@@ -728,7 +728,7 @@ function onCoVideo(e){const f=e.target.files[0];if(!f)return;const r=new FileRea
 async function confirmCO(){
   if(!S.coVideo){toast('Upload a video first','err');return;}
   const proj=S.projects.find(p=>p.id===S.selectedProj);
-  await db.from('media').insert({worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name||'',type:'video',name:S.coVideo.name,is_checkout:true});
+  await db.from('Media').insert({worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name||'',type:'video',name:S.coVideo.name,is_checkout:true});
   S.checkedIn=false;await db.from('workers').update({checked_in:false,check_in_time:null}).eq('id',S.user.id);
   await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
   document.getElementById('co-ov').className='co-ov';toast('👋 Checked out! Video saved.','ok');updateWorkerUI();
@@ -905,10 +905,10 @@ async function uploadPDF(e) {
   toast(`📄 Uploading ${files.length} PDF...`, 'ok');
   for (const f of files) {
     const path = `${projId}/pdf_${Date.now()}_${f.name}`;
-    const { error } = await db.storage.from('media').upload(path, f, { upsert: true });
+    const { error } = await db.storage.from('Media').upload(path, f, { upsert: true });
     if (error) { toast('PDF upload failed: ' + error.message, 'err'); continue; }
-    const { data: urlData } = db.storage.from('media').getPublicUrl(path);
-    await db.from('media').insert({
+    const { data: urlData } = db.storage.from('Media').getPublicUrl(path);
+    await db.from('Media').insert({
       worker_id: S.user?.id || null, worker_name: S.user?.name || 'Manager',
       project_id: projId, project_name: proj?.name || '',
       type: 'pdf', name: f.name,
@@ -926,9 +926,9 @@ async function uploadPDF(e) {
 async function uploadToStorage(file, projId) {
   const ext = file.name.split('.').pop();
   const path = `${projId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-  const { data, error } = await db.storage.from('media').upload(path, file, { upsert: true });
+  const { data, error } = await db.storage.from('Media').upload(path, file, { upsert: true });
   if (error) { console.error('Storage error:', error); return null; }
-  const { data: urlData } = db.storage.from('media').getPublicUrl(path);
+  const { data: urlData } = db.storage.from('Media').getPublicUrl(path);
   return urlData?.publicUrl || null;
 }
 
@@ -954,7 +954,7 @@ function captureMgrMedia(e, type) {
     files.forEach(async f => {
       const publicUrl = await uploadToStorage(f, projId);
       if (!publicUrl) { toast('Upload failed', 'err'); return; }
-      await db.from('media').insert({
+      await db.from('Media').insert({
         worker_id: S.user?.id || null, worker_name: S.user?.name || 'Manager',
         project_id: S.drillProj, project_name: proj?.name || '',
         type: f.type.startsWith('video') ? 'video' : 'photo', name: f.name,
@@ -983,7 +983,7 @@ async function saveJournalEntry() {
     if (!publicUrl) { toast('Upload failed — check storage bucket', 'err'); return; }
 
     // Save metadata to media table
-    await db.from('media').insert({
+    await db.from('Media').insert({
       worker_id: S.user?.id || null,
       worker_name: S.user?.name || 'Manager',
       project_id: projId,
@@ -1120,7 +1120,7 @@ async function delProjTask(id){
 
 async function renderProjMedia(){
   const c=document.getElementById('proj-media-list');
-  const {data}=await db.from('media').select('*').eq('project_id',S.drillProj).order('created_at',{ascending:false});
+  const {data}=await db.from('Media').select('*').eq('project_id',S.drillProj).order('created_at',{ascending:false});
   if(!data||!data.length){c.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">No photos or videos yet</div>';return;}
   c.innerHTML=data.map(m=>`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
