@@ -728,7 +728,7 @@ function onCoVideo(e){const f=e.target.files[0];if(!f)return;const r=new FileRea
 async function confirmCO(){
   if(!S.coVideo){toast('Upload a video first','err');return;}
   const proj=S.projects.find(p=>p.id===S.selectedProj);
-  await db.from('Media').insert({worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name||'',type:'video',name:S.coVideo.name,is_checkout:true});
+  await db.from('media').insert({worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name||'',type:'video',name:S.coVideo.name,is_checkout:true});
   S.checkedIn=false;await db.from('workers').update({checked_in:false,check_in_time:null}).eq('id',S.user.id);
   await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
   document.getElementById('co-ov').className='co-ov';toast('👋 Checked out! Video saved.','ok');updateWorkerUI();
@@ -902,18 +902,21 @@ async function uploadPDF(e) {
   const files = Array.from(e.target.files); if (!files.length) return;
   const projId = S.drillProj; if (!projId) { toast('Open a project first', 'err'); return; }
   const proj = S.projects.find(p => p.id === projId);
-  toast(`📄 Uploading ${files.length} PDF...`, 'ok');
+  toast(`📄 Saving ${files.length} PDF...`, 'ok');
   for (const f of files) {
-    const path = `${projId}/pdf_${Date.now()}_${f.name}`;
-    const { error } = await db.storage.from('Media').upload(path, f, { upsert: true });
-    if (error) { toast('PDF upload failed: ' + error.message, 'err'); continue; }
-    const { data: urlData } = db.storage.from('Media').getPublicUrl(path);
-    await db.from('Media').insert({
-      worker_id: S.user?.id || null, worker_name: S.user?.name || 'Manager',
-      project_id: projId, project_name: proj?.name || '',
-      type: 'pdf', name: f.name,
-      url: '', data_url: urlData?.publicUrl || '',
-      is_checkout: false
+    const reader = new FileReader();
+    await new Promise(resolve => {
+      reader.onload = async (ev) => {
+        await db.from('media').insert({
+          worker_id: S.user?.id || null, worker_name: S.user?.name || 'Manager',
+          project_id: projId, project_name: proj?.name || '',
+          type: 'pdf', name: f.name,
+          url: '', data_url: ev.target.result,
+          is_checkout: false
+        });
+        resolve();
+      };
+      reader.readAsDataURL(f);
     });
   }
   renderProjMedia();
@@ -921,92 +924,123 @@ async function uploadPDF(e) {
   e.target.value = '';
 }
 
-// ═══ MANAGER PHOTO/VIDEO ═══
-// Upload file to Supabase Storage and return public URL
-async function uploadToStorage(file, projId) {
-  const ext = file.name.split('.').pop();
-  const path = `${projId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-  const { data, error } = await db.storage.from('Media').upload(path, file, { upsert: true });
-  if (error) { console.error('Storage error:', error); return null; }
-  const { data: urlData } = db.storage.from('Media').getPublicUrl(path);
-  return urlData?.publicUrl || null;
+// ═══ MEDIA PIPELINE (clean) ═══
+// Compress photo to JPEG, return base64. Videos returned as object URL (not saved to DB).
+async function compressImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1024;
+        let w = img.width, h = img.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.65));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
-function captureMgrMedia(e, type) {
+async function uploadToStorage(file, projId) {
+  const ext = (file.name || 'file').split('.').pop() || 'jpg';
+  const path = `${projId||'general'}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  try {
+    const { data, error } = await db.storage.from('media').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) throw error;
+    const { data: urlData } = db.storage.from('media').getPublicUrl(path);
+    return urlData?.publicUrl || null;
+  } catch(err) {
+    console.error('Storage error:', err);
+    // Fallback to base64 if storage fails
+    return await compressImage(file);
+  }
+}
+
+function captureMgrMedia(e) {
   const files = Array.from(e.target.files);
   if (!files.length) return;
-  if (files.length === 1) {
-    const f = files[0];
-    journalPending = { file: f, type: f.type.startsWith('video') ? 'video' : 'photo', name: f.name, forManager: true };
-    const url = URL.createObjectURL(f);
-    const prev = document.getElementById('journal-preview');
-    prev.style.display = 'block';
-    prev.innerHTML = journalPending.type === 'photo'
-      ? `<img src="${url}" style="width:100%;max-height:200px;object-fit:cover;display:block;border-radius:8px">`
-      : `<video src="${url}" controls style="width:100%;max-height:200px;display:block"></video>`;
-    document.getElementById('journal-ov-ico').textContent = journalPending.type === 'photo' ? '📷' : '🎥';
-    document.getElementById('journal-comment').value = '';
-    document.getElementById('journal-ov').className = 'co-ov show';
-  } else {
-    // Multiple files - upload all directly
-    const projId = S.drillProj || 'general';
+  const f = files[0]; // Always single for comment dialog
+  const mediaType = f.type.startsWith('video') ? 'video' : 'photo';
+  // Store file reference — don't read yet
+  journalPending = { file: f, type: mediaType, name: f.name, forManager: true };
+  const previewUrl = URL.createObjectURL(f);
+  const prev = document.getElementById('journal-preview');
+  prev.style.display = 'block';
+  prev.innerHTML = mediaType === 'photo'
+    ? `<img src="${previewUrl}" style="width:100%;max-height:200px;object-fit:cover;display:block;border-radius:8px">`
+    : `<video src="${previewUrl}" controls style="width:100%;max-height:200px;display:block"></video>`;
+  document.getElementById('journal-ov-ico').textContent = mediaType === 'photo' ? '📷' : '🎥';
+  document.getElementById('journal-comment').value = '';
+  document.getElementById('journal-ov').className = 'co-ov show';
+  // Handle multiple files silently
+  if (files.length > 1) {
     const proj = S.projects.find(p => p.id === S.drillProj);
-    files.forEach(async f => {
-      const publicUrl = await uploadToStorage(f, projId);
-      if (!publicUrl) { toast('Upload failed', 'err'); return; }
-      await db.from('Media').insert({
+    files.slice(1).forEach(async (mf) => {
+      const dataUrl = await uploadToStorage(mf);
+      await db.from('media').insert({
         worker_id: S.user?.id || null, worker_name: S.user?.name || 'Manager',
         project_id: S.drillProj, project_name: proj?.name || '',
-        type: f.type.startsWith('video') ? 'video' : 'photo', name: f.name,
-        url: '', data_url: publicUrl, is_checkout: false
+        type: mf.type.startsWith('video') ? 'video' : 'photo', name: mf.name,
+        url: '', data_url: dataUrl, is_checkout: false
       });
       renderProjMedia();
     });
-    toast(`📸 Uploading ${files.length} files...`, 'ok');
   }
   e.target.value = '';
 }
 
 async function saveJournalEntry() {
   if (!journalPending) return;
+  // Capture everything before any async/null operations
+  const pending = { ...journalPending };
   const comment = document.getElementById('journal-comment').value.trim();
   const btn = document.getElementById('journal-ov').querySelector('.co-go');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Uploading...'; }
+  const projId = pending.forManager ? S.drillProj : S.selectedProj;
+
+  if (!projId) { toast('Select a project first', 'err'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving...'; }
 
   try {
-    const projId = journalPending.forManager ? S.drillProj : S.selectedProj;
-    if (!projId) { toast('Select a project first', 'err'); return; }
     const proj = S.projects.find(p => p.id === projId);
+    // Compress/read the file
+    const dataUrl = await uploadToStorage(pending.file);
 
-    // Upload to Supabase Storage
-    const publicUrl = await uploadToStorage(journalPending.file, projId);
-    if (!publicUrl) { toast('Upload failed — check storage bucket', 'err'); return; }
-
-    // Save metadata to media table
-    await db.from('Media').insert({
+    const {error} = await db.from('media').insert({
       worker_id: S.user?.id || null,
-      worker_name: S.user?.name || 'Manager',
+      worker_name: S.user?.name || 'Unknown',
       project_id: projId,
       project_name: proj?.name || '',
-      type: journalPending.type,
-      name: journalPending.name,
+      type: pending.type,
+      name: pending.name,
       url: comment,
-      data_url: publicUrl,
+      data_url: dataUrl,
       is_checkout: false
     });
 
-    document.getElementById('journal-ov').className = 'co-ov';
+    if (error) throw new Error(error.message);
+
+    // Clear state AFTER successful save
     journalPending = null;
+    document.getElementById('journal-ov').className = 'co-ov';
     toast('📸 Saved!', 'ok');
 
-    if (S.drillProj) renderProjMedia();
-    if (S.selectedProj && !S.drillProj) {
-      S.uploads.push({ data: publicUrl, type: journalPending?.type || 'photo', comment });
+    if (pending.forManager) {
+      renderProjMedia();
+    } else {
+      S.uploads.push({ data: dataUrl, type: pending.type, comment });
       renderJournal();
     }
-  } catch(e) {
-    toast('Error: ' + e.message, 'err');
+  } catch(err) {
+    console.error('Save error:', err);
+    toast('Error: ' + err.message, 'err');
   }
+
   if (btn) { btn.disabled = false; btn.textContent = '💾 Save to Journal'; }
 }
 let journalPending = null;
@@ -1015,13 +1049,13 @@ function captureJournalMedia(e, type) {
   const files = Array.from(e.target.files); if (!files.length) return;
   const f = files[0];
   const mediaType = f.type.startsWith('video') ? 'video' : 'photo';
-  journalPending = { file: f, type: mediaType, name: f.name };
-  const url = URL.createObjectURL(f);
+  journalPending = { file: f, type: mediaType, name: f.name, forManager: false };
+  const previewUrl = URL.createObjectURL(f);
   const prev = document.getElementById('journal-preview');
   prev.style.display = 'block';
   prev.innerHTML = mediaType === 'photo'
-    ? `<img src="${url}" style="width:100%;max-height:200px;object-fit:cover;display:block">`
-    : `<video src="${url}" controls style="width:100%;max-height:200px;display:block"></video>`;
+    ? `<img src="${previewUrl}" style="width:100%;max-height:200px;object-fit:cover;display:block">`
+    : `<video src="${previewUrl}" controls style="width:100%;max-height:200px;display:block"></video>`;
   document.getElementById('journal-ov-ico').textContent = mediaType === 'photo' ? '📷' : '🎥';
   document.getElementById('journal-comment').value = '';
   document.getElementById('journal-ov').className = 'co-ov show';
@@ -1120,7 +1154,7 @@ async function delProjTask(id){
 
 async function renderProjMedia(){
   const c=document.getElementById('proj-media-list');
-  const {data}=await db.from('Media').select('*').eq('project_id',S.drillProj).order('created_at',{ascending:false});
+  const {data}=await db.from('media').select('*').eq('project_id',S.drillProj).order('created_at',{ascending:false});
   if(!data||!data.length){c.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">No photos or videos yet</div>';return;}
   c.innerHTML=data.map(m=>`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
