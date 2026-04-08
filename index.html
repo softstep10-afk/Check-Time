@@ -449,6 +449,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button class="side-item" id="nav-tasks" onclick="showView('tasks')"><span class="side-ico">📋</span>Tasks</button>
       <div class="side-sec" id="adm-sec">Admin</div>
       <button class="side-item" id="nav-managers" onclick="showView('managers')"><span class="side-ico">🔑</span>Managers</button>
+      <button class="side-item" id="nav-trash" onclick="showView('trash')"><span class="side-ico">🗑️</span>Trash</button>
       <div class="side-foot">
         <div class="mgr-chip"><div class="mgr-av" id="m-av" style="background:var(--gold)">M</div><div><div class="mgr-nm" id="m-nm">Manager</div><div class="mgr-rl" id="m-rl">Admin</div><div class="mgr-badge full" id="m-badge">Full Access</div></div></div>
         <button class="sign-out" onclick="doLogout()">Sign out →</button>
@@ -580,6 +581,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="action gold" onclick="openModal('mod-mgr')">+ Add Manager</button></div>
           <div class="mgr-cards" id="mgr-cards"></div>
         </div>
+        <div class="view" id="view-trash">
+          <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--muted)">🗑️ Items here are not permanently deleted. Restore or permanently remove them.</div>
+          <div id="trash-list"><div class="empty"><div class="ei">🗑️</div><p>Trash is empty</p></div></div>
+        </div>
       </div>
     </div>
   </div>
@@ -655,8 +660,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 
-<div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="mp-rate" value="25"></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
-<div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="ep-rate"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
+<div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
+<div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Project Name</label><input type="text" id="ep-name"></div><div class="mfield"><label>Address</label><input type="text" id="ep-addr"></div><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="ep-radius" value="200"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
 <div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role" onchange="toggleWorkerPayFields()"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div id="nw-hourly-wrap" class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="nw-rate" placeholder="25" min="0" step="0.5"></div><div id="nw-fixed-wrap" class="mfield" style="display:none"><label>Fixed Amount per Project ($)</label><input type="number" id="nw-fixed" placeholder="500" min="0"></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
 
 <!-- EDIT WORKER MODAL -->
@@ -680,9 +685,27 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <button class="big-btn" onclick="saveMsgWorker()">📤 Send Message</button>
   <button class="big-btn" style="background:rgba(107,114,128,.1);color:var(--muted);margin-top:8px" onclick="clearMsgWorker()">🗑 Clear Message</button>
 </div></div></div>
-<div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
+<div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><div class="toggle-row"><div><span>🎬 Can view checkout videos</span><small>Allow this manager to see worker checkout videos</small></div><label class="tog"><input type="checkbox" id="nm-checkout"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
 
 <!-- PAYROLL CALCULATOR MODAL -->
+<!-- ADJUST HOURS MODAL -->
+<div class="modal-ov" id="mod-adjust-hours"><div class="modal"><div class="modal-top"><h3>⏱️ Adjust Hours</h3><button class="modal-close" onclick="closeModal('mod-adjust-hours')">×</button></div><div class="modal-body">
+  <input type="hidden" id="adj-worker-id">
+  <input type="hidden" id="adj-proj-id">
+  <div id="adj-worker-name" style="font-size:14px;font-weight:600;margin-bottom:16px;color:var(--gold)"></div>
+  <div class="mfield">
+    <label>Hours to Add or Remove</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="setAdjSign(-1)" id="adj-minus" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--red);background:rgba(239,68,68,.1);color:var(--red);font-size:20px;font-weight:700;cursor:pointer;font-family:var(--font)">−</button>
+      <input type="number" id="adj-hours" min="0" step="0.5" placeholder="0.0" style="flex:1;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:18px;text-align:center;outline:none">
+      <button onclick="setAdjSign(1)" id="adj-plus" style="width:44px;height:44px;border-radius:8px;border:2px solid var(--green);background:rgba(34,197,94,.1);color:var(--green);font-size:20px;font-weight:700;cursor:pointer;font-family:var(--font)">+</button>
+    </div>
+    <div id="adj-sign-label" style="font-size:12px;color:var(--muted);text-align:center;margin-top:6px">Select + to add hours or − to remove</div>
+  </div>
+  <div class="mfield"><label>Reason (required)</label><input type="text" id="adj-reason" placeholder="e.g. Forgot to check out, overtime, correction..." style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div>
+  <button class="big-btn" onclick="saveAdjustHours()">✅ Save Adjustment</button>
+</div></div></div>
+
 <div class="modal-ov" id="mod-calc" style="align-items:flex-start;padding-top:16px">
   <div class="modal" style="max-width:600px;max-height:92vh;overflow-y:auto">
     <div class="modal-top"><h3>🧮 Payroll Calculator</h3><button class="modal-close" onclick="closeModal('mod-calc')">×</button></div>
@@ -1011,7 +1034,10 @@ function calcHours(wId,projId,dateStr){
     else if(ev.type==='out'&&lastIn){total+=(new Date(ev.created_at)-lastIn)/3600000;lastIn=null;}
   });
   if(lastIn){const w=S.workers.find(x=>x.id===wId);if(w?.checked_in)total+=(Date.now()-lastIn)/3600000;}
-  return total;
+  // Add manual hour adjustments (positive or negative)
+  const adjustments=evs.filter(e=>e.type==='adjustment').reduce((s,e)=>s+(e.hours||0),0);
+  total+=adjustments;
+  return Math.max(0,total);
 }
 
 // Hours for any date range — ignores payroll markers (used for reports)
@@ -1112,7 +1138,14 @@ function openWorkerDetail(projId,workerId){
   const totalEarned=calcWorkerEarnings(workerId,projId);
   const days=getDays(workerId,projId);
   const rateLabel=w.role==='subcontractor'?`Fixed $${w.fixed_amount||0}`:`$${w.rate||0}/hr`;
-  document.getElementById('wd-stats').innerHTML=`<div class="stat a"><div class="sl">Total Hours</div><div class="sv">${totalH.toFixed(1)}h</div><div class="sd">on project</div></div><div class="stat b"><div class="sl">Days Worked</div><div class="sv">${days.length}</div><div class="sd">days</div></div><div class="stat p"><div class="sl">Earned</div><div class="sv">$${totalEarned.toFixed(0)}</div><div class="sd">${rateLabel}</div></div><div class="stat g"><div class="sl">Status</div><div class="sv" style="font-size:14px">${w.checked_in?'✅':'⭕'}</div><div class="sd">${w.checked_in?'On Site':'Offline'}</div></div>`;
+  const isOwner=S.user?.role==='owner';
+  document.getElementById('wd-stats').innerHTML=`
+    <div class="stat a"><div class="sl">Total Hours</div><div class="sv">${totalH.toFixed(1)}h</div><div class="sd">on project</div></div>
+    <div class="stat b"><div class="sl">Days Worked</div><div class="sv">${days.length}</div><div class="sd">days</div></div>
+    <div class="stat p"><div class="sl">Earned</div><div class="sv">$${totalEarned.toFixed(0)}</div><div class="sd">${rateLabel}</div></div>
+    <div class="stat g"><div class="sl">Status</div><div class="sv" style="font-size:14px">${w.checked_in?'✅':'⭕'}</div><div class="sd">${w.checked_in?'On Site':'Offline'}</div></div>
+    ${isOwner?`<div style="grid-column:1/-1;margin-top:4px"><button onclick="openAdjustHours('${workerId}','${projId}')" style="padding:9px 18px;border-radius:8px;border:1px solid var(--gold);background:rgba(245,158,11,.1);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">⏱️ Adjust Hours</button></div>`:''}
+  `;
   const dc=document.getElementById('wd-days');
   if(!days.length){dc.innerHTML='<div class="empty"><div class="ei">📅</div><p>No work days yet</p></div>';}
   else dc.innerHTML=days.map(ds=>{const h=calcHours(workerId,projId,ds);const inEv=S.events.filter(e=>e.worker_id===workerId&&e.project_id===projId&&e.type==='in'&&e.created_at.startsWith(ds))[0];const outEv=S.events.filter(e=>e.worker_id===workerId&&e.project_id===projId&&e.type==='out'&&e.created_at.startsWith(ds)).pop();const dn=new Date(ds).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});return`<div class="dayrow" onclick="openDayDetail('${projId}','${workerId}','${ds}')"><div><div class="day-h">${dn}</div><div class="day-sub">${inEv?fmtTime(inEv.created_at):'—'} → ${outEv?fmtTime(outEv.created_at):'still on site'}</div></div><div><div class="day-hrs">${h.toFixed(1)}h</div></div></div>`;}).join('');
@@ -1171,13 +1204,64 @@ function renderTaskList(){
 }
 function renderMgrCards(){
   const c=document.getElementById('mgr-cards');
-  c.innerHTML=S.managers.map(m=>`<div class="mcard"><div class="mcard-top"><div class="mcard-av" style="background:${m.color||'#f59e0b'}">${m.name.charAt(0)}</div><div><div class="mcard-name">${m.name}</div><div class="mcard-pin">PIN: <span class="pin-chip">${m.pin}</span></div></div></div><div class="mgr-badge ${m.access==='admin'?'full':'lim'}">${m.access==='admin'?'Full Access':'Limited'}</div>${m.role!=='owner'?`<button class="action red" style="width:100%;margin-top:10px" onclick="delManager('${m.id}')">Remove</button>`:''}</div>`).join('');
+  c.innerHTML=S.managers.map(m=>`
+    <div class="mcard">
+      <div class="mcard-top">
+        <div class="mcard-av" style="background:${m.color||'#f59e0b'}">${m.name.charAt(0)}</div>
+        <div><div class="mcard-name">${m.name}</div><div class="mcard-pin">PIN: <span class="pin-chip">${m.pin}</span></div></div>
+      </div>
+      <div class="mgr-badge ${m.access==='admin'?'full':'lim'}">${m.access==='admin'?'Full Access':'Limited'}</div>
+      ${m.role!=='owner'?`
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:12px;color:var(--muted)">
+          <span>🎬 Checkout videos</span>
+          <label class="tog"><input type="checkbox" ${m.can_view_checkout?'checked':''} onchange="toggleMgrCheckout('${m.id}',this.checked)"><div class="tog-sl"></div></label>
+        </div>
+        <button class="action red" style="width:100%;margin-top:10px" onclick="delManager('${m.id}')">Remove</button>`
+      :''}
+    </div>`).join('');
+}
+async function toggleMgrCheckout(id,val){
+  await db.from('managers').update({can_view_checkout:val}).eq('id',id);
+  const m=await db.from('managers').select('*').order('created_at');S.managers=m.data||[];
+  toast(val?'✅ Checkout videos enabled':'Checkout videos hidden','ok');
 }
 async function assignTask(){const wId=document.getElementById('t-worker').value,title=document.getElementById('t-title').value.trim(),desc=document.getElementById('t-desc').value.trim(),pri=document.getElementById('t-pri').value;if(!wId||!title){toast('Select worker and enter title','err');return;}const w=S.workers.find(x=>x.id===wId);await db.from('tasks').insert({worker_id:wId,worker_name:w.name,title,description:desc,priority:pri,done:false});const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];document.getElementById('t-title').value='';document.getElementById('t-desc').value='';renderTaskList();renderOverview();toast('Task assigned!','ok');}
 async function delTask(id){await db.from('tasks').delete().eq('id',id);const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];renderTaskList();renderOverview();toast('Removed','ok');}
-async function addProject(){const name=document.getElementById('mp-name').value.trim(),addr=document.getElementById('mp-addr').value.trim();if(!name||!addr){toast('Name and address required','err');return;}const notes=document.getElementById('mp-notes').value.trim(),rate=parseFloat(document.getElementById('mp-rate').value)||25,radius=parseInt(document.getElementById('mp-radius').value)||200,lat=parseFloat(document.getElementById('mp-lat').value)||null,lon=parseFloat(document.getElementById('mp-lon').value)||null;await db.from('projects').insert({name,address:addr,notes,rate,gps_lat:lat,gps_lon:lon,gps_radius:radius,status:'active'});const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];closeModal('mod-proj');['mp-name','mp-addr','mp-notes','mp-lat','mp-lon'].forEach(id=>document.getElementById(id).value='');document.getElementById('mp-loc-status').textContent='';refreshManager();toast(`${name} added!`,'ok');}
+async function addProject(){
+  const name=document.getElementById('mp-name').value.trim(),addr=document.getElementById('mp-addr').value.trim();
+  if(!name||!addr){toast('Name and address required','err');return;}
+  const notes=document.getElementById('mp-notes').value.trim();
+  const radius=parseInt(document.getElementById('mp-radius').value)||200;
+  const lat=parseFloat(document.getElementById('mp-lat').value)||null;
+  const lon=parseFloat(document.getElementById('mp-lon').value)||null;
+  await db.from('projects').insert({name,address:addr,notes,rate:0,gps_lat:lat,gps_lon:lon,gps_radius:radius,status:'active'});
+  const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];
+  closeModal('mod-proj');
+  ['mp-name','mp-addr','mp-notes','mp-lat','mp-lon'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('mp-loc-status').textContent='';
+  refreshManager();toast(`${name} added!`,'ok');
+}
 
-function useMyLocationForProject(){
+function openEditProj(id){
+  const p=S.projects.find(x=>x.id===id);if(!p)return;
+  document.getElementById('ep-id').value=id;
+  document.getElementById('ep-name').value=p.name||'';
+  document.getElementById('ep-addr').value=p.address||'';
+  document.getElementById('ep-notes').value=p.notes||'';
+  document.getElementById('ep-radius').value=p.gps_radius||200;
+  openModal('mod-edit-proj');
+}
+async function saveEditProject(){
+  const id=document.getElementById('ep-id').value;
+  const name=document.getElementById('ep-name').value.trim();
+  const addr=document.getElementById('ep-addr').value.trim();
+  const notes=document.getElementById('ep-notes').value.trim();
+  const radius=parseInt(document.getElementById('ep-radius').value)||200;
+  if(!name||!addr){toast('Name and address required','err');return;}
+  await db.from('projects').update({name,address:addr,notes,gps_radius:radius}).eq('id',id);
+  const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];
+  closeModal('mod-edit-proj');renderProjCards();toast('Saved!','ok');
+}
   const btn=document.getElementById('mp-loc-btn');
   const status=document.getElementById('mp-loc-status');
   if(!navigator.geolocation){status.textContent='GPS not supported on this device';return;}
@@ -1209,7 +1293,14 @@ function useMyLocationForProject(){
 }
 function openEditProj(id){const p=S.projects.find(x=>x.id===id);if(!p)return;document.getElementById('ep-id').value=id;document.getElementById('ep-notes').value=p.notes||'';document.getElementById('ep-rate').value=p.rate||25;openModal('mod-edit-proj');}
 async function saveEditProject(){const id=document.getElementById('ep-id').value;await db.from('projects').update({notes:document.getElementById('ep-notes').value.trim(),rate:parseFloat(document.getElementById('ep-rate').value)||25}).eq('id',id);const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];closeModal('mod-edit-proj');renderProjCards();toast('Saved!','ok');}
-async function delProject(id){if(!confirm('Remove this project?'))return;await db.from('projects').delete().eq('id',id);const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];refreshManager();toast('Removed','ok');}
+async function delProject(id){
+  if(!confirm('Move this project to trash?'))return;
+  const p=S.projects.find(x=>x.id===id);
+  await db.from('trash').insert({item_type:'project',item_id:id,item_name:p?.name||'Project',item_data:p,deleted_by:S.user?.name||'Manager'});
+  await db.from('projects').delete().eq('id',id);
+  const pr=await db.from('projects').select('*').order('created_at');S.projects=pr.data||[];
+  refreshManager();toast('Moved to trash','ok');
+}
 function toggleWorkerPayFields(){
   const role=document.getElementById('nw-role').value;
   document.getElementById('nw-hourly-wrap').style.display=role==='subcontractor'?'none':'block';
@@ -1232,8 +1323,26 @@ async function addWorker(){
   document.getElementById('nw-vid').checked=false;
   refreshManager();toast(`${name} added!`,'ok');
 }
-async function delWorker(id){if(!confirm('Remove?'))return;await db.from('workers').delete().eq('id',id);const w=await db.from('workers').select('*').order('created_at');S.workers=w.data||[];refreshManager();toast('Removed','ok');}
-async function addManager(){const name=document.getElementById('nm-name').value.trim(),pin=document.getElementById('nm-pin').value.trim(),access=document.getElementById('nm-access').value;if(!name||pin.length<4){toast('Name and PIN (min 4 digits)','err');return;}if(S.workers.find(w=>w.pin===pin)||S.managers.find(m=>m.pin===pin)){toast('PIN already taken','err');return;}const colors=['#3b82f6','#22c55e','#a855f7','#06b6d4','#f97316'];await db.from('managers').insert({name,pin,access,color:colors[S.managers.length%colors.length]});const m=await db.from('managers').select('*').order('created_at');S.managers=m.data||[];closeModal('mod-mgr');document.getElementById('nm-name').value='';document.getElementById('nm-pin').value='';renderMgrCards();toast(`${name} added!`,'ok');}
+async function delWorker(id){
+  if(!confirm('Move this worker to trash?'))return;
+  const w=S.workers.find(x=>x.id===id);
+  await db.from('trash').insert({item_type:'worker',item_id:id,item_name:w?.name||'Worker',item_data:w,deleted_by:S.user?.name||'Manager'});
+  await db.from('workers').delete().eq('id',id);
+  const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
+  refreshManager();toast('Moved to trash','ok');
+}
+async function addManager(){
+  const name=document.getElementById('nm-name').value.trim(),pin=document.getElementById('nm-pin').value.trim(),access=document.getElementById('nm-access').value;
+  const can_view_checkout=document.getElementById('nm-checkout').checked;
+  if(!name||pin.length<3){toast('Name and PIN (min 3 digits)','err');return;}
+  if(S.workers.find(w=>w.pin===pin)||S.managers.find(m=>m.pin===pin)){toast('PIN already taken','err');return;}
+  const colors=['#3b82f6','#22c55e','#a855f7','#06b6d4','#f97316'];
+  await db.from('managers').insert({name,pin,access,color:colors[S.managers.length%colors.length],can_view_checkout});
+  const m=await db.from('managers').select('*').order('created_at');S.managers=m.data||[];
+  closeModal('mod-mgr');
+  document.getElementById('nm-name').value='';document.getElementById('nm-pin').value='';document.getElementById('nm-checkout').checked=false;
+  renderMgrCards();toast(`${name} added!`,'ok');
+}
 async function delManager(id){if(!confirm('Remove?'))return;await db.from('managers').delete().eq('id',id);const m=await db.from('managers').select('*').order('created_at');S.managers=m.data||[];renderMgrCards();toast('Removed','ok');}
 function fillWorkerSelect(){const s=document.getElementById('t-worker');s.innerHTML=S.workers.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');}
 function fillTlFilters(){const tw=document.getElementById('tl-worker'),tp=document.getElementById('tl-proj');const cw=tw.value,cp=tp.value;tw.innerHTML='<option value="all">All Workers</option>'+S.workers.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');tp.innerHTML='<option value="all">All Projects</option>'+S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');tw.value=cw||'all';tp.value=cp||'all';}
@@ -1245,8 +1354,8 @@ function showView(id){
   document.getElementById('view-'+id).classList.add('on');
   const ni=document.getElementById('nav-'+id);if(ni)ni.classList.add('on');
   const mi=document.getElementById('mob-'+id);if(mi)mi.classList.add('on');
-  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers'};
-  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control'};
+  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers',trash:'Trash'};
+  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control',trash:'Deleted items — restore or remove permanently'};
   document.getElementById('view-title').textContent=titles[id]||id;
   document.getElementById('view-sub').textContent=subs[id]||'';
   if(id==='overview')renderOverview();
@@ -1254,6 +1363,7 @@ function showView(id){
   if(id==='team')renderTeam();
   if(id==='managers')renderMgrCards();
   if(id==='projects')renderProjCards();
+  if(id==='trash')renderTrash();
 }
 function showDrillView(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));document.querySelectorAll('.side-item').forEach(n=>n.classList.remove('on'));document.querySelectorAll('.mob-btn').forEach(n=>n.classList.remove('on'));document.getElementById(id).classList.add('on');document.getElementById('nav-projects').classList.add('on');const mi=document.getElementById('mob-projects');if(mi)mi.classList.add('on');document.getElementById('view-title').textContent='Projects';document.getElementById('view-sub').textContent='Drill-down view';}
 function openModal(id){document.getElementById(id).className='modal-ov show';}
@@ -1620,6 +1730,7 @@ async function delProjTask(id){
 // No reference to data_url or url anywhere.
 async function renderProjMedia() {
   const c = document.getElementById('proj-media-list');
+  const isOwner = S.user?.role === 'owner' || S.user?.can_view_checkout === true;
   const { data, error } = await db.from('media')
     .select('*')
     .eq('project_id', S.drillProj)
@@ -1632,7 +1743,13 @@ async function renderProjMedia() {
     c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">No photos or videos yet</div>';
     return;
   }
-  c.innerHTML = data.map(m => `
+  // Checkout videos only visible to owners (Andrei, Serg)
+  const visible = data.filter(m => !m.is_checkout || isOwner);
+  if (!visible.length) {
+    c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">No photos or videos yet</div>';
+    return;
+  }
+  c.innerHTML = visible.map(m => `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
       ${m.file_url ? `<div style="background:#000">${
         m.type === 'pdf'
@@ -2004,6 +2121,102 @@ function renderCalc(){
     <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green)">$${grandTotal.toFixed(0)}</div>
   </div>`;
   c.innerHTML=html;
+}
+
+// ═══ TRASH ═══
+async function renderTrash(){
+  const c=document.getElementById('trash-list');
+  c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
+  const {data,error}=await db.from('trash').select('*').order('created_at',{ascending:false});
+  if(error||!data||!data.length){
+    c.innerHTML='<div class="empty"><div class="ei">🗑️</div><p>Trash is empty</p></div>';
+    return;
+  }
+  const icons={project:'🏗️',worker:'👷',media:'📷'};
+  c.innerHTML=data.map(item=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:22px">${icons[item.item_type]||'📄'}</span>
+        <div>
+          <div style="font-size:13px;font-weight:600">${item.item_name}</div>
+          <div style="font-size:11px;color:var(--muted)">${item.item_type} · deleted ${fmtDT(item.created_at)} by ${item.deleted_by||'—'}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="restoreItem('${item.id}','${item.item_type}')" style="padding:6px 12px;border-radius:6px;border:1px solid var(--green);background:rgba(34,197,94,.08);color:var(--green);font-family:var(--font);font-size:12px;cursor:pointer;font-weight:600">↩️ Restore</button>
+        <button onclick="permanentDelete('${item.id}','${item.item_type}','${item.item_name.replace(/'/g,"\\'")}','${item.item_id}')" style="padding:6px 12px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.08);color:var(--red);font-family:var(--font);font-size:12px;cursor:pointer;font-weight:600">🗑 Delete Forever</button>
+      </div>
+    </div>`).join('');
+}
+
+async function restoreItem(trashId, type){
+  const {data}=await db.from('trash').select('*').eq('id',trashId).single();
+  if(!data){toast('Item not found','err');return;}
+  const item=data.item_data;
+  if(type==='project'){
+    await db.from('projects').insert(item);
+    const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];
+  } else if(type==='worker'){
+    await db.from('workers').insert(item);
+    const w=await db.from('workers').select('*').order('created_at');S.workers=w.data||[];
+  }
+  await db.from('trash').delete().eq('id',trashId);
+  refreshManager();renderTrash();toast('✅ Restored!','ok');
+}
+
+async function permanentDelete(trashId, type, name, itemId){
+  if(!confirm(`Permanently delete "${name}"? This CANNOT be undone.`))return;
+  await db.from('trash').delete().eq('id',trashId);
+  renderTrash();toast('Permanently deleted','ok');
+}
+
+// ═══ ADJUST HOURS ═══
+let adjSign = 1;
+function openAdjustHours(workerId, projId){
+  const w=S.workers.find(x=>x.id===workerId);
+  document.getElementById('adj-worker-id').value=workerId;
+  document.getElementById('adj-proj-id').value=projId;
+  document.getElementById('adj-worker-name').textContent=`${w?.name||'Worker'} — ${S.projects.find(p=>p.id===projId)?.name||'All Projects'}`;
+  document.getElementById('adj-hours').value='';
+  document.getElementById('adj-reason').value='';
+  adjSign=1;
+  document.getElementById('adj-plus').style.borderWidth='3px';
+  document.getElementById('adj-minus').style.borderWidth='1px';
+  document.getElementById('adj-sign-label').textContent='+ Adding hours';
+  document.getElementById('adj-sign-label').style.color='var(--green)';
+  openModal('mod-adjust-hours');
+}
+function setAdjSign(sign){
+  adjSign=sign;
+  document.getElementById('adj-plus').style.borderWidth=sign===1?'3px':'1px';
+  document.getElementById('adj-minus').style.borderWidth=sign===-1?'3px':'1px';
+  const lbl=document.getElementById('adj-sign-label');
+  lbl.textContent=sign===1?'+ Adding hours':'− Removing hours';
+  lbl.style.color=sign===1?'var(--green)':'var(--red)';
+}
+async function saveAdjustHours(){
+  const workerId=document.getElementById('adj-worker-id').value;
+  const projId=document.getElementById('adj-proj-id').value;
+  const hrs=parseFloat(document.getElementById('adj-hours').value);
+  const reason=document.getElementById('adj-reason').value.trim();
+  if(!hrs||hrs<=0){toast('Enter a valid number of hours','err');return;}
+  if(!reason){toast('Reason is required','err');return;}
+  const w=S.workers.find(x=>x.id===workerId);
+  const proj=S.projects.find(p=>p.id===projId);
+  const finalHours=adjSign*hrs;
+  await db.from('events').insert({
+    type:'adjustment',
+    worker_id:workerId,
+    worker_name:w?.name||'',
+    project_id:projId||null,
+    project_name:proj?.name||'',
+    hours:finalHours,
+    gps_lat:null,gps_lon:null
+  });
+  const ev=await db.from('events').select('*').order('created_at');S.events=ev.data||[];
+  closeModal('mod-adjust-hours');
+  openWorkerDetail(projId,workerId);
+  toast(`${finalHours>0?'+':''}${finalHours.toFixed(1)}h saved for ${w?.name}`,'ok');
 }
 
 init();
