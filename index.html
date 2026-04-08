@@ -606,8 +606,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
 <div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
 
 <script>
-const SURL='https://mmrzaojdjdqzelvxsnym.supabase.co';
-const SKEY='sb_publishable_98Y6jC-IV6vpU4G5c7J1xw_0FQe7B7N';
+const SURL='https://khmcdtrzqfqabdpbcjkj.supabase.co';
+const SKEY='sb_publishable_IDbH48JlyaoFImiBcHCRrw_X7zsqyOv';
 const db=supabase.createClient(SURL,SKEY);
 const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,coVideo:null,selectedProj:null,drillProj:null,drillWorker:null};
 
