@@ -555,7 +555,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
                 <button class="action gold" onclick="openModal('mod-worker')">+ Add</button>
               </div>
             </div>
-            <table><thead><tr><th>Name</th><th>Category</th><th>Status</th><th>Total Hrs</th><th>Rate</th><th>Video</th><th>Actions</th></tr></thead><tbody id="team-table"></tbody><tfoot id="team-totals"></tfoot></table>
+            <table><thead><tr><th>Name</th><th>Category</th><th>Status</th><th>Total Hrs</th><th>Rate</th><th>Earned</th><th>Video</th><th>Actions</th></tr></thead><tbody id="team-table"></tbody><tfoot id="team-totals"></tfoot></table>
           </div>
         </div>
         <div class="view" id="view-timeline">
@@ -734,6 +734,20 @@ const SURL='https://khmcdtrzqfqabdpbcjkj.supabase.co';
 const SKEY='sb_publishable_IDbH48JlyaoFImiBcHCRrw_X7zsqyOv';
 const db=supabase.createClient(SURL,SKEY);
 const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,coVideo:null,selectedProj:null,drillProj:null,drillWorker:null};
+
+// ═══ PREVIEW URL MEMORY MANAGEMENT ═══
+let currentPreviewUrl = null;
+function revokePreviewUrl() {
+  if (currentPreviewUrl) {
+    URL.revokeObjectURL(currentPreviewUrl);
+    currentPreviewUrl = null;
+  }
+}
+function setPreviewUrl(file) {
+  revokePreviewUrl();
+  currentPreviewUrl = URL.createObjectURL(file);
+  return currentPreviewUrl;
+}
 
 async function init(){
   try{
@@ -916,7 +930,7 @@ function startClock(){
 }
 function fmt(s){return[Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');}
 function openCO(){document.getElementById('vid-in').value='';document.getElementById('vid-prev').style.display='none';document.getElementById('vid-ok').style.display='none';document.getElementById('vid-drop').style.display='block';const btn=document.getElementById('co-go');btn.disabled=true;btn.className='co-go';S.coVideo=null;document.getElementById('co-ov').className='co-ov show';}
-function cancelCO(){document.getElementById('co-ov').className='co-ov';toast('Still checked in','err');}
+function cancelCO(){revokePreviewUrl();document.getElementById('co-ov').className='co-ov';toast('Still checked in','err');}
 
 // ═══ REPLACED FUNCTION 1: onCoVideo ═══
 // Stores File object reference only. NO FileReader. NO base64.
@@ -932,7 +946,7 @@ function onCoVideo(e) {
     return;
   }
   S.coVideo = { file: f, name: f.name };
-  const previewUrl = URL.createObjectURL(f);
+  const previewUrl = setPreviewUrl(f);
   document.getElementById('vid-preview').src = previewUrl;
   document.getElementById('vid-prev').style.display = 'block';
   document.getElementById('vid-ok').style.display = 'flex';
@@ -1079,7 +1093,13 @@ function renderOverview(){
   tb.innerHTML=active.map(w=>{const proj=S.projects.find(p=>p.id===w.last_proj_id);const lastIn=S.events.filter(e=>e.worker_id===w.id&&e.type==='in').pop();const h=lastIn?((Date.now()-new Date(lastIn.created_at))/3600000).toFixed(1):0;return`<tr><td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><span class="nm">${w.name}</span></div></td><td>${proj?.name||'—'}</td><td>${lastIn?fmtTime(lastIn.created_at):'—'}</td><td>${h}h</td></tr>`;}).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No workers on site</td></tr>';
   const tl=document.getElementById('ov-tl');
   const rec=[...S.events].reverse().slice(0,8);
-  tl.innerHTML=rec.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 14px"><div class="tl-dot ${e.type}"></div><div style="flex:1;font-size:12px"><strong>${e.worker_name}</strong> ${e.type==='in'?'checked in':e.type==='out'?'checked out':'submitted report'} — ${e.project_name||''}</div><div style="font-size:10px;color:var(--muted)">${fmtDT(e.created_at)}</div></div>`).join('')||'<div class="empty"><p>No activity yet</p></div>';
+  const isOwner=S.user?.role==='owner';
+  tl.innerHTML=rec.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 14px">
+    <div class="tl-dot ${e.type}"></div>
+    <div style="flex:1;font-size:12px"><strong>${e.worker_name}</strong> ${e.type==='in'?'checked in':e.type==='out'?'checked out':e.type==='payroll'?'payroll processed':'submitted report'} — ${e.project_name||''}</div>
+    <div style="font-size:10px;color:var(--muted)">${fmtDT(e.created_at)}</div>
+    ${isOwner?`<button onclick="deleteActivity('${e.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:2px 6px;opacity:.6" title="Delete">🗑</button>`:''}
+  </div>`).join('')||'<div class="empty"><p>No activity yet</p></div>';
 }
 function calcWorkerEarnings(wId, projId){
   const w=S.workers.find(x=>x.id===wId);
@@ -1195,6 +1215,7 @@ function renderTeam(){
       <td><span class="tag ${w.checked_in?'on':'off'}">${w.checked_in?'On Site':'Offline'}</span></td>
       <td><b>${h.toFixed(1)}h</b></td>
       <td style="font-size:12px;font-weight:600;color:var(--gold)">${rateLabel}</td>
+      <td style="font-family:var(--mono);font-weight:700;color:var(--green);font-size:13px">$${earned.toFixed(2)}</td>
       <td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td>
       <td style="display:flex;gap:5px;flex-wrap:wrap">
         <button class="action" onclick="openEditWorker('${w.id}')">✏️ Edit</button>
@@ -1209,7 +1230,9 @@ function renderTeam(){
     tf.innerHTML=`<tr style="background:rgba(245,158,11,.06);border-top:2px solid var(--border)">
       <td colspan="3" style="padding:11px 14px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">TOTAL (${ws.length} people)</td>
       <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--gold);font-size:14px">${totalHours.toFixed(1)}h</td>
-      <td colspan="3" style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--green);font-size:14px">$${totalEarned.toFixed(2)}</td>
+      <td></td>
+      <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--green);font-size:14px">$${totalEarned.toFixed(2)}</td>
+      <td colspan="2"></td>
     </tr>`;
   } else {
     tf.innerHTML='';
@@ -1507,7 +1530,7 @@ async function captureMgrMedia(e) {
   }
   // Store File reference only — no FileReader, no base64
   journalPending = { file: f, type: mediaType, name: f.name, forManager: true };
-  const previewUrl = URL.createObjectURL(f);
+  const previewUrl = setPreviewUrl(f);
   const prev = document.getElementById('journal-preview');
   prev.style.display = 'block';
   prev.innerHTML = mediaType === 'photo'
@@ -1606,7 +1629,7 @@ function captureJournalMedia(e, type) {
     return;
   }
   journalPending = { file: f, type: mediaType, name: f.name, forManager: false };
-  const previewUrl = URL.createObjectURL(f);
+  const previewUrl = setPreviewUrl(f);
   const prev = document.getElementById('journal-preview');
   prev.style.display = 'block';
   prev.innerHTML = mediaType === 'photo'
@@ -1641,6 +1664,7 @@ function voiceJournal() {
 
 function cancelJournal() {
   journalPending = null;
+  revokePreviewUrl();
   document.getElementById('journal-ov').className = 'co-ov';
 }
 
@@ -2244,6 +2268,15 @@ async function saveAdjustHours(){
   closeModal('mod-adjust-hours');
   openWorkerDetail(projId,workerId);
   toast(`${finalHours>0?'+':''}${finalHours.toFixed(1)}h saved for ${w?.name}`,'ok');
+}
+
+async function deleteActivity(id){
+  if(!confirm('Delete this activity record?'))return;
+  await db.from('events').delete().eq('id',id);
+  const ev=await db.from('events').select('*').order('created_at');
+  S.events=ev.data||[];
+  renderOverview();
+  toast('Deleted','ok');
 }
 
 init();
