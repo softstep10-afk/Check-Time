@@ -1045,7 +1045,7 @@ async function uploadPDF(e) {
 // ═══ REPLACED FUNCTION 4: captureMgrMedia ═══
 // First file → opens comment overlay (same flow as before).
 // Extra files → each uploaded to storage with projId, no base64.
-function captureMgrMedia(e) {
+async function captureMgrMedia(e) {
   const files = Array.from(e.target.files);
   if (!files.length) return;
   const f = files[0];
