@@ -1262,6 +1262,8 @@ async function saveEditProject(){
   const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];
   closeModal('mod-edit-proj');renderProjCards();toast('Saved!','ok');
 }
+
+function useMyLocationForProject(){
   const btn=document.getElementById('mp-loc-btn');
   const status=document.getElementById('mp-loc-status');
   if(!navigator.geolocation){status.textContent='GPS not supported on this device';return;}
