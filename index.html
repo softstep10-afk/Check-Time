@@ -414,6 +414,16 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="submit-row"><button class="sub-btn" onclick="submitReport()">📨 Submit Daily Report</button></div>
   </div>
 </div>
+<!-- WORKER MESSAGE OVERLAY -->
+<div class="co-ov" id="worker-msg-ov">
+  <div class="co-box">
+    <div class="co-top"><div class="ico">💬</div><h3>Message from Manager</h3><p style="color:var(--muted);font-size:12px">Read carefully before starting work</p></div>
+    <div class="co-body">
+      <div id="worker-msg-text" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin-bottom:16px"></div>
+      <button class="co-go rdy" onclick="document.getElementById('worker-msg-ov').className='co-ov'">✅ Got it</button>
+    </div>
+  </div>
+</div>
 <div class="co-ov" id="co-ov">
   <div class="co-box">
     <div class="co-top"><div class="ico">🎬</div><h3>Before You Leave</h3><p>Record or upload a short video of your work today.</p></div>
@@ -647,6 +657,28 @@ tr:hover td{background:rgba(255,255,255,.015)}
 <div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="mp-rate" value="25"></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
 <div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="ep-rate"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
 <div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role" onchange="toggleWorkerPayFields()"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div id="nw-hourly-wrap" class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="nw-rate" placeholder="25" min="0" step="0.5"></div><div id="nw-fixed-wrap" class="mfield" style="display:none"><label>Fixed Amount per Project ($)</label><input type="number" id="nw-fixed" placeholder="500" min="0"></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
+
+<!-- EDIT WORKER MODAL -->
+<div class="modal-ov" id="mod-edit-worker"><div class="modal"><div class="modal-top"><h3>✏️ Edit Team Member</h3><button class="modal-close" onclick="closeModal('mod-edit-worker')">×</button></div><div class="modal-body">
+  <input type="hidden" id="ew-id">
+  <div class="mfield"><label>Full Name</label><input type="text" id="ew-name"></div>
+  <div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="ew-pin" maxlength="6"></div>
+  <div class="mfield"><label>Category</label><select id="ew-role" onchange="toggleEditWorkerPayFields()"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div>
+  <div id="ew-hourly-wrap" class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="ew-rate" min="0" step="0.5"></div>
+  <div id="ew-fixed-wrap" class="mfield" style="display:none"><label>Fixed Amount ($)</label><input type="number" id="ew-fixed" min="0"></div>
+  <div class="toggle-row"><div><span>🎬 Require checkout video</span></div><label class="tog"><input type="checkbox" id="ew-vid"><div class="tog-sl"></div></label></div>
+  <button class="big-btn" onclick="saveEditWorker()">💾 Save Changes</button>
+  <button class="big-btn" style="background:rgba(239,68,68,.15);color:var(--red);margin-top:8px" onclick="confirmResetHours()">🔄 Reset Hours to Zero</button>
+</div></div></div>
+
+<!-- MESSAGE WORKER MODAL -->
+<div class="modal-ov" id="mod-msg-worker"><div class="modal"><div class="modal-top"><h3>💬 Message to Worker</h3><button class="modal-close" onclick="closeModal('mod-msg-worker')">×</button></div><div class="modal-body">
+  <input type="hidden" id="msg-worker-id">
+  <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Worker will see this message when they open the app.</div>
+  <div class="mfield"><label id="msg-worker-name-lbl">Worker</label><textarea id="msg-text" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;resize:vertical;min-height:100px;outline:none" placeholder="e.g. Please bring your tools tomorrow. Start at 8am on project Papay."></textarea></div>
+  <button class="big-btn" onclick="saveMsgWorker()">📤 Send Message</button>
+  <button class="big-btn" style="background:rgba(107,114,128,.1);color:var(--muted);margin-top:8px" onclick="clearMsgWorker()">🗑 Clear Message</button>
+</div></div></div>
 <div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
 
 <div class="modal-ov" id="mod-annual">
@@ -717,6 +749,11 @@ async function doLogin(){
       startClock();
       getGPS();
       showPage('pg-worker');
+      // Show message from manager if one exists
+      if(w.message&&w.message.trim()){
+        document.getElementById('worker-msg-text').textContent=w.message;
+        document.getElementById('worker-msg-ov').className='co-ov show';
+      }
       // If worker was checked in on a project, auto-open that project
       if(w.checked_in && w.last_proj_id){openWorkerProject(w.last_proj_id);}
     }
@@ -1074,7 +1111,20 @@ function renderTeam(){
   tb.innerHTML=ws.map(w=>{
     const h=calcHours(w.id,null);
     const rateLabel=w.role==='subcontractor'?`$${w.fixed_amount||0} fixed`:`$${w.rate||0}/hr`;
-    return`<tr><td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div><div class="nm">${w.name}</div><div class="np">PIN: ${w.pin}</div></div></div></td><td><span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></td><td><span class="tag ${w.checked_in?'on':'off'}">${w.checked_in?'On Site':'Offline'}</span></td><td>${h.toFixed(1)}h</td><td style="font-size:12px;font-weight:600;color:var(--gold)">${rateLabel}</td><td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td><td style="display:flex;gap:5px"><button class="action red" onclick="delWorker('${w.id}')">Remove</button></td></tr>`;
+    const hasMsg=w.message&&w.message.trim();
+    return`<tr>
+      <td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div><div class="nm">${w.name}</div><div class="np">PIN: ${w.pin}</div></div></div></td>
+      <td><span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></td>
+      <td><span class="tag ${w.checked_in?'on':'off'}">${w.checked_in?'On Site':'Offline'}</span></td>
+      <td>${h.toFixed(1)}h</td>
+      <td style="font-size:12px;font-weight:600;color:var(--gold)">${rateLabel}</td>
+      <td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td>
+      <td style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="action" onclick="openEditWorker('${w.id}')">✏️ Edit</button>
+        <button class="action ${hasMsg?'gold':''}" onclick="openMsgWorker('${w.id}')" title="${hasMsg?'Has message':'Send message'}">💬${hasMsg?' ●':''}</button>
+        <button class="action red" onclick="delWorker('${w.id}')">Remove</button>
+      </td>
+    </tr>`;
   }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No team members yet</td></tr>';
 }
 async function toggleVid(id,val){await db.from('workers').update({require_video:val}).eq('id',id);const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];toast('Updated','ok');}
@@ -1107,30 +1157,34 @@ function useMyLocationForProject(){
   btn.disabled=true;
   status.textContent='';
   navigator.geolocation.getCurrentPosition(
-    pos=>{
+    async pos=>{
       const lat=pos.coords.latitude.toFixed(6);
       const lon=pos.coords.longitude.toFixed(6);
       document.getElementById('mp-lat').value=lat;
       document.getElementById('mp-lon').value=lon;
       btn.textContent='✅ Location saved!';
-      btn.style.borderColor='var(--green)';
-      btn.style.color='var(--green)';
-      btn.style.background='rgba(34,197,94,.07)';
-      status.textContent=`±${Math.round(pos.coords.accuracy)}m accuracy · ${lat}, ${lon}`;
-      status.style.color='var(--green)';
-      setTimeout(()=>{
-        btn.textContent='📍 Use My Current Location';
-        btn.style.borderColor='var(--gold)';
-        btn.style.color='var(--gold)';
-        btn.style.background='rgba(245,158,11,.07)';
-        btn.disabled=false;
-      },3000);
+      btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(34,197,94,.07)';
+      status.textContent=`±${Math.round(pos.coords.accuracy)}m · getting address...`;
+      status.style.color='var(--muted)';
+      // Reverse geocoding via Nominatim (free, no API key needed)
+      try{
+        const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+        const d=await r.json();
+        if(d?.display_name){
+          const addr=d.display_name;
+          document.getElementById('mp-addr').value=addr;
+          status.textContent=`✅ ±${Math.round(pos.coords.accuracy)}m · ${addr.split(',').slice(0,3).join(',')}`;
+          status.style.color='var(--green)';
+        }
+      }catch(e){
+        status.textContent=`±${Math.round(pos.coords.accuracy)}m · ${lat}, ${lon}`;
+        status.style.color='var(--green)';
+      }
+      setTimeout(()=>{btn.textContent='📍 Use My Current Location';btn.style.borderColor='var(--gold)';btn.style.color='var(--gold)';btn.style.background='rgba(245,158,11,.07)';btn.disabled=false;},4000);
     },
     err=>{
-      btn.textContent='📍 Use My Current Location';
-      btn.disabled=false;
-      status.textContent='Could not get location — check browser permissions';
-      status.style.color='var(--red)';
+      btn.textContent='📍 Use My Current Location';btn.disabled=false;
+      status.textContent='Could not get location — check browser permissions';status.style.color='var(--red)';
     },
     {enableHighAccuracy:true,timeout:10000}
   );
@@ -1750,6 +1804,73 @@ async function openAnnualReport(){
     html+='</div>';
   });
   c.innerHTML=html;
+}
+
+// ═══ EDIT WORKER ═══
+function openEditWorker(id){
+  const w=S.workers.find(x=>x.id===id);if(!w)return;
+  document.getElementById('ew-id').value=id;
+  document.getElementById('ew-name').value=w.name;
+  document.getElementById('ew-pin').value=w.pin;
+  document.getElementById('ew-role').value=w.role||'worker';
+  document.getElementById('ew-rate').value=w.rate||0;
+  document.getElementById('ew-fixed').value=w.fixed_amount||0;
+  document.getElementById('ew-vid').checked=w.require_video||false;
+  toggleEditWorkerPayFields();
+  openModal('mod-edit-worker');
+}
+function toggleEditWorkerPayFields(){
+  const role=document.getElementById('ew-role').value;
+  document.getElementById('ew-hourly-wrap').style.display=role==='subcontractor'?'none':'block';
+  document.getElementById('ew-fixed-wrap').style.display=role==='subcontractor'?'block':'none';
+}
+async function saveEditWorker(){
+  const id=document.getElementById('ew-id').value;
+  const name=document.getElementById('ew-name').value.trim();
+  const pin=document.getElementById('ew-pin').value.trim();
+  const role=document.getElementById('ew-role').value;
+  const rate=role==='subcontractor'?0:parseFloat(document.getElementById('ew-rate').value)||0;
+  const fixed_amount=role==='subcontractor'?parseFloat(document.getElementById('ew-fixed').value)||0:0;
+  const require_video=document.getElementById('ew-vid').checked;
+  if(!name||pin.length<3){toast('Name and PIN required','err');return;}
+  // Check PIN uniqueness (exclude self)
+  const pinTaken=(S.workers.find(w=>w.pin===pin&&w.id!==id)||S.managers.find(m=>m.pin===pin));
+  if(pinTaken){toast('PIN already taken by someone else','err');return;}
+  await db.from('workers').update({name,pin,role,rate,fixed_amount,require_video}).eq('id',id);
+  const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
+  closeModal('mod-edit-worker');refreshManager();toast(`${name} updated!`,'ok');
+}
+async function confirmResetHours(){
+  const id=document.getElementById('ew-id').value;
+  const w=S.workers.find(x=>x.id===id);
+  if(!confirm(`Reset ALL hours for ${w?.name}? This deletes their check-in history.`))return;
+  // Delete all events for this worker
+  await db.from('events').delete().match({worker_id:id});
+  const ev=await db.from('events').select('*').order('created_at');S.events=ev.data||[];
+  closeModal('mod-edit-worker');refreshManager();toast(`Hours reset for ${w?.name}`,'ok');
+}
+
+// ═══ WORKER MESSAGES ═══
+function openMsgWorker(id){
+  const w=S.workers.find(x=>x.id===id);if(!w)return;
+  document.getElementById('msg-worker-id').value=id;
+  document.getElementById('msg-worker-name-lbl').textContent=`Message for ${w.name}`;
+  document.getElementById('msg-text').value=w.message||'';
+  openModal('mod-msg-worker');
+}
+async function saveMsgWorker(){
+  const id=document.getElementById('msg-worker-id').value;
+  const msg=document.getElementById('msg-text').value.trim();
+  if(!msg){toast('Write a message first','err');return;}
+  await db.from('workers').update({message:msg}).eq('id',id);
+  const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
+  closeModal('mod-msg-worker');renderTeam();toast('💬 Message sent!','ok');
+}
+async function clearMsgWorker(){
+  const id=document.getElementById('msg-worker-id').value;
+  await db.from('workers').update({message:null}).eq('id',id);
+  const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
+  closeModal('mod-msg-worker');renderTeam();toast('Message cleared','ok');
 }
 
 init();
