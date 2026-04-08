@@ -335,41 +335,84 @@ tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 <div class="page" id="pg-worker">
-  <div class="w-top"><div><h2 id="w-name">Worker</h2><p id="w-sub">Select a project</p></div><div style="display:flex;gap:8px"><button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button><button class="out-btn" onclick="doLogout()">Sign Out</button></div></div>
-  <div class="w-body">
+  <!-- TOP BAR -->
+  <div class="w-top">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button id="w-back-btn" onclick="workerBackToProjects()" style="display:none;background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0">←</button>
+      <div><h2 id="w-name">Worker</h2><p id="w-sub" style="font-size:11px;color:var(--muted);margin-top:2px">Select a project</p></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
+      <button class="out-btn" onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>
+
+  <!-- VIEW 1: PROJECT LIST -->
+  <div id="w-view-projects" class="w-body">
     <div class="proj-label">📍 Select Today's Project</div>
     <div id="proj-list"></div>
-    <div id="notes-wrap" style="display:none"><div class="notes-box"><h4>📋 Manager's Notes</h4><p id="notes-txt"></p></div></div>
-    <div class="gps-row"><span>📍 Require GPS check-in</span><label class="tog"><input type="checkbox" id="gps-req" checked><div class="tog-sl"></div></label></div>
-    <div class="gps-info"><div class="gdot spin" id="gps-dot"></div><span id="gps-txt">Acquiring location...</span></div>
-    <div class="status-card">
-      <div class="sc-proj">Project</div>
-      <div class="sc-name" id="sc-proj">— Select a project above —</div>
-      <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
-      <div class="clock" id="sc-clock">00:00:00</div>
-      <div class="clock-lbl" id="sc-lbl">Not checked in</div>
-      <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>✅ Select a project first</button>
-    </div>
-    <div class="sec-h">📸 Photo Journal</div>
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-        <button onclick="document.getElementById('cam-photo').click()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:var(--font);width:100%">
-          <span style="font-size:32px">📷</span>
-          <span style="font-size:13px;font-weight:700;color:var(--text)">Take Photo</span>
-        </button>
-        <button onclick="document.getElementById('cam-video').click()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:var(--font);width:100%">
-          <span style="font-size:32px">🎥</span>
-          <span style="font-size:13px;font-weight:700;color:var(--text)">Record Video</span>
-        </button>
-      </div>
-      <input type="file" id="cam-photo" accept="image/*" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
-      <input type="file" id="cam-video" accept="video/*" style="display:none" onchange="captureJournalMedia(event,'video')">
-      <div id="journal-entries"><div style="text-align:center;padding:14px;color:var(--muted);font-size:12px">No photos yet — tap a button above</div></div>
-    </div>
-    <div class="sec-h">📋 My Tasks</div>
-    <div id="w-tasks"></div>
   </div>
-  <div class="submit-row"><button class="sub-btn" onclick="submitReport()">📨 Submit Daily Report</button></div>
+
+  <!-- VIEW 2: PROJECT DETAIL -->
+  <div id="w-view-detail" style="display:none">
+    <!-- GPS status bar -->
+    <div style="padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+        <div class="gdot spin" id="gps-dot"></div>
+        <span id="gps-txt">Acquiring location...</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+        <span>GPS</span>
+        <label class="tog"><input type="checkbox" id="gps-req" checked><div class="tog-sl"></div></label>
+      </div>
+    </div>
+
+    <div class="w-body" style="padding-bottom:80px">
+
+      <!-- CHECK IN/OUT CARD -->
+      <div class="status-card" style="margin-bottom:16px">
+        <div class="sc-proj">Project</div>
+        <div class="sc-name" id="sc-proj">—</div>
+        <div id="w-proj-addr" style="margin-bottom:12px"></div>
+        <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
+        <div class="clock" id="sc-clock">00:00:00</div>
+        <div class="clock-lbl" id="sc-lbl">Not checked in</div>
+        <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>✅ Check In</button>
+      </div>
+
+      <!-- MANAGER NOTES -->
+      <div id="notes-wrap" style="display:none">
+        <div class="notes-box" style="margin-bottom:16px">
+          <h4>📋 Manager's Notes</h4>
+          <p id="notes-txt"></p>
+        </div>
+      </div>
+
+      <!-- MY TASKS -->
+      <div class="sec-h">📋 Tasks for this project</div>
+      <div id="w-tasks" style="margin-bottom:16px"></div>
+
+      <!-- PHOTO JOURNAL -->
+      <div class="sec-h">📸 Project Journal</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
+          <button onclick="document.getElementById('cam-photo').click()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:var(--font);width:100%">
+            <span style="font-size:32px">📷</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text)">Add Photo</span>
+          </button>
+          <button onclick="document.getElementById('cam-video').click()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:var(--font);width:100%">
+            <span style="font-size:32px">🎥</span>
+            <span style="font-size:13px;font-weight:700;color:var(--text)">Add Video</span>
+          </button>
+        </div>
+        <input type="file" id="cam-photo" accept="image/*" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
+        <input type="file" id="cam-video" accept="video/*" style="display:none" onchange="captureJournalMedia(event,'video')">
+        <div id="journal-entries"><div style="text-align:center;padding:14px;color:var(--muted);font-size:12px">No photos yet</div></div>
+      </div>
+
+    </div>
+    <div class="submit-row"><button class="sub-btn" onclick="submitReport()">📨 Submit Daily Report</button></div>
+  </div>
 </div>
 <div class="co-ov" id="co-ov">
   <div class="co-box">
@@ -679,23 +722,49 @@ function gpsDist(a,b,c,d){const R=6371000,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/
 function renderProjPicker(){
   const c=document.getElementById('proj-list');
   if(!S.projects.length){c.innerHTML='<div class="empty"><div class="ei">🏗️</div><p>No projects yet</p></div>';return;}
-  c.innerHTML=S.projects.filter(p=>p.status==='active').map(p=>`<div class="proj-item ${S.selectedProj===p.id?'picked':''}" onclick="pickProj('${p.id}')"><div><div class="proj-item-name">${p.name}</div><div class="proj-item-addr"><a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" onclick="event.stopPropagation()">🗺️ ${p.address}</a></div></div><div class="proj-check">${S.selectedProj===p.id?'✓':''}</div></div>`).join('');
+  const active=S.projects.filter(p=>p.status==='active');
+  if(!active.length){c.innerHTML='<div class="empty"><div class="ei">🏗️</div><p>No active projects</p></div>';return;}
+  c.innerHTML=active.map(p=>`
+    <div class="proj-item" onclick="openWorkerProject('${p.id}')">
+      <div>
+        <div class="proj-item-name">${p.name}</div>
+        <div class="proj-item-addr"><a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" onclick="event.stopPropagation()">🗺️ ${p.address}</a></div>
+      </div>
+      <div style="font-size:20px">›</div>
+    </div>`).join('');
 }
-function pickProj(id){
-  if(S.checkedIn){toast('Check out first','err');return;}
-  S.selectedProj=id;renderProjPicker();
+function openWorkerProject(id){
+  if(S.checkedIn && S.selectedProj !== id){toast('Check out first','err');return;}
+  S.selectedProj=id;
   const p=S.projects.find(x=>x.id===id);
-  document.getElementById('sc-proj').textContent=p?.name||'—';
+  // Update header
   document.getElementById('w-sub').textContent=p?.name||'';
+  document.getElementById('w-back-btn').style.display='block';
+  // Show project detail view
+  document.getElementById('w-view-projects').style.display='none';
+  document.getElementById('w-view-detail').style.display='block';
+  // Fill project info
+  document.getElementById('sc-proj').textContent=p?.name||'—';
+  document.getElementById('w-proj-addr').innerHTML=p?.address?`<a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none">🗺️ ${p.address}</a>`:'';
   const nw=document.getElementById('notes-wrap'),nt=document.getElementById('notes-txt');
   if(p?.notes?.trim()){nt.textContent=p.notes;nw.style.display='block';}else{nw.style.display='none';}
   updateWorkerUI();
-  renderJournal(); // ← reload journal for selected project
+  loadWorkerTasks();
+  renderJournal();
 }
+function workerBackToProjects(){
+  if(S.checkedIn){toast('Check out first','err');return;}
+  S.selectedProj=null;
+  document.getElementById('w-back-btn').style.display='none';
+  document.getElementById('w-sub').textContent='Select a project';
+  document.getElementById('w-view-projects').style.display='block';
+  document.getElementById('w-view-detail').style.display='none';
+}
+function pickProj(id){openWorkerProject(id);}
 function updateWorkerUI(){
   const btn=document.getElementById('ci-btn'),badge=document.getElementById('sc-badge'),needVid=S.user?.require_video;
   if(S.checkedIn){btn.textContent=needVid?'🚪 Check Out (video required)':'🚪 Check Out';btn.className='ci-btn do-out';btn.disabled=false;badge.textContent='Checked In';badge.className='sc-badge badge-in';}
-  else{if(S.selectedProj){btn.textContent='✅ Check In';btn.className='ci-btn do-in';btn.disabled=false;}else{btn.textContent='✅ Select a project first';btn.className='ci-btn do-in';btn.disabled=true;}badge.textContent='Checked Out';badge.className='sc-badge badge-out';}
+  else{btn.textContent='✅ Check In';btn.className='ci-btn do-in';btn.disabled=false;badge.textContent='Checked Out';badge.className='sc-badge badge-out';}
 }
 async function toggleCI(){
   if(!S.selectedProj){toast('Select a project first','err');return;}
@@ -795,7 +864,7 @@ async function confirmCO() {
 
 async function loadWorkerTasks(){
   const c=document.getElementById('w-tasks');
-  const mine=S.tasks.filter(t=>t.worker_id===S.user.id&&!t.done);
+  const mine=S.tasks.filter(t=>t.worker_id===S.user.id&&!t.done&&(!S.selectedProj||t.project_id===S.selectedProj||!t.project_id));
   if(!mine.length){c.innerHTML='<div class="empty"><div class="ei">✅</div><p>No tasks assigned</p></div>';return;}
   c.innerHTML=mine.map(t=>`
     <div class="task-card" style="cursor:pointer" onclick="openTaskDetail('${t.id}')">
