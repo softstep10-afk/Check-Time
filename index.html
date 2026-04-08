@@ -879,6 +879,7 @@ async function refreshWorker(){
   }
   toast('✅ Updated!','ok');
 }
+function workerBackToProjects(){
   if(S.checkedIn){toast('Check out before leaving this project','err');return;}
   S.selectedProj=null;
   document.getElementById('w-back-btn').style.display='none';
