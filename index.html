@@ -696,22 +696,41 @@ async function doLogin(){
       const {data,error}=await db.from('workers').select('*').eq('pin',pin);
       if(error||!data||!data.length){showErr('PIN not found — ask your manager');btn.disabled=false;btn.textContent='Sign In →';return;}
       const w=data[0];
-      S.user=w;S.checkedIn=w.checked_in||false;S.checkInTime=w.check_in_time?new Date(w.check_in_time):null;S.coVideo=null;S.selectedProj=w.last_proj_id;
+      S.user=w;S.checkedIn=w.checked_in||false;S.checkInTime=w.check_in_time?new Date(w.check_in_time):null;S.coVideo=null;S.selectedProj=null;
       document.getElementById('w-name').textContent=w.name;
       document.getElementById('w-sub').textContent='Select a project';
+      document.getElementById('w-back-btn').style.display='none';
+      document.getElementById('w-view-projects').style.display='block';
+      document.getElementById('w-view-detail').style.display='none';
       const proj=await db.from('projects').select('*').order('created_at');
       S.projects=proj.data||[];
       const tasks=await db.from('tasks').select('*').order('created_at');
       S.tasks=tasks.data||[];
-      renderProjPicker();updateWorkerUI();loadWorkerTasks();startClock();getGPS();
-      renderJournal();
+      renderProjPicker();
+      startClock();
+      getGPS();
       showPage('pg-worker');
+      // If worker was checked in on a project, auto-open that project
+      if(w.checked_in && w.last_proj_id){openWorkerProject(w.last_proj_id);}
     }
   }catch(e){showErr('Connection error: '+e.message);}
   btn.disabled=false;btn.textContent='Sign In →';
 }
 function showErr(msg){const e=document.getElementById('err-msg');e.textContent=msg;e.style.display='block';}
-function doLogout(){if(S.clockTimer)clearInterval(S.clockTimer);S.user=null;S.checkedIn=false;S.coVideo=null;S.selectedProj=null;document.getElementById('pin-in').value='';document.getElementById('err-msg').style.display='none';switchTab('worker');showPage('pg-login');}
+function doLogout(){
+  if(S.clockTimer)clearInterval(S.clockTimer);
+  S.user=null;S.checkedIn=false;S.coVideo=null;S.selectedProj=null;
+  document.getElementById('pin-in').value='';
+  document.getElementById('err-msg').style.display='none';
+  // Reset worker views
+  const backBtn=document.getElementById('w-back-btn');
+  const vp=document.getElementById('w-view-projects');
+  const vd=document.getElementById('w-view-detail');
+  if(backBtn)backBtn.style.display='none';
+  if(vp)vp.style.display='block';
+  if(vd)vd.style.display='none';
+  switchTab('worker');showPage('pg-login');
+}
 function getGPS(){
   const dot=document.getElementById('gps-dot'),txt=document.getElementById('gps-txt');
   dot.className='gdot spin';txt.textContent='Acquiring location...';
@@ -726,12 +745,22 @@ function renderProjPicker(){
   if(!active.length){c.innerHTML='<div class="empty"><div class="ei">🏗️</div><p>No active projects</p></div>';return;}
   c.innerHTML=active.map(p=>`
     <div class="proj-item" onclick="openWorkerProject('${p.id}')">
-      <div>
+      <div style="flex:1">
         <div class="proj-item-name">${p.name}</div>
-        <div class="proj-item-addr"><a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" onclick="event.stopPropagation()">🗺️ ${p.address}</a></div>
+        <div style="font-size:12px;color:var(--blue);margin-top:4px">🗺️ ${p.address}</div>
+        <div style="display:flex;gap:8px;margin-top:8px" onclick="event.stopPropagation()">
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:11px;padding:5px 10px;border-radius:6px;background:rgba(59,130,246,.12);color:var(--blue);text-decoration:none;font-weight:600">📍 Navigate</a>
+          <button onclick="copyAddress('${p.address.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}'))" style="font-size:11px;padding:5px 10px;border-radius:6px;background:rgba(245,158,11,.12);color:var(--gold);border:none;font-family:var(--font);cursor:pointer;font-weight:600">📋 Copy address</button>
+        </div>
       </div>
-      <div style="font-size:20px">›</div>
+      <div style="font-size:20px;color:var(--muted);padding-left:10px">›</div>
     </div>`).join('');
+}
+function copyAddress(addr, name){
+  const txt=`${name}\n${addr}`;
+  if(navigator.share){navigator.share({title:name,text:txt}).catch(()=>{});}
+  else if(navigator.clipboard){navigator.clipboard.writeText(txt).then(()=>toast('📋 Address copied!','ok')).catch(()=>toast('Could not copy','err'));}
+  else{toast('📋 '+txt,'ok');}
 }
 function openWorkerProject(id){
   if(S.checkedIn && S.selectedProj !== id){toast('Check out first','err');return;}
@@ -753,12 +782,13 @@ function openWorkerProject(id){
   renderJournal();
 }
 function workerBackToProjects(){
-  if(S.checkedIn){toast('Check out first','err');return;}
+  if(S.checkedIn){toast('Check out before leaving this project','err');return;}
   S.selectedProj=null;
   document.getElementById('w-back-btn').style.display='none';
   document.getElementById('w-sub').textContent='Select a project';
   document.getElementById('w-view-projects').style.display='block';
   document.getElementById('w-view-detail').style.display='none';
+  renderProjPicker();
 }
 function pickProj(id){openWorkerProject(id);}
 function updateWorkerUI(){
