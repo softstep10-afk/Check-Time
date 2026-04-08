@@ -464,7 +464,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <div class="stat b"><div class="sl">Projects</div><div class="sv" id="sv3">0</div><div class="sd">active</div></div>
             <div class="stat p"><div class="sl">Open Tasks</div><div class="sv" id="sv4">0</div><div class="sd">pending</div></div>
           </div>
-          <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px">
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+            <button class="action" style="background:var(--purple);color:#fff;border-color:var(--purple);font-weight:700;padding:8px 16px" onclick="openPayrollCalc()">🧮 Calculator</button>
             <button class="action" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:700;padding:8px 16px" onclick="openAnnualReport()">📊 Annual Report</button>
             <button class="action" style="background:var(--green);color:#fff;border-color:var(--green);font-weight:700;padding:8px 16px" onclick="openPayroll()">💰 Process Payroll</button>
           </div>
@@ -680,6 +681,23 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <button class="big-btn" style="background:rgba(107,114,128,.1);color:var(--muted);margin-top:8px" onclick="clearMsgWorker()">🗑 Clear Message</button>
 </div></div></div>
 <div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
+
+<!-- PAYROLL CALCULATOR MODAL -->
+<div class="modal-ov" id="mod-calc" style="align-items:flex-start;padding-top:16px">
+  <div class="modal" style="max-width:600px;max-height:92vh;overflow-y:auto">
+    <div class="modal-top"><h3>🧮 Payroll Calculator</h3><button class="modal-close" onclick="closeModal('mod-calc')">×</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+        <button id="calc-btn-biweek" onclick="setCalcPeriod('biweek')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--gold);color:#000;font-family:var(--font)">2 Weeks</button>
+        <button id="calc-btn-month" onclick="setCalcPeriod('month')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--border);color:var(--muted);font-family:var(--font)">Month</button>
+        <button id="calc-btn-quarter" onclick="setCalcPeriod('quarter')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--border);color:var(--muted);font-family:var(--font)">3 Months</button>
+        <button id="calc-btn-year" onclick="setCalcPeriod('year')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--border);color:var(--muted);font-family:var(--font)">Year</button>
+      </div>
+      <div id="calc-period-label" style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:14px"></div>
+      <div id="calc-content"></div>
+    </div>
+  </div>
+</div>
 
 <div class="modal-ov" id="mod-annual">
   <div class="modal" style="max-width:500px">
@@ -977,10 +995,16 @@ async function refreshManager(){
   renderOverview();renderProjCards();renderTeam();renderTimeline();renderTaskList();renderMgrCards();fillWorkerSelect();fillTlFilters();
 }
 function calcHours(wId,projId,dateStr){
-  // Only count hours AFTER the last payroll marker (so hours reset after each payroll)
-  const lastPayroll=[...S.events].filter(e=>e.type==='payroll').sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
-  const since=lastPayroll?new Date(lastPayroll.created_at):null;
-  const evs=S.events.filter(e=>e.worker_id===wId&&(!projId||e.project_id===projId)&&(!dateStr||e.created_at.startsWith(dateStr))&&(!since||new Date(e.created_at)>since));
+  // Find the last payroll/reset marker for THIS specific worker (or global payroll with null worker_id)
+  const markers=S.events.filter(e=>e.type==='payroll'&&(e.worker_id===wId||e.worker_id===null));
+  const lastMarker=markers.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+  const since=lastMarker?new Date(lastMarker.created_at):null;
+  const evs=S.events.filter(e=>
+    e.worker_id===wId&&
+    (!projId||e.project_id===projId)&&
+    (!dateStr||e.created_at.startsWith(dateStr))&&
+    (!since||new Date(e.created_at)>since)
+  );
   let total=0,lastIn=null;
   [...evs].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(ev=>{
     if(ev.type==='in')lastIn=new Date(ev.created_at);
@@ -990,17 +1014,21 @@ function calcHours(wId,projId,dateStr){
   return total;
 }
 
-// Worker earnings: hourly workers use their rate, subcontractors use fixed amount
-function workerEarnings(w, projId){
-  if(!w)return 0;
-  if(w.role==='subcontractor')return w.fixed_amount||0;
-  return calcHours(w.id, projId)*(w.rate||0);
-}
-
-// Real-time project cost = sum of all workers' earnings on this project
-function getProjectCost(projId){
-  const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===projId));
-  return pw.reduce((sum,w)=>sum+workerEarnings(w,projId),0);
+// Hours for any date range — ignores payroll markers (used for reports)
+function calcHoursRange(wId,projId,fromDate,toDate){
+  const evs=S.events.filter(e=>
+    e.worker_id===wId&&
+    e.type!=='payroll'&&
+    (!projId||e.project_id===projId)&&
+    (!fromDate||new Date(e.created_at)>=fromDate)&&
+    (!toDate||new Date(e.created_at)<=toDate)
+  );
+  let total=0,lastIn=null;
+  [...evs].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(ev=>{
+    if(ev.type==='in')lastIn=new Date(ev.created_at);
+    else if(ev.type==='out'&&lastIn){total+=(new Date(ev.created_at)-lastIn)/3600000;lastIn=null;}
+  });
+  return total;
 }
 function renderOverview(){
   document.getElementById('sv1').textContent=S.workers.filter(w=>w.checked_in).length;
@@ -1157,30 +1185,20 @@ function useMyLocationForProject(){
   btn.disabled=true;
   status.textContent='';
   navigator.geolocation.getCurrentPosition(
-    async pos=>{
+    pos=>{
       const lat=pos.coords.latitude.toFixed(6);
       const lon=pos.coords.longitude.toFixed(6);
       document.getElementById('mp-lat').value=lat;
       document.getElementById('mp-lon').value=lon;
-      btn.textContent='✅ Location saved!';
+      btn.textContent='✅ Coordinates saved!';
       btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(34,197,94,.07)';
-      status.textContent=`±${Math.round(pos.coords.accuracy)}m · getting address...`;
-      status.style.color='var(--muted)';
-      // Reverse geocoding via Nominatim (free, no API key needed)
-      try{
-        const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
-        const d=await r.json();
-        if(d?.display_name){
-          const addr=d.display_name;
-          document.getElementById('mp-addr').value=addr;
-          status.textContent=`✅ ±${Math.round(pos.coords.accuracy)}m · ${addr.split(',').slice(0,3).join(',')}`;
-          status.style.color='var(--green)';
-        }
-      }catch(e){
-        status.textContent=`±${Math.round(pos.coords.accuracy)}m · ${lat}, ${lon}`;
-        status.style.color='var(--green)';
-      }
-      setTimeout(()=>{btn.textContent='📍 Use My Current Location';btn.style.borderColor='var(--gold)';btn.style.color='var(--gold)';btn.style.background='rgba(245,158,11,.07)';btn.disabled=false;},4000);
+      status.textContent=`✅ ±${Math.round(pos.coords.accuracy)}m accuracy`;
+      status.style.color='var(--green)';
+      setTimeout(()=>{
+        btn.textContent='📍 Use My Current Location';
+        btn.style.borderColor='var(--gold)';btn.style.color='var(--gold)';btn.style.background='rgba(245,158,11,.07)';
+        btn.disabled=false;
+      },3000);
     },
     err=>{
       btn.textContent='📍 Use My Current Location';btn.disabled=false;
@@ -1843,11 +1861,27 @@ async function saveEditWorker(){
 async function confirmResetHours(){
   const id=document.getElementById('ew-id').value;
   const w=S.workers.find(x=>x.id===id);
-  if(!confirm(`Reset ALL hours for ${w?.name}? This deletes their check-in history.`))return;
-  // Delete all events for this worker
-  await db.from('events').delete().match({worker_id:id});
+  if(!confirm(`Reset current hours for ${w?.name}? Their history is saved in archive.`))return;
+  const h=calcHours(id,null);
+  const earned=calcWorkerEarnings(w,null);
+  const periodLabel=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  // Archive current hours to payroll_periods before reset
+  if(h>0){
+    await db.from('payroll_periods').insert({
+      worker_id:id, worker_name:w.name,
+      hours:h, amount:earned, rate:w.rate||0,
+      period_label:'Manual reset — '+periodLabel,
+      processed_by:S.user?.name||'Manager'
+    });
+  }
+  // Insert a reset marker for this specific worker
+  await db.from('events').insert({
+    type:'payroll', worker_id:id, worker_name:w.name,
+    project_id:null, project_name:'HOURS RESET: '+periodLabel
+  });
   const ev=await db.from('events').select('*').order('created_at');S.events=ev.data||[];
-  closeModal('mod-edit-worker');refreshManager();toast(`Hours reset for ${w?.name}`,'ok');
+  closeModal('mod-edit-worker');refreshManager();
+  toast(`✅ Hours reset for ${w?.name}. History saved.`,'ok');
 }
 
 // ═══ WORKER MESSAGES ═══
@@ -1871,6 +1905,105 @@ async function clearMsgWorker(){
   await db.from('workers').update({message:null}).eq('id',id);
   const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
   closeModal('mod-msg-worker');renderTeam();toast('Message cleared','ok');
+}
+
+// ═══ PAYROLL CALCULATOR ═══
+let calcPeriod = 'biweek';
+function openPayrollCalc(){
+  calcPeriod='biweek';
+  openModal('mod-calc');
+  renderCalc();
+}
+function setCalcPeriod(p){
+  calcPeriod=p;
+  ['biweek','month','quarter','year'].forEach(id=>{
+    const btn=document.getElementById('calc-btn-'+id);
+    if(btn){btn.style.background=id===p?'var(--gold)':'var(--border)';btn.style.color=id===p?'#000':'var(--muted)';}
+  });
+  renderCalc();
+}
+function renderCalc(){
+  const now=new Date();
+  let fromDate, label;
+  if(calcPeriod==='biweek'){fromDate=new Date(now-14*86400000);label='Last 2 Weeks';}
+  else if(calcPeriod==='month'){fromDate=new Date(now.getFullYear(),now.getMonth(),1);label='This Month ('+now.toLocaleString('en-US',{month:'long'})+')';}
+  else if(calcPeriod==='quarter'){
+    const qStart=new Date(now.getFullYear(),Math.floor(now.getMonth()/3)*3,1);
+    fromDate=qStart;label='This Quarter (Q'+(Math.floor(now.getMonth()/3)+1)+' '+now.getFullYear()+')';
+  }
+  else{fromDate=new Date(now.getFullYear(),0,1);label='This Year ('+now.getFullYear()+')';}
+  document.getElementById('calc-period-label').textContent=label+' · '+fromDate.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'  →  Today';
+  const c=document.getElementById('calc-content');
+  let html='';
+  let grandTotal=0; let grandHours=0;
+  // Workers section
+  const hourlyWorkers=S.workers.filter(w=>w.role!=='subcontractor');
+  const subWorkers=S.workers.filter(w=>w.role==='subcontractor');
+  if(hourlyWorkers.length){
+    html+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">👷 Hourly Workers</div>`;
+    hourlyWorkers.forEach(w=>{
+      const h=calcHoursRange(w.id,null,fromDate,now);
+      const earned=h*(w.rate||0);
+      grandHours+=h; grandTotal+=earned;
+      if(h>0||true){
+        html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div style="width:28px;height:28px;border-radius:50%;background:${w.color||'#f59e0b'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000">${w.name.charAt(0)}</div>
+              <div><div style="font-size:13px;font-weight:600">${w.name}</div><div style="font-size:11px;color:var(--muted)">${h.toFixed(1)}h × $${w.rate||0}/hr</div></div>
+            </div>
+          </div>
+          <div style="font-family:var(--mono);font-weight:700;font-size:16px;color:${earned>0?'var(--gold)':'var(--muted)'}">$${earned.toFixed(0)}</div>
+        </div>`;
+      }
+    });
+  }
+  if(subWorkers.length){
+    html+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:14px 0 8px">🤝 Subcontractors</div>`;
+    subWorkers.forEach(w=>{
+      const amount=w.fixed_amount||0;
+      grandTotal+=amount;
+      html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:28px;height:28px;border-radius:50%;background:${w.color||'#a855f7'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">${w.name.charAt(0)}</div>
+            <div><div style="font-size:13px;font-weight:600">${w.name}</div><div style="font-size:11px;color:var(--muted)">Fixed amount</div></div>
+          </div>
+        </div>
+        <div style="font-family:var(--mono);font-weight:700;font-size:16px;color:var(--purple)">$${amount.toFixed(0)}</div>
+      </div>`;
+    });
+  }
+  // Projects breakdown
+  if(S.projects.length){
+    html+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:14px 0 8px">🏗️ By Project</div>`;
+    S.projects.forEach(p=>{
+      const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id));
+      const projHours=pw.reduce((s,w)=>s+calcHoursRange(w.id,p.id,fromDate,now),0);
+      const projCost=pw.reduce((s,w)=>{
+        if(w.role==='subcontractor')return s+(w.fixed_amount||0);
+        return s+calcHoursRange(w.id,p.id,fromDate,now)*(w.rate||0);
+      },0);
+      if(projHours>0||projCost>0){
+        html+=`<div style="padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="font-size:13px;font-weight:700">${p.name}</div>
+            <div style="font-family:var(--mono);font-weight:700;color:var(--green)">$${projCost.toFixed(0)}</div>
+          </div>
+          <div style="font-size:11px;color:var(--muted)">${projHours.toFixed(1)}h total</div>
+        </div>`;
+      }
+    });
+  }
+  // Grand total
+  html+=`<div style="display:flex;justify-content:space-between;padding:14px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.25);border-radius:10px;margin-top:12px">
+    <div>
+      <div style="font-size:14px;font-weight:700">💰 Total Labor Cost</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px">${grandHours.toFixed(1)} hours total</div>
+    </div>
+    <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green)">$${grandTotal.toFixed(0)}</div>
+  </div>`;
+  c.innerHTML=html;
 }
 
 init();
