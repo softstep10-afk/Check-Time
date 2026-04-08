@@ -1202,14 +1202,13 @@ function cancelJournal() {
 async function renderJournal() {
   const c = document.getElementById('journal-entries');
   if (!S.selectedProj || !S.user?.id) {
-    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">Select a project to see your photos</div>';
+    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">Select a project to see photos</div>';
     return;
   }
   c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading...</div>';
   const { data, error } = await db.from('media')
     .select('*')
     .eq('project_id', S.selectedProj)
-    .eq('worker_id', S.user.id)
     .eq('is_checkout', false)
     .order('created_at', { ascending: false });
   if (error) {
@@ -1228,9 +1227,8 @@ async function renderJournal() {
           : `<video src="${m.file_url}" controls style="width:100%;max-height:220px;display:block"></video>`
         : ''}
       ${m.comment ? `<div style="padding:10px 13px;font-size:13px;line-height:1.5">${m.comment}</div>` : ''}
-      <div style="padding:6px 13px 10px;display:flex;align-items:center;justify-content:space-between">
+      <div style="padding:6px 13px 10px">
         <div style="font-size:10px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}</div>
-        <button onclick="deleteMediaEntry('${m.id}', 'worker')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:4px 8px">Remove</button>
       </div>
     </div>`).join('');
 }
