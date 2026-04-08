@@ -643,7 +643,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 
-<div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="mp-rate" value="25"></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude (optional)</label><input type="number" step="any" id="mp-lat" placeholder="47.6062"></div><div class="mfield" style="margin:0"><label>Longitude (optional)</label><input type="number" step="any" id="mp-lon" placeholder="-122.3321"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
+<div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="mp-rate" value="25"></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
 <div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="ep-rate"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
 <div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
 <div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
@@ -1015,7 +1015,44 @@ function renderMgrCards(){
 }
 async function assignTask(){const wId=document.getElementById('t-worker').value,title=document.getElementById('t-title').value.trim(),desc=document.getElementById('t-desc').value.trim(),pri=document.getElementById('t-pri').value;if(!wId||!title){toast('Select worker and enter title','err');return;}const w=S.workers.find(x=>x.id===wId);await db.from('tasks').insert({worker_id:wId,worker_name:w.name,title,description:desc,priority:pri,done:false});const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];document.getElementById('t-title').value='';document.getElementById('t-desc').value='';renderTaskList();renderOverview();toast('Task assigned!','ok');}
 async function delTask(id){await db.from('tasks').delete().eq('id',id);const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];renderTaskList();renderOverview();toast('Removed','ok');}
-async function addProject(){const name=document.getElementById('mp-name').value.trim(),addr=document.getElementById('mp-addr').value.trim();if(!name||!addr){toast('Name and address required','err');return;}const notes=document.getElementById('mp-notes').value.trim(),rate=parseFloat(document.getElementById('mp-rate').value)||25,radius=parseInt(document.getElementById('mp-radius').value)||200,lat=parseFloat(document.getElementById('mp-lat').value)||null,lon=parseFloat(document.getElementById('mp-lon').value)||null;await db.from('projects').insert({name,address:addr,notes,rate,gps_lat:lat,gps_lon:lon,gps_radius:radius,status:'active'});const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];closeModal('mod-proj');['mp-name','mp-addr','mp-notes','mp-lat','mp-lon'].forEach(id=>document.getElementById(id).value='');refreshManager();toast(`${name} added!`,'ok');}
+async function addProject(){const name=document.getElementById('mp-name').value.trim(),addr=document.getElementById('mp-addr').value.trim();if(!name||!addr){toast('Name and address required','err');return;}const notes=document.getElementById('mp-notes').value.trim(),rate=parseFloat(document.getElementById('mp-rate').value)||25,radius=parseInt(document.getElementById('mp-radius').value)||200,lat=parseFloat(document.getElementById('mp-lat').value)||null,lon=parseFloat(document.getElementById('mp-lon').value)||null;await db.from('projects').insert({name,address:addr,notes,rate,gps_lat:lat,gps_lon:lon,gps_radius:radius,status:'active'});const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];closeModal('mod-proj');['mp-name','mp-addr','mp-notes','mp-lat','mp-lon'].forEach(id=>document.getElementById(id).value='');document.getElementById('mp-loc-status').textContent='';refreshManager();toast(`${name} added!`,'ok');}
+
+function useMyLocationForProject(){
+  const btn=document.getElementById('mp-loc-btn');
+  const status=document.getElementById('mp-loc-status');
+  if(!navigator.geolocation){status.textContent='GPS not supported on this device';return;}
+  btn.textContent='📍 Getting location...';
+  btn.disabled=true;
+  status.textContent='';
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const lat=pos.coords.latitude.toFixed(6);
+      const lon=pos.coords.longitude.toFixed(6);
+      document.getElementById('mp-lat').value=lat;
+      document.getElementById('mp-lon').value=lon;
+      btn.textContent='✅ Location saved!';
+      btn.style.borderColor='var(--green)';
+      btn.style.color='var(--green)';
+      btn.style.background='rgba(34,197,94,.07)';
+      status.textContent=`±${Math.round(pos.coords.accuracy)}m accuracy · ${lat}, ${lon}`;
+      status.style.color='var(--green)';
+      setTimeout(()=>{
+        btn.textContent='📍 Use My Current Location';
+        btn.style.borderColor='var(--gold)';
+        btn.style.color='var(--gold)';
+        btn.style.background='rgba(245,158,11,.07)';
+        btn.disabled=false;
+      },3000);
+    },
+    err=>{
+      btn.textContent='📍 Use My Current Location';
+      btn.disabled=false;
+      status.textContent='Could not get location — check browser permissions';
+      status.style.color='var(--red)';
+    },
+    {enableHighAccuracy:true,timeout:10000}
+  );
+}
 function openEditProj(id){const p=S.projects.find(x=>x.id===id);if(!p)return;document.getElementById('ep-id').value=id;document.getElementById('ep-notes').value=p.notes||'';document.getElementById('ep-rate').value=p.rate||25;openModal('mod-edit-proj');}
 async function saveEditProject(){const id=document.getElementById('ep-id').value;await db.from('projects').update({notes:document.getElementById('ep-notes').value.trim(),rate:parseFloat(document.getElementById('ep-rate').value)||25}).eq('id',id);const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];closeModal('mod-edit-proj');renderProjCards();toast('Saved!','ok');}
 async function delProject(id){if(!confirm('Remove this project?'))return;await db.from('projects').delete().eq('id',id);const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];refreshManager();toast('Removed','ok');}
