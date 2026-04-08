@@ -454,7 +454,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <div class="stat b"><div class="sl">Projects</div><div class="sv" id="sv3">0</div><div class="sd">active</div></div>
             <div class="stat p"><div class="sl">Open Tasks</div><div class="sv" id="sv4">0</div><div class="sd">pending</div></div>
           </div>
-          <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:14px">
+            <button class="action" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:700;padding:8px 16px" onclick="openAnnualReport()">📊 Annual Report</button>
             <button class="action" style="background:var(--green);color:#fff;border-color:var(--green);font-weight:700;padding:8px 16px" onclick="openPayroll()">💰 Process Payroll</button>
           </div>
           <div class="tcard"><div class="tcard-h"><h3>Currently On Site</h3></div><table><thead><tr><th>Name</th><th>Project</th><th>Since</th><th>Hours</th></tr></thead><tbody id="ov-table"></tbody></table></div>
@@ -541,7 +542,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
                 <button class="action gold" onclick="openModal('mod-worker')">+ Add</button>
               </div>
             </div>
-            <table><thead><tr><th>Name</th><th>Category</th><th>Status</th><th>Total Hrs</th><th>Video</th><th>Actions</th></tr></thead><tbody id="team-table"></tbody></table>
+            <table><thead><tr><th>Name</th><th>Category</th><th>Status</th><th>Total Hrs</th><th>Rate</th><th>Video</th><th>Actions</th></tr></thead><tbody id="team-table"></tbody></table>
           </div>
         </div>
         <div class="view" id="view-timeline">
@@ -645,9 +646,15 @@ tr:hover td{background:rgba(255,255,255,.015)}
 
 <div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="mp-rate" value="25"></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
 <div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="ep-rate"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
-<div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
+<div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role" onchange="toggleWorkerPayFields()"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div id="nw-hourly-wrap" class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="nw-rate" placeholder="25" min="0" step="0.5"></div><div id="nw-fixed-wrap" class="mfield" style="display:none"><label>Fixed Amount per Project ($)</label><input type="number" id="nw-fixed" placeholder="500" min="0"></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
 <div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
 
+<div class="modal-ov" id="mod-annual">
+  <div class="modal" style="max-width:500px">
+    <div class="modal-top"><h3>📊 Annual Report</h3><button class="modal-close" onclick="closeModal('mod-annual')">×</button></div>
+    <div class="modal-body" id="annual-content" style="max-height:70vh;overflow-y:auto"></div>
+  </div>
+</div>
 <script>
 const SURL='https://khmcdtrzqfqabdpbcjkj.supabase.co';
 const SKEY='sb_publishable_IDbH48JlyaoFImiBcHCRrw_X7zsqyOv';
@@ -932,7 +939,32 @@ async function refreshManager(){
   S.projects=p.data||[];S.workers=w.data||[];S.events=e.data||[];S.tasks=t.data||[];S.managers=m.data||[];
   renderOverview();renderProjCards();renderTeam();renderTimeline();renderTaskList();renderMgrCards();fillWorkerSelect();fillTlFilters();
 }
-function calcHours(wId,projId,dateStr){const evs=S.events.filter(e=>e.worker_id===wId&&(!projId||e.project_id===projId)&&(!dateStr||e.created_at.startsWith(dateStr)));let total=0,lastIn=null;[...evs].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(ev=>{if(ev.type==='in')lastIn=new Date(ev.created_at);else if(ev.type==='out'&&lastIn){total+=(new Date(ev.created_at)-lastIn)/3600000;lastIn=null;}});if(lastIn){const w=S.workers.find(x=>x.id===wId);if(w?.checked_in)total+=(Date.now()-lastIn)/3600000;}return total;}
+function calcHours(wId,projId,dateStr){
+  // Only count hours AFTER the last payroll marker (so hours reset after each payroll)
+  const lastPayroll=[...S.events].filter(e=>e.type==='payroll').sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+  const since=lastPayroll?new Date(lastPayroll.created_at):null;
+  const evs=S.events.filter(e=>e.worker_id===wId&&(!projId||e.project_id===projId)&&(!dateStr||e.created_at.startsWith(dateStr))&&(!since||new Date(e.created_at)>since));
+  let total=0,lastIn=null;
+  [...evs].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(ev=>{
+    if(ev.type==='in')lastIn=new Date(ev.created_at);
+    else if(ev.type==='out'&&lastIn){total+=(new Date(ev.created_at)-lastIn)/3600000;lastIn=null;}
+  });
+  if(lastIn){const w=S.workers.find(x=>x.id===wId);if(w?.checked_in)total+=(Date.now()-lastIn)/3600000;}
+  return total;
+}
+
+// Worker earnings: hourly workers use their rate, subcontractors use fixed amount
+function workerEarnings(w, projId){
+  if(!w)return 0;
+  if(w.role==='subcontractor')return w.fixed_amount||0;
+  return calcHours(w.id, projId)*(w.rate||0);
+}
+
+// Real-time project cost = sum of all workers' earnings on this project
+function getProjectCost(projId){
+  const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===projId));
+  return pw.reduce((sum,w)=>sum+workerEarnings(w,projId),0);
+}
 function renderOverview(){
   document.getElementById('sv1').textContent=S.workers.filter(w=>w.checked_in).length;
   document.getElementById('sv2').textContent=S.workers.length;
@@ -945,9 +977,44 @@ function renderOverview(){
   const rec=[...S.events].reverse().slice(0,8);
   tl.innerHTML=rec.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 14px"><div class="tl-dot ${e.type}"></div><div style="flex:1;font-size:12px"><strong>${e.worker_name}</strong> ${e.type==='in'?'checked in':e.type==='out'?'checked out':'submitted report'} — ${e.project_name||''}</div><div style="font-size:10px;color:var(--muted)">${fmtDT(e.created_at)}</div></div>`).join('')||'<div class="empty"><p>No activity yet</p></div>';
 }
+function calcWorkerEarnings(wId, projId){
+  const w=S.workers.find(x=>x.id===wId);
+  if(!w)return 0;
+  if(w.role==='subcontractor')return w.fixed_amount||0;
+  return calcHours(wId,projId)*(w.rate||0);
+}
+function calcProjectCost(projId){
+  const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===projId));
+  return pw.reduce((sum,w)=>sum+calcWorkerEarnings(w.id,projId),0);
+}
 function renderProjCards(){
   const c=document.getElementById('proj-cards');
-  c.innerHTML=S.projects.map(p=>{const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id));const on=pw.filter(w=>w.checked_in&&w.last_proj_id===p.id).length;const totalH=pw.reduce((s,w)=>s+calcHours(w.id,p.id),0);const cost=totalH*(p.rate||0);const hasNotes=p.notes?.trim();return`<div class="pcard" onclick="openProjDetail('${p.id}')"><h3>${p.name}</h3><div class="addr"><a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" onclick="event.stopPropagation()">🗺️ ${p.address}</a></div><div class="pcard-stats"><div class="ps">On Site: <span class="g">${on}</span></div><div class="ps">Workers: <span>${pw.length}</span></div><div class="ps">Hours: <span>${totalH.toFixed(1)}h</span></div><div class="ps">Cost: <span>$${cost.toFixed(0)}</span></div></div><div class="pnotes ${hasNotes?'':'empty'}">${hasNotes?p.notes:'No notes — click Edit to add'}</div><div class="btn-row" onclick="event.stopPropagation()"><button onclick="openProjDetail('${p.id}')">📊 Details</button><button onclick="openEditProj('${p.id}')">✏️ Edit</button><button class="red" onclick="delProject('${p.id}')">Remove</button></div></div>`;}).join('')||'<div class="empty" style="grid-column:1/-1"><div class="ei">🏗️</div><p>No projects yet</p></div>';
+  c.innerHTML=S.projects.map(p=>{
+    const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id));
+    const on=pw.filter(w=>w.checked_in&&w.last_proj_id===p.id).length;
+    const totalH=pw.reduce((s,w)=>s+calcHours(w.id,p.id),0);
+    const cost=calcProjectCost(p.id);
+    const hasNotes=p.notes?.trim();
+    return`<div class="pcard" onclick="openProjDetail('${p.id}')">
+      <h3>${p.name}</h3>
+      <div class="addr" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap" onclick="event.stopPropagation()">
+        <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none">🗺️ ${p.address}</a>
+        <button onclick="copyAddress('${p.address.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}'))" style="font-size:10px;padding:3px 8px;border-radius:5px;background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.3);cursor:pointer;font-family:var(--font)">📋 Copy</button>
+      </div>
+      <div class="pcard-stats">
+        <div class="ps">On Site: <span class="g">${on}</span></div>
+        <div class="ps">Workers: <span>${pw.length}</span></div>
+        <div class="ps">Hours: <span>${totalH.toFixed(1)}h</span></div>
+        <div class="ps">Total Cost: <span>$${cost.toFixed(0)}</span></div>
+      </div>
+      <div class="pnotes ${hasNotes?'':'empty'}">${hasNotes?p.notes:'No notes — click Edit to add'}</div>
+      <div class="btn-row" onclick="event.stopPropagation()">
+        <button onclick="openProjDetail('${p.id}')">📊 Details</button>
+        <button onclick="openEditProj('${p.id}')">✏️ Edit</button>
+        <button class="red" onclick="delProject('${p.id}')">Remove</button>
+      </div>
+    </div>`;
+  }).join('')||'<div class="empty" style="grid-column:1/-1"><div class="ei">🏗️</div><p>No projects yet</p></div>';
 }
 function openProjDetail(projId){
   S.drillProj=projId;const proj=S.projects.find(p=>p.id===projId);if(!proj)return;
@@ -955,11 +1022,19 @@ function openProjDetail(projId){
   const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===projId));
   const on=pw.filter(w=>w.checked_in&&w.last_proj_id===projId).length;
   const totalH=pw.reduce((s,w)=>s+calcHours(w.id,projId),0);
+  const totalCost=calcProjectCost(projId);
   const days=new Set(S.events.filter(e=>e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;
-  document.getElementById('pd-stats').innerHTML=`<div class="stat g"><div class="sl">On Site</div><div class="sv">${on}</div><div class="sd">now</div></div><div class="stat a"><div class="sl">Total Hours</div><div class="sv">${totalH.toFixed(1)}h</div><div class="sd">all time</div></div><div class="stat b"><div class="sl">Est. Cost</div><div class="sv">$${(totalH*(proj.rate||0)).toFixed(0)}</div><div class="sd">@ $${proj.rate||0}/hr</div></div><div class="stat p"><div class="sl">Work Days</div><div class="sv">${days}</div><div class="sd">logged</div></div>`;
+  document.getElementById('pd-stats').innerHTML=`<div class="stat g"><div class="sl">On Site</div><div class="sv">${on}</div><div class="sd">now</div></div><div class="stat a"><div class="sl">Total Hours</div><div class="sv">${totalH.toFixed(1)}h</div><div class="sd">all time</div></div><div class="stat b"><div class="sl">Total Cost</div><div class="sv">$${totalCost.toFixed(0)}</div><div class="sd">all workers</div></div><div class="stat p"><div class="sl">Work Days</div><div class="sv">${days}</div><div class="sd">logged</div></div>`;
   const wc=document.getElementById('pd-workers');
   if(!pw.length){wc.innerHTML='<div class="empty"><div class="ei">👷</div><p>No check-ins yet</p></div>';}
-  else wc.innerHTML=pw.map(w=>{const h=calcHours(w.id,projId);const wd=new Set(S.events.filter(e=>e.worker_id===w.id&&e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;const isOn=w.checked_in&&w.last_proj_id===projId;return`<div class="wrow" onclick="openWorkerDetail('${projId}','${w.id}')"><div class="wrow-av" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div class="wrow-info"><div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div><div class="wrow-stats"><div class="ws">Hours: <span>${h.toFixed(1)}h</span></div><div class="ws">Days: <span>${wd}</span></div><div class="ws">Earned: <span>$${(h*(proj.rate||0)).toFixed(0)}</span></div></div></div><div class="wrow-status ${isOn?'on':'off'}">${isOn?'On Site':'Offline'}</div></div>`;}).join('');
+  else wc.innerHTML=pw.map(w=>{
+    const h=calcHours(w.id,projId);
+    const earned=calcWorkerEarnings(w.id,projId);
+    const wd=new Set(S.events.filter(e=>e.worker_id===w.id&&e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;
+    const isOn=w.checked_in&&w.last_proj_id===projId;
+    const rateLabel=w.role==='subcontractor'?`Fixed: $${w.fixed_amount||0}`:`$${w.rate||0}/hr`;
+    return`<div class="wrow" onclick="openWorkerDetail('${projId}','${w.id}')"><div class="wrow-av" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div class="wrow-info"><div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div><div class="wrow-stats"><div class="ws">Hours: <span>${h.toFixed(1)}h</span></div><div class="ws">Days: <span>${wd}</span></div><div class="ws">Earned: <span>$${earned.toFixed(0)}</span></div><div class="ws">Rate: <span>${rateLabel}</span></div></div></div><div class="wrow-status ${isOn?'on':'off'}">${isOn?'On Site':'Offline'}</div></div>`;
+  }).join('');
   showDrillView('view-proj-detail');
   renderProjTasks();
   renderProjMedia();
@@ -968,8 +1043,11 @@ function openWorkerDetail(projId,workerId){
   S.drillProj=projId;S.drillWorker=workerId;
   const proj=S.projects.find(p=>p.id===projId),w=S.workers.find(x=>x.id===workerId);if(!proj||!w)return;
   document.getElementById('bc-worker').textContent=w.name;document.getElementById('bc-worker2').textContent=w.name;
-  const totalH=calcHours(workerId,projId);const days=getDays(workerId,projId);
-  document.getElementById('wd-stats').innerHTML=`<div class="stat a"><div class="sl">Total Hours</div><div class="sv">${totalH.toFixed(1)}h</div><div class="sd">on project</div></div><div class="stat b"><div class="sl">Days Worked</div><div class="sv">${days.length}</div><div class="sd">days</div></div><div class="stat p"><div class="sl">Earned</div><div class="sv">$${(totalH*(proj.rate||0)).toFixed(0)}</div><div class="sd">@ $${proj.rate||0}/hr</div></div><div class="stat g"><div class="sl">Status</div><div class="sv" style="font-size:14px">${w.checked_in?'✅':'⭕'}</div><div class="sd">${w.checked_in?'On Site':'Offline'}</div></div>`;
+  const totalH=calcHours(workerId,projId);
+  const totalEarned=calcWorkerEarnings(workerId,projId);
+  const days=getDays(workerId,projId);
+  const rateLabel=w.role==='subcontractor'?`Fixed $${w.fixed_amount||0}`:`$${w.rate||0}/hr`;
+  document.getElementById('wd-stats').innerHTML=`<div class="stat a"><div class="sl">Total Hours</div><div class="sv">${totalH.toFixed(1)}h</div><div class="sd">on project</div></div><div class="stat b"><div class="sl">Days Worked</div><div class="sv">${days.length}</div><div class="sd">days</div></div><div class="stat p"><div class="sl">Earned</div><div class="sv">$${totalEarned.toFixed(0)}</div><div class="sd">${rateLabel}</div></div><div class="stat g"><div class="sl">Status</div><div class="sv" style="font-size:14px">${w.checked_in?'✅':'⭕'}</div><div class="sd">${w.checked_in?'On Site':'Offline'}</div></div>`;
   const dc=document.getElementById('wd-days');
   if(!days.length){dc.innerHTML='<div class="empty"><div class="ei">📅</div><p>No work days yet</p></div>';}
   else dc.innerHTML=days.map(ds=>{const h=calcHours(workerId,projId,ds);const inEv=S.events.filter(e=>e.worker_id===workerId&&e.project_id===projId&&e.type==='in'&&e.created_at.startsWith(ds))[0];const outEv=S.events.filter(e=>e.worker_id===workerId&&e.project_id===projId&&e.type==='out'&&e.created_at.startsWith(ds)).pop();const dn=new Date(ds).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});return`<div class="dayrow" onclick="openDayDetail('${projId}','${workerId}','${ds}')"><div><div class="day-h">${dn}</div><div class="day-sub">${inEv?fmtTime(inEv.created_at):'—'} → ${outEv?fmtTime(outEv.created_at):'still on site'}</div></div><div><div class="day-hrs">${h.toFixed(1)}h</div></div></div>`;}).join('');
@@ -993,7 +1071,11 @@ function renderTeam(){
   const rf=document.getElementById('role-filter')?.value||'all',sr=document.getElementById('team-search')?.value.toLowerCase()||'';
   const ws=S.workers.filter(w=>(rf==='all'||(w.role||'worker')===rf)&&(!sr||w.name.toLowerCase().includes(sr)));
   const tb=document.getElementById('team-table');
-  tb.innerHTML=ws.map(w=>{const h=calcHours(w.id,null);return`<tr><td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div><div class="nm">${w.name}</div><div class="np">PIN: ${w.pin}</div></div></div></td><td><span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></td><td><span class="tag ${w.checked_in?'on':'off'}">${w.checked_in?'On Site':'Offline'}</span></td><td>${h.toFixed(1)}h</td><td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td><td style="display:flex;gap:5px"><button class="action red" onclick="delWorker('${w.id}')">Remove</button></td></tr>`;}).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">No team members yet</td></tr>';
+  tb.innerHTML=ws.map(w=>{
+    const h=calcHours(w.id,null);
+    const rateLabel=w.role==='subcontractor'?`$${w.fixed_amount||0} fixed`:`$${w.rate||0}/hr`;
+    return`<tr><td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div><div class="nm">${w.name}</div><div class="np">PIN: ${w.pin}</div></div></div></td><td><span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></td><td><span class="tag ${w.checked_in?'on':'off'}">${w.checked_in?'On Site':'Offline'}</span></td><td>${h.toFixed(1)}h</td><td style="font-size:12px;font-weight:600;color:var(--gold)">${rateLabel}</td><td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td><td style="display:flex;gap:5px"><button class="action red" onclick="delWorker('${w.id}')">Remove</button></td></tr>`;
+  }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No team members yet</td></tr>';
 }
 async function toggleVid(id,val){await db.from('workers').update({require_video:val}).eq('id',id);const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];toast('Updated','ok');}
 function renderTimeline(){
@@ -1056,7 +1138,28 @@ function useMyLocationForProject(){
 function openEditProj(id){const p=S.projects.find(x=>x.id===id);if(!p)return;document.getElementById('ep-id').value=id;document.getElementById('ep-notes').value=p.notes||'';document.getElementById('ep-rate').value=p.rate||25;openModal('mod-edit-proj');}
 async function saveEditProject(){const id=document.getElementById('ep-id').value;await db.from('projects').update({notes:document.getElementById('ep-notes').value.trim(),rate:parseFloat(document.getElementById('ep-rate').value)||25}).eq('id',id);const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];closeModal('mod-edit-proj');renderProjCards();toast('Saved!','ok');}
 async function delProject(id){if(!confirm('Remove this project?'))return;await db.from('projects').delete().eq('id',id);const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];refreshManager();toast('Removed','ok');}
-async function addWorker(){const name=document.getElementById('nw-name').value.trim(),pin=document.getElementById('nw-pin').value.trim(),role=document.getElementById('nw-role').value,rv=document.getElementById('nw-vid').checked;if(!name||pin.length<4){toast('Name and PIN (min 4 digits)','err');return;}if(S.workers.find(w=>w.pin===pin)||S.managers.find(m=>m.pin===pin)){toast('PIN already taken','err');return;}const colors=['#f59e0b','#3b82f6','#22c55e','#ef4444','#a855f7','#06b6d4','#f97316','#84cc16'];const used=S.workers.map(w=>w.color);const color=colors.find(c=>!used.includes(c))||colors[S.workers.length%colors.length];await db.from('workers').insert({name,pin,role,color,require_video:rv,checked_in:false});const w=await db.from('workers').select('*').order('created_at');S.workers=w.data||[];closeModal('mod-worker');document.getElementById('nw-name').value='';document.getElementById('nw-pin').value='';document.getElementById('nw-vid').checked=false;refreshManager();toast(`${name} added!`,'ok');}
+function toggleWorkerPayFields(){
+  const role=document.getElementById('nw-role').value;
+  document.getElementById('nw-hourly-wrap').style.display=role==='subcontractor'?'none':'block';
+  document.getElementById('nw-fixed-wrap').style.display=role==='subcontractor'?'block':'none';
+}
+async function addWorker(){
+  const name=document.getElementById('nw-name').value.trim(),pin=document.getElementById('nw-pin').value.trim(),role=document.getElementById('nw-role').value,rv=document.getElementById('nw-vid').checked;
+  if(!name||pin.length<4){toast('Name and PIN (min 4 digits)','err');return;}
+  if(S.workers.find(w=>w.pin===pin)||S.managers.find(m=>m.pin===pin)){toast('PIN already taken','err');return;}
+  const rate=role==='subcontractor'?0:parseFloat(document.getElementById('nw-rate').value)||0;
+  const fixed_amount=role==='subcontractor'?parseFloat(document.getElementById('nw-fixed').value)||0:0;
+  const colors=['#f59e0b','#3b82f6','#22c55e','#ef4444','#a855f7','#06b6d4','#f97316','#84cc16'];
+  const used=S.workers.map(w=>w.color);
+  const color=colors.find(c=>!used.includes(c))||colors[S.workers.length%colors.length];
+  await db.from('workers').insert({name,pin,role,color,require_video:rv,checked_in:false,rate,fixed_amount});
+  const w=await db.from('workers').select('*').order('created_at');S.workers=w.data||[];
+  closeModal('mod-worker');
+  document.getElementById('nw-name').value='';document.getElementById('nw-pin').value='';
+  document.getElementById('nw-rate').value='';document.getElementById('nw-fixed').value='';
+  document.getElementById('nw-vid').checked=false;
+  refreshManager();toast(`${name} added!`,'ok');
+}
 async function delWorker(id){if(!confirm('Remove?'))return;await db.from('workers').delete().eq('id',id);const w=await db.from('workers').select('*').order('created_at');S.workers=w.data||[];refreshManager();toast('Removed','ok');}
 async function addManager(){const name=document.getElementById('nm-name').value.trim(),pin=document.getElementById('nm-pin').value.trim(),access=document.getElementById('nm-access').value;if(!name||pin.length<4){toast('Name and PIN (min 4 digits)','err');return;}if(S.workers.find(w=>w.pin===pin)||S.managers.find(m=>m.pin===pin)){toast('PIN already taken','err');return;}const colors=['#3b82f6','#22c55e','#a855f7','#06b6d4','#f97316'];await db.from('managers').insert({name,pin,access,color:colors[S.managers.length%colors.length]});const m=await db.from('managers').select('*').order('created_at');S.managers=m.data||[];closeModal('mod-mgr');document.getElementById('nm-name').value='';document.getElementById('nm-pin').value='';renderMgrCards();toast(`${name} added!`,'ok');}
 async function delManager(id){if(!confirm('Remove?'))return;await db.from('managers').delete().eq('id',id);const m=await db.from('managers').select('*').order('created_at');S.managers=m.data||[];renderMgrCards();toast('Removed','ok');}
@@ -1561,31 +1664,96 @@ function calcHoursFromEvents(evs,projId,dateStr){
 function openPayroll(){
   const c=document.getElementById('payroll-summary');
   const ws=S.workers;
-  let html='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Summary</div>';
-  let total=0;
+  let html='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Current Period Summary</div>';
+  let totalAmount=0; let totalHours=0;
   ws.forEach(w=>{
     const h=calcHours(w.id,null);
-    if(h>0){
-      total+=h;
-      html+=`<div style="display:flex;justify-content:space-between;padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;font-size:13px">
-        <div><div class="av-sm" style="background:${w.color||'#f59e0b'};width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000;margin-right:8px">${w.name.charAt(0)}</div>${w.name}</div>
-        <div style="font-family:var(--mono);font-weight:700;color:var(--gold)">${h.toFixed(1)}h</div>
+    const earned=calcWorkerEarnings(w.id,null);
+    if(h>0||w.role==='subcontractor'){
+      totalAmount+=earned; totalHours+=h;
+      const rateLabel=w.role==='subcontractor'?`Fixed $${w.fixed_amount||0}`:`${h.toFixed(1)}h × $${w.rate||0}/hr`;
+      html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;font-size:13px">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px"><div class="av-sm" style="background:${w.color||'#f59e0b'};width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000">${w.name.charAt(0)}</div><div><div style="font-weight:600">${w.name}</div><div style="font-size:11px;color:var(--muted)">${rateLabel}</div></div></div>
+        </div>
+        <div style="font-family:var(--mono);font-weight:700;color:var(--gold);font-size:16px">$${earned.toFixed(0)}</div>
       </div>`;
     }
   });
-  html+=`<div style="display:flex;justify-content:space-between;padding:12px 14px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;margin-top:8px;font-size:14px;font-weight:700"><div>Total</div><div style="color:var(--green)">${total.toFixed(1)}h</div></div>`;
+  html+=`<div style="display:flex;justify-content:space-between;padding:12px 14px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;margin-top:8px;font-size:14px;font-weight:700">
+    <div>💰 Total Payroll</div>
+    <div style="color:var(--green)">$${totalAmount.toFixed(0)}</div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">${totalHours.toFixed(1)} total hours this period</div>`;
   c.innerHTML=html;
   openModal('mod-payroll');
 }
 
 async function processPayroll(){
-  await db.from('events').insert({type:'payroll',worker_id:S.user.id,worker_name:'System',project_id:null,project_name:'PAYROLL PROCESSED '+new Date().toLocaleDateString()});
-  toast('✅ Payroll processed! Hours archived.','ok');
+  const ws=S.workers;
+  const now=new Date().toISOString();
+  const periodLabel=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  // Archive each worker's earnings for this period
+  for(const w of ws){
+    const h=calcHours(w.id,null);
+    const earned=calcWorkerEarnings(w.id,null);
+    if(h>0||(w.role==='subcontractor'&&(w.fixed_amount||0)>0)){
+      await db.from('payroll_periods').insert({
+        worker_id:w.id, worker_name:w.name,
+        hours:h, amount:earned, rate:w.rate||0,
+        period_label:periodLabel,
+        processed_by:S.user?.name||'Manager'
+      });
+    }
+  }
+  // Insert payroll cutoff marker — calcHours will ignore events before this
+  await db.from('events').insert({type:'payroll',worker_id:null,worker_name:'System',project_id:null,project_name:'PAYROLL: '+periodLabel});
+  const ev=await db.from('events').select('*').order('created_at');
+  S.events=ev.data||[];
+  toast('✅ Payroll processed! Hours reset. Archive saved.','ok');
   closeModal('mod-payroll');
   refreshManager();
 }
 
+async function openAnnualReport(){
+  const modal=document.getElementById('mod-annual');
+  const c=document.getElementById('annual-content');
+  c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
+  openModal('mod-annual');
+  const {data:periods}=await db.from('payroll_periods').select('*').order('created_at');
+  if(!periods||!periods.length){c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">No payroll history yet</div>';return;}
+  // Group by year
+  const years=[...new Set(periods.map(p=>new Date(p.created_at).getFullYear()))].sort().reverse();
+  let html='';
+  years.forEach(yr=>{
+    const yPeriods=periods.filter(p=>new Date(p.created_at).getFullYear()===yr);
+    // Group by worker within year
+    const byWorker={};
+    yPeriods.forEach(p=>{
+      if(!byWorker[p.worker_id]){byWorker[p.worker_id]={name:p.worker_name,hours:0,amount:0,periods:[]};}
+      byWorker[p.worker_id].hours+=p.hours||0;
+      byWorker[p.worker_id].amount+=p.amount||0;
+      byWorker[p.worker_id].periods.push(p);
+    });
+    const yearTotal=Object.values(byWorker).reduce((s,w)=>s+w.amount,0);
+    html+=`<div style="margin-bottom:20px">
+      <div style="font-size:14px;font-weight:700;color:var(--gold);margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border)">📅 ${yr} — Total: <span style="color:var(--green)">$${yearTotal.toFixed(0)}</span></div>`;
+    Object.values(byWorker).sort((a,b)=>b.amount-a.amount).forEach(w=>{
+      html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px">
+        <div>
+          <div style="font-size:13px;font-weight:600">${w.name}</div>
+          <div style="font-size:11px;color:var(--muted)">${w.hours.toFixed(1)}h · ${w.periods.length} payroll period${w.periods.length>1?'s':''}</div>
+        </div>
+        <div style="font-family:var(--mono);font-weight:700;color:var(--gold)">$${w.amount.toFixed(0)}</div>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  c.innerHTML=html;
+}
+
 init();
+
 </script>
 </body>
 </html>
