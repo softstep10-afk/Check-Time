@@ -362,7 +362,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <span style="font-size:13px;font-weight:700;color:var(--text)">Record Video</span>
         </button>
       </div>
-      <!-- Mobile: uses camera directly. Desktop: opens file picker -->
       <input type="file" id="cam-photo" accept="image/*" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
       <input type="file" id="cam-video" accept="video/*" style="display:none" onchange="captureJournalMedia(event,'video')">
       <div id="journal-entries"><div style="text-align:center;padding:14px;color:var(--muted);font-size:12px">No photos yet — tap a button above</div></div>
@@ -425,7 +424,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div class="view" id="view-proj-detail">
           <div class="bc"><span onclick="showView('projects')">🏗️ Projects</span><span class="bc-sep">›</span><span class="cur" id="bc-proj">Project</span></div>
           <div class="stats" id="pd-stats"></div>
-
           <!-- PROJECT TASKS -->
           <div class="tcard" style="margin-bottom:14px">
             <div class="tcard-h">
@@ -456,7 +454,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
             </div>
             <div id="proj-task-list"></div>
           </div>
-
           <!-- PROJECT MEDIA -->
           <div class="tcard" style="margin-bottom:14px">
             <div class="tcard-h"><h3>📸 Photos & Videos</h3></div>
@@ -479,7 +476,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
             </div>
             <div id="proj-media-list" style="padding:10px"></div>
           </div>
-
           <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">👷 Team on this project</h3>
           <div id="pd-workers"></div>
         </div>
@@ -533,12 +529,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
   </div>
 </div>
-<div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="mp-rate" value="25"></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude (optional)</label><input type="number" step="any" id="mp-lat" placeholder="47.6062"></div><div class="mfield" style="margin:0"><label>Longitude (optional)</label><input type="number" step="any" id="mp-lon" placeholder="-122.3321"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
-<div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="ep-rate"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
-<div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
-<div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
-
-<!-- MOBILE NAV -->
 <div class="mob-nav" id="mob-nav">
   <div class="mob-nav-inner">
     <button class="mob-btn on" id="mob-overview" onclick="showView('overview')"><span class="mi">📊</span>Overview</button>
@@ -609,11 +599,18 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
   </div>
 </div>
+
+<div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="mp-rate" value="25"></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude (optional)</label><input type="number" step="any" id="mp-lat" placeholder="47.6062"></div><div class="mfield" style="margin:0"><label>Longitude (optional)</label><input type="number" step="any" id="mp-lon" placeholder="-122.3321"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
+<div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="ep-rate"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
+<div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
+<div class="modal-ov" id="mod-mgr"><div class="modal"><div class="modal-top"><h3>Add Manager</h3><button class="modal-close" onclick="closeModal('mod-mgr')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nm-name" placeholder="Alex Foreman"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nm-pin" maxlength="6"></div><div class="mfield"><label>Access Level</label><select id="nm-access"><option value="admin">Full Access — sees everything</option><option value="limited">Limited — sees assigned projects only</option></select></div><button class="big-btn" onclick="addManager()">Add Manager</button></div></div></div>
+
 <script>
 const SURL='https://mmrzaojdjdqzelvxsnym.supabase.co';
 const SKEY='sb_publishable_98Y6jC-IV6vpU4G5c7J1xw_0FQe7B7N';
 const db=supabase.createClient(SURL,SKEY);
-const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,uploads:[],coVideo:null,selectedProj:null,drillProj:null,drillWorker:null};
+const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,coVideo:null,selectedProj:null,drillProj:null,drillWorker:null};
+
 async function init(){
   try{
     const[p,w,e,t,m]=await Promise.all([db.from('projects').select('*').order('created_at'),db.from('workers').select('*').order('created_at'),db.from('events').select('*').order('created_at'),db.from('tasks').select('*').order('created_at'),db.from('managers').select('*').order('created_at')]);
@@ -639,7 +636,6 @@ async function doLogin(){
   document.getElementById('err-msg').style.display='none';
   try{
     if(S.loginRole==='manager'){
-      // Query Supabase directly every time
       const {data,error}=await db.from('managers').select('*').eq('pin',pin);
       if(error||!data||!data.length){showErr('Manager PIN not found');btn.disabled=false;btn.textContent='Sign In →';return;}
       const mgr=data[0];
@@ -654,11 +650,10 @@ async function doLogin(){
       document.getElementById('nav-managers').style.display=mgr.access==='admin'?'flex':'none';
       showPage('pg-manager');refreshManager();
     }else{
-      // Query Supabase directly every time
       const {data,error}=await db.from('workers').select('*').eq('pin',pin);
       if(error||!data||!data.length){showErr('PIN not found — ask your manager');btn.disabled=false;btn.textContent='Sign In →';return;}
       const w=data[0];
-      S.user=w;S.checkedIn=w.checked_in||false;S.checkInTime=w.check_in_time?new Date(w.check_in_time):null;S.uploads=[];S.coVideo=null;S.selectedProj=w.last_proj_id;
+      S.user=w;S.checkedIn=w.checked_in||false;S.checkInTime=w.check_in_time?new Date(w.check_in_time):null;S.coVideo=null;S.selectedProj=w.last_proj_id;
       document.getElementById('w-name').textContent=w.name;
       document.getElementById('w-sub').textContent='Select a project';
       const proj=await db.from('projects').select('*').order('created_at');
@@ -673,7 +668,7 @@ async function doLogin(){
   btn.disabled=false;btn.textContent='Sign In →';
 }
 function showErr(msg){const e=document.getElementById('err-msg');e.textContent=msg;e.style.display='block';}
-function doLogout(){if(S.clockTimer)clearInterval(S.clockTimer);S.user=null;S.checkedIn=false;S.uploads=[];S.coVideo=null;S.selectedProj=null;document.getElementById('pin-in').value='';document.getElementById('err-msg').style.display='none';switchTab('worker');showPage('pg-login');}
+function doLogout(){if(S.clockTimer)clearInterval(S.clockTimer);S.user=null;S.checkedIn=false;S.coVideo=null;S.selectedProj=null;document.getElementById('pin-in').value='';document.getElementById('err-msg').style.display='none';switchTab('worker');showPage('pg-login');}
 function getGPS(){
   const dot=document.getElementById('gps-dot'),txt=document.getElementById('gps-txt');
   dot.className='gdot spin';txt.textContent='Acquiring location...';
@@ -695,6 +690,7 @@ function pickProj(id){
   const nw=document.getElementById('notes-wrap'),nt=document.getElementById('notes-txt');
   if(p?.notes?.trim()){nt.textContent=p.notes;nw.style.display='block';}else{nw.style.display='none';}
   updateWorkerUI();
+  renderJournal(); // ← reload journal for selected project
 }
 function updateWorkerUI(){
   const btn=document.getElementById('ci-btn'),badge=document.getElementById('sc-badge'),needVid=S.user?.require_video;
@@ -724,19 +720,79 @@ function startClock(){
 function fmt(s){return[Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');}
 function openCO(){document.getElementById('vid-in').value='';document.getElementById('vid-prev').style.display='none';document.getElementById('vid-ok').style.display='none';document.getElementById('vid-drop').style.display='block';const btn=document.getElementById('co-go');btn.disabled=true;btn.className='co-go';S.coVideo=null;document.getElementById('co-ov').className='co-ov show';}
 function cancelCO(){document.getElementById('co-ov').className='co-ov';toast('Still checked in','err');}
-function onCoVideo(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{S.coVideo={data:ev.target.result,name:f.name};document.getElementById('vid-preview').src=ev.target.result;document.getElementById('vid-prev').style.display='block';document.getElementById('vid-ok').style.display='flex';document.getElementById('vid-drop').style.display='none';const btn=document.getElementById('co-go');btn.disabled=false;btn.className='co-go rdy';};r.readAsDataURL(f);}
-async function confirmCO(){
-  if(!S.coVideo){toast('Upload a video first','err');return;}
-  const proj=S.projects.find(p=>p.id===S.selectedProj);
-  await db.from('media').insert({worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name||'',type:'video',name:S.coVideo.name,is_checkout:true});
-  S.checkedIn=false;await db.from('workers').update({checked_in:false,check_in_time:null}).eq('id',S.user.id);
-  await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
-  document.getElementById('co-ov').className='co-ov';toast('👋 Checked out! Video saved.','ok');updateWorkerUI();
-  const[ev,wk]=await Promise.all([db.from('events').select('*').order('created_at'),db.from('workers').select('*').order('created_at')]);S.events=ev.data||[];S.workers=wk.data||[];
+
+// ═══ REPLACED FUNCTION 1: onCoVideo ═══
+// Stores File object reference only. NO FileReader. NO base64.
+// Object URL is used for preview display only — it is never saved.
+function onCoVideo(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    validateFile(f, 'video');
+  } catch(err) {
+    toast(err.message, 'err');
+    e.target.value = '';
+    return;
+  }
+  S.coVideo = { file: f, name: f.name };
+  const previewUrl = URL.createObjectURL(f);
+  document.getElementById('vid-preview').src = previewUrl;
+  document.getElementById('vid-prev').style.display = 'block';
+  document.getElementById('vid-ok').style.display = 'flex';
+  document.getElementById('vid-drop').style.display = 'none';
+  const btn = document.getElementById('co-go');
+  btn.disabled = false;
+  btn.className = 'co-go rdy';
 }
-function onUpload(e){Array.from(e.target.files).forEach(f=>{const r=new FileReader();r.onload=ev=>{S.uploads.push({name:f.name,type:f.type.startsWith('video')?'video':'image',data:ev.target.result});renderThumbs();};r.readAsDataURL(f);});}
-function renderThumbs(){const c=document.getElementById('thumb-grid');c.innerHTML='';S.uploads.forEach((m,i)=>{const d=document.createElement('div');d.className='thumb';d.innerHTML=m.type==='image'?`<img src="${m.data}"><button class="del" onclick="delThumb(${i})">×</button>`:`<video src="${m.data}"></video><button class="del" onclick="delThumb(${i})">×</button>`;c.appendChild(d);});}
-function delThumb(i){S.uploads.splice(i,1);renderThumbs();}
+
+// ═══ REPLACED FUNCTION 2: confirmCO ═══
+// Upload-first. Checkout is BLOCKED if upload fails. No partial success.
+async function confirmCO() {
+  if (!S.coVideo?.file) { toast('Upload a video first', 'err'); return; }
+  const btn = document.getElementById('co-go');
+  btn.disabled = true;
+  btn.textContent = '⏳ Uploading video...';
+  try {
+    const proj = S.projects.find(p => p.id === S.selectedProj);
+    // Step 1: Upload to storage — throws on failure, checkout blocked
+    const { filePath, fileUrl } = await uploadFileToStorage(S.coVideo.file, S.selectedProj, 'checkout');
+    // Step 2: Insert media row only after confirmed upload
+    const { error: mErr } = await db.from('media').insert({
+      worker_id: S.user.id, worker_name: S.user.name,
+      project_id: S.selectedProj, project_name: proj?.name || '',
+      type: 'video', name: S.coVideo.name,
+      file_path: filePath, file_url: fileUrl, comment: '',
+      is_checkout: true
+    });
+    if (mErr) throw new Error(mErr.message);
+    // Step 3: Complete checkout only after confirmed media row
+    S.checkedIn = false;
+    await db.from('workers').update({ checked_in: false, check_in_time: null }).eq('id', S.user.id);
+    await db.from('events').insert({
+      type: 'out', worker_id: S.user.id, worker_name: S.user.name,
+      project_id: S.selectedProj, project_name: proj?.name,
+      gps_lat: S.gps?.lat, gps_lon: S.gps?.lon
+    });
+    S.coVideo = null;
+    document.getElementById('co-ov').className = 'co-ov';
+    toast('👋 Checked out! Video saved.', 'ok');
+    updateWorkerUI();
+    const [ev, wk] = await Promise.all([
+      db.from('events').select('*').order('created_at'),
+      db.from('workers').select('*').order('created_at')
+    ]);
+    S.events = ev.data || []; S.workers = wk.data || [];
+  } catch(err) {
+    // Checkout is BLOCKED — worker remains checked in
+    console.error('Checkout video upload failed:', err);
+    toast('⚠️ Upload failed — still checked in. Check connection and try again.', 'err');
+    btn.disabled = false;
+    btn.textContent = '🚪 Confirm Check Out';
+    btn.className = 'co-go rdy';
+  }
+}
+
+
 async function loadWorkerTasks(){
   const c=document.getElementById('w-tasks');
   const mine=S.tasks.filter(t=>t.worker_id===S.user.id&&!t.done);
@@ -751,7 +807,6 @@ async function loadWorkerTasks(){
       <button class="task-done-btn" onclick="event.stopPropagation();markDone('${t.id}')">✅ Mark Done</button>
     </div>`).join('');
 }
-
 function openTaskDetail(id){
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
   document.getElementById('task-detail-title').textContent=t.title;
@@ -767,11 +822,10 @@ async function markDoneFromDetail(){
 }
 async function markDone(id){await db.from('tasks').update({done:true}).eq('id',id);const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];loadWorkerTasks();toast('Task done!','ok');}
 async function submitReport(){
-  if(!S.checkedIn&&!S.uploads.length){toast('Check in or add photos first','err');return;}
+  if(!S.checkedIn){toast('Check in first to submit a report','err');return;}
   const proj=S.projects.find(x=>x.id===S.selectedProj);
   await db.from('events').insert({type:'upload',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name});
   const ev=await db.from('events').select('*').order('created_at');S.events=ev.data||[];
-  S.uploads=[];renderJournal();
   toast('📨 Report submitted!','ok');
 }
 async function refreshManager(){
@@ -897,77 +951,113 @@ function roleLabel(r){return{worker:'👷 Worker',supervisor:'👔 Supervisor',d
 function toast(msg,type='ok'){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(type==='ok'?'ok':'err');setTimeout(()=>t.className='toast',3500);}
 function fmtTime(iso){return new Date(iso).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}
 function fmtDT(iso){const d=new Date(iso);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}
-// ═══ PDF UPLOAD ═══
-async function uploadPDF(e) {
-  const files = Array.from(e.target.files); if (!files.length) return;
-  const projId = S.drillProj; if (!projId) { toast('Open a project first', 'err'); return; }
-  const proj = S.projects.find(p => p.id === projId);
-  toast(`📄 Saving ${files.length} PDF...`, 'ok');
-  for (const f of files) {
-    const reader = new FileReader();
-    await new Promise(resolve => {
-      reader.onload = async (ev) => {
-        await db.from('media').insert({
-          worker_id: S.user?.id || null, worker_name: S.user?.name || 'Manager',
-          project_id: projId, project_name: proj?.name || '',
-          type: 'pdf', name: f.name,
-          url: '', data_url: ev.target.result,
-          is_checkout: false
-        });
-        resolve();
-      };
-      reader.readAsDataURL(f);
-    });
+
+// ═══════════════════════════════════════════════════════════════
+// NEW HELPER 1: validateFile
+// Enforces size limits and MIME types before any upload attempt.
+// Throws a descriptive Error — never silently passes invalid files.
+// ═══════════════════════════════════════════════════════════════
+function validateFile(file, type) {
+  const LIMITS = { photo: 10, video: 200, pdf: 25 }; // MB
+  const MIMES = {
+    photo: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/gif'],
+    video: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo', 'video/avi'],
+    pdf:   ['application/pdf']
+  };
+  const maxMB = LIMITS[type] || 25;
+  const maxBytes = maxMB * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new Error(`File too large (${(file.size/1024/1024).toFixed(1)}MB). Max ${maxMB}MB for ${type}.`);
   }
-  renderProjMedia();
-  toast(`📄 ${files.length} PDF saved!`, 'ok');
+  const allowed = MIMES[type] || [];
+  // Allow empty MIME type on mobile (some browsers don't report it)
+  if (file.type && !allowed.includes(file.type)) {
+    throw new Error(`Invalid file type "${file.type}". Expected a ${type} file.`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NEW HELPER 2: uploadFileToStorage
+// REPLACES: uploadToStorage (which had a base64 fallback)
+// Rules:
+//   - Throws on failure. No fallback. No base64. No silent catch.
+//   - Returns a permanent public HTTPS URL only.
+//   - Files go to: {projId}/{folder}/{timestamp}_{random}.{ext}
+// ═══════════════════════════════════════════════════════════════
+async function uploadFileToStorage(file, projId, folder) {
+  if (!projId) throw new Error('uploadFileToStorage: projectId is required');
+  const ext = (file.name || 'file').split('.').pop().toLowerCase() || 'bin';
+  const safeFolder = folder || 'misc';
+  const filePath = `${projId}/${safeFolder}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const { error: upErr } = await db.storage
+    .from('media')
+    .upload(filePath, file, { upsert: false, contentType: file.type });
+  if (upErr) {
+    throw new Error(`Storage upload failed: ${upErr.message}`);
+  }
+  const { data: urlData } = db.storage.from('media').getPublicUrl(filePath);
+  if (!urlData?.publicUrl) {
+    throw new Error('Upload succeeded but public URL could not be retrieved.');
+  }
+  return { filePath, fileUrl: urlData.publicUrl };
+}
+
+// ═══ REPLACED FUNCTION 3: uploadPDF ═══
+// No FileReader. No base64. Each file uploaded to storage directly.
+// Per-file errors are surfaced individually — other files still proceed.
+async function uploadPDF(e) {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+  const projId = S.drillProj;
+  if (!projId) { toast('Open a project first', 'err'); return; }
+  const proj = S.projects.find(p => p.id === projId);
+  let saved = 0;
+  for (const f of files) {
+    try {
+      validateFile(f, 'pdf');
+      toast(`📄 Uploading ${f.name}...`, 'ok');
+      const { filePath, fileUrl } = await uploadFileToStorage(f, projId, 'pdfs');
+      const { error } = await db.from('media').insert({
+        worker_id: S.user?.id || null,
+        worker_name: S.user?.name || 'Manager',
+        project_id: projId,
+        project_name: proj?.name || '',
+        type: 'pdf',
+        name: f.name,
+        file_path: filePath,
+        file_url: fileUrl,
+        comment: '',
+        is_checkout: false
+      });
+      if (error) throw new Error(error.message);
+      saved++;
+    } catch(err) {
+      toast(`❌ Failed: ${f.name} — ${err.message}`, 'err');
+    }
+  }
+  if (saved > 0) {
+    renderProjMedia();
+    toast(`📄 ${saved} PDF${saved > 1 ? 's' : ''} uploaded!`, 'ok');
+  }
   e.target.value = '';
 }
 
-// ═══ MEDIA PIPELINE (clean) ═══
-// Compress photo to JPEG, return base64. Videos returned as object URL (not saved to DB).
-async function compressImage(file) {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const MAX = 1024;
-        let w = img.width, h = img.height;
-        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
-        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', 0.65));
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-async function uploadToStorage(file, projId) {
-  const ext = (file.name || 'file').split('.').pop() || 'jpg';
-  const path = `${projId||'general'}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-  try {
-    const { data, error } = await db.storage.from('media').upload(path, file, { upsert: true, contentType: file.type });
-    if (error) throw error;
-    const { data: urlData } = db.storage.from('media').getPublicUrl(path);
-    return urlData?.publicUrl || null;
-  } catch(err) {
-    console.error('Storage error:', err);
-    // Fallback to base64 if storage fails
-    return await compressImage(file);
-  }
-}
-
+// ═══ REPLACED FUNCTION 4: captureMgrMedia ═══
+// First file → opens comment overlay (same flow as before).
+// Extra files → each uploaded to storage with projId, no base64.
 function captureMgrMedia(e) {
   const files = Array.from(e.target.files);
   if (!files.length) return;
-  const f = files[0]; // Always single for comment dialog
+  const f = files[0];
   const mediaType = f.type.startsWith('video') ? 'video' : 'photo';
-  // Store file reference — don't read yet
+  try {
+    validateFile(f, mediaType);
+  } catch(err) {
+    toast(err.message, 'err');
+    e.target.value = '';
+    return;
+  }
+  // Store File reference only — no FileReader, no base64
   journalPending = { file: f, type: mediaType, name: f.name, forManager: true };
   const previewUrl = URL.createObjectURL(f);
   const prev = document.getElementById('journal-preview');
@@ -978,77 +1068,95 @@ function captureMgrMedia(e) {
   document.getElementById('journal-ov-ico').textContent = mediaType === 'photo' ? '📷' : '🎥';
   document.getElementById('journal-comment').value = '';
   document.getElementById('journal-ov').className = 'co-ov show';
-  // Handle multiple files silently
+  // Additional files: sequential for...of — deterministic, no race conditions
   if (files.length > 1) {
     const proj = S.projects.find(p => p.id === S.drillProj);
-    files.slice(1).forEach(async (mf) => {
-      const dataUrl = await uploadToStorage(mf);
-      await db.from('media').insert({
-        worker_id: S.user?.id || null, worker_name: S.user?.name || 'Manager',
-        project_id: S.drillProj, project_name: proj?.name || '',
-        type: mf.type.startsWith('video') ? 'video' : 'photo', name: mf.name,
-        url: '', data_url: dataUrl, is_checkout: false
-      });
-      renderProjMedia();
-    });
+    for (const mf of files.slice(1)) {
+      const mt = mf.type.startsWith('video') ? 'video' : 'photo';
+      try {
+        validateFile(mf, mt);
+        const { filePath, fileUrl } = await uploadFileToStorage(mf, S.drillProj, mt === 'video' ? 'videos' : 'photos');
+        const { error } = await db.from('media').insert({
+          worker_id: S.user?.id || null,
+          worker_name: S.user?.name || 'Manager',
+          project_id: S.drillProj,
+          project_name: proj?.name || '',
+          type: mt,
+          name: mf.name,
+          file_path: filePath,
+          file_url: fileUrl,
+          comment: '',
+          is_checkout: false
+        });
+        if (error) throw new Error(error.message);
+        renderProjMedia();
+      } catch(err) {
+        toast(`❌ Failed: ${mf.name} — ${err.message}`, 'err');
+      }
+    }
   }
   e.target.value = '';
 }
 
+// ═══ REPLACED FUNCTION 5: saveJournalEntry ═══
+// Uses correct field names: file_url (URL) and comment (text).
+// Passes projId to uploadFileToStorage for correct storage path.
+// No base64. No silent success. Throws are surfaced to the user.
 async function saveJournalEntry() {
   if (!journalPending) return;
-  // Capture everything before any async/null operations
   const pending = { ...journalPending };
   const comment = document.getElementById('journal-comment').value.trim();
   const btn = document.getElementById('journal-ov').querySelector('.co-go');
   const projId = pending.forManager ? S.drillProj : S.selectedProj;
-
   if (!projId) { toast('Select a project first', 'err'); return; }
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving...'; }
-
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Uploading...'; }
   try {
+    const mediaCategory = pending.type === 'video' ? 'video' : 'photo';
+    validateFile(pending.file, mediaCategory);
     const proj = S.projects.find(p => p.id === projId);
-    // Compress/read the file
-    const dataUrl = await uploadToStorage(pending.file);
-
-    const {error} = await db.from('media').insert({
+    const folder = pending.type === 'video' ? 'videos' : 'photos';
+    const { filePath, fileUrl } = await uploadFileToStorage(pending.file, projId, folder);
+    const { error } = await db.from('media').insert({
       worker_id: S.user?.id || null,
       worker_name: S.user?.name || 'Unknown',
       project_id: projId,
       project_name: proj?.name || '',
       type: pending.type,
       name: pending.name,
-      url: comment,
-      data_url: dataUrl,
+      file_path: filePath,
+      file_url: fileUrl,
+      comment: comment,
       is_checkout: false
     });
-
     if (error) throw new Error(error.message);
-
-    // Clear state AFTER successful save
     journalPending = null;
     document.getElementById('journal-ov').className = 'co-ov';
     toast('📸 Saved!', 'ok');
-
     if (pending.forManager) {
       renderProjMedia();
     } else {
-      S.uploads.push({ data: dataUrl, type: pending.type, comment });
       renderJournal();
     }
   } catch(err) {
     console.error('Save error:', err);
-    toast('Error: ' + err.message, 'err');
+    toast('❌ Error: ' + err.message, 'err');
   }
-
   if (btn) { btn.disabled = false; btn.textContent = '💾 Save to Journal'; }
 }
+
 let journalPending = null;
 
 function captureJournalMedia(e, type) {
   const files = Array.from(e.target.files); if (!files.length) return;
   const f = files[0];
   const mediaType = f.type.startsWith('video') ? 'video' : 'photo';
+  try {
+    validateFile(f, mediaType);
+  } catch(err) {
+    toast(err.message, 'err');
+    e.target.value = '';
+    return;
+  }
   journalPending = { file: f, type: mediaType, name: f.name, forManager: false };
   const previewUrl = URL.createObjectURL(f);
   const prev = document.getElementById('journal-preview');
@@ -1088,23 +1196,69 @@ function cancelJournal() {
   document.getElementById('journal-ov').className = 'co-ov';
 }
 
-function renderJournal() {
+// ═══ REPLACED FUNCTION 6: renderJournal ═══
+// Always loads from Supabase DB. Never reads S.uploads for display.
+// Works after refresh, logout, or opening from another device.
+async function renderJournal() {
   const c = document.getElementById('journal-entries');
-  if (!S.uploads.length) { c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No photos yet — take your first photo!</div>'; return; }
-  c.innerHTML = S.uploads.map((m, i) => `
+  if (!S.selectedProj || !S.user?.id) {
+    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">Select a project to see your photos</div>';
+    return;
+  }
+  c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">Loading...</div>';
+  const { data, error } = await db.from('media')
+    .select('*')
+    .eq('project_id', S.selectedProj)
+    .eq('worker_id', S.user.id)
+    .eq('is_checkout', false)
+    .order('created_at', { ascending: false });
+  if (error) {
+    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--red);font-size:12px">Failed to load photos. Check connection.</div>';
+    return;
+  }
+  if (!data || !data.length) {
+    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No photos yet — take your first photo!</div>';
+    return;
+  }
+  c.innerHTML = data.map(m => `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
-      ${m.type === 'photo'
-        ? `<img src="${m.data}" style="width:100%;max-height:220px;object-fit:cover;display:block">`
-        : `<video src="${m.data}" controls style="width:100%;max-height:220px;display:block"></video>`}
+      ${m.file_url
+        ? m.type === 'photo'
+          ? `<img src="${m.file_url}" style="width:100%;max-height:220px;object-fit:cover;display:block" loading="lazy">`
+          : `<video src="${m.file_url}" controls style="width:100%;max-height:220px;display:block"></video>`
+        : ''}
       ${m.comment ? `<div style="padding:10px 13px;font-size:13px;line-height:1.5">${m.comment}</div>` : ''}
       <div style="padding:6px 13px 10px;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-size:10px;color:var(--muted)">${S.user.name} · Just now</div>
-        <button onclick="removeJournalEntry(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px">Remove</button>
+        <div style="font-size:10px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}</div>
+        <button onclick="deleteMediaEntry('${m.id}', 'worker')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:12px;padding:4px 8px">Remove</button>
       </div>
     </div>`).join('');
 }
 
-function removeJournalEntry(i) { S.uploads.splice(i, 1); renderJournal(); }
+// ═══ COMPANION: deleteMediaEntry ═══
+// Required by renderJournal and renderProjMedia delete buttons.
+// Deletes from DB. renderJournal/renderProjMedia re-loads from DB after.
+async function deleteMediaEntry(id, context) {
+  if (!confirm('Remove this entry?')) return;
+  // Step 1: Read the row to get file_path
+  const { data: row, error: fetchErr } = await db.from('media').select('file_path').eq('id', id).single();
+  if (fetchErr) { toast('Failed to find entry: ' + fetchErr.message, 'err'); return; }
+  // Step 2: Delete the file from Supabase Storage (if file_path exists)
+  if (row?.file_path) {
+    const { error: storageErr } = await db.storage.from('media').remove([row.file_path]);
+    if (storageErr) { toast('Storage delete failed: ' + storageErr.message, 'err'); return; }
+  }
+  // Step 3: Delete the DB row
+  const { error: dbErr } = await db.from('media').delete().eq('id', id);
+  if (dbErr) { toast('DB delete failed: ' + dbErr.message, 'err'); return; }
+  // Step 4: Refresh UI
+  toast('Removed', 'ok');
+  if (context === 'worker') {
+    renderJournal();
+  } else {
+    renderProjMedia();
+  }
+}
 
 // ═══ PROJECT TASKS ═══
 function openProjTaskForm(){
@@ -1152,22 +1306,47 @@ async function delProjTask(id){
   renderProjTasks();renderOverview();
 }
 
-async function renderProjMedia(){
-  const c=document.getElementById('proj-media-list');
-  const {data}=await db.from('media').select('*').eq('project_id',S.drillProj).order('created_at',{ascending:false});
-  if(!data||!data.length){c.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">No photos or videos yet</div>';return;}
-  c.innerHTML=data.map(m=>`
+// ═══ REPLACED FUNCTION 7: renderProjMedia ═══
+// Renders file_url (storage URL) and comment fields only.
+// No reference to data_url or url anywhere.
+async function renderProjMedia() {
+  const c = document.getElementById('proj-media-list');
+  const { data, error } = await db.from('media')
+    .select('*')
+    .eq('project_id', S.drillProj)
+    .order('created_at', { ascending: false });
+  if (error) {
+    c.innerHTML = '<div style="text-align:center;color:var(--red);font-size:12px;padding:10px">Failed to load media</div>';
+    return;
+  }
+  if (!data || !data.length) {
+    c.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px">No photos or videos yet</div>';
+    return;
+  }
+  c.innerHTML = data.map(m => `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
-      ${m.data_url?`<div style="background:#000">${m.type==='pdf'
-        ?`<div style="padding:16px;background:rgba(239,68,68,.07);display:flex;align-items:center;gap:12px"><span style="font-size:32px">📄</span><div><div style="font-size:14px;font-weight:600">${m.name}</div><a href="${m.data_url}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none">📂 Open PDF</a></div></div>`
-        :m.type==='video'
-        ?`<video src="${m.data_url}" controls style="width:100%;max-height:220px;display:block"></video>`
-        :`<img src="${m.data_url}" style="width:100%;max-height:220px;object-fit:cover;display:block">`
-      }</div>`:''}
+      ${m.file_url ? `<div style="background:#000">${
+        m.type === 'pdf'
+          ? `<div style="padding:16px;background:rgba(239,68,68,.07);display:flex;align-items:center;gap:12px">
+               <span style="font-size:32px">📄</span>
+               <div>
+                 <div style="font-size:14px;font-weight:600">${m.name}</div>
+                 <a href="${m.file_url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue);text-decoration:none">📂 Open PDF</a>
+               </div>
+             </div>`
+          : m.type === 'video'
+          ? `<video src="${m.file_url}" controls style="width:100%;max-height:220px;display:block"></video>`
+          : `<img src="${m.file_url}" style="width:100%;max-height:220px;object-fit:cover;display:block" loading="lazy">`
+      }</div>` : ''}
       <div style="padding:10px 13px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:2px">${m.worker_name} <span style="font-weight:400;color:var(--muted)">· ${fmtDT(m.created_at)}</span></div>
-        ${m.url?`<div style="font-size:13px;line-height:1.5;margin-top:4px">${m.url}</div>`:''}
-        ${m.is_checkout?'<span style="font-size:10px;background:rgba(239,68,68,.12);color:var(--red);padding:2px 7px;border-radius:20px;display:inline-block;margin-top:4px">Checkout video</span>':''}
+        <div style="font-size:12px;font-weight:600;margin-bottom:2px">
+          ${m.worker_name} <span style="font-weight:400;color:var(--muted)">· ${fmtDT(m.created_at)}</span>
+        </div>
+        ${m.comment ? `<div style="font-size:13px;line-height:1.5;margin-top:4px">${m.comment}</div>` : ''}
+        ${m.is_checkout ? '<span style="font-size:10px;background:rgba(239,68,68,.12);color:var(--red);padding:2px 7px;border-radius:20px;display:inline-block;margin-top:4px">🎬 Checkout video</span>' : ''}
+        <div style="margin-top:8px">
+          <button onclick="deleteMediaEntry('${m.id}', 'manager')" style="background:none;border:1px solid rgba(239,68,68,.3);color:var(--red);cursor:pointer;font-size:11px;padding:3px 10px;border-radius:6px;font-family:var(--font)">Remove</button>
+        </div>
       </div>
     </div>`).join('');
 }
@@ -1177,7 +1356,7 @@ function voiceInput(fieldId){
   if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('Voice not supported — type manually','err');return;}
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   const r=new SR();
-  r.lang='ru-RU'; // Russian first
+  r.lang='ru-RU';
   r.continuous=false;r.interimResults=false;
   toast('🎤 Listening...','ok');
   r.onresult=e=>{
@@ -1186,7 +1365,6 @@ function voiceInput(fieldId){
     if(el){el.value=(el.value?el.value+' ':'')+txt;toast('✅ Saved!','ok');}
   };
   r.onerror=e=>{
-    // Try English if Russian fails
     const r2=new SR();r2.lang='en-US';r2.continuous=false;r2.interimResults=false;
     r2.onresult=ev=>{const txt=ev.results[0][0].transcript;const el=document.getElementById(fieldId);if(el){el.value=(el.value?el.value+' ':'')+txt;toast('✅ Captured!','ok');}};
     r2.onerror=()=>toast('Voice error — try again','err');
@@ -1267,10 +1445,7 @@ function openPayroll(){
 }
 
 async function processPayroll(){
-  // Archive current events by adding a payroll_period tag
-  const now=new Date().toISOString();
   await db.from('events').insert({type:'payroll',worker_id:S.user.id,worker_name:'System',project_id:null,project_name:'PAYROLL PROCESSED '+new Date().toLocaleDateString()});
-  // Reset all workers checked hours by inserting a payroll marker
   toast('✅ Payroll processed! Hours archived.','ok');
   closeModal('mod-payroll');
   refreshManager();
