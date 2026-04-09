@@ -1524,7 +1524,7 @@ function fmtDT(iso){const d=new Date(iso);return d.toLocaleDateString('en-US',{m
 // Throws a descriptive Error — never silently passes invalid files.
 // ═══════════════════════════════════════════════════════════════
 function validateFile(file, type) {
-  const LIMITS = { photo: 10, video: 200, pdf: 25 }; // MB
+  const LIMITS = { photo: 20, video: 500, pdf: 50 }; // MB — Pro plan: 500MB per file
   const MIMES = {
     photo: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/gif'],
     video: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo', 'video/avi'],
