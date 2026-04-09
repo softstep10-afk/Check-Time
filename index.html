@@ -1044,15 +1044,19 @@ async function toggleCI(){
   const proj=S.projects.find(p=>p.id===S.selectedProj),gpsOn=document.getElementById('gps-req').checked;
   const isDriver=S.user?.role==='driver';
   if(!S.checkedIn){
-    // GPS check — skip for drivers, skip if GPS unavailable or toggle off
+    // GPS distance check — only if GPS on, not driver, GPS available, AND project has coordinates
     if(gpsOn && !isDriver && S.gps && proj?.gps_lat && proj?.gps_lon){
       const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
-      if(d>(proj.gps_radius||300)){
-        toast(`You are ${Math.round(d)}m away. Must be within ${proj.gps_radius||300}m.`,'err');
-        return;
+      const radius=proj.gps_radius||300;
+      if(d>radius){
+        // Show distance info + offer override option
+        const override=confirm(`You are ${Math.round(d)}m from ${proj.name}.\nRequired: within ${radius}m.\n\nCheck in anyway?`);
+        if(!override)return;
+        // Log that override was used
+        toast(`⚠️ Checked in from ${Math.round(d)}m away`,'ok');
       }
     }
-    // If GPS toggle is on but GPS not available — warn but allow checkin
+    // GPS toggle on but GPS not yet available — allow with warning
     if(gpsOn && !isDriver && !S.gps){
       toast('⚠️ GPS unavailable — checking in without location','ok');
     }
@@ -2689,30 +2693,36 @@ function startRealtimeManager(){
   db.channel('manager-realtime')
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'events'},payload=>{
       S.events.push(payload.new);
-      // Update worker checked_in status
       const ev=payload.new;
       const w=S.workers.find(x=>x.id===ev.worker_id);
       if(w){
         if(ev.type==='in'){w.checked_in=true;w.last_proj_id=ev.project_id;}
         else if(ev.type==='out'){w.checked_in=false;}
       }
-      // Show notification bell
       S.newNotifCount=(S.newNotifCount||0)+1;
       const bell=document.getElementById('mgr-notif-bell');
       const cnt=document.getElementById('mgr-notif-count');
       if(bell){bell.style.display='block';}
       if(cnt){cnt.textContent=S.newNotifCount;}
-      // Refresh current view silently
-      const activeView=document.querySelector('.view.on')?.id;
-      if(activeView==='view-overview')renderOverview();
-      if(activeView==='view-projects')renderProjCards();
+      renderOverview();
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers'},payload=>{
+      // Worker updated (checked in/out, message, etc.)
       const idx=S.workers.findIndex(w=>w.id===payload.new.id);
-      if(idx>=0)S.workers[idx]=payload.new;
+      if(idx>=0)S.workers[idx]={...S.workers[idx],...payload.new};
+      else S.workers.push(payload.new);
+      // Show notification for checkin/checkout changes
+      const old=idx>=0?S.workers[idx]:null;
+      if(payload.new.checked_in!==old?.checked_in){
+        S.newNotifCount=(S.newNotifCount||0)+1;
+        const bell=document.getElementById('mgr-notif-bell');
+        const cnt=document.getElementById('mgr-notif-count');
+        if(bell)bell.style.display='block';
+        if(cnt)cnt.textContent=S.newNotifCount;
+      }
+      renderOverview();
       const activeView=document.querySelector('.view.on')?.id;
       if(activeView==='view-team')renderTeam();
-      if(activeView==='view-overview')renderOverview();
     })
     .subscribe();
 }
