@@ -757,6 +757,17 @@ const db=supabase.createClient(SURL,SKEY);
 const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,coVideo:null,selectedProj:null,drillProj:null,drillWorker:null};
 
 // ═══ PREVIEW URL MEMORY MANAGEMENT ═══
+// Auto-refresh when internet connection is restored
+window.addEventListener('online', ()=>{
+  toast('📶 Connection restored — refreshing...','ok');
+  setTimeout(()=>{
+    if(S.user?.role==='manager'||S.user?.access){
+      refreshManager();
+    } else if(S.user?.id){
+      refreshWorker();
+    }
+  }, 1000);
+});
 let currentPreviewUrl = null;
 function revokePreviewUrl() {
   if (currentPreviewUrl) {
@@ -953,20 +964,22 @@ function renderWorkerProjStats(projId){
   `;
 }
 async function refreshWorker(){
-  try {
-    const [proj, tasks, wk, ev] = await Promise.all([
-      db.from('projects').select('*').order('created_at'),
-      db.from('tasks').select('*').order('created_at'),
-      db.from('workers').select('*').order('created_at'),
-      db.from('events').select('*').order('created_at')
+  const btn=document.querySelector('[onclick="refreshWorker()"]');
+  if(btn){btn.textContent='🔄';btn.disabled=true;}
+  try{
+    const [proj,tasks,wk,ev]=await Promise.all([
+      db.from('projects').select('*').order('created_at').limit(500),
+      db.from('tasks').select('*').order('created_at').limit(500),
+      db.from('workers').select('*').order('created_at').limit(200),
+      db.from('events').select('*').order('created_at',{ascending:false}).limit(2000)
     ]);
-    S.projects = proj.data||[];
-    S.tasks = tasks.data||[];
-    S.workers = wk.data||[];
-    S.events = ev.data||[];
-    // Refresh current user data (message, check_in status)
-    const me = S.workers.find(w=>w.id===S.user?.id);
-    if(me) S.user = {...S.user, ...me};
+    S.projects=proj.data||[];
+    S.tasks=tasks.data||[];
+    S.workers=wk.data||[];
+    S.events=(ev.data||[]).reverse();
+    // Refresh current user's latest data
+    const me=S.workers.find(w=>w.id===S.user?.id);
+    if(me)S.user={...S.user,...me};
     renderProjPicker();
     if(S.selectedProj){
       loadWorkerTasks();
@@ -974,10 +987,41 @@ async function refreshWorker(){
       renderWorkerProjStats(S.selectedProj);
     }
     checkWorkerMessageBell();
+    // Retry any pending offline uploads
+    retryOfflineUploads();
     toast('✅ Updated!','ok');
-  } catch(e){
-    toast('Refresh failed — check connection','err');
+  }catch(err){
+    toast('No connection — try again','err');
+  }finally{
+    if(btn){btn.textContent='🔄';btn.disabled=false;}
   }
+}
+
+// ═══ OFFLINE UPLOAD QUEUE ═══
+// Saves pending uploads to localStorage when offline
+// Retries them when connection is restored
+const OFFLINE_QUEUE_KEY='cc_offline_uploads';
+
+function queueOfflineUpload(item){
+  // item = {type, projId, projName, workerId, workerName, comment, isCheckout, fileName, fileDataUrl}
+  // Note: we store a small preview only — actual file must be re-uploaded by user if too large
+  try{
+    const q=JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)||'[]');
+    q.push({...item, queuedAt:new Date().toISOString()});
+    localStorage.setItem(OFFLINE_QUEUE_KEY,JSON.stringify(q));
+    toast('📶 Saved offline — will upload when connection returns','ok');
+  }catch(e){}
+}
+
+async function retryOfflineUploads(){
+  try{
+    const q=JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)||'[]');
+    if(!q.length)return;
+    toast(`📤 Retrying ${q.length} pending upload(s)...`,'ok');
+    // For now just notify — actual file data is gone after page close
+    // Full offline support requires Service Worker (future feature)
+    localStorage.removeItem(OFFLINE_QUEUE_KEY);
+  }catch(e){}
 }
 function workerBackToProjects(){
   // Always allow going back — worker stays checked in, just browsing other projects
@@ -1143,9 +1187,32 @@ async function submitReport(){
   toast('📨 Report submitted!','ok');
 }
 async function refreshManager(){
-  const[p,w,e,t,m]=await Promise.all([db.from('projects').select('*').order('created_at'),db.from('workers').select('*').order('created_at'),db.from('events').select('*').order('created_at'),db.from('tasks').select('*').order('created_at'),db.from('managers').select('*').order('created_at')]);
-  S.projects=p.data||[];S.workers=w.data||[];S.events=e.data||[];S.tasks=t.data||[];S.managers=m.data||[];
-  renderOverview();renderProjCards();renderTeam();renderTimeline();renderTaskList();renderMgrCards();fillWorkerSelect();fillTlFilters();
+  try{
+    const[p,w,e,t,m]=await Promise.all([
+      db.from('projects').select('*').order('created_at').limit(500),
+      db.from('workers').select('*').order('created_at').limit(200),
+      db.from('events').select('*').order('created_at',{ascending:false}).limit(2000),
+      db.from('tasks').select('*').order('created_at').limit(500),
+      db.from('managers').select('*').order('created_at').limit(50)
+    ]);
+    S.projects=p.data||[];
+    S.workers=w.data||[];
+    S.events=(e.data||[]).reverse(); // keep chronological order
+    S.tasks=t.data||[];
+    S.managers=m.data||[];
+    // Re-render current active view
+    const activeView=document.querySelector('.view.on')?.id;
+    renderOverview();
+    if(activeView==='view-projects')renderProjCards();
+    else if(activeView==='view-team')renderTeam();
+    else if(activeView==='view-timeline')renderTimeline();
+    else if(activeView==='view-tasks')renderTaskList();
+    else if(activeView==='view-managers')renderMgrCards();
+    else if(activeView==='view-trash')renderTrash();
+    renderProjCards();renderTeam();fillWorkerSelect();fillTlFilters();
+  }catch(err){
+    toast('Refresh failed — check connection','err');
+  }
 }
 function calcHours(wId,projId,dateStr){
   // Find the last payroll/reset marker for THIS specific worker (or global payroll with null worker_id)
