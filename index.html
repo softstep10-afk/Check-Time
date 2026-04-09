@@ -349,6 +349,12 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <button onclick="refreshWorker()" style="padding:7px 10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer">🔄</button>
+      <!-- Sound mode toggle -->
+      <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+        <button id="notif-btn-sound" onclick="setNotifMode('sound')" style="padding:6px 8px;background:var(--gold);color:#000;border:none;font-size:13px;cursor:pointer" title="Sound on">🔔</button>
+        <button id="notif-btn-vibrate" onclick="setNotifMode('vibrate')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Vibrate only">📳</button>
+        <button id="notif-btn-silent" onclick="setNotifMode('silent')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Silent">🔕</button>
+      </div>
       <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--blue);border-radius:8px;color:var(--blue);font-size:16px;cursor:pointer" title="Your tasks">📋<span style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">0</span></button>
       <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:16px;cursor:pointer" title="You have a message">💬<span id="w-msg-dot" style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface)"></span></button>
       <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
@@ -850,7 +856,7 @@ async function doLogin(){
       document.getElementById('m-badge').className='mgr-badge '+(mgr.access==='admin'?'full':'lim');
       document.getElementById('adm-sec').style.display=mgr.access==='admin'?'block':'none';
       document.getElementById('nav-managers').style.display=mgr.access==='admin'?'flex':'none';
-      showPage('pg-manager');refreshManager();startRealtimeManager();startAutoRefresh();
+      showPage('pg-manager');refreshManager();startRealtimeManager();startAutoRefresh();initBackButton();
     }else{
       const {data,error}=await db.from('workers').select('*').eq('pin',pin);
       if(error||!data||!data.length){showErr('PIN not found — ask your manager');btn.disabled=false;btn.textContent='Sign In →';return;}
@@ -872,6 +878,9 @@ async function doLogin(){
       startRealtimeWorker();
       checkWorkerMessageBell();
       startAutoRefresh();
+      initBackButton();
+      // Restore saved notification mode
+      setNotifMode(getNotifMode());
       // Show message from manager if one exists
       if(w.message&&w.message.trim()){
         const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
@@ -2719,6 +2728,85 @@ function triggerMediaAdd(){
   else if(activeMediaTab==='video') document.getElementById('mgr-video').click();
   else document.getElementById('mgr-pdf').click();
 }
+// ═══ SOUND NOTIFICATIONS ═══
+// ═══ SOUND & VIBRATION SETTINGS ═══
+// Saved to localStorage so it persists
+const NOTIF_KEY='cc_notif_mode';
+function getNotifMode(){return localStorage.getItem(NOTIF_KEY)||'sound';} // 'sound' | 'vibrate' | 'silent'
+function setNotifMode(mode){
+  localStorage.setItem(NOTIF_KEY,mode);
+  ['sound','vibrate','silent'].forEach(m=>{
+    const btn=document.getElementById('notif-btn-'+m);
+    if(!btn)return;
+    btn.style.background=m===mode?'var(--gold)':'var(--border)';
+    btn.style.color=m===mode?'#000':'var(--muted)';
+  });
+  const labels={sound:'🔔 Sound',vibrate:'📳 Vibrate',silent:'🔕 Silent'};
+  toast(labels[mode]+' mode set','ok');
+}
+
+function playSound(type){
+  const mode=getNotifMode();
+  // Vibration
+  if((mode==='sound'||mode==='vibrate')&&navigator.vibrate){
+    if(type==='task')navigator.vibrate([100,50,100]);
+    else if(type==='message')navigator.vibrate([200]);
+    else if(type==='checkin')navigator.vibrate([80]);
+  }
+  // Sound
+  if(mode!=='sound')return;
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.connect(gain);gain.connect(ctx.destination);
+    if(type==='task'){
+      osc.frequency.setValueAtTime(880,ctx.currentTime);
+      osc.frequency.setValueAtTime(1100,ctx.currentTime+0.1);
+      gain.gain.setValueAtTime(0.3,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.3);
+    } else if(type==='message'){
+      osc.frequency.setValueAtTime(660,ctx.currentTime);
+      osc.frequency.setValueAtTime(880,ctx.currentTime+0.15);
+      gain.gain.setValueAtTime(0.25,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.4);
+    } else if(type==='checkin'){
+      osc.frequency.setValueAtTime(440,ctx.currentTime);
+      osc.frequency.setValueAtTime(880,ctx.currentTime+0.1);
+      gain.gain.setValueAtTime(0.2,ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
+      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.25);
+    }
+  }catch(e){}
+}
+
+// ═══ ANDROID BACK BUTTON HANDLER ═══
+// Intercepts back button to navigate within app instead of leaving
+function initBackButton(){
+  // Push state so back button has something to intercept
+  history.pushState({app:true},'',location.href);
+  window.addEventListener('popstate',e=>{
+    // Push state again to keep intercepting
+    history.pushState({app:true},'',location.href);
+    // Navigate within app
+    if(S.user?.access||S.user?.role==='owner'){
+      // Manager: go back from drill-down views
+      const drillViews=['view-proj-detail','view-worker-detail','view-day-detail'];
+      const activeDrill=drillViews.find(v=>document.getElementById(v)?.classList.contains('on'));
+      if(activeDrill==='view-day-detail'){goBack2Worker();return;}
+      if(activeDrill==='view-worker-detail'){goBack2Proj();return;}
+      if(activeDrill==='view-proj-detail'){showView('projects');return;}
+    } else if(S.user?.id){
+      // Worker: go back to project list
+      if(document.getElementById('w-view-detail')?.style.display!=='none'){
+        workerBackToProjects();return;
+      }
+    }
+  });
+}
+
 // ═══ AUTO REFRESH — silent background sync every 30 seconds ═══
 function startAutoRefresh(){
   if(S._autoRefreshTimer)clearInterval(S._autoRefreshTimer);
@@ -2993,6 +3081,7 @@ function startRealtimeWorker(){
         el.style.background=msgBg[c]||'rgba(245,158,11,.08)';
         el.style.color=msgColors[c]||'var(--gold)';
         document.getElementById('worker-msg-ov').className='co-ov show';
+        playSound('message');
         toast('💬 New message from manager!','ok');
       }
     })
@@ -3001,10 +3090,11 @@ function startRealtimeWorker(){
       S.tasks.push(t);
       if(t.worker_id===S.user.id){
         loadWorkerTasks();
+        playSound('task');
         toast(`📋 New task: ${t.title}`,'ok');
       } else if(t.project_id===S.selectedProj && !t.worker_id){
-        // General task on current project
         loadWorkerTasks();
+        playSound('task');
         toast(`📋 New task on this project: ${t.title}`,'ok');
       }
     })
