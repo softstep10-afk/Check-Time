@@ -1189,47 +1189,63 @@ async function confirmCO() {
 
 async function loadWorkerTasks(){
   const c=document.getElementById('w-tasks');
-  // Tasks assigned directly to this worker (any project)
-  const mine=S.tasks.filter(t=>t.worker_id===S.user.id&&!t.done);
-  // Tasks on current project with no specific worker assigned
+  // ALL tasks for this worker (done and undone) + general project tasks
+  const mine=S.tasks.filter(t=>t.worker_id===S.user.id);
   const projTasks=S.selectedProj?S.tasks.filter(t=>
     t.project_id===S.selectedProj&&
-    !t.done&&
     (!t.worker_id||t.worker_id===S.user.id)
   ):[];
-  // Combine and dedupe
   const all=[...new Map([...mine,...projTasks].map(t=>[t.id,t])).values()]
     .sort((a,b)=>{
+      // Undone first, then by priority
+      if(a.done!==b.done)return a.done?1:-1;
       const pri={high:0,medium:1,low:2};
-      return (pri[a.priority]||1)-(pri[b.priority]||1);
+      return(pri[a.priority]||1)-(pri[b.priority]||1);
     });
+  const done=all.filter(t=>t.done).length;
+  const total=all.length;
+  const undone=total-done;
   // Update task bell
   const bell=document.getElementById('w-task-bell');
-  const prevCount=S._lastTaskCount||0;
   if(bell){
-    if(all.length>0){bell.style.display='block';bell.querySelector('span').textContent=all.length;}
+    if(undone>0){bell.style.display='block';bell.querySelector('span').textContent=undone;}
+    else if(total>0){bell.style.display='block';bell.querySelector('span').textContent='✓';bell.style.borderColor='var(--green)';bell.style.color='var(--green)';}
     else{bell.style.display='none';}
-    if(all.length>prevCount) toast(`📋 New task!`,'ok');
   }
-  S._lastTaskCount=all.length;
+  S._lastTaskCount=undone;
   if(!all.length){c.innerHTML='<div class="empty"><div class="ei">✅</div><p>No tasks assigned</p></div>';return;}
   const roleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
   const myColor=roleColors[S.user?.role||'worker']||'#f59e0b';
-  c.innerHTML=all.map(t=>{
+  // Progress bar
+  const pct=total>0?Math.round(done/total*100):0;
+  const progressBar=`<div style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:700;color:var(--text)">Tasks: ${done}/${total} done</span>
+      <span style="font-size:12px;color:${pct===100?'var(--green)':'var(--muted)'}">${pct}%</span>
+    </div>
+    <div style="background:var(--border);border-radius:6px;height:6px;overflow:hidden">
+      <div style="background:${pct===100?'var(--green)':'var(--gold)'};height:100%;width:${pct}%;transition:width .3s;border-radius:6px"></div>
+    </div>
+  </div>`;
+  c.innerHTML=progressBar+all.map(t=>{
     const proj=S.projects.find(p=>p.id===t.project_id);
     const isCurrentProj=t.project_id===S.selectedProj;
     const isForMe=t.worker_id===S.user.id;
-    return`<div class="task-card" style="cursor:pointer;border-left:3px solid ${isForMe?myColor:'var(--border)'}" onclick="openTaskDetail('${t.id}')">
+    return`<div class="task-card" style="cursor:pointer;border-left:3px solid ${t.done?'var(--green)':isForMe?myColor:'var(--border)'};opacity:${t.done?'0.7':'1'}" onclick="openTaskDetail('${t.id}')">
       <div class="task-top">
-        <div>
-          <div class="task-title">${t.title}</div>
-          ${!isCurrentProj&&proj?`<div style="font-size:10px;color:var(--blue);margin-top:2px">📍 ${proj.name}</div>`:''}
-          ${!isForMe?`<div style="font-size:10px;color:var(--muted);margin-top:2px">👷 General task</div>`:''}
+        <div style="display:flex;align-items:center;gap:8px;flex:1">
+          <div style="width:22px;height:22px;border-radius:50%;border:2px solid ${t.done?'var(--green)':'var(--border)'};background:${t.done?'var(--green)':'none'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px">${t.done?'✓':''}</div>
+          <div style="flex:1">
+            <div class="task-title" style="${t.done?'text-decoration:line-through;color:var(--muted)':''}">${t.title}</div>
+            ${!isCurrentProj&&proj?`<div style="font-size:10px;color:var(--blue);margin-top:2px">📍 ${proj.name}</div>`:''}
+            ${t.done&&t.completed_by?`<div style="font-size:10px;color:var(--green);margin-top:2px">✅ Done by ${t.completed_by}</div>`:''}
+            ${!t.done&&!isForMe?`<div style="font-size:10px;color:var(--muted);margin-top:2px">👷 General task</div>`:''}
+          </div>
         </div>
-        <span class="pri ${t.priority}">${t.priority==='high'?'🔴 High':t.priority==='medium'?'🟡 Med':'🟢 Low'}</span>
+        <span class="pri ${t.priority}">${t.priority==='high'?'🔴':t.priority==='medium'?'🟡':'🟢'}</span>
       </div>
-      ${t.description?`<div class="task-desc">${t.description}</div>`:''}
-      <button class="task-done-btn" onclick="event.stopPropagation();markDone('${t.id}')">✅ Mark Done</button>
+      ${t.description?`<div class="task-desc" style="${t.done?'color:var(--muted)':''}">${t.description}</div>`:''}
+      ${!t.done?`<button class="task-done-btn" onclick="event.stopPropagation();markDone('${t.id}')">✅ Mark Done</button>`:''}
     </div>`;
   }).join('');
 }
@@ -2106,19 +2122,30 @@ function renderProjTasks(){
   const c=document.getElementById('proj-task-list');
   const tasks=S.tasks.filter(t=>t.project_id===S.drillProj);
   if(!tasks.length){c.innerHTML='<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">No tasks yet — add one above</div>';return;}
+  const done=tasks.filter(t=>t.done).length;
+  const total=tasks.length;
+  const pct=Math.round(done/total*100);
   const roleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
-  c.innerHTML=tasks.map(t=>{
+  const progressBar=`<div style="padding:10px 14px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:700">${done}/${total} tasks done</span>
+      <span style="font-size:12px;color:${pct===100?'var(--green)':'var(--muted)'};font-weight:700">${pct===100?'🎉 All done!':pct+'%'}</span>
+    </div>
+    <div style="background:var(--border);border-radius:6px;height:6px;overflow:hidden">
+      <div style="background:${pct===100?'var(--green)':'var(--gold)'};height:100%;width:${pct}%;transition:width .3s;border-radius:6px"></div>
+    </div>
+  </div>`;
+  c.innerHTML=progressBar+tasks.map(t=>{
     const w=S.workers.find(x=>x.id===t.worker_id);
     const wColor=w?roleColors[w.role||'worker']||'#f59e0b':null;
     const leftBorder=wColor?`border-left:3px solid ${wColor};`:'';
-    return`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(42,48,69,.4);${leftBorder}">
-      <div onclick="toggleProjTask('${t.id}','${!t.done}')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${t.done?'var(--green)':'var(--border)'};background:${t.done?'var(--green)':'none'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px">${t.done?'✓':''}</div>
+    return`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(42,48,69,.4);${leftBorder}opacity:${t.done?'.7':'1'}">
+      <div onclick="toggleProjTask('${t.id}','${!t.done}')" style="width:22px;height:22px;border-radius:50%;border:2px solid ${t.done?'var(--green)':'var(--border)'};background:${t.done?'var(--green)':'none'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px">${t.done?'✓':''}</div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500;${t.done?'text-decoration:line-through;color:var(--muted)':''}">${t.title}</div>
         ${w?`<div style="font-size:10px;font-weight:600;margin-top:2px;color:${wColor}">→ ${w.name} <span style="opacity:.7">(${w.role||'worker'})</span></div>`:t.worker_name&&t.worker_name!=='Project'?`<div style="font-size:10px;color:var(--muted)">→ ${t.worker_name}</div>`:''}
         ${t.done&&t.completed_by?`<div style="font-size:10px;color:var(--green);margin-top:2px">✅ Done by ${t.completed_by}${t.completed_at?' · '+fmtDT(t.completed_at):''}</div>`:''}
       </div>
-      ${w?`<div style="width:8px;height:8px;border-radius:50%;background:${wColor};flex-shrink:0"></div>`:''}
       <span class="pri ${t.priority}">${t.priority==='high'?'🔴 High':t.priority==='medium'?'🟡 Med':'🟢 Low'}</span>
       <button onclick="delProjTask('${t.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">🗑</button>
     </div>`;
