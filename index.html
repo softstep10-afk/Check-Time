@@ -328,7 +328,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button class="tab-btn on" id="tab-w" onclick="switchTab('worker')">👷 Worker</button>
       <button class="tab-btn" id="tab-m" onclick="switchTab('manager')">📊 Manager</button>
     </div>
-    <div class="field"><label id="pin-lbl">Worker PIN</label><input type="password" id="pin-in" placeholder="••••" maxlength="6" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="field"><label id="pin-lbl">Worker PIN</label><input type="password" id="pin-in" placeholder="••••" maxlength="6" onkeydown="if(event.key==='Enter')doLogin()"></div>
     <button class="big-btn" id="login-btn" onclick="doLogin()">Sign In →</button>
     <div class="err-msg" id="err-msg"></div>
     <p class="hint-txt" id="hint-txt">Manager? <a onclick="switchTab('manager')">Switch here</a></p>
