@@ -1184,14 +1184,18 @@ function renderOverview(){
     const proj=S.projects.find(p=>p.id===w.last_proj_id);
     const lastIn=S.events.filter(e=>e.worker_id===w.id&&e.type==='in').pop();
     const h=lastIn?((Date.now()-new Date(lastIn.created_at))/3600000).toFixed(1):0;
+    const hNum=parseFloat(h);
+    const longSession=hNum>10; // warn if 10+ hours
+    const veryLong=hNum>14;    // alert if 14+ hours
+    const sessionWarning=longSession?`<span style="font-size:10px;background:${veryLong?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${veryLong?'var(--red)':'var(--gold)'};padding:2px 6px;border-radius:6px;margin-left:4px">${veryLong?'🚨 '+Math.round(hNum)+'h':'⚠️ '+Math.round(hNum)+'h'}</span>`:'';
     const role=w.role||'worker';
     const rColor=roleColors[role]||'#f59e0b';
-    return`<tr>
+    return`<tr style="${veryLong?'background:rgba(239,68,68,.04)':longSession?'background:rgba(245,158,11,.03)':''}">
       <td>
         <div class="cell-name">
           <div class="av-sm" style="background:${w.color||rColor};border:2px solid ${rColor}">${w.name.charAt(0)}</div>
           <div>
-            <div class="nm">${w.name}</div>
+            <div class="nm">${w.name}${sessionWarning}</div>
             <div style="font-size:10px;color:${rColor}">${roleIcons[role]} ${role}</div>
           </div>
         </div>
@@ -1201,7 +1205,7 @@ function renderOverview(){
         ${proj?.address?`<div style="font-size:10px;color:var(--muted)">${proj.address.split(',').slice(0,2).join(',')}</div>`:''}
       </td>
       <td style="font-size:12px">${lastIn?fmtTime(lastIn.created_at):'—'}</td>
-      <td style="font-family:var(--mono);font-weight:700;color:var(--gold)">${h}h</td>
+      <td style="font-family:var(--mono);font-weight:700;color:${veryLong?'var(--red)':longSession?'var(--gold)':'var(--gold)'}">${h}h</td>
     </tr>`;
   }).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No workers on site</td></tr>';
   const tl=document.getElementById('ov-tl');
