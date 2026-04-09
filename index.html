@@ -349,6 +349,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <button onclick="refreshWorker()" style="padding:7px 10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer">🔄</button>
+      <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--blue);border-radius:8px;color:var(--blue);font-size:16px;cursor:pointer" title="Your tasks">📋<span style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">0</span></button>
       <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:16px;cursor:pointer" title="You have a message">💬<span id="w-msg-dot" style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface)"></span></button>
       <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
       <button class="out-btn" onclick="doLogout()">Sign Out</button>
@@ -643,7 +644,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 <!-- TASK DETAIL OVERLAY -->
 <div class="co-ov" id="task-detail-ov">
   <div class="co-box">
-    <div class="co-top"><div class="ico">📋</div><h3 id="task-detail-title">Task</h3><p id="task-detail-pri" style="color:var(--gold);font-weight:700;margin-top:4px"></p></div>
+    <div class="co-top"><div class="ico">📋</div><h3 id="task-detail-title">Task</h3><p id="task-detail-pri" style="color:var(--gold);font-weight:700;margin-top:4px"></p><p id="task-detail-proj" style="color:var(--blue);font-size:12px;margin-top:4px"></p></div>
     <div class="co-body">
       <div style="background:var(--card);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap" id="task-detail-desc"></div>
       <input type="hidden" id="task-detail-id">
@@ -1171,24 +1172,57 @@ async function confirmCO() {
 
 async function loadWorkerTasks(){
   const c=document.getElementById('w-tasks');
-  const mine=S.tasks.filter(t=>t.worker_id===S.user.id&&!t.done&&(!S.selectedProj||t.project_id===S.selectedProj||!t.project_id));
-  if(!mine.length){c.innerHTML='<div class="empty"><div class="ei">✅</div><p>No tasks assigned</p></div>';return;}
-  c.innerHTML=mine.map(t=>`
-    <div class="task-card" style="cursor:pointer" onclick="openTaskDetail('${t.id}')">
+  // Show ALL undone tasks assigned to this worker across ALL projects
+  const mine=S.tasks.filter(t=>t.worker_id===S.user.id&&!t.done);
+  // Also show tasks for current project with no worker assigned
+  const projTasks=S.selectedProj?S.tasks.filter(t=>t.project_id===S.selectedProj&&!t.worker_id&&!t.done):[];
+  // Combine and dedupe
+  const all=[...new Map([...mine,...projTasks].map(t=>[t.id,t])).values()];
+  // Update task bell
+  const bell=document.getElementById('w-task-bell');
+  const prevCount=S._lastTaskCount||0;
+  if(bell){
+    if(all.length>0){
+      bell.style.display='block';
+      bell.querySelector('span').textContent=all.length;
+    } else {
+      bell.style.display='none';
+    }
+    // New task arrived — show toast
+    if(all.length>prevCount){
+      toast(`📋 New task assigned to you!`,'ok');
+    }
+  }
+  S._lastTaskCount=all.length;
+  if(!all.length){c.innerHTML='<div class="empty"><div class="ei">✅</div><p>No tasks assigned</p></div>';return;}
+  const roleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
+  const myColor=roleColors[S.user?.role||'worker']||'#f59e0b';
+  c.innerHTML=all.map(t=>{
+    const proj=S.projects.find(p=>p.id===t.project_id);
+    const isCurrentProj=t.project_id===S.selectedProj;
+    return`<div class="task-card" style="cursor:pointer;border-left:3px solid ${myColor}" onclick="openTaskDetail('${t.id}')">
       <div class="task-top">
-        <div class="task-title">${t.title}</div>
+        <div>
+          <div class="task-title">${t.title}</div>
+          ${!isCurrentProj&&proj?`<div style="font-size:10px;color:var(--blue);margin-top:2px">📍 ${proj.name}</div>`:''}
+        </div>
         <span class="pri ${t.priority}">${t.priority==='high'?'🔴 High':t.priority==='medium'?'🟡 Medium':'🟢 Low'}</span>
       </div>
       ${t.description?`<div class="task-desc">${t.description}</div>`:''}
       <button class="task-done-btn" onclick="event.stopPropagation();markDone('${t.id}')">✅ Mark Done</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function openTaskDetail(id){
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
+  const proj=S.projects.find(p=>p.id===t.project_id);
   document.getElementById('task-detail-title').textContent=t.title;
   document.getElementById('task-detail-pri').textContent=t.priority==='high'?'🔴 High':t.priority==='medium'?'🟡 Medium':'🟢 Low';
-  document.getElementById('task-detail-desc').textContent=t.description||'No description';
+  document.getElementById('task-detail-desc').textContent=t.description||(proj?`Project: ${proj.name}`:'No description');
   document.getElementById('task-detail-id').value=id;
+  // Show project info in detail
+  const projEl=document.getElementById('task-detail-proj');
+  if(projEl)projEl.textContent=proj?`📍 ${proj.name}`:'';
   document.getElementById('task-detail-ov').className='co-ov show';
 }
 function closeTaskDetail(){document.getElementById('task-detail-ov').className='co-ov';}
@@ -2679,27 +2713,25 @@ async function deleteActivity(id){
 
 // ═══ REALTIME SUBSCRIPTIONS ═══
 function startRealtimeWorker(){
-  // Subscribe to changes in workers table (messages) and tasks
   db.channel('worker-realtime')
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers',filter:`id=eq.${S.user.id}`},payload=>{
       const updated=payload.new;
-      // Update local user data
       S.user={...S.user,...updated};
       const w=S.workers.find(x=>x.id===S.user.id);
       if(w)Object.assign(w,updated);
-      // Show bell if new message
       checkWorkerMessageBell();
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks'},payload=>{
-      // New task assigned to this worker
-      if(payload.new.worker_id===S.user.id){
-        S.tasks.push(payload.new);
+      const t=payload.new;
+      S.tasks.push(t);
+      // Notify if task is assigned to this worker
+      if(t.worker_id===S.user.id){
         loadWorkerTasks();
-        toast(`📋 New task: ${payload.new.title}`,'ok');
+        toast(`📋 New task: ${t.title}`,'ok');
       }
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tasks'},payload=>{
-      const idx=S.tasks.findIndex(t=>t.id===payload.new.id);
+      const idx=S.tasks.findIndex(x=>x.id===payload.new.id);
       if(idx>=0)S.tasks[idx]=payload.new;
       else S.tasks.push(payload.new);
       loadWorkerTasks();
@@ -2745,6 +2777,16 @@ function startRealtimeManager(){
     .subscribe();
 }
 
+function showWorkerTaskList(){
+  const tasksEl=document.getElementById('w-tasks');
+  if(tasksEl){
+    if(S.selectedProj){
+      tasksEl.scrollIntoView({behavior:'smooth',block:'start'});
+    } else {
+      toast('Open a project to see your tasks','ok');
+    }
+  }
+}
 function checkWorkerMessageBell(){
   const bell=document.getElementById('w-msg-bell');
   if(!bell)return;
