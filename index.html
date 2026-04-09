@@ -828,7 +828,7 @@ async function doLogin(){
       document.getElementById('m-badge').className='mgr-badge '+(mgr.access==='admin'?'full':'lim');
       document.getElementById('adm-sec').style.display=mgr.access==='admin'?'block':'none';
       document.getElementById('nav-managers').style.display=mgr.access==='admin'?'flex':'none';
-      showPage('pg-manager');refreshManager();startRealtimeManager();
+      showPage('pg-manager');refreshManager();startRealtimeManager();startAutoRefresh();
     }else{
       const {data,error}=await db.from('workers').select('*').eq('pin',pin);
       if(error||!data||!data.length){showErr('PIN not found — ask your manager');btn.disabled=false;btn.textContent='Sign In →';return;}
@@ -849,6 +849,7 @@ async function doLogin(){
       showPage('pg-worker');
       startRealtimeWorker();
       checkWorkerMessageBell();
+      startAutoRefresh();
       // Show message from manager if one exists
       if(w.message&&w.message.trim()){
         const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
@@ -875,6 +876,8 @@ async function doLogin(){
 function showErr(msg){const e=document.getElementById('err-msg');e.textContent=msg;e.style.display='block';}
 function doLogout(){
   if(S.clockTimer)clearInterval(S.clockTimer);
+  if(S._autoRefreshTimer)clearInterval(S._autoRefreshTimer);
+  try{db.removeAllChannels();}catch(e){}
   S.user=null;S.checkedIn=false;S.coVideo=null;S.selectedProj=null;
   document.getElementById('pin-in').value='';
   document.getElementById('err-msg').style.display='none';
@@ -2525,6 +2528,47 @@ function triggerMediaAdd(){
   else if(activeMediaTab==='video') document.getElementById('mgr-video').click();
   else document.getElementById('mgr-pdf').click();
 }
+// ═══ AUTO REFRESH — silent background sync every 30 seconds ═══
+function startAutoRefresh(){
+  if(S._autoRefreshTimer)clearInterval(S._autoRefreshTimer);
+  const isManager=!!(S.user?.access||S.user?.role==='owner');
+  S._autoRefreshTimer=setInterval(async()=>{
+    try{
+      if(isManager){
+        const[w,e]=await Promise.all([
+          db.from('workers').select('*').order('created_at').limit(200),
+          db.from('events').select('*').order('created_at',{ascending:false}).limit(500)
+        ]);
+        if(w.data)S.workers=w.data;
+        if(e.data)S.events=[...e.data].reverse();
+        renderOverview();
+      } else {
+        const[t,me]=await Promise.all([
+          db.from('tasks').select('*').order('created_at').limit(500),
+          db.from('workers').select('id,message,message_color,checked_in,check_in_time,last_proj_id').eq('id',S.user.id).single()
+        ]);
+        if(t.data)S.tasks=t.data;
+        if(me.data){
+          const oldMsg=S.user?.message;
+          Object.assign(S.user,me.data);
+          const w=S.workers.find(x=>x.id===S.user.id);
+          if(w)Object.assign(w,me.data);
+          if(me.data.message&&me.data.message!==oldMsg&&me.data.message.trim()){
+            const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
+            const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
+            const c=me.data.message_color||'gold';
+            const el=document.getElementById('worker-msg-text');
+            if(el){el.textContent=me.data.message;el.style.borderColor=msgColors[c];el.style.background=msgBg[c];el.style.color=msgColors[c];}
+            document.getElementById('worker-msg-ov').className='co-ov show';
+          }
+          checkWorkerMessageBell();
+        }
+        loadWorkerTasks();
+      }
+    }catch(e){}
+  },30000);
+}
+
 let calcPeriod = 'biweek';
 function openPayrollCalc(){
   calcPeriod='biweek';
