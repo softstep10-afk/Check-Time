@@ -435,9 +435,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="co-top"><div class="ico">💬</div><h3>Message from Manager</h3><p style="color:var(--muted);font-size:12px">Read carefully before starting work</p></div>
     <div class="co-body">
       <div id="worker-msg-text" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin-bottom:16px"></div>
-      <div style="display:flex;gap:10px">
-        <button class="co-go rdy" style="flex:1;background:rgba(107,114,128,.15);color:var(--muted);box-shadow:none" onclick="document.getElementById('worker-msg-ov').className='co-ov'">📖 Read later</button>
-        <button class="co-go rdy" style="flex:1" onclick="workerMsgDone()">✅ Got it — Done</button>
+      <div style="display:flex;gap:10px;flex-direction:column">
+        <button class="co-go rdy" style="background:var(--green);color:#fff" onclick="workerMsgDone()">✅ Done — Mark as completed</button>
+        <button class="co-go rdy" style="background:rgba(107,114,128,.15);color:var(--muted);box-shadow:none" onclick="workerMsgReadLater()">📖 Read — will do later</button>
       </div>
     </div>
   </div>
@@ -1530,7 +1530,7 @@ function renderTeam(){
       <td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td>
       <td style="display:flex;gap:5px;flex-wrap:wrap">
         <button class="action" onclick="openEditWorker('${w.id}')">✏️ Edit</button>
-        <button class="action ${hasMsg?'gold':''}" onclick="openMsgWorker('${w.id}')" title="${hasMsg?'Has unread message':'Send message'}" style="${hasMsg?'border-color:var(--gold)':''}">💬${hasMsg?' ●':''}</button>
+        <button class="action ${hasMsg?'gold':''}" onclick="openMsgWorker('${w.id}')" title="${hasMsg?w.message_read?'📖 Read — pending':'💬 Unread message':'Send message'}" style="${hasMsg?w.message_read?'border-color:var(--muted);color:var(--muted)':'border-color:var(--gold)':''}">💬${hasMsg?w.message_read?' 📖':' ●':''}</button>
         <button class="action red" onclick="delWorker('${w.id}')">Remove</button>
       </td>
     </tr>`;
@@ -2488,7 +2488,7 @@ async function saveMsgWorker(){
   const msg=document.getElementById('msg-text').value.trim();
   const color=document.getElementById('msg-color').value||'gold';
   if(!msg){toast('Write a message first','err');return;}
-  await db.from('workers').update({message:msg, message_color:color}).eq('id',id);
+  await db.from('workers').update({message:msg, message_color:color, message_read:false}).eq('id',id);
   const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
   closeModal('mod-msg-worker');renderTeam();toast('💬 Message sent!','ok');
 }
@@ -2866,18 +2866,33 @@ function showWorkerTaskList(){
   }
 }
 async function workerMsgDone(){
-  // Close overlay
   document.getElementById('worker-msg-ov').className='co-ov';
-  // Clear message from DB — this signals manager it was acknowledged
   if(!S.user?.id)return;
-  await db.from('workers').update({message:null,message_color:null}).eq('id',S.user.id);
-  S.user.message=null;S.user.message_color=null;
+  // Mark as done — clear message completely
+  await db.from('workers').update({message:null,message_color:null,message_read:true}).eq('id',S.user.id);
+  S.user.message=null;S.user.message_color=null;S.user.message_read=true;
   const w=S.workers.find(x=>x.id===S.user.id);
-  if(w){w.message=null;w.message_color=null;}
-  // Hide bell
+  if(w){w.message=null;w.message_color=null;w.message_read=true;}
+  checkWorkerMessageBell();
+  toast('✅ Marked as done','ok');
+}
+
+async function workerMsgReadLater(){
+  document.getElementById('worker-msg-ov').className='co-ov';
+  if(!S.user?.id)return;
+  // Mark as read but keep message visible in bell
+  await db.from('workers').update({message_read:true}).eq('id',S.user.id);
+  S.user.message_read=true;
+  const w=S.workers.find(x=>x.id===S.user.id);
+  if(w)w.message_read=true;
+  // Show bell as "read but pending"
   const bell=document.getElementById('w-msg-bell');
-  if(bell)bell.style.display='none';
-  toast('✅ Message acknowledged','ok');
+  if(bell){
+    bell.style.display='block';
+    bell.style.borderColor='var(--muted)';
+    bell.style.color='var(--muted)';
+  }
+  toast('📖 Message saved — tap 💬 to view again','ok');
 }
 
 function checkWorkerMessageBell(){
@@ -2886,6 +2901,15 @@ function checkWorkerMessageBell(){
   const w=S.workers.find(x=>x.id===S.user?.id)||S.user;
   if(w?.message&&w.message.trim()){
     bell.style.display='block';
+    if(w.message_read){
+      // Read but not done — grey bell
+      bell.style.borderColor='var(--muted)';
+      bell.style.color='var(--muted)';
+    } else {
+      // Unread — gold/red bell
+      bell.style.borderColor='var(--gold)';
+      bell.style.color='var(--gold)';
+    }
   } else {
     bell.style.display='none';
   }
