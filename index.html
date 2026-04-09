@@ -421,20 +421,27 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" style="padding:11px;background:rgba(245,158,11,.08);border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
           <button id="wtab-video" onclick="openWorkerMediaTab('video')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🎥 Videos</button>
         </div>
-        <!-- Add button inside folder -->
-        <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <button id="w-add-media-btn" onclick="triggerWorkerMediaAdd()" style="padding:6px 14px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Add Photo</button>
-          <span id="w-media-count" style="font-size:11px;color:var(--muted)">0 files</span>
-        </div>
         <input type="file" id="cam-photo" accept="image/*" capture="environment" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
         <input type="file" id="cam-video" accept="video/*" capture="environment" style="display:none" onchange="captureJournalMedia(event,'video')">
-        <div id="journal-entries" style="padding:4px"></div>
+        <div id="journal-entries" style="padding:0"></div>
       </div>
 
     </div>
     <div class="submit-row"><button class="sub-btn" onclick="submitReport()">📨 Submit Daily Report</button></div>
   </div>
 </div>
+<!-- IN-APP MEDIA VIEWER -->
+<div id="media-viewer-ov" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);flex-direction:column" onclick="closeMediaViewer()">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;flex-shrink:0" onclick="event.stopPropagation()">
+    <div id="mv-title" style="font-size:13px;color:rgba(255,255,255,.7);font-family:var(--font)"></div>
+    <div style="display:flex;gap:8px">
+      <a id="mv-download" href="#" download style="padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.2);color:#fff;font-family:var(--font);font-size:12px;font-weight:600;text-decoration:none">⬇️ Save</a>
+      <button onclick="closeMediaViewer()" style="padding:6px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:none;color:#fff;font-family:var(--font);font-size:18px;cursor:pointer">×</button>
+    </div>
+  </div>
+  <div id="mv-body" style="flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:8px" onclick="event.stopPropagation()"></div>
+</div>
+
 <!-- WORKER MESSAGE OVERLAY -->
 <div class="co-ov" id="worker-msg-ov">
   <div class="co-box">
@@ -2168,6 +2175,9 @@ function voiceJournal() {
 function cancelJournal() {
   journalPending = null;
   revokePreviewUrl();
+  // Clear preview DOM so it never bleeds into saved media viewer
+  const prev=document.getElementById('journal-preview');
+  if(prev){prev.innerHTML='';prev.style.display='none';}
   document.getElementById('journal-ov').className = 'co-ov';
 }
 
@@ -2228,19 +2238,26 @@ async function renderJournal() {
   }
   // Photos: compact 3-column grid
   if(activeWorkerMediaTab==='photo'){
-    c.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">`+
+    const addCell=`<div onclick="document.getElementById('cam-photo').click()" style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer;background:var(--card);border:2px dashed var(--border)">
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--muted)">
+        <span style="font-size:24px">+</span><span style="font-size:9px;font-weight:700">ADD</span>
+      </div>
+    </div>`;
+    c.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">`+addCell+
       visible.map(m=>`
-        <div style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer" onclick="window.open('${m.file_url}','_blank')">
+        <div style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer" onclick="openMediaViewer('${m.file_url}','${m.type||'photo'}','${(m.name||'').replace(/'/g,"\\'")}','${(m.worker_name||'').replace(/'/g,"\\'")}','${m.created_at||''}')">
           <img src="${m.file_url}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" loading="lazy">
           <div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.75));font-size:8px;color:rgba(255,255,255,.85)">${m.worker_name||''}</div>
         </div>`).join('')+`</div>`;
     return;
   }
-  // Videos: list
-  c.innerHTML=visible.map(m=>`
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px">
+  // Videos
+  const addVidCell=`<div onclick="document.getElementById('cam-video').click()" style="margin:8px 12px 4px;padding:10px;background:var(--card);border:2px dashed var(--border);border-radius:8px;cursor:pointer;text-align:center;color:var(--muted);font-size:12px;font-weight:700">+ Add Video</div>`;
+  if(!visible.length){c.innerHTML=addVidCell+`<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No videos yet</div>`;return;}
+  c.innerHTML=addVidCell+visible.map(m=>`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 8px 8px">
       <video src="${m.file_url}" controls style="width:100%;max-height:200px;display:block"></video>
-      <div style="padding:8px 12px;font-size:10px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}</div>
+      <div style="padding:6px 10px;font-size:10px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}</div>
     </div>`).join('');
 }
 
@@ -2374,59 +2391,125 @@ async function renderProjMedia() {
     return true;
   });
 
-  const addBtnLabels={photo:'📷 Add Photo',video:'🎥 Add Video',pdf:'📄 Upload PDF'};
-  const addBtnColors={photo:'var(--gold)',video:'var(--red)',pdf:'var(--blue)'};
-  const addBtn=`<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
-    <button onclick="triggerMediaAdd()" style="padding:8px 16px;background:none;border:1px solid ${addBtnColors[activeMediaTab]};border-radius:8px;color:${addBtnColors[activeMediaTab]};font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">${addBtnLabels[activeMediaTab]}</button>
-    <span style="font-size:11px;color:var(--muted);margin-left:10px">${visible.length} file${visible.length!==1?'s':''}</span>
-  </div>`;
-
+  if (!visible.length && activeMediaTab==='photo') {
+    const addCell=`<div onclick="document.getElementById('mgr-photo').click()" style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer;background:var(--card);border:2px dashed var(--border)">
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--muted)">
+        <span style="font-size:24px">+</span><span style="font-size:9px;font-weight:700">ADD</span>
+      </div>
+    </div>`;
+    c.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">${addCell}</div>`;
+    return;
+  }
   if (!visible.length) {
-    const labels={photo:'photos',video:'videos',pdf:'PDFs'};
-    c.innerHTML = addBtn + `<div style="text-align:center;color:var(--muted);font-size:12px;padding:24px">No ${labels[activeMediaTab]||'files'} yet — add one above</div>`;
+    const label=activeMediaTab==='video'?'video':'PDF';
+    const inputId=activeMediaTab==='video'?'mgr-video':'mgr-pdf';
+    c.innerHTML=`<div onclick="document.getElementById('${inputId}').click()" style="margin:8px 12px;padding:10px;background:var(--card);border:2px dashed var(--border);border-radius:8px;cursor:pointer;text-align:center;color:var(--muted);font-size:12px;font-weight:700">+ Add ${label}</div><div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No ${label}s yet</div>`;
     return;
   }
 
-  // Photos: compact square grid
   if(activeMediaTab === 'photo'){
-    c.innerHTML = addBtn + `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">` +
+    const addCell=`<div onclick="document.getElementById('mgr-photo').click()" style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer;background:var(--card);border:2px dashed var(--border)">
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--muted)">
+        <span style="font-size:24px">+</span>
+        <span style="font-size:9px;font-weight:700">ADD</span>
+      </div>
+    </div>`;
+    c.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">`+addCell+
       visible.map(m=>`
         <div style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer" onclick="openMediaFull('${m.id}')">
           <img src="${m.file_url}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" loading="lazy">
-          ${m.is_checkout?'<span style="position:absolute;top:3px;right:3px;font-size:8px;background:rgba(239,68,68,.9);color:#fff;padding:1px 4px;border-radius:3px">CO</span>':''}
+          ${m.is_checkout?'<span style="position:absolute;top:2px;right:2px;font-size:8px;background:rgba(239,68,68,.9);color:#fff;padding:1px 4px;border-radius:3px">CO</span>':''}
           <div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.75));font-size:9px;color:rgba(255,255,255,.85)">${m.worker_name||''}</div>
-          <button onclick="event.stopPropagation();deleteMediaEntry('${m.id}','manager')" style="position:absolute;top:3px;left:3px;background:rgba(0,0,0,.6);border:none;color:#fff;cursor:pointer;font-size:10px;border-radius:4px;padding:1px 4px;line-height:1.4">🗑</button>
-        </div>`).join('') + `</div>`;
+          <button onclick="event.stopPropagation();deleteMediaEntry('${m.id}','manager')" style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,.6);border:none;color:#fff;cursor:pointer;font-size:9px;border-radius:3px;padding:1px 3px;line-height:1.4">🗑</button>
+        </div>`).join('')+`</div>`;
     return;
   }
-
-  // Videos and PDFs: list view
-  c.innerHTML = addBtn + `<div style="padding:10px">` + visible.map(m => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
-      ${m.file_url ? `<div style="background:#000">${
-        m.type === 'pdf'
-          ? `<div style="padding:16px;background:rgba(239,68,68,.07);display:flex;align-items:center;gap:12px">
-               <span style="font-size:32px">📄</span>
-               <div>
-                 <div style="font-size:14px;font-weight:600">${m.name}</div>
-                 <a href="${m.file_url}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue);text-decoration:none">📂 Open PDF</a>
-               </div>
-             </div>`
-          : `<video src="${m.file_url}" controls style="width:100%;max-height:220px;display:block"></video>`
-      }</div>` : ''}
-      <div style="padding:10px 13px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:2px">${m.worker_name} <span style="font-weight:400;color:var(--muted)">· ${fmtDT(m.created_at)}</span></div>
-        ${m.comment ? `<div style="font-size:13px;line-height:1.5;margin-top:4px">${m.comment}</div>` : ''}
-        ${m.is_checkout ? '<span style="font-size:10px;background:rgba(239,68,68,.12);color:var(--red);padding:2px 7px;border-radius:20px;display:inline-block;margin-top:4px">🎬 Checkout video</span>' : ''}
-        <div style="margin-top:8px"><button onclick="deleteMediaEntry('${m.id}','manager')" style="background:none;border:1px solid rgba(239,68,68,.3);color:var(--red);cursor:pointer;font-size:11px;padding:3px 10px;border-radius:6px;font-family:var(--font)">Remove</button></div>
+  // Videos: list with + button at top
+  if(activeMediaTab === 'video'){
+    const addBtn=`<div onclick="document.getElementById('mgr-video').click()" style="margin:8px 12px;padding:10px;background:var(--card);border:2px dashed var(--border);border-radius:8px;cursor:pointer;text-align:center;color:var(--muted);font-size:12px;font-weight:700">+ Add Video</div>`;
+    if(!visible.length){c.innerHTML=addBtn+`<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No videos yet</div>`;return;}
+    c.innerHTML=addBtn+`<div style="padding:8px">`+visible.map(m=>`
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px">
+        <video src="${m.file_url}" controls style="width:100%;max-height:220px;display:block"></video>
+        <div style="padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:11px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}${m.is_checkout?' · 🎬 Checkout':''}</div>
+          <button onclick="deleteMediaEntry('${m.id}','manager')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:11px">🗑</button>
+        </div>
+      </div>`).join('')+`</div>`;
+    return;
+  }
+  // PDFs: list with + button at top
+  const addBtn=`<div onclick="document.getElementById('mgr-pdf').click()" style="margin:8px 12px;padding:10px;background:var(--card);border:2px dashed var(--border);border-radius:8px;cursor:pointer;text-align:center;color:var(--muted);font-size:12px;font-weight:700">+ Upload PDF</div>`;
+  if(!visible.length){c.innerHTML=addBtn+`<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No PDFs yet</div>`;return;}
+  c.innerHTML=addBtn+`<div style="padding:8px">`+visible.map(m=>`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:28px">📄</span>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${m.name||'Document'}</div>
+        <div style="font-size:11px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}</div>
+        <a href="${m.file_url}" target="_blank" style="font-size:11px;color:var(--blue)">📂 Open</a>
       </div>
-    </div>`).join('') + `</div>`;
+      <button onclick="deleteMediaEntry('${m.id}','manager')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">🗑</button>
+    </div>`).join('')+`</div>`;
 }
 
 function openMediaFull(id){
   const m=(S._mediaCache||[]).find(x=>x.id===id);
   if(!m||!m.file_url)return;
-  window.open(m.file_url,'_blank');
+  openMediaViewer(m.file_url, m.type, m.name||m.worker_name||'', m.worker_name, m.created_at);
+}
+
+function openMediaViewer(url, type, name, workerName, createdAt){
+  const ov=document.getElementById('media-viewer-ov');
+  const body=document.getElementById('mv-body');
+  const title=document.getElementById('mv-title');
+  const dl=document.getElementById('mv-download');
+  // Clear previous content
+  body.innerHTML='';
+  const isPhoto=type==='photo'||type==='image';
+  const isVideo=type==='video';
+  const isPdf=type==='pdf';
+  // Title
+  title.textContent=(workerName?workerName+' · ':'')+(createdAt?fmtDT(createdAt):'');
+  // Download link
+  dl.href=url;
+  dl.download=name||'file';
+  dl.style.display=isPdf?'none':'inline-block';
+  // Content
+  if(isPhoto){
+    const img=document.createElement('img');
+    img.src=url;
+    img.style.cssText='max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;display:block';
+    body.appendChild(img);
+  } else if(isVideo){
+    const vid=document.createElement('video');
+    vid.src=url;
+    vid.controls=true;
+    vid.autoplay=true;
+    vid.style.cssText='max-width:100%;max-height:100%;border-radius:4px;display:block';
+    body.appendChild(vid);
+  } else if(isPdf){
+    // In-app PDF panel with open/download
+    body.innerHTML=`<div style="text-align:center;padding:32px;color:#fff">
+      <div style="font-size:64px;margin-bottom:16px">📄</div>
+      <div style="font-size:16px;font-weight:700;margin-bottom:8px">${name||'Document'}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:24px">${workerName||''} · ${createdAt?fmtDT(createdAt):''}</div>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <a href="${url}" target="_blank" rel="noopener" style="padding:12px 24px;background:var(--blue);color:#fff;border-radius:10px;text-decoration:none;font-weight:700;font-family:var(--font)">📂 Open PDF</a>
+        <a href="${url}" download style="padding:12px 24px;background:var(--card);border:1px solid var(--border);color:#fff;border-radius:10px;text-decoration:none;font-weight:700;font-family:var(--font)">⬇️ Download</a>
+      </div>
+    </div>`;
+  }
+  ov.style.display='flex';
+}
+
+function closeMediaViewer(){
+  const ov=document.getElementById('media-viewer-ov');
+  ov.style.display='none';
+  // Stop any playing video and clear content to free memory
+  const vid=ov.querySelector('video');
+  if(vid){vid.pause();vid.src='';}
+  document.getElementById('mv-body').innerHTML='';
 }
 
 // ═══ VOICE INPUT ═══
