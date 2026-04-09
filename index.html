@@ -1587,7 +1587,15 @@ function openProjDetail(projId){
     const wd=new Set(S.events.filter(e=>e.worker_id===w.id&&e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;
     const isOn=w.checked_in&&w.last_proj_id===projId;
     const rateLabel=w.role==='subcontractor'?`Fixed: $${w.fixed_amount||0}`:`$${w.rate||0}/hr`;
-    return`<div class="wrow" onclick="openWorkerDetail('${projId}','${w.id}')"><div class="wrow-av" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div class="wrow-info"><div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div><div class="wrow-stats"><div class="ws">Hours: <span>${h.toFixed(1)}h</span></div><div class="ws">Days: <span>${wd}</span></div><div class="ws">Earned: <span>$${earned.toFixed(2)}</span></div><div class="ws">Rate: <span>${rateLabel}</span></div></div></div><div class="wrow-status ${isOn?'on':'off'}">${isOn?'On Site':'Offline'}</div></div>`;
+    // Check if location is stale (checked in but no GPS update for 2+ hours)
+    const locAge=w.location_updated_at?Math.round((Date.now()-new Date(w.location_updated_at))/60000):null;
+    const isStale=isOn&&locAge!==null&&locAge>120;
+    const hasLive=isOn&&w.current_lat&&w.current_lon;
+    let statusLabel,statusClass;
+    if(isOn&&!isStale){statusLabel='● On Site';statusClass='on';}
+    else if(isOn&&isStale){statusLabel='? Unknown';statusClass='off';}
+    else{statusLabel='Offline';statusClass='off';}
+    return`<div class="wrow" onclick="openWorkerDetail('${projId}','${w.id}')"><div class="wrow-av" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div class="wrow-info"><div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div><div class="wrow-stats"><div class="ws">Hours: <span>${h.toFixed(1)}h</span></div><div class="ws">Days: <span>${wd}</span></div><div class="ws">Earned: <span>$${earned.toFixed(2)}</span></div><div class="ws">Rate: <span>${rateLabel}</span></div></div></div><div class="wrow-status ${statusClass}">${statusLabel}</div></div>`;
   }).join('');
   showDrillView('view-proj-detail');
   renderProjTasks();
