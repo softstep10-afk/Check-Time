@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Construction Clock</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#f59e0b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ConClock">
+<link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -914,16 +920,8 @@ function copyAddress(addr, name){
   else{toast('📋 '+txt,'ok');}
 }
 function openWorkerProject(id){
-  const isDriver = S.user?.role === 'driver';
-  // Drivers can freely switch between projects
-  // Other roles: block if checked in on a different project
-  if(!isDriver && S.checkedIn && S.selectedProj && S.selectedProj !== id){
-    toast('Check out first','err');return;
-  }
-  // If checked in but selectedProj not set yet (page reload) — restore it
-  if(S.checkedIn && !S.selectedProj){
-    S.selectedProj = S.user?.last_proj_id || id;
-  }
+  // Always allow VIEWING any project
+  // Checkin on wrong project is blocked inside toggleCI
   S.selectedProj=id;
   const p=S.projects.find(x=>x.id===id);
   document.getElementById('w-sub').textContent=p?.name||'';
@@ -932,9 +930,9 @@ function openWorkerProject(id){
   document.getElementById('w-view-detail').style.display='block';
   document.getElementById('sc-proj').textContent=p?.name||'—';
   document.getElementById('w-proj-addr').innerHTML=p?.address?`<a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none">🗺️ ${p.address}</a>`:'';
-  // Hide GPS bar for drivers — they don't need location tracking
+  // Hide GPS bar for drivers
   const gpsBar=document.querySelector('#w-view-detail > div:first-child');
-  if(gpsBar) gpsBar.style.display = (S.user?.role==='driver') ? 'none' : 'flex';
+  if(gpsBar) gpsBar.style.display=(S.user?.role==='driver')?'none':'flex';
   // Live stats
   renderWorkerProjStats(id);
   const nw=document.getElementById('notes-wrap'),nt=document.getElementById('notes-txt');
@@ -1036,11 +1034,31 @@ function workerBackToProjects(){
 function pickProj(id){openWorkerProject(id);}
 function updateWorkerUI(){
   const btn=document.getElementById('ci-btn'),badge=document.getElementById('sc-badge'),needVid=S.user?.require_video;
-  if(S.checkedIn){btn.textContent=needVid?'🚪 Check Out (video required)':'🚪 Check Out';btn.className='ci-btn do-out';btn.disabled=false;badge.textContent='Checked In';badge.className='sc-badge badge-in';}
-  else{btn.textContent='✅ Check In';btn.className='ci-btn do-in';btn.disabled=false;badge.textContent='Checked Out';badge.className='sc-badge badge-out';}
+  const isMyProj = S.selectedProj === S.user?.last_proj_id;
+  if(S.checkedIn && isMyProj){
+    // On their checked-in project
+    btn.textContent=needVid?'🚪 Check Out (video required)':'🚪 Check Out';
+    btn.className='ci-btn do-out';btn.disabled=false;
+    badge.textContent='✅ Checked In';badge.className='sc-badge badge-in';
+  } else if(S.checkedIn && !isMyProj){
+    // Viewing a different project while checked in elsewhere
+    btn.textContent='⚠️ Checked in on another project';
+    btn.className='ci-btn';btn.disabled=true;
+    btn.style.background='rgba(245,158,11,.15)';btn.style.color='var(--gold)';
+    badge.textContent='Checked In (other project)';badge.className='sc-badge badge-in';
+  } else {
+    // Not checked in
+    btn.textContent='✅ Check In';btn.className='ci-btn do-in';btn.disabled=false;
+    btn.style.background='';btn.style.color='';
+    badge.textContent='Checked Out';badge.className='sc-badge badge-out';
+  }
 }
 async function toggleCI(){
   if(!S.selectedProj){toast('Select a project first','err');return;}
+  // Block checkin if already checked in on a different project
+  if(S.checkedIn && S.selectedProj !== S.user?.last_proj_id){
+    toast('Check out from your current project first','err');return;
+  }
   const proj=S.projects.find(p=>p.id===S.selectedProj),gpsOn=document.getElementById('gps-req').checked;
   const isDriver=S.user?.role==='driver';
   if(!S.checkedIn){
