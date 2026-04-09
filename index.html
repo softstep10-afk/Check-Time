@@ -358,7 +358,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--blue);border-radius:8px;color:var(--blue);font-size:16px;cursor:pointer" title="Your tasks">📋<span style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">0</span></button>
       <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:16px;cursor:pointer" title="You have a message">💬<span id="w-msg-dot" style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface)"></span></button>
       <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
-      <button class="out-btn" onclick="doLogout()">Sign Out</button>
     </div>
   </div>
 
@@ -703,7 +702,33 @@ tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 
-<div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="mp-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
+<div class="modal-ov" id="mod-adj-hours">
+  <div class="modal">
+    <div class="modal-top"><h3>⏱️ Adjust Hours</h3><button class="modal-close" onclick="closeModal('mod-adj-hours')">×</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="adj-worker-id">
+      <div id="adj-worker-name" style="font-size:14px;font-weight:700;margin-bottom:14px;color:var(--gold)"></div>
+      <div class="mfield">
+        <label>Adjustment (hours)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="document.getElementById('adj-hours').value=Math.max(-24,parseFloat(document.getElementById('adj-hours').value||0)-0.5).toFixed(1)" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--red);font-size:18px;cursor:pointer;font-family:var(--font)">−</button>
+          <input type="number" id="adj-hours" step="0.5" value="0" style="flex:1;padding:11px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:18px;font-weight:700;text-align:center;outline:none">
+          <button onclick="document.getElementById('adj-hours').value=(parseFloat(document.getElementById('adj-hours').value||0)+0.5).toFixed(1)" style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--green);font-size:18px;cursor:pointer;font-family:var(--font)">+</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">Positive = add hours · Negative = remove hours</div>
+      </div>
+      <div class="mfield">
+        <label>Reason <button onclick="voiceInput('adj-reason')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label>
+        <input type="text" id="adj-reason" placeholder="e.g. Forgot to check out, worked extra...">
+      </div>
+      <div class="toggle-row" style="margin-bottom:16px">
+        <div><span>Show this note to worker</span><small>Worker will see the reason in their Hours view</small></div>
+        <label class="tog"><input type="checkbox" id="adj-show-worker" checked><div class="tog-sl"></div></label>
+      </div>
+      <button class="big-btn" onclick="submitHourAdj()">✅ Apply Adjustment</button>
+    </div>
+  </div>
+</div><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="mp-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
 <div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Project Name</label><input type="text" id="ep-name"></div><div class="mfield"><label>Address</label><input type="text" id="ep-addr"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="ep-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="ep-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForEdit()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="ep-loc-btn">📍 Use My Current Location</button><div id="ep-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="ep-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="ep-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
 <div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role" onchange="toggleWorkerPayFields()"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div id="nw-hourly-wrap" class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="nw-rate" placeholder="25" min="0" step="0.5"></div><div id="nw-fixed-wrap" class="mfield" style="display:none"><label>Fixed Amount per Project ($)</label><input type="number" id="nw-fixed" placeholder="500" min="0"></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
 
@@ -1660,6 +1685,7 @@ function renderTeam(){
       <td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td>
       <td style="display:flex;gap:5px;flex-wrap:wrap">
         <button class="action" onclick="openEditWorker('${w.id}')">✏️ Edit</button>
+        <button class="action" onclick="openAdjHours('${w.id}')" title="Adjust hours" style="border-color:rgba(245,158,11,.4);color:var(--gold)">⏱️</button>
         <button class="action ${hasMsg?'gold':''}" onclick="openMsgWorker('${w.id}')" title="${hasMsg?w.message_read?'📖 Read — pending':'💬 Unread message':'Send message'}" style="${hasMsg?w.message_read?'border-color:var(--muted);color:var(--muted)':'border-color:var(--gold)':''}">💬${hasMsg?w.message_read?' 📖':' ●':''}</button>
         <button class="action red" onclick="delWorker('${w.id}')">Remove</button>
       </td>
@@ -2202,11 +2228,11 @@ async function renderJournal() {
   }
   // Photos: compact 3-column grid
   if(activeWorkerMediaTab==='photo'){
-    c.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px">`+
+    c.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">`+
       visible.map(m=>`
-        <div style="position:relative;height:100px;border-radius:6px;overflow:hidden;cursor:pointer" onclick="window.open('${m.file_url}','_blank')">
-          <img src="${m.file_url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
-          <div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:8px;color:rgba(255,255,255,.8)">${m.worker_name||''}</div>
+        <div style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer" onclick="window.open('${m.file_url}','_blank')">
+          <img src="${m.file_url}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" loading="lazy">
+          <div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.75));font-size:8px;color:rgba(255,255,255,.85)">${m.worker_name||''}</div>
         </div>`).join('')+`</div>`;
     return;
   }
@@ -2361,15 +2387,15 @@ async function renderProjMedia() {
     return;
   }
 
-  // Photos: compact grid
+  // Photos: compact square grid
   if(activeMediaTab === 'photo'){
-    c.innerHTML = addBtn + `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px">` +
+    c.innerHTML = addBtn + `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">` +
       visible.map(m=>`
-        <div style="position:relative;height:110px;border-radius:6px;overflow:hidden;cursor:pointer" onclick="openMediaFull('${m.id}')">
-          <img src="${m.file_url}" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy">
+        <div style="position:relative;padding-top:100%;border-radius:4px;overflow:hidden;cursor:pointer" onclick="openMediaFull('${m.id}')">
+          <img src="${m.file_url}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block" loading="lazy">
           ${m.is_checkout?'<span style="position:absolute;top:3px;right:3px;font-size:8px;background:rgba(239,68,68,.9);color:#fff;padding:1px 4px;border-radius:3px">CO</span>':''}
-          <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:9px;color:rgba(255,255,255,.8)">${m.worker_name||''}</div>
-          <button onclick="event.stopPropagation();deleteMediaEntry('${m.id}','manager')" style="position:absolute;top:3px;left:3px;background:rgba(0,0,0,.6);border:none;color:#fff;cursor:pointer;font-size:10px;border-radius:4px;padding:1px 4px">🗑</button>
+          <div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.75));font-size:9px;color:rgba(255,255,255,.85)">${m.worker_name||''}</div>
+          <button onclick="event.stopPropagation();deleteMediaEntry('${m.id}','manager')" style="position:absolute;top:3px;left:3px;background:rgba(0,0,0,.6);border:none;color:#fff;cursor:pointer;font-size:10px;border-radius:4px;padding:1px 4px;line-height:1.4">🗑</button>
         </div>`).join('') + `</div>`;
     return;
   }
@@ -2426,40 +2452,72 @@ function voiceInput(fieldId){
 }
 
 // ═══ WORKER HOURS ═══
+let workerCalcPeriod='current';
 async function showWorkerHours(){
+  document.getElementById('worker-hours-ov').className='co-ov show';
+  renderWorkerHoursCalc();
+}
+
+function setWorkerCalcPeriod(p){
+  workerCalcPeriod=p;
+  ['current','biweek','month','quarter','year'].forEach(id=>{
+    const btn=document.getElementById('wc-btn-'+id);
+    if(btn){btn.style.background=id===p?'var(--gold)':'var(--border)';btn.style.color=id===p?'#000':'var(--muted)';}
+  });
+  renderWorkerHoursCalc();
+}
+
+async function renderWorkerHoursCalc(){
   const c=document.getElementById('worker-hours-content');
   c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
-  document.getElementById('worker-hours-ov').className='co-ov show';
   const ev=await db.from('events').select('*').eq('worker_id',S.user.id).order('created_at');
-  const evs=ev.data||[];
+  const allEvs=ev.data||[];
+  const now=new Date();
+  let fromDate=null,toDate=new Date(),label='Current Period';
+  if(workerCalcPeriod==='biweek'){fromDate=new Date(now-14*86400000);label='Last 2 Weeks';}
+  else if(workerCalcPeriod==='month'){fromDate=new Date(now.getFullYear(),now.getMonth(),1);label='This Month';}
+  else if(workerCalcPeriod==='quarter'){fromDate=new Date(now.getFullYear(),Math.floor(now.getMonth()/3)*3,1);label='This Quarter';}
+  else if(workerCalcPeriod==='year'){fromDate=new Date(now.getFullYear(),0,1);label='This Year';}
+  const evs=fromDate?allEvs.filter(e=>new Date(e.created_at)>=fromDate&&new Date(e.created_at)<=toDate):allEvs;
   const totalH=calcHoursFromEvents(evs,null,null);
-  const days=[...new Set(evs.map(e=>e.created_at.split('T')[0]))].sort().reverse();
-  let html=`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Total Hours</div>
-        <div style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--gold)">${totalH.toFixed(1)}h</div>
+  const earned=S.user.role==='subcontractor'?(S.user.fixed_amount||0):totalH*(S.user.rate||0);
+  const days=[...new Set(evs.filter(e=>e.type==='in').map(e=>e.created_at.split('T')[0]))].sort().reverse();
+  // Period buttons
+  const btns=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+    ${[['current','Current'],['biweek','2 Weeks'],['month','Month'],['quarter','3 Months'],['year','Year']].map(([id,lbl])=>
+      `<button id="wc-btn-${id}" onclick="setWorkerCalcPeriod('${id}')" style="padding:7px 12px;font-size:11px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:${workerCalcPeriod===id?'var(--gold)':'var(--border)'};color:${workerCalcPeriod===id?'#000':'var(--muted)'};font-family:var(--font)">${lbl}</button>`
+    ).join('')}
+  </div>`;
+  let html=btns+`
+    <div style="display:grid;grid-template-columns:1fr 1fr${S.user.rate>0?';1fr':''};gap:8px;margin-bottom:16px">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">${label}</div>
+        <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--gold)">${totalH.toFixed(1)}h</div>
       </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Days Worked</div>
-        <div style="font-family:var(--mono);font-size:26px;font-weight:700;color:var(--blue)">${days.length}</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Days</div>
+        <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--blue)">${days.length}</div>
       </div>
+      ${S.user.rate>0?`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Earned</div>
+        <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green)">$${earned.toFixed(0)}</div>
+      </div>`:''}
     </div>
-    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Daily Breakdown</div>`;
-  if(!days.length){html+='<div class="empty"><p>No work days yet</p></div>';}
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Daily Breakdown</div>`;
+  if(!days.length){html+='<div style="text-align:center;padding:20px;color:var(--muted)">No work days in this period</div>';}
   else days.forEach(ds=>{
-    const dayEvs=evs.filter(e=>e.created_at.startsWith(ds));
+    const dayEvs=allEvs.filter(e=>e.created_at.startsWith(ds));
     const h=calcHoursFromEvents(dayEvs,null,null);
     const inEv=dayEvs.find(e=>e.type==='in');
     const outEv=[...dayEvs].reverse().find(e=>e.type==='out');
     const dn=new Date(ds).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
     const proj=S.projects.find(p=>p.id===inEv?.project_id);
-    html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:8px">
+    html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:6px">
       <div>
         <div style="font-size:13px;font-weight:600">${dn}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${proj?.name||'—'} · ${inEv?fmtTime(inEv.created_at):'?'} → ${outEv?fmtTime(outEv.created_at):'on site'}</div>
       </div>
-      <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--gold)">${h.toFixed(1)}h</div>
+      <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--gold)">${h.toFixed(1)}h</div>
     </div>`;
   });
   c.innerHTML=html;
@@ -3237,6 +3295,44 @@ async function workerMsgReadLater(){
   toast('📖 Message saved — tap 💬 to view again','ok');
 }
 
+function openAdjHours(wId){
+  const w=S.workers.find(x=>x.id===wId);
+  if(!w)return;
+  document.getElementById('adj-worker-id').value=wId;
+  document.getElementById('adj-worker-name').textContent='👷 '+w.name;
+  document.getElementById('adj-hours').value='0';
+  document.getElementById('adj-reason').value='';
+  document.getElementById('adj-show-worker').checked=true;
+  openModal('mod-adj-hours');
+}
+
+async function submitHourAdj(){
+  const wId=document.getElementById('adj-worker-id').value;
+  const hrs=parseFloat(document.getElementById('adj-hours').value)||0;
+  const reason=document.getElementById('adj-reason').value.trim();
+  const showWorker=document.getElementById('adj-show-worker').checked;
+  if(!hrs){toast('Enter hours amount','err');return;}
+  if(!reason){toast('Enter a reason','err');return;}
+  const w=S.workers.find(x=>x.id===wId);
+  // Insert as special event type 'adjustment'
+  await db.from('events').insert({
+    type:'adjustment',
+    worker_id:wId,
+    worker_name:w?.name||'',
+    project_id:null,
+    project_name:null,
+    hours:hrs,
+    gps_lat:null,
+    gps_lon:null,
+    created_at:new Date().toISOString(),
+    // Store reason in project_name field (reusing)
+    ...(showWorker?{project_name:'ADJ:'+reason}:{project_name:'ADJ_HIDDEN:'+reason})
+  });
+  closeModal('mod-adj-hours');
+  await refreshManager();
+  toast(`✅ ${hrs>0?'+':''}${hrs}h applied to ${w?.name}`,'ok');
+}
+
 function checkWorkerMessageBell(){
   const bell=document.getElementById('w-msg-bell');
   if(!bell)return;
@@ -3244,11 +3340,9 @@ function checkWorkerMessageBell(){
   if(w?.message&&w.message.trim()){
     bell.style.display='block';
     if(w.message_read){
-      // Read but not done — grey bell
       bell.style.borderColor='var(--muted)';
       bell.style.color='var(--muted)';
     } else {
-      // Unread — gold/red bell
       bell.style.borderColor='var(--gold)';
       bell.style.color='var(--gold)';
     }
