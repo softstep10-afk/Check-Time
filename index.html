@@ -475,7 +475,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div class="tcard"><div class="tcard-h"><h3>Recent Activity</h3></div><div style="padding:6px 0" id="ov-tl"></div></div>
         </div>
         <div class="view" id="view-projects">
-          <div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="action gold" onclick="openModal('mod-proj')">+ Add Project</button></div>
           <div class="cards" id="proj-cards"></div>
         </div>
         <div class="view" id="view-proj-detail">
@@ -662,7 +661,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 </div>
 
 <div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="mp-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
-<div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Project Name</label><input type="text" id="ep-name"></div><div class="mfield"><label>Address</label><input type="text" id="ep-addr"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="ep-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="ep-radius" value="200"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
+<div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Project Name</label><input type="text" id="ep-name"></div><div class="mfield"><label>Address</label><input type="text" id="ep-addr"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="ep-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="ep-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForEdit()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="ep-loc-btn">📍 Use My Current Location</button><div id="ep-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="ep-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="ep-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
 <div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role" onchange="toggleWorkerPayFields()"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div id="nw-hourly-wrap" class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="nw-rate" placeholder="25" min="0" step="0.5"></div><div id="nw-fixed-wrap" class="mfield" style="display:none"><label>Fixed Amount per Project ($)</label><input type="number" id="nw-fixed" placeholder="500" min="0"></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
 
 <!-- EDIT WORKER MODAL -->
@@ -1138,7 +1137,10 @@ function fmtStartDate(ds){
 }
 function renderProjCards(){
   const c=document.getElementById('proj-cards');
-  c.innerHTML=S.projects.map(p=>{
+  c.innerHTML = `<div onclick="openModal('mod-proj')" style="background:var(--surface);border:2px dashed var(--border);border-radius:13px;padding:16px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px;gap:8px" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+    <span style="font-size:36px">➕</span>
+    <span style="font-size:14px;font-weight:700;color:var(--gold)">Add Project</span>
+  </div>` + S.projects.map(p=>{
     const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id));
     const on=pw.filter(w=>w.checked_in&&w.last_proj_id===p.id).length;
     const totalH=pw.reduce((s,w)=>s+calcHours(w.id,p.id),0);
@@ -1175,7 +1177,7 @@ function renderProjCards(){
         <button class="red" onclick="delProject('${p.id}')">Remove</button>
       </div>
     </div>`;
-  }).join('')||'<div class="empty" style="grid-column:1/-1"><div class="ei">🏗️</div><p>No projects yet</p></div>';
+  }).join('');
 }
 function openProjDetail(projId){
   S.drillProj=projId;const proj=S.projects.find(p=>p.id===projId);if(!proj)return;
@@ -1344,6 +1346,12 @@ function openEditProj(id){
   document.getElementById('ep-notes').value=p.notes||'';
   document.getElementById('ep-radius').value=p.gps_radius||200;
   document.getElementById('ep-start').value=p.start_date||'';
+  document.getElementById('ep-lat').value=p.gps_lat||'';
+  document.getElementById('ep-lon').value=p.gps_lon||'';
+  document.getElementById('ep-loc-status').textContent='';
+  const btn=document.getElementById('ep-loc-btn');
+  btn.textContent='📍 Use My Current Location';
+  btn.style.borderColor='var(--gold)';btn.style.color='var(--gold)';btn.style.background='rgba(245,158,11,.07)';
   openModal('mod-edit-proj');
 }
 async function saveEditProject(){
@@ -1353,10 +1361,31 @@ async function saveEditProject(){
   const notes=document.getElementById('ep-notes').value.trim();
   const radius=parseInt(document.getElementById('ep-radius').value)||200;
   const start_date=document.getElementById('ep-start').value||null;
+  const lat=parseFloat(document.getElementById('ep-lat').value)||null;
+  const lon=parseFloat(document.getElementById('ep-lon').value)||null;
   if(!name||!addr){toast('Name and address required','err');return;}
-  await db.from('projects').update({name,address:addr,notes,gps_radius:radius,start_date}).eq('id',id);
+  await db.from('projects').update({name,address:addr,notes,gps_radius:radius,start_date,gps_lat:lat,gps_lon:lon}).eq('id',id);
   const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];
   closeModal('mod-edit-proj');renderProjCards();toast('Saved!','ok');
+}
+function useMyLocationForEdit(){
+  const btn=document.getElementById('ep-loc-btn');
+  const status=document.getElementById('ep-loc-status');
+  if(!navigator.geolocation){status.textContent='GPS not supported';return;}
+  btn.textContent='📍 Getting location...';btn.disabled=true;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      document.getElementById('ep-lat').value=pos.coords.latitude.toFixed(6);
+      document.getElementById('ep-lon').value=pos.coords.longitude.toFixed(6);
+      btn.textContent='✅ Location saved!';
+      btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(34,197,94,.07)';
+      status.textContent=`✅ ±${Math.round(pos.coords.accuracy)}m accuracy`;
+      status.style.color='var(--green)';
+      setTimeout(()=>{btn.textContent='📍 Use My Current Location';btn.style.borderColor='var(--gold)';btn.style.color='var(--gold)';btn.style.background='rgba(245,158,11,.07)';btn.disabled=false;},3000);
+    },
+    ()=>{btn.textContent='📍 Use My Current Location';btn.disabled=false;status.textContent='Could not get location';status.style.color='var(--red)';},
+    {enableHighAccuracy:true,timeout:10000}
+  );
 }
 
 function useMyLocationForProject(){
