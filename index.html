@@ -1519,26 +1519,32 @@ function fmtTime(iso){return new Date(iso).toLocaleTimeString('en-US',{hour:'2-d
 function fmtDT(iso){const d=new Date(iso);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}
 
 // ═══════════════════════════════════════════════════════════════
-// NEW HELPER 1: validateFile
-// Enforces size limits and MIME types before any upload attempt.
-// Throws a descriptive Error — never silently passes invalid files.
 // ═══════════════════════════════════════════════════════════════
+// validateFile — Stage A
+// Frontend limits EXACTLY match real Supabase enforced limits:
+//   Bucket "media" file_size_limit = 524288000 bytes = 500MB
+//   Project global limit = 500GB (bucket is the bottleneck)
+//   Plan: Pro
+// These constants must be updated if bucket settings change.
+// ═══════════════════════════════════════════════════════════════
+const STORAGE_LIMITS_MB = { photo: 20, video: 500, pdf: 50 };
+
 function validateFile(file, type) {
-  const LIMITS = { photo: 20, video: 500, pdf: 50 }; // MB — Pro plan: 500MB per file
+  const maxMB = STORAGE_LIMITS_MB[type] || 50;
+  const maxBytes = maxMB * 1024 * 1024;
   const MIMES = {
     photo: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'image/gif'],
     video: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo', 'video/avi'],
     pdf:   ['application/pdf']
   };
-  const maxMB = LIMITS[type] || 25;
-  const maxBytes = maxMB * 1024 * 1024;
-  if (file.size > maxBytes) {
-    throw new Error(`File too large (${(file.size/1024/1024).toFixed(1)}MB). Max ${maxMB}MB for ${type}.`);
-  }
   const allowed = MIMES[type] || [];
-  // Allow empty MIME type on mobile (some browsers don't report it)
-  if (file.type && !allowed.includes(file.type)) {
-    throw new Error(`Invalid file type "${file.type}". Expected a ${type} file.`);
+  if (file.size > maxBytes) {
+    const actualMB = (file.size / 1024 / 1024).toFixed(1);
+    throw new Error(`Video is too large (${actualMB}MB). Maximum allowed size: ${maxMB}MB. Please trim the video and try again.`);
+  }
+  // Allow empty MIME type on mobile (some browsers don't report it correctly)
+  if (file.type && allowed.length && !allowed.includes(file.type)) {
+    throw new Error(`File type not supported: ${file.type}. Please use a standard ${type} format.`);
   }
 }
 
