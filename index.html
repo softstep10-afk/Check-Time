@@ -916,7 +916,53 @@ function getGPS(){
   const dot=document.getElementById('gps-dot'),txt=document.getElementById('gps-txt');
   dot.className='gdot spin';txt.textContent='Acquiring location...';
   if(!navigator.geolocation){dot.className='gdot bad';txt.textContent='GPS not supported';return;}
-  navigator.geolocation.getCurrentPosition(p=>{S.gps={lat:p.coords.latitude,lon:p.coords.longitude};dot.className='gdot good';txt.textContent=`Location found (±${Math.round(p.coords.accuracy)}m)`;},()=>{S.gps=null;dot.className='gdot bad';txt.textContent='Location denied — disable GPS toggle';document.getElementById('gps-req').checked=false;},{enableHighAccuracy:true,timeout:10000});
+  navigator.geolocation.getCurrentPosition(p=>{
+    S.gps={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy};
+    dot.className='gdot good';
+    txt.textContent=`Location found (±${Math.round(p.coords.accuracy)}m)`;
+    if(S.checkedIn)startLiveTracking();
+  },()=>{
+    S.gps=null;dot.className='gdot bad';
+    txt.textContent='Location denied — disable GPS toggle';
+    document.getElementById('gps-req').checked=false;
+  },{enableHighAccuracy:true,timeout:10000});
+}
+
+// ═══ LIVE LOCATION TRACKING ═══
+let liveTrackingTimer=null;
+let liveTrackingInterval=10; // minutes, default
+
+function startLiveTracking(){
+  if(liveTrackingTimer)clearInterval(liveTrackingTimer);
+  if(!S.checkedIn||!S.user?.id)return;
+  updateLiveLocation(); // immediate update
+  liveTrackingTimer=setInterval(updateLiveLocation, liveTrackingInterval*60*1000);
+}
+
+function stopLiveTracking(){
+  if(liveTrackingTimer){clearInterval(liveTrackingTimer);liveTrackingTimer=null;}
+}
+
+async function updateLiveLocation(){
+  if(!S.checkedIn||!S.user?.id)return;
+  navigator.geolocation.getCurrentPosition(
+    async p=>{
+      S.gps={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy};
+      try{
+        await db.from('workers').update({
+          current_lat:p.coords.latitude,
+          current_lon:p.coords.longitude,
+          location_updated_at:new Date().toISOString()
+        }).eq('id',S.user.id);
+      }catch(e){}
+      const dot=document.getElementById('gps-dot');
+      const txt=document.getElementById('gps-txt');
+      if(dot)dot.className='gdot good';
+      if(txt)txt.textContent=`📍 Live · ±${Math.round(p.coords.accuracy)}m`;
+    },
+    ()=>{},
+    {enableHighAccuracy:true,timeout:8000,maximumAge:60000}
+  );
 }
 function gpsDist(a,b,c,d){const R=6371000,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
 function renderProjPicker(){
@@ -1122,9 +1168,16 @@ async function toggleCI(){
     if(!saved){toast('⚠️ Checked in locally — will sync when connection improves','ok');}
     else{toast('✅ Checked in!','ok');}
     updateWorkerUI();
+    startLiveTracking();
   }else{
     if(S.user.require_video){openCO();}
-    else{S.checkedIn=false;await db.from('workers').update({checked_in:false,check_in_time:null}).eq('id',S.user.id);await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});toast('👋 Checked out!','ok');updateWorkerUI();}
+    else{
+      S.checkedIn=false;
+      stopLiveTracking();
+      await db.from('workers').update({checked_in:false,check_in_time:null,current_lat:null,current_lon:null}).eq('id',S.user.id);
+      await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
+      toast('👋 Checked out!','ok');updateWorkerUI();
+    }
   }
   const[ev,wk]=await Promise.all([db.from('events').select('*').order('created_at'),db.from('workers').select('*').order('created_at')]);
   S.events=ev.data||[];S.workers=wk.data||[];
@@ -1390,9 +1443,18 @@ function renderOverview(){
     const sessionWarning=longSession?`<span style="font-size:10px;background:${veryLong?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${veryLong?'var(--red)':'var(--gold)'};padding:2px 6px;border-radius:6px;margin-left:4px">${veryLong?'🚨 '+Math.round(hNum)+'h':'⚠️ '+Math.round(hNum)+'h'}</span>`:'';
     const role=w.role||'worker';
     const rColor=roleColors[role]||'#f59e0b';
-    // GPS — use last checkin event's coordinates
-    const gpsLink=lastIn?.gps_lat&&lastIn?.gps_lon
-      ?`<a href="https://www.google.com/maps?q=${lastIn.gps_lat},${lastIn.gps_lon}" target="_blank" style="font-size:18px;text-decoration:none" title="View location">📍</a>`
+    // GPS — prefer live current location, fall back to checkin location
+    const hasLive=w.current_lat&&w.current_lon;
+    const lat=hasLive?w.current_lat:lastIn?.gps_lat;
+    const lon=hasLive?w.current_lon:lastIn?.gps_lon;
+    const locAge=hasLive&&w.location_updated_at
+      ?Math.round((Date.now()-new Date(w.location_updated_at))/60000)
+      :null;
+    const gpsLink=lat&&lon
+      ?`<a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:1px">
+          <span style="font-size:18px">${hasLive?'📍':'📌'}</span>
+          ${locAge!==null?`<span style="font-size:9px;color:${locAge<15?'var(--green)':'var(--muted)'}">${locAge}m ago</span>`:'<span style="font-size:9px;color:var(--muted)">checkin</span>'}
+        </a>`
       :'<span style="color:var(--muted);font-size:11px">—</span>';
     return`<tr style="${veryLong?'background:rgba(239,68,68,.04)':longSession?'background:rgba(245,158,11,.03)':''}">
       <td>
