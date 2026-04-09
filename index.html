@@ -435,7 +435,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="co-top"><div class="ico">💬</div><h3>Message from Manager</h3><p style="color:var(--muted);font-size:12px">Read carefully before starting work</p></div>
     <div class="co-body">
       <div id="worker-msg-text" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;font-size:14px;line-height:1.7;color:var(--text);white-space:pre-wrap;margin-bottom:16px"></div>
-      <button class="co-go rdy" onclick="document.getElementById('worker-msg-ov').className='co-ov'">✅ Got it</button>
+      <div style="display:flex;gap:10px">
+        <button class="co-go rdy" style="flex:1;background:rgba(107,114,128,.15);color:var(--muted);box-shadow:none" onclick="document.getElementById('worker-msg-ov').className='co-ov'">📖 Read later</button>
+        <button class="co-go rdy" style="flex:1" onclick="workerMsgDone()">✅ Got it — Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1524,7 +1527,7 @@ function renderTeam(){
       <td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td>
       <td style="display:flex;gap:5px;flex-wrap:wrap">
         <button class="action" onclick="openEditWorker('${w.id}')">✏️ Edit</button>
-        <button class="action ${hasMsg?'gold':''}" onclick="openMsgWorker('${w.id}')" title="${hasMsg?'Has message':'Send message'}">💬${hasMsg?' ●':''}</button>
+        <button class="action ${hasMsg?'gold':''}" onclick="openMsgWorker('${w.id}')" title="${hasMsg?'Has unread message':'Send message'}" style="${hasMsg?'border-color:var(--gold)':''}">💬${hasMsg?' ●':''}</button>
         <button class="action red" onclick="delWorker('${w.id}')">Remove</button>
       </td>
     </tr>`;
@@ -2818,6 +2821,21 @@ function showWorkerTaskList(){
     }
   }
 }
+async function workerMsgDone(){
+  // Close overlay
+  document.getElementById('worker-msg-ov').className='co-ov';
+  // Clear message from DB — this signals manager it was acknowledged
+  if(!S.user?.id)return;
+  await db.from('workers').update({message:null,message_color:null}).eq('id',S.user.id);
+  S.user.message=null;S.user.message_color=null;
+  const w=S.workers.find(x=>x.id===S.user.id);
+  if(w){w.message=null;w.message_color=null;}
+  // Hide bell
+  const bell=document.getElementById('w-msg-bell');
+  if(bell)bell.style.display='none';
+  toast('✅ Message acknowledged','ok');
+}
+
 function checkWorkerMessageBell(){
   const bell=document.getElementById('w-msg-bell');
   if(!bell)return;
