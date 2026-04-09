@@ -466,7 +466,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="main">
       <div class="main-top"><div><h2 id="view-title">Overview</h2><div class="sub" id="view-sub">Today's summary</div></div><div id="view-actions" style="display:flex;gap:8px;align-items:center">
         <button id="mgr-notif-bell" onclick="showMgrNotifications()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-size:16px;cursor:pointer" title="New activity">🔔<span id="mgr-notif-count" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)"></span></button>
-        <button onclick="refreshManager();toast('✅ Refreshed!','ok')" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer" title="Refresh data">🔄 Refresh</button>
+        <button onclick="refreshManager().then(()=>toast('✅ Refreshed!','ok'))" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer" title="Refresh data">🔄 Refresh</button>
       </div></div>
       <div class="main-body">
         <div class="view on" id="view-overview">
@@ -953,16 +953,31 @@ function renderWorkerProjStats(projId){
   `;
 }
 async function refreshWorker(){
-  const proj=await db.from('projects').select('*').order('created_at');
-  S.projects=proj.data||[];
-  const tasks=await db.from('tasks').select('*').order('created_at');
-  S.tasks=tasks.data||[];
-  renderProjPicker();
-  if(S.selectedProj){
-    loadWorkerTasks();
-    renderJournal();
+  try {
+    const [proj, tasks, wk, ev] = await Promise.all([
+      db.from('projects').select('*').order('created_at'),
+      db.from('tasks').select('*').order('created_at'),
+      db.from('workers').select('*').order('created_at'),
+      db.from('events').select('*').order('created_at')
+    ]);
+    S.projects = proj.data||[];
+    S.tasks = tasks.data||[];
+    S.workers = wk.data||[];
+    S.events = ev.data||[];
+    // Refresh current user data (message, check_in status)
+    const me = S.workers.find(w=>w.id===S.user?.id);
+    if(me) S.user = {...S.user, ...me};
+    renderProjPicker();
+    if(S.selectedProj){
+      loadWorkerTasks();
+      renderJournal();
+      renderWorkerProjStats(S.selectedProj);
+    }
+    checkWorkerMessageBell();
+    toast('✅ Updated!','ok');
+  } catch(e){
+    toast('Refresh failed — check connection','err');
   }
-  toast('✅ Updated!','ok');
 }
 function workerBackToProjects(){
   // Always allow going back — worker stays checked in, just browsing other projects
