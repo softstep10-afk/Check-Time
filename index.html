@@ -492,6 +492,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
                   <input type="text" id="ptask-title" placeholder="Task description..." class="fi" style="margin:0;padding-right:42px">
                   <button onclick="voiceInput('ptask-title')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--gold);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">🎤</button>
                 </div>
+                <select id="ptask-worker" class="fi" style="width:auto;margin:0">
+                  <option value="">👷 All workers</option>
+                </select>
                 <select id="ptask-pri" class="fi" style="width:auto;margin:0">
                   <option value="low">🟢 Low</option>
                   <option value="medium" selected>🟡 Medium</option>
@@ -690,7 +693,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button onclick="setMsgColor('red')" id="msgc-red" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🔴 Urgent</button>
       <button onclick="setMsgColor('blue')" id="msgc-blue" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🔵 Task</button>
     </div>
-    <textarea id="msg-text" style="width:100%;padding:11px 13px;background:var(--card);border:2px solid var(--gold);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;resize:vertical;min-height:100px;outline:none" placeholder="e.g. Please bring your tools tomorrow. Start at 8am on project Papay."></textarea>
+    <div style="position:relative">
+      <textarea id="msg-text" style="width:100%;padding:11px 42px 11px 13px;background:var(--card);border:2px solid var(--gold);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;resize:vertical;min-height:100px;outline:none;box-sizing:border-box" placeholder="e.g. Please bring your tools tomorrow. Start at 8am on project Papay."></textarea>
+      <button onclick="voiceInput('msg-text')" style="position:absolute;right:8px;top:10px;background:var(--gold);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">🎤</button>
+    </div>
   </div>
   <button class="big-btn" onclick="saveMsgWorker()">📤 Send Message</button>
   <button class="big-btn" style="background:rgba(107,114,128,.1);color:var(--muted);margin-top:8px" onclick="clearMsgWorker()">🗑 Clear Message</button>
@@ -1808,6 +1814,10 @@ async function deleteMediaEntry(id, context) {
 // ═══ PROJECT TASKS ═══
 function openProjTaskForm(){
   document.getElementById('proj-task-form').style.display='block';
+  // Fill worker selector
+  const sel=document.getElementById('ptask-worker');
+  const roleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
+  sel.innerHTML='<option value="">👷 All workers</option>'+S.workers.map(w=>`<option value="${w.id}" data-role="${w.role||'worker'}">${w.name} (${w.role||'worker'})</option>`).join('');
   document.getElementById('ptask-title').focus();
 }
 function quickTask(txt){document.getElementById('ptask-title').value=txt;}
@@ -1815,9 +1825,11 @@ function quickTask(txt){document.getElementById('ptask-title').value=txt;}
 async function addProjTask(){
   const title=document.getElementById('ptask-title').value.trim();
   const pri=document.getElementById('ptask-pri').value;
+  const wId=document.getElementById('ptask-worker').value||null;
   if(!title||!S.drillProj){toast('Enter task title','err');return;}
   const proj=S.projects.find(p=>p.id===S.drillProj);
-  await db.from('tasks').insert({title,priority:pri,project_id:S.drillProj,project_name:proj?.name,done:false,worker_id:null,worker_name:'Project'});
+  const w=wId?S.workers.find(x=>x.id===wId):null;
+  await db.from('tasks').insert({title,priority:pri,project_id:S.drillProj,project_name:proj?.name,done:false,worker_id:wId||null,worker_name:w?.name||'Project'});
   const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];
   document.getElementById('ptask-title').value='';
   document.getElementById('proj-task-form').style.display='none';
@@ -1828,16 +1840,22 @@ function renderProjTasks(){
   const c=document.getElementById('proj-task-list');
   const tasks=S.tasks.filter(t=>t.project_id===S.drillProj);
   if(!tasks.length){c.innerHTML='<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px">No tasks yet — add one above</div>';return;}
-  c.innerHTML=tasks.map(t=>`
-    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(42,48,69,.4)">
+  const roleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
+  c.innerHTML=tasks.map(t=>{
+    const w=S.workers.find(x=>x.id===t.worker_id);
+    const wColor=w?roleColors[w.role||'worker']||'#f59e0b':null;
+    const leftBorder=wColor?`border-left:3px solid ${wColor};`:'';
+    return`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid rgba(42,48,69,.4);${leftBorder}">
       <div onclick="toggleProjTask('${t.id}','${!t.done}')" style="width:20px;height:20px;border-radius:50%;border:2px solid ${t.done?'var(--green)':'var(--border)'};background:${t.done?'var(--green)':'none'};cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px">${t.done?'✓':''}</div>
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500;${t.done?'text-decoration:line-through;color:var(--muted)':''}">${t.title}</div>
-        ${t.worker_name&&t.worker_name!=='Project'?`<div style="font-size:10px;color:var(--muted)">→ ${t.worker_name}</div>`:''}
+        ${w?`<div style="font-size:10px;font-weight:600;margin-top:2px;color:${wColor}">→ ${w.name} <span style="opacity:.7">(${w.role||'worker'})</span></div>`:t.worker_name&&t.worker_name!=='Project'?`<div style="font-size:10px;color:var(--muted)">→ ${t.worker_name}</div>`:''}
       </div>
+      ${w?`<div style="width:8px;height:8px;border-radius:50%;background:${wColor};flex-shrink:0"></div>`:''}
       <span class="pri ${t.priority}">${t.priority==='high'?'🔴 High':t.priority==='medium'?'🟡 Med':'🟢 Low'}</span>
       <button onclick="delProjTask('${t.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">🗑</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 async function toggleProjTask(id,val){
