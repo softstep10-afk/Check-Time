@@ -903,8 +903,10 @@ function copyAddress(addr, name){
   else{toast('📋 '+txt,'ok');}
 }
 function openWorkerProject(id){
-  // If checked in on a different project — block
-  if(S.checkedIn && S.selectedProj && S.selectedProj !== id){
+  const isDriver = S.user?.role === 'driver';
+  // Drivers can freely switch between projects
+  // Other roles: block if checked in on a different project
+  if(!isDriver && S.checkedIn && S.selectedProj && S.selectedProj !== id){
     toast('Check out first','err');return;
   }
   // If checked in but selectedProj not set yet (page reload) — restore it
@@ -919,6 +921,9 @@ function openWorkerProject(id){
   document.getElementById('w-view-detail').style.display='block';
   document.getElementById('sc-proj').textContent=p?.name||'—';
   document.getElementById('w-proj-addr').innerHTML=p?.address?`<a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none">🗺️ ${p.address}</a>`:'';
+  // Hide GPS bar for drivers — they don't need location tracking
+  const gpsBar=document.querySelector('#w-view-detail > div:first-child');
+  if(gpsBar) gpsBar.style.display = (S.user?.role==='driver') ? 'none' : 'flex';
   // Live stats
   renderWorkerProjStats(id);
   const nw=document.getElementById('notes-wrap'),nt=document.getElementById('notes-txt');
@@ -978,8 +983,16 @@ function updateWorkerUI(){
 async function toggleCI(){
   if(!S.selectedProj){toast('Select a project first','err');return;}
   const proj=S.projects.find(p=>p.id===S.selectedProj),gpsOn=document.getElementById('gps-req').checked;
+  const isDriver=S.user?.role==='driver';
   if(!S.checkedIn){
-    if(gpsOn){if(!S.gps){toast('GPS not available','err');return;}if(proj?.gps_lat&&proj?.gps_lon){const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);if(d>(proj.gps_radius||300)){toast(`You are ${Math.round(d)}m away. Must be within ${proj.gps_radius||300}m.`,'err');return;}}}
+    // Drivers skip GPS check entirely
+    if(gpsOn && !isDriver){
+      if(!S.gps){toast('GPS not available','err');return;}
+      if(proj?.gps_lat&&proj?.gps_lon){
+        const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
+        if(d>(proj.gps_radius||300)){toast(`You are ${Math.round(d)}m away. Must be within ${proj.gps_radius||300}m.`,'err');return;}
+      }
+    }
     S.checkedIn=true;S.checkInTime=Date.now();
     await db.from('workers').update({checked_in:true,check_in_time:new Date(S.checkInTime).toISOString(),last_proj_id:S.selectedProj}).eq('id',S.user.id);
     await db.from('events').insert({type:'in',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
@@ -1164,8 +1177,33 @@ function renderOverview(){
   document.getElementById('sv3').textContent=S.projects.filter(p=>p.status==='active').length;
   document.getElementById('sv4').textContent=S.tasks.filter(t=>!t.done).length;
   const tb=document.getElementById('ov-table');
-  const active=S.workers.filter(w=>w.checked_in);
-  tb.innerHTML=active.map(w=>{const proj=S.projects.find(p=>p.id===w.last_proj_id);const lastIn=S.events.filter(e=>e.worker_id===w.id&&e.type==='in').pop();const h=lastIn?((Date.now()-new Date(lastIn.created_at))/3600000).toFixed(1):0;return`<tr><td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><span class="nm">${w.name}</span></div></td><td>${proj?.name||'—'}</td><td>${lastIn?fmtTime(lastIn.created_at):'—'}</td><td>${h}h</td></tr>`;}).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No workers on site</td></tr>';
+  const active=S.workers.filter(w=>w.checked_in).sort((a,b)=>a.name.localeCompare(b.name));
+  const roleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
+  const roleIcons={worker:'👷',supervisor:'👔',driver:'🚚',subcontractor:'🤝'};
+  tb.innerHTML=active.map(w=>{
+    const proj=S.projects.find(p=>p.id===w.last_proj_id);
+    const lastIn=S.events.filter(e=>e.worker_id===w.id&&e.type==='in').pop();
+    const h=lastIn?((Date.now()-new Date(lastIn.created_at))/3600000).toFixed(1):0;
+    const role=w.role||'worker';
+    const rColor=roleColors[role]||'#f59e0b';
+    return`<tr>
+      <td>
+        <div class="cell-name">
+          <div class="av-sm" style="background:${w.color||rColor};border:2px solid ${rColor}">${w.name.charAt(0)}</div>
+          <div>
+            <div class="nm">${w.name}</div>
+            <div style="font-size:10px;color:${rColor}">${roleIcons[role]} ${role}</div>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div style="font-size:13px;font-weight:600">${proj?.name||'—'}</div>
+        ${proj?.address?`<div style="font-size:10px;color:var(--muted)">${proj.address.split(',').slice(0,2).join(',')}</div>`:''}
+      </td>
+      <td style="font-size:12px">${lastIn?fmtTime(lastIn.created_at):'—'}</td>
+      <td style="font-family:var(--mono);font-weight:700;color:var(--gold)">${h}h</td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No workers on site</td></tr>';
   const tl=document.getElementById('ov-tl');
   const rec=[...S.events].reverse().slice(0,8);
   const isOwner=S.user?.role==='owner';
