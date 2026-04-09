@@ -491,7 +491,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <button class="action" style="background:var(--blue);color:#fff;border-color:var(--blue);font-weight:700;padding:8px 16px" onclick="openAnnualReport()">📊 Annual Report</button>
             <button class="action" style="background:var(--green);color:#fff;border-color:var(--green);font-weight:700;padding:8px 16px" onclick="openPayroll()">💰 Process Payroll</button>
           </div>
-          <div class="tcard"><div class="tcard-h"><h3>Currently On Site</h3></div><table><thead><tr><th>Name</th><th>Project</th><th>Since</th><th>Hours</th></tr></thead><tbody id="ov-table"></tbody></table></div>
+          <div class="tcard"><div class="tcard-h"><h3>Currently On Site</h3></div><table><thead><tr><th>Name</th><th>Project</th><th>Since</th><th>Hours</th><th>GPS</th></tr></thead><tbody id="ov-table"></tbody></table></div>
           <div class="tcard"><div class="tcard-h"><h3>Recent Activity</h3></div><div style="padding:6px 0" id="ov-tl"></div></div>
         </div>
         <div class="view" id="view-projects">
@@ -536,20 +536,16 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <!-- PROJECT MEDIA -->
           <div class="tcard" style="margin-bottom:14px">
             <div class="tcard-h"><h3>📸 Photos & Videos</h3></div>
-            <!-- Tab buttons -->
+            <!-- Tab buttons — clicking opens folder with add inside -->
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)">
               <button id="mtab-photo" onclick="openMediaTab('photo')" style="padding:12px;background:rgba(245,158,11,.08);border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
               <button id="mtab-video" onclick="openMediaTab('video')" style="padding:12px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🎥 Videos</button>
               <button id="mtab-pdf" onclick="openMediaTab('pdf')" style="padding:12px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📄 PDFs</button>
             </div>
-            <!-- Add button row -->
-            <div style="padding:10px 12px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end">
-              <button id="media-add-btn" onclick="triggerMediaAdd()" style="padding:7px 14px;background:var(--gold);color:#000;border:none;border-radius:8px;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">+ Add Photo</button>
-            </div>
-            <input type="file" id="mgr-photo" accept="image/*" capture="environment" multiple style="display:none" onchange="captureMgrMedia(event,'photo')">
-            <input type="file" id="mgr-video" accept="video/*" capture="environment" style="display:none" onchange="captureMgrMedia(event,'video')">
+            <input type="file" id="mgr-photo" accept="image/*" multiple style="display:none" onchange="captureMgrMedia(event,'photo')">
+            <input type="file" id="mgr-video" accept="video/*" style="display:none" onchange="captureMgrMedia(event,'video')">
             <input type="file" id="mgr-pdf" accept=".pdf" multiple style="display:none" onchange="uploadPDF(event)">
-            <div id="proj-media-list" style="padding:10px"></div>
+            <div id="proj-media-list" style="padding:0"></div>
           </div>
           <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">👷 Team on this project</h3>
           <div id="pd-workers"></div>
@@ -667,14 +663,35 @@ tr:hover td{background:rgba(255,255,255,.015)}
 </div>
 
 <!-- PAYROLL MODAL -->
-<div class="modal-ov" id="mod-payroll">
-  <div class="modal">
+<div class="modal-ov" id="mod-payroll" style="align-items:flex-start;padding-top:16px">
+  <div class="modal" style="max-width:520px;max-height:92vh;overflow-y:auto">
     <div class="modal-top"><h3>💰 Process Payroll</h3><button class="modal-close" onclick="closeModal('mod-payroll')">×</button></div>
     <div class="modal-body">
-      <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:14px;margin-bottom:16px;font-size:13px;line-height:1.7">⚠️ This marks all current hours as PAID. Workers start fresh from zero. History is always saved in archive.</div>
+      <!-- Period selector -->
+      <div class="mfield">
+        <label>Period</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <button onclick="setPayrollPeriod('current')" id="pp-current" style="padding:9px;border-radius:8px;border:2px solid var(--gold);background:rgba(245,158,11,.1);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">Current period</button>
+          <button onclick="setPayrollPeriod('custom')" id="pp-custom" style="padding:9px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📅 Custom dates</button>
+        </div>
+        <div id="pp-custom-dates" style="display:none;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <div><label style="font-size:11px;color:var(--muted)">From</label><input type="date" id="pp-from" style="width:100%;padding:9px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none" onchange="openPayroll()"></div>
+          <div><label style="font-size:11px;color:var(--muted)">To</label><input type="date" id="pp-to" style="width:100%;padding:9px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none" onchange="openPayroll()"></div>
+        </div>
+      </div>
+      <!-- Select all toggle -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:8px 12px;background:var(--card);border-radius:8px">
+        <span style="font-size:12px;font-weight:700">Select workers to pay</span>
+        <button onclick="toggleAllPayroll()" id="pp-select-all" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);cursor:pointer">Select All</button>
+      </div>
       <div id="payroll-summary"></div>
       <div style="height:12px"></div>
-      <button class="big-btn" style="background:var(--green);color:#fff" onclick="processPayroll()">✅ Confirm Payroll</button>
+      <div id="payroll-total-row" style="display:flex;justify-content:space-between;padding:12px 14px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:10px;margin-bottom:12px">
+        <span style="font-weight:700">💰 Selected Total</span>
+        <span id="payroll-total-amt" style="font-family:var(--mono);font-weight:700;color:var(--green)">$0.00</span>
+      </div>
+      <div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:10px;padding:12px;margin-bottom:12px;font-size:12px;line-height:1.6">⚠️ Only selected workers will be marked PAID. Their hours reset to zero. History is always saved.</div>
+      <button class="big-btn" style="background:var(--green);color:#fff" onclick="processPayroll()">✅ Process Selected</button>
     </div>
   </div>
 </div>
@@ -747,6 +764,11 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <button id="calc-btn-month" onclick="setCalcPeriod('month')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--border);color:var(--muted);font-family:var(--font)">Month</button>
         <button id="calc-btn-quarter" onclick="setCalcPeriod('quarter')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--border);color:var(--muted);font-family:var(--font)">3 Months</button>
         <button id="calc-btn-year" onclick="setCalcPeriod('year')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--border);color:var(--muted);font-family:var(--font)">Year</button>
+        <button id="calc-btn-custom" onclick="setCalcPeriod('custom')" style="padding:10px;font-size:12px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:var(--border);color:var(--muted);font-family:var(--font)">📅 Custom</button>
+      </div>
+      <div id="calc-custom-dates" style="display:none;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <div><label style="font-size:11px;color:var(--muted)">From</label><input type="date" id="calc-from" style="width:100%;padding:8px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:12px;outline:none" onchange="renderCalc()"></div>
+        <div><label style="font-size:11px;color:var(--muted)">To</label><input type="date" id="calc-to" style="width:100%;padding:8px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:12px;outline:none" onchange="renderCalc()"></div>
       </div>
       <div id="calc-period-label" style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:14px"></div>
       <div id="calc-content"></div>
@@ -1363,11 +1385,15 @@ function renderOverview(){
     const lastIn=S.events.filter(e=>e.worker_id===w.id&&e.type==='in').pop();
     const h=lastIn?((Date.now()-new Date(lastIn.created_at))/3600000).toFixed(1):0;
     const hNum=parseFloat(h);
-    const longSession=hNum>10; // warn if 10+ hours
-    const veryLong=hNum>14;    // alert if 14+ hours
+    const longSession=hNum>10;
+    const veryLong=hNum>14;
     const sessionWarning=longSession?`<span style="font-size:10px;background:${veryLong?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${veryLong?'var(--red)':'var(--gold)'};padding:2px 6px;border-radius:6px;margin-left:4px">${veryLong?'🚨 '+Math.round(hNum)+'h':'⚠️ '+Math.round(hNum)+'h'}</span>`:'';
     const role=w.role||'worker';
     const rColor=roleColors[role]||'#f59e0b';
+    // GPS — use last checkin event's coordinates
+    const gpsLink=lastIn?.gps_lat&&lastIn?.gps_lon
+      ?`<a href="https://www.google.com/maps?q=${lastIn.gps_lat},${lastIn.gps_lon}" target="_blank" style="font-size:18px;text-decoration:none" title="View location">📍</a>`
+      :'<span style="color:var(--muted);font-size:11px">—</span>';
     return`<tr style="${veryLong?'background:rgba(239,68,68,.04)':longSession?'background:rgba(245,158,11,.03)':''}">
       <td>
         <div class="cell-name">
@@ -1384,6 +1410,7 @@ function renderOverview(){
       </td>
       <td style="font-size:12px">${lastIn?fmtTime(lastIn.created_at):'—'}</td>
       <td style="font-family:var(--mono);font-weight:700;color:${veryLong?'var(--red)':longSession?'var(--gold)':'var(--gold)'}">${h}h</td>
+      <td style="text-align:center">${gpsLink}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No workers on site</td></tr>';
   const tl=document.getElementById('ov-tl');
@@ -2187,8 +2214,6 @@ async function renderProjMedia() {
     return;
   }
   S._mediaCache = data || [];
-  // Filter by active tab and checkout visibility
-  // Note: type can be 'photo' or 'image' depending on upload path
   let visible = (data||[]).filter(m => {
     if(m.is_checkout && !isOwner) return false;
     const isPhoto = m.type==='photo'||m.type==='image';
@@ -2199,25 +2224,35 @@ async function renderProjMedia() {
     if(activeMediaTab==='pdf')   return isPdf;
     return true;
   });
+
+  const addBtnLabels={photo:'📷 Add Photo',video:'🎥 Add Video',pdf:'📄 Upload PDF'};
+  const addBtnColors={photo:'var(--gold)',video:'var(--red)',pdf:'var(--blue)'};
+  const addBtn=`<div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+    <button onclick="triggerMediaAdd()" style="padding:8px 16px;background:none;border:1px solid ${addBtnColors[activeMediaTab]};border-radius:8px;color:${addBtnColors[activeMediaTab]};font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">${addBtnLabels[activeMediaTab]}</button>
+    <span style="font-size:11px;color:var(--muted);margin-left:10px">${visible.length} file${visible.length!==1?'s':''}</span>
+  </div>`;
+
   if (!visible.length) {
     const labels={photo:'photos',video:'videos',pdf:'PDFs'};
-    c.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">No ${labels[activeMediaTab]||'files'} yet</div>`;
+    c.innerHTML = addBtn + `<div style="text-align:center;color:var(--muted);font-size:12px;padding:24px">No ${labels[activeMediaTab]||'files'} yet — add one above</div>`;
     return;
   }
-  // Photos: compact fixed-size grid of thumbnails
+
+  // Photos: compact grid
   if(activeMediaTab === 'photo'){
-    c.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px">` +
+    c.innerHTML = addBtn + `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px">` +
       visible.map(m=>`
         <div style="position:relative;height:110px;border-radius:6px;overflow:hidden;cursor:pointer" onclick="openMediaFull('${m.id}')">
           <img src="${m.file_url}" style="width:100%;height:100%;object-fit:cover;display:block" loading="lazy">
           ${m.is_checkout?'<span style="position:absolute;top:3px;right:3px;font-size:8px;background:rgba(239,68,68,.9);color:#fff;padding:1px 4px;border-radius:3px">CO</span>':''}
-          <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:9px;color:rgba(255,255,255,.7)">${m.worker_name||''}</div>
-          <button onclick="event.stopPropagation();deleteMediaEntry('${m.id}','manager')" style="position:absolute;top:3px;left:3px;background:rgba(0,0,0,.6);border:none;color:#fff;cursor:pointer;font-size:10px;border-radius:4px;padding:1px 4px;line-height:1.4">🗑</button>
+          <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 6px;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:9px;color:rgba(255,255,255,.8)">${m.worker_name||''}</div>
+          <button onclick="event.stopPropagation();deleteMediaEntry('${m.id}','manager')" style="position:absolute;top:3px;left:3px;background:rgba(0,0,0,.6);border:none;color:#fff;cursor:pointer;font-size:10px;border-radius:4px;padding:1px 4px">🗑</button>
         </div>`).join('') + `</div>`;
     return;
   }
+
   // Videos and PDFs: list view
-  c.innerHTML = visible.map(m => `
+  c.innerHTML = addBtn + `<div style="padding:10px">` + visible.map(m => `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
       ${m.file_url ? `<div style="background:#000">${
         m.type === 'pdf'
@@ -2231,16 +2266,12 @@ async function renderProjMedia() {
           : `<video src="${m.file_url}" controls style="width:100%;max-height:220px;display:block"></video>`
       }</div>` : ''}
       <div style="padding:10px 13px">
-        <div style="font-size:12px;font-weight:600;margin-bottom:2px">
-          ${m.worker_name} <span style="font-weight:400;color:var(--muted)">· ${fmtDT(m.created_at)}</span>
-        </div>
+        <div style="font-size:12px;font-weight:600;margin-bottom:2px">${m.worker_name} <span style="font-weight:400;color:var(--muted)">· ${fmtDT(m.created_at)}</span></div>
         ${m.comment ? `<div style="font-size:13px;line-height:1.5;margin-top:4px">${m.comment}</div>` : ''}
         ${m.is_checkout ? '<span style="font-size:10px;background:rgba(239,68,68,.12);color:var(--red);padding:2px 7px;border-radius:20px;display:inline-block;margin-top:4px">🎬 Checkout video</span>' : ''}
-        <div style="margin-top:8px">
-          <button onclick="deleteMediaEntry('${m.id}', 'manager')" style="background:none;border:1px solid rgba(239,68,68,.3);color:var(--red);cursor:pointer;font-size:11px;padding:3px 10px;border-radius:6px;font-family:var(--font)">Remove</button>
-        </div>
+        <div style="margin-top:8px"><button onclick="deleteMediaEntry('${m.id}','manager')" style="background:none;border:1px solid rgba(239,68,68,.3);color:var(--red);cursor:pointer;font-size:11px;padding:3px 10px;border-radius:6px;font-family:var(--font)">Remove</button></div>
       </div>
-    </div>`).join('');
+    </div>`).join('') + `</div>`;
 }
 
 function openMediaFull(id){
@@ -2322,56 +2353,127 @@ function calcHoursFromEvents(evs,projId,dateStr){
 }
 
 // ═══ PAYROLL ═══
+let payrollPeriodMode='current';
+let selectedPayrollWorkers=new Set();
+
+function setPayrollPeriod(mode){
+  payrollPeriodMode=mode;
+  ['current','custom'].forEach(m=>{
+    const btn=document.getElementById('pp-'+m);
+    if(!btn)return;
+    const active=m===mode;
+    btn.style.borderColor=active?'var(--gold)':'var(--border)';
+    btn.style.background=active?'rgba(245,158,11,.1)':'none';
+    btn.style.color=active?'var(--gold)':'var(--muted)';
+  });
+  const customDates=document.getElementById('pp-custom-dates');
+  if(customDates)customDates.style.display=mode==='custom'?'grid':'none';
+  openPayroll();
+}
+
+function toggleAllPayroll(){
+  const allIds=S.workers.map(w=>w.id);
+  if(selectedPayrollWorkers.size===allIds.length){
+    selectedPayrollWorkers.clear();
+  } else {
+    allIds.forEach(id=>selectedPayrollWorkers.add(id));
+  }
+  updatePayrollCheckboxes();
+  updatePayrollTotal();
+}
+
+function updatePayrollCheckboxes(){
+  S.workers.forEach(w=>{
+    const cb=document.getElementById('pp-cb-'+w.id);
+    if(cb)cb.checked=selectedPayrollWorkers.has(w.id);
+  });
+}
+
+function updatePayrollTotal(){
+  let total=0;
+  selectedPayrollWorkers.forEach(id=>{
+    total+=calcWorkerEarnings(id,null);
+  });
+  const el=document.getElementById('payroll-total-amt');
+  if(el)el.textContent='$'+total.toFixed(2);
+}
+
 function openPayroll(){
   const c=document.getElementById('payroll-summary');
-  const ws=S.workers;
-  let html='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Current Period Summary</div>';
-  let totalAmount=0; let totalHours=0;
-  ws.forEach(w=>{
-    const h=calcHours(w.id,null);
-    const earned=calcWorkerEarnings(w.id,null);
-    if(h>0||w.role==='subcontractor'){
-      totalAmount+=earned; totalHours+=h;
-      const rateLabel=w.role==='subcontractor'?`Fixed $${w.fixed_amount||0}`:`${h.toFixed(1)}h × $${w.rate||0}/hr`;
-      html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px;font-size:13px">
+  if(!c){openModal('mod-payroll');return;}
+  // Determine date range
+  let fromDate=null,toDate=new Date();
+  if(payrollPeriodMode==='custom'){
+    const f=document.getElementById('pp-from')?.value;
+    const t=document.getElementById('pp-to')?.value;
+    if(f)fromDate=new Date(f);
+    if(t)toDate=new Date(t+'T23:59:59');
+  }
+  // Init selected workers
+  if(selectedPayrollWorkers.size===0){
+    S.workers.forEach(w=>selectedPayrollWorkers.add(w.id));
+  }
+  let html='';
+  S.workers.forEach(w=>{
+    const h=payrollPeriodMode==='custom'&&fromDate
+      ?calcHoursRange(w.id,null,fromDate,toDate)
+      :calcHours(w.id,null);
+    const earned=w.role==='subcontractor'?(w.fixed_amount||0):h*(w.rate||0);
+    const rateLabel=w.role==='subcontractor'?`Fixed $${w.fixed_amount||0}`:`${h.toFixed(1)}h × $${w.rate||0}/hr`;
+    const checked=selectedPayrollWorkers.has(w.id);
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="pp-cb-${w.id}" ${checked?'checked':''} onchange="ppToggleWorker('${w.id}',this.checked)" style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold)">
+        <div class="av-sm" style="background:${w.color||'#f59e0b'};width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000">${w.name.charAt(0)}</div>
         <div>
-          <div style="display:flex;align-items:center;gap:8px"><div class="av-sm" style="background:${w.color||'#f59e0b'};width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#000">${w.name.charAt(0)}</div><div><div style="font-weight:600">${w.name}</div><div style="font-size:11px;color:var(--muted)">${rateLabel}</div></div></div>
+          <div style="font-size:13px;font-weight:600">${w.name}</div>
+          <div style="font-size:11px;color:var(--muted)">${rateLabel}</div>
         </div>
-        <div style="font-family:var(--mono);font-weight:700;color:var(--gold);font-size:16px">$${earned.toFixed(2)}</div>
-      </div>`;
-    }
+      </div>
+      <div style="font-family:var(--mono);font-weight:700;color:var(--gold);font-size:15px">$${earned.toFixed(2)}</div>
+    </div>`;
   });
-  html+=`<div style="display:flex;justify-content:space-between;padding:12px 14px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;margin-top:8px;font-size:14px;font-weight:700">
-    <div>💰 Total Payroll</div>
-    <div style="color:var(--green)">$${totalAmount.toFixed(2)}</div>
-  </div>
-  <div style="font-size:11px;color:var(--muted);text-align:center;margin-top:8px">${totalHours.toFixed(1)} total hours this period</div>`;
   c.innerHTML=html;
+  updatePayrollTotal();
   openModal('mod-payroll');
 }
 
+function ppToggleWorker(id,checked){
+  if(checked)selectedPayrollWorkers.add(id);
+  else selectedPayrollWorkers.delete(id);
+  updatePayrollTotal();
+}
+
 async function processPayroll(){
-  const ws=S.workers;
-  const now=new Date().toISOString();
-  const periodLabel=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-  // Archive each worker's earnings for this period
-  for(const w of ws){
-    const h=calcHours(w.id,null);
-    const earned=calcWorkerEarnings(w.id,null);
-    if(h>0||(w.role==='subcontractor'&&(w.fixed_amount||0)>0)){
-      await db.from('payroll_periods').insert({
-        worker_id:w.id, worker_name:w.name,
-        hours:h, amount:earned, rate:w.rate||0,
-        period_label:periodLabel,
-        processed_by:S.user?.name||'Manager'
-      });
-    }
+  if(selectedPayrollWorkers.size===0){toast('Select at least one worker','err');return;}
+  let fromDate=null,toDate=new Date();
+  if(payrollPeriodMode==='custom'){
+    const f=document.getElementById('pp-from')?.value;
+    const t=document.getElementById('pp-to')?.value;
+    if(f)fromDate=new Date(f);
+    if(t)toDate=new Date(t+'T23:59:59');
   }
-  // Insert payroll cutoff marker — calcHours will ignore events before this
-  await db.from('events').insert({type:'payroll',worker_id:null,worker_name:'System',project_id:null,project_name:'PAYROLL: '+periodLabel});
+  const periodLabel=payrollPeriodMode==='custom'&&fromDate
+    ?`${fromDate.toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${toDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`
+    :new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  for(const id of selectedPayrollWorkers){
+    const w=S.workers.find(x=>x.id===id);
+    if(!w)continue;
+    const h=payrollPeriodMode==='custom'&&fromDate?calcHoursRange(id,null,fromDate,toDate):calcHours(id,null);
+    const earned=w.role==='subcontractor'?(w.fixed_amount||0):h*(w.rate||0);
+    await db.from('payroll_periods').insert({
+      worker_id:id,worker_name:w.name,
+      hours:h,amount:earned,rate:w.rate||0,
+      period_label:periodLabel,
+      processed_by:S.user?.name||'Manager'
+    });
+    // Insert individual worker payroll marker
+    await db.from('events').insert({type:'payroll',worker_id:id,worker_name:w.name,project_id:null,project_name:'PAYROLL: '+periodLabel});
+  }
   const ev=await db.from('events').select('*').order('created_at');
   S.events=ev.data||[];
-  toast('✅ Payroll processed! Hours reset. Archive saved.','ok');
+  selectedPayrollWorkers.clear();
+  toast(`✅ Payroll processed!`,'ok');
   closeModal('mod-payroll');
   refreshManager();
 }
@@ -2604,23 +2706,32 @@ function openPayrollCalc(){
 }
 function setCalcPeriod(p){
   calcPeriod=p;
-  ['biweek','month','quarter','year'].forEach(id=>{
+  ['biweek','month','quarter','year','custom'].forEach(id=>{
     const btn=document.getElementById('calc-btn-'+id);
     if(btn){btn.style.background=id===p?'var(--gold)':'var(--border)';btn.style.color=id===p?'#000':'var(--muted)';}
   });
+  const customDates=document.getElementById('calc-custom-dates');
+  if(customDates)customDates.style.display=p==='custom'?'grid':'none';
   renderCalc();
 }
 function renderCalc(){
   const now=new Date();
-  let fromDate, label;
+  let fromDate, toDate=new Date(), label;
   if(calcPeriod==='biweek'){fromDate=new Date(now-14*86400000);label='Last 2 Weeks';}
   else if(calcPeriod==='month'){fromDate=new Date(now.getFullYear(),now.getMonth(),1);label='This Month ('+now.toLocaleString('en-US',{month:'long'})+')';}
   else if(calcPeriod==='quarter'){
     const qStart=new Date(now.getFullYear(),Math.floor(now.getMonth()/3)*3,1);
     fromDate=qStart;label='This Quarter (Q'+(Math.floor(now.getMonth()/3)+1)+' '+now.getFullYear()+')';
   }
+  else if(calcPeriod==='custom'){
+    const f=document.getElementById('calc-from')?.value;
+    const t=document.getElementById('calc-to')?.value;
+    fromDate=f?new Date(f):new Date(now-14*86400000);
+    if(t){toDate=new Date(t+'T23:59:59');}
+    label=`${fromDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})} → ${toDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+  }
   else{fromDate=new Date(now.getFullYear(),0,1);label='This Year ('+now.getFullYear()+')';}
-  document.getElementById('calc-period-label').textContent=label+' · '+fromDate.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'  →  Today';
+  document.getElementById('calc-period-label').textContent=label+(calcPeriod!=='custom'?' · '+fromDate.toLocaleDateString('en-US',{month:'short',day:'numeric'})+'  →  Today':'');
   const c=document.getElementById('calc-content');
   let html='';
   let grandTotal=0; let grandHours=0;
@@ -2630,7 +2741,7 @@ function renderCalc(){
   if(hourlyWorkers.length){
     html+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">👷 Hourly Workers</div>`;
     hourlyWorkers.forEach(w=>{
-      const h=calcHoursRange(w.id,null,fromDate,now);
+      const h=calcHoursRange(w.id,null,fromDate,toDate);
       const earned=h*(w.rate||0);
       grandHours+=h; grandTotal+=earned;
       if(h>0||true){
@@ -2667,10 +2778,10 @@ function renderCalc(){
     html+=`<div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin:14px 0 8px">🏗️ By Project</div>`;
     S.projects.forEach(p=>{
       const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id));
-      const projHours=pw.reduce((s,w)=>s+calcHoursRange(w.id,p.id,fromDate,now),0);
+      const projHours=pw.reduce((s,w)=>s+calcHoursRange(w.id,p.id,fromDate,toDate),0);
       const projCost=pw.reduce((s,w)=>{
         if(w.role==='subcontractor')return s+(w.fixed_amount||0);
-        return s+calcHoursRange(w.id,p.id,fromDate,now)*(w.rate||0);
+        return s+calcHoursRange(w.id,p.id,fromDate,toDate)*(w.rate||0);
       },0);
       if(projHours>0||projCost>0){
         html+=`<div style="padding:10px 14px;background:var(--card);border-radius:8px;margin-bottom:6px">
