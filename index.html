@@ -358,7 +358,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <!-- VIEW 2: PROJECT DETAIL -->
   <div id="w-view-detail" style="display:none">
     <!-- GPS status bar -->
-    <div style="padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <div style="padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
       <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
         <div class="gdot spin" id="gps-dot"></div>
         <span id="gps-txt">Acquiring location...</span>
@@ -371,45 +371,51 @@ tr:hover td{background:rgba(255,255,255,.015)}
 
     <div class="w-body" style="padding-bottom:80px">
 
-      <!-- CHECK IN/OUT CARD -->
-      <div class="status-card" style="margin-bottom:16px">
-        <div class="sc-proj">Project</div>
-        <div class="sc-name" id="sc-proj">—</div>
-        <div id="w-proj-addr" style="margin-bottom:12px"></div>
-        <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
-        <div class="clock" id="sc-clock">00:00:00</div>
-        <div class="clock-lbl" id="sc-lbl">Not checked in</div>
+      <!-- 1. PROJECT STATS -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">📍 Project</div>
+        <div class="sc-name" id="sc-proj" style="font-size:16px;font-weight:700;margin-bottom:4px">—</div>
+        <div id="w-proj-addr" style="margin-bottom:10px;font-size:12px;color:var(--blue)"></div>
+        <!-- Live stats row -->
+        <div id="w-proj-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px"></div>
+        <!-- Status + clock -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
+          <div style="text-align:right">
+            <div class="clock" id="sc-clock" style="font-size:20px">00:00:00</div>
+            <div class="clock-lbl" id="sc-lbl" style="font-size:10px">Not checked in</div>
+          </div>
+        </div>
         <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>✅ Check In</button>
       </div>
 
       <!-- MANAGER NOTES -->
       <div id="notes-wrap" style="display:none">
-        <div class="notes-box" style="margin-bottom:16px">
+        <div class="notes-box" style="margin-bottom:12px">
           <h4>📋 Manager's Notes</h4>
           <p id="notes-txt"></p>
         </div>
       </div>
 
-      <!-- MY TASKS -->
+      <!-- 2. TASKS -->
       <div class="sec-h">📋 Tasks for this project</div>
       <div id="w-tasks" style="margin-bottom:16px"></div>
 
-      <!-- PHOTO JOURNAL -->
+      <!-- 3. PHOTO / VIDEO — compact row -->
       <div class="sec-h">📸 Project Journal</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-          <button onclick="document.getElementById('cam-photo').click()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:var(--font);width:100%">
-            <span style="font-size:32px">📷</span>
-            <span style="font-size:13px;font-weight:700;color:var(--text)">Add Photo</span>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:12px">
+        <!-- Compact add buttons -->
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button onclick="document.getElementById('cam-photo').click()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600;color:var(--text)">
+            <span style="font-size:18px">📷</span> Photo
           </button>
-          <button onclick="document.getElementById('cam-video').click()" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 10px;background:var(--card);border:2px solid var(--border);border-radius:12px;cursor:pointer;font-family:var(--font);width:100%">
-            <span style="font-size:32px">🎥</span>
-            <span style="font-size:13px;font-weight:700;color:var(--text)">Add Video</span>
+          <button onclick="document.getElementById('cam-video').click()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600;color:var(--text)">
+            <span style="font-size:18px">🎥</span> Video
           </button>
         </div>
         <input type="file" id="cam-photo" accept="image/*" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
         <input type="file" id="cam-video" accept="video/*" style="display:none" onchange="captureJournalMedia(event,'video')">
-        <div id="journal-entries"><div style="text-align:center;padding:14px;color:var(--muted);font-size:12px">No photos yet</div></div>
+        <div id="journal-entries"><div style="text-align:center;padding:10px;color:var(--muted);font-size:12px">No photos yet</div></div>
       </div>
 
     </div>
@@ -894,20 +900,39 @@ function openWorkerProject(id){
   if(S.checkedIn && S.selectedProj !== id){toast('Check out first','err');return;}
   S.selectedProj=id;
   const p=S.projects.find(x=>x.id===id);
-  // Update header
   document.getElementById('w-sub').textContent=p?.name||'';
   document.getElementById('w-back-btn').style.display='block';
-  // Show project detail view
   document.getElementById('w-view-projects').style.display='none';
   document.getElementById('w-view-detail').style.display='block';
-  // Fill project info
   document.getElementById('sc-proj').textContent=p?.name||'—';
   document.getElementById('w-proj-addr').innerHTML=p?.address?`<a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none">🗺️ ${p.address}</a>`:'';
+  // Live stats
+  renderWorkerProjStats(id);
   const nw=document.getElementById('notes-wrap'),nt=document.getElementById('notes-txt');
   if(p?.notes?.trim()){nt.textContent=p.notes;nw.style.display='block';}else{nw.style.display='none';}
   updateWorkerUI();
   loadWorkerTasks();
   renderJournal();
+}
+
+function renderWorkerProjStats(projId){
+  const st=document.getElementById('w-proj-stats');
+  if(!st)return;
+  const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===projId));
+  const onSite=pw.filter(w=>w.checked_in&&w.last_proj_id===projId).length;
+  const totalH=pw.reduce((s,w)=>s+calcHours(w.id,projId),0);
+  const totalCost=calcProjectCost(projId);
+  const days=new Set(S.events.filter(e=>e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;
+  st.innerHTML=`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:20px;font-weight:700;color:var(--green)">${onSite}</div>
+      <div style="font-size:10px;color:var(--muted)">On Site now</div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
+      <div style="font-size:20px;font-weight:700;color:var(--gold)">${totalH.toFixed(1)}h</div>
+      <div style="font-size:10px;color:var(--muted)">Total Hours</div>
+    </div>
+  `;
 }
 async function refreshWorker(){
   const proj=await db.from('projects').select('*').order('created_at');
