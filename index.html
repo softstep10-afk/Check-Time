@@ -681,8 +681,18 @@ tr:hover td{background:rgba(255,255,255,.015)}
 <!-- MESSAGE WORKER MODAL -->
 <div class="modal-ov" id="mod-msg-worker"><div class="modal"><div class="modal-top"><h3>💬 Message to Worker</h3><button class="modal-close" onclick="closeModal('mod-msg-worker')">×</button></div><div class="modal-body">
   <input type="hidden" id="msg-worker-id">
+  <input type="hidden" id="msg-color" value="gold">
   <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Worker will see this message when they open the app.</div>
-  <div class="mfield"><label id="msg-worker-name-lbl">Worker</label><textarea id="msg-text" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;resize:vertical;min-height:100px;outline:none" placeholder="e.g. Please bring your tools tomorrow. Start at 8am on project Papay."></textarea></div>
+  <div class="mfield">
+    <label id="msg-worker-name-lbl">Worker</label>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button onclick="setMsgColor('gold')" id="msgc-gold" style="flex:1;padding:8px;border-radius:8px;border:3px solid var(--gold);background:rgba(245,158,11,.15);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🟡 Info</button>
+      <button onclick="setMsgColor('green')" id="msgc-green" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🟢 Good</button>
+      <button onclick="setMsgColor('red')" id="msgc-red" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🔴 Urgent</button>
+      <button onclick="setMsgColor('blue')" id="msgc-blue" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🔵 Task</button>
+    </div>
+    <textarea id="msg-text" style="width:100%;padding:11px 13px;background:var(--card);border:2px solid var(--gold);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;resize:vertical;min-height:100px;outline:none" placeholder="e.g. Please bring your tools tomorrow. Start at 8am on project Papay."></textarea>
+  </div>
   <button class="big-btn" onclick="saveMsgWorker()">📤 Send Message</button>
   <button class="big-btn" style="background:rgba(107,114,128,.1);color:var(--muted);margin-top:8px" onclick="clearMsgWorker()">🗑 Clear Message</button>
 </div></div></div>
@@ -807,7 +817,14 @@ async function doLogin(){
       showPage('pg-worker');
       // Show message from manager if one exists
       if(w.message&&w.message.trim()){
-        document.getElementById('worker-msg-text').textContent=w.message;
+        const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
+        const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
+        const c=w.message_color||'gold';
+        const el=document.getElementById('worker-msg-text');
+        el.textContent=w.message;
+        el.style.borderColor=msgColors[c]||'var(--gold)';
+        el.style.background=msgBg[c]||'rgba(245,158,11,.08)';
+        el.style.color=msgColors[c]||'var(--gold)';
         document.getElementById('worker-msg-ov').className='co-ov show';
       }
       // If worker was checked in on a project, auto-open that project
@@ -1127,8 +1144,18 @@ function renderProjCards(){
     const totalH=pw.reduce((s,w)=>s+calcHours(w.id,p.id),0);
     const cost=calcProjectCost(p.id);
     const hasNotes=p.notes?.trim();
-    return`<div class="pcard" onclick="openProjDetail('${p.id}')">
-      <h3>${p.name}</h3>
+    const statusColor=p.status_color||'none';
+    const borderColor=statusColor==='red'?'var(--red)':statusColor==='yellow'?'var(--gold)':statusColor==='green'?'var(--green)':'var(--border)';
+    const bgColor=statusColor==='red'?'rgba(239,68,68,.04)':statusColor==='yellow'?'rgba(245,158,11,.04)':statusColor==='green'?'rgba(34,197,94,.04)':'';
+    return`<div class="pcard" onclick="openProjDetail('${p.id}')" style="border-color:${borderColor};${bgColor?'background:'+bgColor:''}">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <h3 style="margin:0">${p.name}</h3>
+        <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+          <button onclick="setProjColor('${p.id}','green')" style="width:20px;height:20px;border-radius:50%;background:var(--green);border:${statusColor==='green'?'3px solid #fff':'2px solid transparent'};cursor:pointer;padding:0" title="Green — OK"></button>
+          <button onclick="setProjColor('${p.id}','yellow')" style="width:20px;height:20px;border-radius:50%;background:var(--gold);border:${statusColor==='yellow'?'3px solid #fff':'2px solid transparent'};cursor:pointer;padding:0" title="Yellow — Attention"></button>
+          <button onclick="setProjColor('${p.id}','red')" style="width:20px;height:20px;border-radius:50%;background:var(--red);border:${statusColor==='red'?'3px solid #fff':'2px solid transparent'};cursor:pointer;padding:0" title="Red — Problem"></button>
+        </div>
+      </div>
       <div class="addr" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap" onclick="event.stopPropagation()">
         <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:12px;color:var(--blue);text-decoration:none">🗺️ ${p.address}</a>
         <button onclick="copyAddress('${p.address.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}'))" style="font-size:10px;padding:3px 8px;border-radius:5px;background:rgba(245,158,11,.1);color:var(--gold);border:1px solid rgba(245,158,11,.3);cursor:pointer;font-family:var(--font)">📋 Copy</button>
@@ -2077,19 +2104,49 @@ function openMsgWorker(id){
   document.getElementById('msg-worker-id').value=id;
   document.getElementById('msg-worker-name-lbl').textContent=`Message for ${w.name}`;
   document.getElementById('msg-text').value=w.message||'';
+  const color=w.message_color||'gold';
+  document.getElementById('msg-color').value=color;
+  setMsgColor(color);
   openModal('mod-msg-worker');
 }
+// ═══ PROJECT COLOR STATUS ═══
+async function setProjColor(id, color){
+  const current=S.projects.find(p=>p.id===id)?.status_color;
+  const newColor=current===color?'none':color; // toggle off if same
+  await db.from('projects').update({status_color:newColor}).eq('id',id);
+  const p=await db.from('projects').select('*').order('created_at');S.projects=p.data||[];
+  renderProjCards();
+}
+
+// ═══ MESSAGE COLOR ═══
+function setMsgColor(color){
+  document.getElementById('msg-color').value=color;
+  const colors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
+  const labels={gold:'🟡 Info',green:'🟢 Good',red:'🔴 Urgent',blue:'🔵 Task'};
+  ['gold','green','red','blue'].forEach(c=>{
+    const btn=document.getElementById('msgc-'+c);
+    if(btn){
+      btn.style.borderWidth=c===color?'3px':'2px';
+      btn.style.borderColor=c===color?colors[c]:'var(--border)';
+      btn.style.background=c===color?`rgba(${c==='gold'?'245,158,11':c==='green'?'34,197,94':c==='red'?'239,68,68':'59,130,246'},.15)`:'none';
+      btn.style.color=c===color?colors[c]:'var(--muted)';
+    }
+  });
+  document.getElementById('msg-text').style.borderColor=colors[color]||'var(--gold)';
+}
+
 async function saveMsgWorker(){
   const id=document.getElementById('msg-worker-id').value;
   const msg=document.getElementById('msg-text').value.trim();
+  const color=document.getElementById('msg-color').value||'gold';
   if(!msg){toast('Write a message first','err');return;}
-  await db.from('workers').update({message:msg}).eq('id',id);
+  await db.from('workers').update({message:msg, message_color:color}).eq('id',id);
   const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
   closeModal('mod-msg-worker');renderTeam();toast('💬 Message sent!','ok');
 }
 async function clearMsgWorker(){
   const id=document.getElementById('msg-worker-id').value;
-  await db.from('workers').update({message:null}).eq('id',id);
+  await db.from('workers').update({message:null, message_color:null}).eq('id',id);
   const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
   closeModal('mod-msg-worker');renderTeam();toast('Message cleared','ok');
 }
