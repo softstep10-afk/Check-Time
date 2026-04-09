@@ -1044,13 +1044,17 @@ async function toggleCI(){
   const proj=S.projects.find(p=>p.id===S.selectedProj),gpsOn=document.getElementById('gps-req').checked;
   const isDriver=S.user?.role==='driver';
   if(!S.checkedIn){
-    // Drivers skip GPS check entirely
-    if(gpsOn && !isDriver){
-      if(!S.gps){toast('GPS not available','err');return;}
-      if(proj?.gps_lat&&proj?.gps_lon){
-        const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
-        if(d>(proj.gps_radius||300)){toast(`You are ${Math.round(d)}m away. Must be within ${proj.gps_radius||300}m.`,'err');return;}
+    // GPS check — skip for drivers, skip if GPS unavailable or toggle off
+    if(gpsOn && !isDriver && S.gps && proj?.gps_lat && proj?.gps_lon){
+      const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
+      if(d>(proj.gps_radius||300)){
+        toast(`You are ${Math.round(d)}m away. Must be within ${proj.gps_radius||300}m.`,'err');
+        return;
       }
+    }
+    // If GPS toggle is on but GPS not available — warn but allow checkin
+    if(gpsOn && !isDriver && !S.gps){
+      toast('⚠️ GPS unavailable — checking in without location','ok');
     }
     S.checkedIn=true;S.checkInTime=Date.now();
     await db.from('workers').update({checked_in:true,check_in_time:new Date(S.checkInTime).toISOString(),last_proj_id:S.selectedProj}).eq('id',S.user.id);
