@@ -1053,7 +1053,15 @@ async function markDoneFromDetail(){
   const id=document.getElementById('task-detail-id').value;
   await markDone(id);closeTaskDetail();
 }
-async function markDone(id){await db.from('tasks').update({done:true}).eq('id',id);const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];loadWorkerTasks();toast('Task done!','ok');}
+async function markDone(id){
+  await db.from('tasks').update({
+    done:true,
+    completed_by:S.user?.name||'Worker',
+    completed_at:new Date().toISOString()
+  }).eq('id',id);
+  const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];
+  loadWorkerTasks();toast('Task done!','ok');
+}
 async function submitReport(){
   if(!S.checkedIn){toast('Check in first to submit a report','err');return;}
   const proj=S.projects.find(x=>x.id===S.selectedProj);
@@ -1146,7 +1154,7 @@ function renderProjCards(){
   c.innerHTML = `<div onclick="openModal('mod-proj')" style="background:var(--surface);border:2px dashed var(--border);border-radius:13px;padding:16px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px;gap:8px" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
     <span style="font-size:36px">➕</span>
     <span style="font-size:14px;font-weight:700;color:var(--gold)">Add Project</span>
-  </div>` + S.projects.map(p=>{
+  </div>` + [...S.projects].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
     const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id));
     const on=pw.filter(w=>w.checked_in&&w.last_proj_id===p.id).length;
     const totalH=pw.reduce((s,w)=>s+calcHours(w.id,p.id),0);
@@ -1251,7 +1259,7 @@ function goBack2Proj(){openProjDetail(S.drillProj);}
 function goBack2Worker(){openWorkerDetail(S.drillProj,S.drillWorker);}
 function renderTeam(){
   const rf=document.getElementById('role-filter')?.value||'all',sr=document.getElementById('team-search')?.value.toLowerCase()||'';
-  const ws=S.workers.filter(w=>(rf==='all'||(w.role||'worker')===rf)&&(!sr||w.name.toLowerCase().includes(sr)));
+  const ws=S.workers.filter(w=>(rf==='all'||(w.role||'worker')===rf)&&(!sr||w.name.toLowerCase().includes(sr))).sort((a,b)=>a.name.localeCompare(b.name));
   const tb=document.getElementById('team-table');
   let totalHours=0, totalEarned=0;
   tb.innerHTML=ws.map(w=>{
@@ -1850,6 +1858,7 @@ function renderProjTasks(){
       <div style="flex:1">
         <div style="font-size:13px;font-weight:500;${t.done?'text-decoration:line-through;color:var(--muted)':''}">${t.title}</div>
         ${w?`<div style="font-size:10px;font-weight:600;margin-top:2px;color:${wColor}">→ ${w.name} <span style="opacity:.7">(${w.role||'worker'})</span></div>`:t.worker_name&&t.worker_name!=='Project'?`<div style="font-size:10px;color:var(--muted)">→ ${t.worker_name}</div>`:''}
+        ${t.done&&t.completed_by?`<div style="font-size:10px;color:var(--green);margin-top:2px">✅ Done by ${t.completed_by}${t.completed_at?' · '+fmtDT(t.completed_at):''}</div>`:''}
       </div>
       ${w?`<div style="width:8px;height:8px;border-radius:50%;background:${wColor};flex-shrink:0"></div>`:''}
       <span class="pri ${t.priority}">${t.priority==='high'?'🔴 High':t.priority==='medium'?'🟡 Med':'🟢 Low'}</span>
@@ -1859,7 +1868,16 @@ function renderProjTasks(){
 }
 
 async function toggleProjTask(id,val){
-  await db.from('tasks').update({done:val==='true'}).eq('id',id);
+  const done=val==='true';
+  const update={done};
+  if(done){
+    update.completed_by=S.user?.name||'Manager';
+    update.completed_at=new Date().toISOString();
+  } else {
+    update.completed_by=null;
+    update.completed_at=null;
+  }
+  await db.from('tasks').update(update).eq('id',id);
   const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];
   renderProjTasks();renderOverview();
 }
