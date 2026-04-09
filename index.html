@@ -341,8 +341,9 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button id="w-back-btn" onclick="workerBackToProjects()" style="display:none;background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0">←</button>
       <div><h2 id="w-name">Worker</h2><p id="w-sub" style="font-size:11px;color:var(--muted);margin-top:2px">Select a project</p></div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center">
       <button onclick="refreshWorker()" style="padding:7px 10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer">🔄</button>
+      <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:16px;cursor:pointer" title="You have a message">💬<span id="w-msg-dot" style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface)"></span></button>
       <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
       <button class="out-btn" onclick="doLogout()">Sign Out</button>
     </div>
@@ -457,7 +458,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
     </div>
     <div class="main">
-      <div class="main-top"><div><h2 id="view-title">Overview</h2><div class="sub" id="view-sub">Today's summary</div></div><div id="view-actions" style="display:flex;gap:8px"><button onclick="refreshManager();toast('✅ Refreshed!','ok')" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer" title="Refresh data">🔄 Refresh</button></div></div>
+      <div class="main-top"><div><h2 id="view-title">Overview</h2><div class="sub" id="view-sub">Today's summary</div></div><div id="view-actions" style="display:flex;gap:8px;align-items:center">
+        <button id="mgr-notif-bell" onclick="showMgrNotifications()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-size:16px;cursor:pointer" title="New activity">🔔<span id="mgr-notif-count" style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)"></span></button>
+        <button onclick="refreshManager();toast('✅ Refreshed!','ok')" style="padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer" title="Refresh data">🔄 Refresh</button>
+      </div></div>
       <div class="main-body">
         <div class="view on" id="view-overview">
           <div class="stats">
@@ -801,7 +805,7 @@ async function doLogin(){
       document.getElementById('m-badge').className='mgr-badge '+(mgr.access==='admin'?'full':'lim');
       document.getElementById('adm-sec').style.display=mgr.access==='admin'?'block':'none';
       document.getElementById('nav-managers').style.display=mgr.access==='admin'?'flex':'none';
-      showPage('pg-manager');refreshManager();
+      showPage('pg-manager');refreshManager();startRealtimeManager();
     }else{
       const {data,error}=await db.from('workers').select('*').eq('pin',pin);
       if(error||!data||!data.length){showErr('PIN not found — ask your manager');btn.disabled=false;btn.textContent='Sign In →';return;}
@@ -820,6 +824,8 @@ async function doLogin(){
       startClock();
       getGPS();
       showPage('pg-worker');
+      startRealtimeWorker();
+      checkWorkerMessageBell();
       // Show message from manager if one exists
       if(w.message&&w.message.trim()){
         const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
@@ -2418,6 +2424,102 @@ async function deleteActivity(id){
   S.events=ev.data||[];
   renderOverview();
   toast('Deleted','ok');
+}
+
+// ═══ REALTIME SUBSCRIPTIONS ═══
+function startRealtimeWorker(){
+  // Subscribe to changes in workers table (messages) and tasks
+  db.channel('worker-realtime')
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers',filter:`id=eq.${S.user.id}`},payload=>{
+      const updated=payload.new;
+      // Update local user data
+      S.user={...S.user,...updated};
+      const w=S.workers.find(x=>x.id===S.user.id);
+      if(w)Object.assign(w,updated);
+      // Show bell if new message
+      checkWorkerMessageBell();
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks'},payload=>{
+      // New task assigned to this worker
+      if(payload.new.worker_id===S.user.id){
+        S.tasks.push(payload.new);
+        loadWorkerTasks();
+        toast(`📋 New task: ${payload.new.title}`,'ok');
+      }
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tasks'},payload=>{
+      const idx=S.tasks.findIndex(t=>t.id===payload.new.id);
+      if(idx>=0)S.tasks[idx]=payload.new;
+      else S.tasks.push(payload.new);
+      loadWorkerTasks();
+    })
+    .subscribe();
+}
+
+function startRealtimeManager(){
+  db.channel('manager-realtime')
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'events'},payload=>{
+      S.events.push(payload.new);
+      // Update worker checked_in status
+      const ev=payload.new;
+      const w=S.workers.find(x=>x.id===ev.worker_id);
+      if(w){
+        if(ev.type==='in'){w.checked_in=true;w.last_proj_id=ev.project_id;}
+        else if(ev.type==='out'){w.checked_in=false;}
+      }
+      // Show notification bell
+      S.newNotifCount=(S.newNotifCount||0)+1;
+      const bell=document.getElementById('mgr-notif-bell');
+      const cnt=document.getElementById('mgr-notif-count');
+      if(bell){bell.style.display='block';}
+      if(cnt){cnt.textContent=S.newNotifCount;}
+      // Refresh current view silently
+      const activeView=document.querySelector('.view.on')?.id;
+      if(activeView==='view-overview')renderOverview();
+      if(activeView==='view-projects')renderProjCards();
+    })
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers'},payload=>{
+      const idx=S.workers.findIndex(w=>w.id===payload.new.id);
+      if(idx>=0)S.workers[idx]=payload.new;
+      const activeView=document.querySelector('.view.on')?.id;
+      if(activeView==='view-team')renderTeam();
+      if(activeView==='view-overview')renderOverview();
+    })
+    .subscribe();
+}
+
+function checkWorkerMessageBell(){
+  const bell=document.getElementById('w-msg-bell');
+  if(!bell)return;
+  const w=S.workers.find(x=>x.id===S.user?.id)||S.user;
+  if(w?.message&&w.message.trim()){
+    bell.style.display='block';
+  } else {
+    bell.style.display='none';
+  }
+}
+
+function showWorkerMessage(){
+  const w=S.workers.find(x=>x.id===S.user?.id)||S.user;
+  if(!w?.message)return;
+  const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
+  const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
+  const c=w.message_color||'gold';
+  const el=document.getElementById('worker-msg-text');
+  el.textContent=w.message;
+  el.style.borderColor=msgColors[c]||'var(--gold)';
+  el.style.background=msgBg[c]||'rgba(245,158,11,.08)';
+  el.style.color=msgColors[c]||'var(--gold)';
+  document.getElementById('worker-msg-ov').className='co-ov show';
+}
+
+function showMgrNotifications(){
+  S.newNotifCount=0;
+  const bell=document.getElementById('mgr-notif-bell');
+  const cnt=document.getElementById('mgr-notif-count');
+  if(bell)bell.style.display='none';
+  if(cnt)cnt.textContent='';
+  showView('overview');
 }
 
 init();
