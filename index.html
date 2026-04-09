@@ -414,21 +414,22 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="sec-h">📋 Tasks for this project</div>
       <div id="w-tasks" style="margin-bottom:16px"></div>
 
-      <!-- 3. PHOTO / VIDEO — compact row -->
+      <!-- 3. PHOTO / VIDEO — tabbed folders -->
       <div class="sec-h">📸 Project Journal</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:12px">
-        <!-- Compact add buttons -->
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button onclick="document.getElementById('cam-photo').click()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600;color:var(--text)">
-            <span style="font-size:18px">📷</span> Photo
-          </button>
-          <button onclick="document.getElementById('cam-video').click()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600;color:var(--text)">
-            <span style="font-size:18px">🎥</span> Video
-          </button>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px">
+        <!-- Tab buttons -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--border)">
+          <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" style="padding:11px;background:rgba(245,158,11,.08);border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
+          <button id="wtab-video" onclick="openWorkerMediaTab('video')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🎥 Videos</button>
         </div>
-        <input type="file" id="cam-photo" accept="image/*" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
-        <input type="file" id="cam-video" accept="video/*" style="display:none" onchange="captureJournalMedia(event,'video')">
-        <div id="journal-entries"><div style="text-align:center;padding:10px;color:var(--muted);font-size:12px">No photos yet</div></div>
+        <!-- Add button inside folder -->
+        <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <button id="w-add-media-btn" onclick="triggerWorkerMediaAdd()" style="padding:6px 14px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Add Photo</button>
+          <span id="w-media-count" style="font-size:11px;color:var(--muted)">0 files</span>
+        </div>
+        <input type="file" id="cam-photo" accept="image/*" capture="environment" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
+        <input type="file" id="cam-video" accept="video/*" capture="environment" style="display:none" onchange="captureJournalMedia(event,'video')">
+        <div id="journal-entries" style="padding:4px"></div>
       </div>
 
     </div>
@@ -1459,18 +1460,25 @@ function renderOverview(){
     const locAge=hasLive&&w.location_updated_at
       ?Math.round((Date.now()-new Date(w.location_updated_at))/60000)
       :null;
+    // Check if worker has left the project site
+    let leftSite=false;
+    if(hasLive&&proj?.gps_lat&&proj?.gps_lon){
+      const dist=gpsDist(w.current_lat,w.current_lon,proj.gps_lat,proj.gps_lon);
+      leftSite=dist>(proj.gps_radius||300)*2; // 2x radius = clearly left
+    }
     const gpsLink=lat&&lon
       ?`<a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:1px">
-          <span style="font-size:18px">${hasLive?'📍':'📌'}</span>
-          ${locAge!==null?`<span style="font-size:9px;color:${locAge<15?'var(--green)':'var(--muted)'}">${locAge}m ago</span>`:'<span style="font-size:9px;color:var(--muted)">checkin</span>'}
+          <span style="font-size:18px">${leftSite?'🚗':hasLive?'📍':'📌'}</span>
+          ${locAge!==null?`<span style="font-size:9px;color:${leftSite?'var(--red)':locAge<15?'var(--green)':'var(--muted)'}">${leftSite?'left site':locAge+'m ago'}</span>`:'<span style="font-size:9px;color:var(--muted)">checkin</span>'}
         </a>`
       :'<span style="color:var(--muted);font-size:11px">—</span>';
-    return`<tr style="${veryLong?'background:rgba(239,68,68,.04)':longSession?'background:rgba(245,158,11,.03)':''}">
+    const leftSiteWarning=leftSite?`<span style="font-size:10px;background:rgba(239,68,68,.15);color:var(--red);padding:2px 7px;border-radius:6px;margin-left:6px">🚗 Left site</span>`:'';
+    return`<tr style="${veryLong?'background:rgba(239,68,68,.04)':leftSite?'background:rgba(239,68,68,.03)':longSession?'background:rgba(245,158,11,.03)':''}">
       <td>
         <div class="cell-name">
           <div class="av-sm" style="background:${w.color||rColor};border:2px solid ${rColor}">${w.name.charAt(0)}</div>
           <div>
-            <div class="nm">${w.name}${sessionWarning}</div>
+            <div class="nm">${w.name}${sessionWarning}${leftSiteWarning}</div>
             <div style="font-size:10px;color:${rColor}">${roleIcons[role]} ${role}</div>
           </div>
         </div>
@@ -2132,6 +2140,30 @@ function cancelJournal() {
 // ═══ REPLACED FUNCTION 6: renderJournal ═══
 // Always loads from Supabase DB. Never reads S.uploads for display.
 // Works after refresh, logout, or opening from another device.
+let activeWorkerMediaTab='photo';
+
+function openWorkerMediaTab(type){
+  activeWorkerMediaTab=type;
+  ['photo','video'].forEach(t=>{
+    const btn=document.getElementById('wtab-'+t);
+    if(!btn)return;
+    const active=t===type;
+    btn.style.borderBottomColor=active?'var(--gold)':'transparent';
+    btn.style.color=active?'var(--gold)':'var(--muted)';
+    btn.style.background=active?'rgba(245,158,11,.08)':'none';
+  });
+  const addBtn=document.getElementById('w-add-media-btn');
+  if(addBtn){
+    addBtn.textContent=type==='photo'?'📷 Add Photo':'🎥 Add Video';
+  }
+  renderJournal();
+}
+
+function triggerWorkerMediaAdd(){
+  if(activeWorkerMediaTab==='photo') document.getElementById('cam-photo').click();
+  else document.getElementById('cam-video').click();
+}
+
 async function renderJournal() {
   const c = document.getElementById('journal-entries');
   if (!S.selectedProj || !S.user?.id) {
@@ -2145,24 +2177,36 @@ async function renderJournal() {
     .eq('is_checkout', false)
     .order('created_at', { ascending: false });
   if (error) {
-    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--red);font-size:12px">Failed to load photos. Check connection.</div>';
+    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--red);font-size:12px">Failed to load. Check connection.</div>';
     return;
   }
-  if (!data || !data.length) {
-    c.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px">No photos yet — take your first photo!</div>';
+  // Filter by active tab
+  const all=data||[];
+  const visible=all.filter(m=>activeWorkerMediaTab==='photo'
+    ?(m.type==='photo'||m.type==='image')
+    :m.type==='video');
+  // Update count
+  const countEl=document.getElementById('w-media-count');
+  if(countEl)countEl.textContent=`${visible.length} file${visible.length!==1?'s':''}`;
+  if(!visible.length){
+    c.innerHTML=`<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No ${activeWorkerMediaTab==='photo'?'photos':'videos'} yet</div>`;
     return;
   }
-  c.innerHTML = data.map(m => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px">
-      ${m.file_url
-        ? m.type === 'photo'
-          ? `<img src="${m.file_url}" style="width:100%;max-height:220px;object-fit:cover;display:block" loading="lazy">`
-          : `<video src="${m.file_url}" controls style="width:100%;max-height:220px;display:block"></video>`
-        : ''}
-      ${m.comment ? `<div style="padding:10px 13px;font-size:13px;line-height:1.5">${m.comment}</div>` : ''}
-      <div style="padding:6px 13px 10px">
-        <div style="font-size:10px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}</div>
-      </div>
+  // Photos: compact 3-column grid
+  if(activeWorkerMediaTab==='photo'){
+    c.innerHTML=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px">`+
+      visible.map(m=>`
+        <div style="position:relative;height:100px;border-radius:6px;overflow:hidden;cursor:pointer" onclick="window.open('${m.file_url}','_blank')">
+          <img src="${m.file_url}" style="width:100%;height:100%;object-fit:cover" loading="lazy">
+          <div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:8px;color:rgba(255,255,255,.8)">${m.worker_name||''}</div>
+        </div>`).join('')+`</div>`;
+    return;
+  }
+  // Videos: list
+  c.innerHTML=visible.map(m=>`
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px">
+      <video src="${m.file_url}" controls style="width:100%;max-height:200px;display:block"></video>
+      <div style="padding:8px 12px;font-size:10px;color:var(--muted)">${m.worker_name} · ${fmtDT(m.created_at)}</div>
     </div>`).join('');
 }
 
