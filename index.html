@@ -93,13 +93,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .err-msg{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:var(--r-sm);padding:12px 16px;font-size:13px;color:var(--red);text-align:center;margin-top:16px;display:none}
 
 /* ── Worker Page ── */
-#pg-worker{background:var(--bg);max-width:520px;margin:0 auto;width:100%}
-.w-top{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;gap:8px}
+#pg-worker{background:var(--bg);width:100%}
+.w-top{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;gap:12px}
 .w-top h2{font-size:15px;font-weight:700;line-height:1.2}
 .w-top p{font-size:11px;color:var(--muted);margin-top:1px}
 .out-btn{padding:8px 14px;background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text-secondary);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap;min-height:36px}
 .out-btn:hover{border-color:var(--text-secondary);color:var(--text)}
-.w-body{padding:16px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.w-body{padding:20px 24px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;max-width:960px;margin:0 auto;width:100%}
 .sec-h{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:20px 0 10px;display:flex;align-items:center;gap:6px}
 .proj-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px}
 
@@ -402,6 +402,17 @@ tr:hover td{background:rgba(255,255,255,.012)}
 /* Misc */
 .mgr-notif-badge{position:absolute;top:-5px;right:-5px;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:2px 5px;border-radius:var(--r-full);font-family:var(--font)}
 
+/* Worker full-screen layout adjustments */
+#pg-worker .w-top{max-width:100%}
+#pg-worker .gps-row{max-width:960px;margin-left:auto;margin-right:auto}
+
+/* Desktop: worker project detail = two columns */
+@media (min-width:768px){
+  #w-detail-inner{grid-template-columns:360px 1fr!important;align-items:start}
+  #w-col-left .ci-btn{font-size:15px;padding:16px}
+  #proj-list{grid-template-columns:repeat(auto-fill,minmax(340px,1fr))!important;gap:12px!important}
+}
+
 @media (max-width:640px){
   .dash{grid-template-columns:1fr}
   .side{display:none}
@@ -410,11 +421,14 @@ tr:hover td{background:rgba(255,255,255,.012)}
   .main-body{padding:16px}
   .main-top{padding:14px 16px}
   #mgr-drill{padding:16px}
+  /* Worker mobile */
+  .w-body{padding:16px!important;max-width:100%!important}
+  .w-top{padding:12px 16px}
 }
 
 @media (max-width:380px){
   .stats{grid-template-columns:repeat(2,1fr)}
-  .w-top{padding:12px 14px}
+  .w-top{padding:10px 12px}
   .co-box{border-radius:var(--r-lg)}
 }
 </style>
@@ -473,13 +487,13 @@ tr:hover td{background:rgba(255,255,255,.012)}
   <!-- VIEW 1: PROJECT LIST -->
   <div id="w-view-projects" class="w-body">
     <div class="proj-label">📍 Select Today's Project</div>
-    <div id="proj-list"></div>
+    <div id="proj-list" style="display:grid;grid-template-columns:1fr;gap:0"></div>
   </div>
 
   <!-- VIEW 2: PROJECT DETAIL -->
-  <div id="w-view-detail" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div id="w-view-detail" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;width:100%">
     <!-- GPS status bar -->
-    <div style="padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+    <div style="padding:10px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;max-width:960px;margin:0 auto;width:100%">
       <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
         <div class="gdot spin" id="gps-dot"></div>
         <span id="gps-txt">Acquiring location...</span>
@@ -490,21 +504,24 @@ tr:hover td{background:rgba(255,255,255,.012)}
       </div>
     </div>
 
-    <div class="w-body" style="padding-bottom:80px">
+    <div class="w-body" style="padding-bottom:40px">
+      <div id="w-detail-inner" style="display:grid;grid-template-columns:1fr;gap:16px">
 
+      <!-- LEFT: PROJECT CARD + CHECKIN -->
+      <div id="w-col-left">
       <!-- 1. PROJECT STATS -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">📍 Project</div>
-        <div class="sc-name" id="sc-proj" style="font-size:16px;font-weight:700;margin-bottom:4px">—</div>
-        <div id="w-proj-addr" style="margin-bottom:10px;font-size:12px;color:var(--blue)"></div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;margin-bottom:16px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.08em;margin-bottom:6px">📍 Project</div>
+        <div class="sc-name" id="sc-proj" style="font-size:20px;font-weight:700;margin-bottom:4px">—</div>
+        <div id="w-proj-addr" style="margin-bottom:14px;font-size:13px;color:var(--blue)"></div>
         <!-- Live stats row -->
-        <div id="w-proj-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px"></div>
+        <div id="w-proj-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px"></div>
         <!-- Status + clock -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
           <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
           <div style="text-align:right">
-            <div class="clock" id="sc-clock" style="font-size:20px">00:00:00</div>
-            <div class="clock-lbl" id="sc-lbl" style="font-size:10px">Not checked in</div>
+            <div class="clock" id="sc-clock">00:00:00</div>
+            <div class="clock-lbl" id="sc-lbl">Not checked in</div>
           </div>
         </div>
         <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>✅ Check In</button>
@@ -512,13 +529,15 @@ tr:hover td{background:rgba(255,255,255,.012)}
 
       <!-- MANAGER NOTES -->
       <div id="notes-wrap" style="display:none">
-        <div class="notes-box" style="margin-bottom:12px">
+        <div class="notes-box" style="margin-bottom:16px">
           <h4>📋 Manager's Notes</h4>
           <p id="notes-txt"></p>
         </div>
       </div>
+      </div><!-- end w-col-left -->
 
-      <!-- 2. TASKS -->
+      <!-- RIGHT: TASKS + MEDIA -->
+      <div id="w-col-right">
       <div class="sec-h">📋 Tasks for this project</div>
       <div id="w-tasks" style="margin-bottom:16px"></div>
 
@@ -541,10 +560,11 @@ tr:hover td{background:rgba(255,255,255,.012)}
         </div>
       </div>
 
-    </div>
-  </div>
-</div>
-<!-- WORKER TASKS OVERLAY -->
+      </div><!-- end w-col-right -->
+      </div><!-- end w-detail-inner grid -->
+    </div><!-- end w-body -->
+  </div><!-- end w-view-detail -->
+</div><!-- end pg-worker -->
 <div class="co-ov" id="worker-tasks-ov">
   <div class="co-box" style="padding:0;overflow:hidden">
     <div id="worker-tasks-body" style="max-height:80vh;overflow-y:auto"></div>
