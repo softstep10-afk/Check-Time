@@ -410,7 +410,6 @@ tr:hover td{background:rgba(255,255,255,.012)}
 @media (min-width:768px){
   #w-detail-inner{grid-template-columns:360px 1fr!important;align-items:start}
   #w-col-left .ci-btn{font-size:15px;padding:16px}
-  #proj-list{grid-template-columns:repeat(auto-fill,minmax(340px,1fr))!important;gap:12px!important}
 }
 
 @media (max-width:640px){
@@ -487,7 +486,7 @@ tr:hover td{background:rgba(255,255,255,.012)}
   <!-- VIEW 1: PROJECT LIST -->
   <div id="w-view-projects" class="w-body">
     <div class="proj-label">📍 Select Today's Project</div>
-    <div id="proj-list" style="display:grid;grid-template-columns:1fr;gap:0"></div>
+    <div id="proj-list" class="cards"></div>
   </div>
 
   <!-- VIEW 2: PROJECT DETAIL -->
@@ -1147,7 +1146,8 @@ function renderProjPicker(){
   if(!S.projects.length){c.innerHTML='<div class="empty"><div class="ei">🏗️</div><p>No projects yet</p></div>';return;}
   const active=S.projects.filter(p=>p.status==='active').sort((a,b)=>a.name.localeCompare(b.name));
   if(!active.length){c.innerHTML='<div class="empty"><div class="ei">🏗️</div><p>No active projects</p></div>';return;}
-  // Smart nearby suggestion — if GPS available, find closest project within 500m
+
+  // Nearby banner
   let nearbyBanner='';
   if(S.gps && !S.checkedIn){
     let closest=null,closestDist=Infinity;
@@ -1157,32 +1157,46 @@ function renderProjPicker(){
         if(d<closestDist){closestDist=d;closest=p;}
       }
     });
-    if(closest && closestDist<500){
-      nearbyBanner=`<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+    if(closest&&closestDist<500){
+      nearbyBanner=`<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;grid-column:1/-1">
         <span style="font-size:24px">📍</span>
-        <div style="flex:1">
-          <div style="font-size:13px;font-weight:700;color:var(--green)">You're near ${closest.name}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${Math.round(closestDist)}m away</div>
-        </div>
-        <button onclick="quickCheckin('${closest.id}')" style="padding:8px 16px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">Check In</button>
+        <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--green)">You're near ${closest.name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${Math.round(closestDist)}m away</div></div>
+        <button onclick="quickCheckin('${closest.id}')" style="padding:9px 18px;background:var(--green);color:#fff;border:none;border-radius:var(--r-sm);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">Check In</button>
       </div>`;
     }
   }
+
   c.innerHTML=nearbyBanner+active.map(p=>{
-    const isMyProj=S.checkedIn && S.selectedProj===p.id;
-    return`<div class="proj-item" onclick="openWorkerProject('${p.id}')" style="${isMyProj?'border-left:3px solid var(--green);background:rgba(34,197,94,.05)':''}">
-      <div style="flex:1">
-        <div class="proj-item-name" style="display:flex;align-items:center;gap:8px">
-          ${p.name}
-          ${isMyProj?'<span style="font-size:10px;background:rgba(34,197,94,.15);color:var(--green);padding:2px 8px;border-radius:10px;font-weight:700">✅ Checked In</span>':''}
-        </div>
-        <div style="font-size:12px;color:var(--blue);margin-top:4px">🗺️ ${p.address}</div>
-        <div style="display:flex;gap:8px;margin-top:8px" onclick="event.stopPropagation()">
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:11px;padding:5px 10px;border-radius:6px;background:rgba(59,130,246,.12);color:var(--blue);text-decoration:none;font-weight:600">📍 Navigate</a>
-          <button onclick="copyAddress('${p.address.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}'))" style="font-size:11px;padding:5px 10px;border-radius:6px;background:rgba(245,158,11,.12);color:var(--gold);border:none;font-family:var(--font);cursor:pointer;font-weight:600">📋 Copy</button>
+    const isMyProj=S.checkedIn&&S.selectedProj===p.id;
+    const statusColor=p.status_color||'none';
+    const borderColor=isMyProj?'var(--green)':statusColor==='red'?'var(--red)':statusColor==='yellow'?'var(--gold)':statusColor==='green'?'var(--green)':'var(--border)';
+    const bgColor=isMyProj?'rgba(34,197,94,.04)':statusColor==='red'?'rgba(239,68,68,.03)':statusColor==='yellow'?'rgba(245,158,11,.03)':statusColor==='green'?'rgba(34,197,94,.03)':'';
+    const hasNotes=p.notes?.trim();
+    // Worker-visible stats
+    const myH=calcHours(S.user?.id,p.id);
+    const myDays=new Set(S.events.filter(e=>e.worker_id===S.user?.id&&e.project_id===p.id&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;
+    const onSite=S.workers.filter(w=>w.checked_in&&w.last_proj_id===p.id).length;
+    return`<div class="pcard" onclick="openWorkerProject('${p.id}')" style="border-color:${borderColor};${bgColor?'background:'+bgColor:''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:8px">
+        <h3 style="margin:0;font-size:15px">${p.name}
+          ${isMyProj?'<span style="font-size:10px;background:rgba(34,197,94,.15);color:var(--green);padding:2px 8px;border-radius:var(--r-full);font-weight:700;margin-left:6px;vertical-align:middle">✅ Checked In</span>':''}
+        </h3>
+        <div style="display:flex;gap:4px;flex-shrink:0">
+          <div style="width:10px;height:10px;border-radius:50%;background:${statusColor==='green'?'var(--green)':statusColor==='yellow'?'var(--gold)':statusColor==='red'?'var(--red)':'var(--border)'}"></div>
         </div>
       </div>
-      <div style="font-size:20px;color:var(--muted);padding-left:10px">›</div>
+      <div style="font-size:12px;color:var(--blue);margin-bottom:10px">🗺️ ${p.address}</div>
+      <div class="pcard-stats">
+        <div class="ps">On Site: <span class="g">${onSite}</span></div>
+        <div class="ps">My Hours: <span>${myH.toFixed(1)}h</span></div>
+        <div class="ps">My Days: <span>${myDays}</span></div>
+      </div>
+      ${hasNotes?`<div class="pnotes">${p.notes}</div>`:''}
+      <div class="btn-row" onclick="event.stopPropagation()">
+        <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="flex:1;padding:8px;border-radius:var(--r-sm);border:1px solid var(--border);color:var(--blue);font-size:11px;font-weight:600;text-decoration:none;text-align:center;font-family:var(--font)">📍 Navigate</a>
+        <button onclick="copyAddress('${p.address.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}'))" style="flex:1;padding:8px;border-radius:var(--r-sm);border:1px solid var(--border);background:none;color:var(--gold);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📋 Copy</button>
+      </div>
     </div>`;
   }).join('');
 }
