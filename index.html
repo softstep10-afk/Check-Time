@@ -3092,10 +3092,8 @@ function triggerMediaAdd(){
   else document.getElementById('mgr-pdf').click();
 }
 // ═══ SOUND NOTIFICATIONS ═══
-// ═══ SOUND & VIBRATION SETTINGS ═══
-// Saved to localStorage so it persists
-const NOTIF_KEY='cc_notif_mode';
-function getNotifMode(){return localStorage.getItem(NOTIF_KEY)||'sound';} // 'sound' | 'vibrate' | 'silent'
+// ═══ SOUND & VIBRATION ═══
+function getNotifMode(){return localStorage.getItem(NOTIF_KEY)||'sound';}
 function setNotifMode(mode){
   localStorage.setItem(NOTIF_KEY,mode);
   ['sound','vibrate','silent'].forEach(m=>{
@@ -3104,44 +3102,43 @@ function setNotifMode(mode){
     btn.style.background=m===mode?'var(--gold)':'var(--border)';
     btn.style.color=m===mode?'#000':'var(--muted)';
   });
-  const labels={sound:'🔔 Sound',vibrate:'📳 Vibrate',silent:'🔕 Silent'};
-  toast(labels[mode]+' mode set','ok');
+  const labels={sound:'🔔 Sound on',vibrate:'📳 Vibrate only',silent:'🔕 Silent'};
+  toast(labels[mode],'ok');
 }
 
 function playSound(type){
   const mode=getNotifMode();
-  // Vibration
-  if((mode==='sound'||mode==='vibrate')&&navigator.vibrate){
-    if(type==='task')navigator.vibrate([100,50,100]);
-    else if(type==='message')navigator.vibrate([200]);
-    else if(type==='checkin')navigator.vibrate([80]);
-  }
-  // Sound
-  if(mode!=='sound')return;
-  try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
-    const osc=ctx.createOscillator();
-    const gain=ctx.createGain();
-    osc.connect(gain);gain.connect(ctx.destination);
-    if(type==='task'){
-      osc.frequency.setValueAtTime(880,ctx.currentTime);
-      osc.frequency.setValueAtTime(1100,ctx.currentTime+0.1);
-      gain.gain.setValueAtTime(0.3,ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);
-      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.3);
-    } else if(type==='message'){
-      osc.frequency.setValueAtTime(660,ctx.currentTime);
-      osc.frequency.setValueAtTime(880,ctx.currentTime+0.15);
-      gain.gain.setValueAtTime(0.25,ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
-      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.4);
-    } else if(type==='checkin'){
-      osc.frequency.setValueAtTime(440,ctx.currentTime);
-      osc.frequency.setValueAtTime(880,ctx.currentTime+0.1);
-      gain.gain.setValueAtTime(0.2,ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);
-      osc.start(ctx.currentTime);osc.stop(ctx.currentTime+0.25);
+  if(mode==='silent')return;
+  // Vibration — works on Android Chrome
+  if(mode==='vibrate'||mode==='sound'){
+    if(navigator.vibrate){
+      if(type==='task')navigator.vibrate([150,80,150]);
+      else if(type==='message')navigator.vibrate([300]);
+      else if(type==='checkin')navigator.vibrate([100]);
     }
+  }
+  if(mode!=='sound')return;
+  // Simple beep using AudioContext — requires prior user gesture on mobile
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)return;
+    const ctx=new AudioCtx();
+    const gain=ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0,ctx.currentTime);
+    const freqs=type==='task'?[880,1100,880]:type==='message'?[660,880,1100]:type==='checkin'?[440,660,880]:[440];
+    freqs.forEach((f,i)=>{
+      const osc=ctx.createOscillator();
+      osc.type='sine';
+      osc.frequency.setValueAtTime(f,ctx.currentTime+i*0.12);
+      osc.connect(gain);
+      osc.start(ctx.currentTime+i*0.12);
+      osc.stop(ctx.currentTime+i*0.12+0.1);
+    });
+    gain.gain.setValueAtTime(0.4,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+freqs.length*0.12+0.15);
+    // Auto close context
+    setTimeout(()=>ctx.close(),1000);
   }catch(e){}
 }
 
@@ -3571,31 +3568,19 @@ function showWorkerTaskList(){
 async function workerMsgDone(){
   document.getElementById('worker-msg-ov').className='co-ov';
   if(!S.user?.id)return;
-  // Mark as done — clear message completely
   await db.from('workers').update({message:null,message_color:null,message_read:true}).eq('id',S.user.id);
   S.user.message=null;S.user.message_color=null;S.user.message_read=true;
-  const w=S.workers.find(x=>x.id===S.user.id);
-  if(w){w.message=null;w.message_color=null;w.message_read=true;}
   checkWorkerMessageBell();
-  toast('✅ Marked as done','ok');
+  toast('✅ Message done','ok');
 }
 
 async function workerMsgReadLater(){
   document.getElementById('worker-msg-ov').className='co-ov';
   if(!S.user?.id)return;
-  // Mark as read but keep message visible in bell
   await db.from('workers').update({message_read:true}).eq('id',S.user.id);
   S.user.message_read=true;
-  const w=S.workers.find(x=>x.id===S.user.id);
-  if(w)w.message_read=true;
-  // Show bell as "read but pending"
-  const bell=document.getElementById('w-msg-bell');
-  if(bell){
-    bell.style.display='block';
-    bell.style.borderColor='var(--muted)';
-    bell.style.color='var(--muted)';
-  }
-  toast('📖 Message saved — tap 💬 to view again','ok');
+  checkWorkerMessageBell();
+  toast('📖 Saved — tap ✉️ to read again','ok');
 }
 
 function openAdjHours(wId){
@@ -3654,18 +3639,14 @@ async function forceCheckout(wId, wName, e){
 function checkWorkerMessageBell(){
   const bell=document.getElementById('w-msg-bell');
   if(!bell)return;
-  const w=S.workers.find(x=>x.id===S.user?.id)||S.user;
-  if(w?.message&&w.message.trim()){
+  // Use S.user directly — always has latest message state
+  const msg=S.user?.message;
+  if(msg&&msg.trim()){
     bell.style.display='block';
-    // Unread = gold pulse, read = muted
-    if(w.message_read){
-      bell.style.borderColor='var(--muted)';
-      bell.style.color='var(--muted)';
-      bell.style.background='none';
+    if(S.user?.message_read){
+      bell.style.borderColor='var(--muted)';bell.style.color='var(--muted)';bell.style.background='none';
     } else {
-      bell.style.borderColor='var(--gold)';
-      bell.style.color='var(--gold)';
-      bell.style.background='rgba(245,158,11,.1)';
+      bell.style.borderColor='var(--gold)';bell.style.color='var(--gold)';bell.style.background='rgba(245,158,11,.12)';
     }
   } else {
     bell.style.display='none';
