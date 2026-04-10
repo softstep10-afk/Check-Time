@@ -512,6 +512,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <button class="action" style="background:var(--green);color:#fff;border-color:var(--green);font-weight:700;padding:8px 16px" onclick="openPayroll()">💰 Process Payroll</button>
           </div>
           <div class="tcard"><div class="tcard-h"><h3>Currently On Site</h3></div><table><thead><tr><th>Name</th><th>Project</th><th>Since</th><th>Hours</th><th>GPS</th></tr></thead><tbody id="ov-table"></tbody></table></div>
+          <div class="tcard" id="gaps-card" style="display:none"><div class="tcard-h"><h3>⚠️ Untracked Time Today</h3><span style="font-size:11px;color:var(--muted)">gaps 30min+ between projects</span></div><div id="ov-gaps" style="padding:6px 0"></div></div>
           <div class="tcard"><div class="tcard-h"><h3>Recent Activity</h3></div><div style="padding:6px 0" id="ov-tl"></div></div>
         </div>
         <div class="view" id="view-projects">
@@ -1025,7 +1026,28 @@ function renderProjPicker(){
   if(!S.projects.length){c.innerHTML='<div class="empty"><div class="ei">🏗️</div><p>No projects yet</p></div>';return;}
   const active=S.projects.filter(p=>p.status==='active').sort((a,b)=>a.name.localeCompare(b.name));
   if(!active.length){c.innerHTML='<div class="empty"><div class="ei">🏗️</div><p>No active projects</p></div>';return;}
-  c.innerHTML=active.map(p=>{
+  // Smart nearby suggestion — if GPS available, find closest project within 500m
+  let nearbyBanner='';
+  if(S.gps && !S.checkedIn){
+    let closest=null,closestDist=Infinity;
+    active.forEach(p=>{
+      if(p.gps_lat&&p.gps_lon){
+        const d=gpsDist(S.gps.lat,S.gps.lon,p.gps_lat,p.gps_lon);
+        if(d<closestDist){closestDist=d;closest=p;}
+      }
+    });
+    if(closest && closestDist<500){
+      nearbyBanner=`<div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:10px;padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+        <span style="font-size:24px">📍</span>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700;color:var(--green)">You're near ${closest.name}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${Math.round(closestDist)}m away</div>
+        </div>
+        <button onclick="quickCheckin('${closest.id}')" style="padding:8px 16px;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">Check In</button>
+      </div>`;
+    }
+  }
+  c.innerHTML=nearbyBanner+active.map(p=>{
     const isMyProj=S.checkedIn && S.selectedProj===p.id;
     return`<div class="proj-item" onclick="openWorkerProject('${p.id}')" style="${isMyProj?'border-left:3px solid var(--green);background:rgba(34,197,94,.05)':''}">
       <div style="flex:1">
@@ -1042,6 +1064,24 @@ function renderProjPicker(){
       <div style="font-size:20px;color:var(--muted);padding-left:10px">›</div>
     </div>`;
   }).join('');
+}
+
+async function quickCheckin(projId){
+  // One-tap checkin from nearby suggestion
+  S.selectedProj=projId;
+  const p=S.projects.find(x=>x.id===projId);
+  // Auto checkout from previous if needed
+  if(S.user?.last_proj_id && S.user.last_proj_id!==projId && S.checkedIn){
+    const oldProj=S.projects.find(x=>x.id===S.user.last_proj_id);
+    await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.user.last_proj_id,project_name:oldProj?.name||'',gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
+  }
+  S.checkedIn=true;S.checkInTime=Date.now();
+  await db.from('workers').update({checked_in:true,check_in_time:new Date(S.checkInTime).toISOString(),last_proj_id:projId}).eq('id',S.user.id);
+  await db.from('events').insert({type:'in',worker_id:S.user.id,worker_name:S.user.name,project_id:projId,project_name:p?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
+  toast(`✅ Checked in at ${p?.name}`,'ok');
+  playSound('checkin');
+  startLiveTracking();
+  openWorkerProject(projId);
 }
 function copyAddress(addr, name){
   const txt=`${name}\n${addr}`;
@@ -1564,6 +1604,55 @@ function renderOverview(){
     <div style="font-size:10px;color:var(--muted)">${fmtDT(e.created_at)}</div>
     ${isOwner?`<button onclick="deleteActivity('${e.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:2px 6px;opacity:.6" title="Delete">🗑</button>`:''}
   </div>`).join('')||'<div class="empty"><p>No activity yet</p></div>';
+
+  // ── Untracked time gaps ──
+  // For each worker find checkout→checkin pairs today with gap ≥ 30 min
+  const todayStr=new Date().toISOString().split('T')[0];
+  const gaps=[];
+  S.workers.forEach(w=>{
+    const wEvs=S.events
+      .filter(e=>e.worker_id===w.id&&(e.type==='in'||e.type==='out')&&e.created_at.startsWith(todayStr))
+      .sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    for(let i=0;i<wEvs.length-1;i++){
+      const curr=wEvs[i],next=wEvs[i+1];
+      if(curr.type==='out'&&next.type==='in'){
+        const gapMin=Math.round((new Date(next.created_at)-new Date(curr.created_at))/60000);
+        if(gapMin>=30){
+          gaps.push({
+            worker:w,
+            fromProj:curr.project_name||'?',
+            toProj:next.project_name||'?',
+            outTime:curr.created_at,
+            inTime:next.created_at,
+            gapMin
+          });
+        }
+      }
+    }
+    // Also check if checked in now with no checkout after last checkout — handled by 12h warning
+  });
+
+  const gapsCard=document.getElementById('gaps-card');
+  const gapsEl=document.getElementById('ov-gaps');
+  if(!gaps.length){
+    if(gapsCard)gapsCard.style.display='none';
+    return;
+  }
+  if(gapsCard)gapsCard.style.display='block';
+  const gapRoleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
+  gapsEl.innerHTML=gaps.map(g=>{
+    const color=g.gapMin>120?'var(--red)':'var(--gold)';
+    const h=Math.floor(g.gapMin/60),m=g.gapMin%60;
+    const dur=h>0?`${h}h ${m}m`:`${m}m`;
+    const rColor=gapRoleColors[g.worker.role||'worker']||'#f59e0b';
+    return`<div style="flex:1;font-size:12px">
+        <strong>${g.worker.name}</strong>
+        <span style="color:var(--muted)"> · ${fmtTime(g.outTime)} → ${fmtTime(g.inTime)}</span>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">${g.fromProj} → ${g.toProj}</div>
+      </div>
+      <span style="font-size:12px;font-weight:700;color:${color};background:rgba(${g.gapMin>120?'239,68,68':'245,158,11'},.12);padding:3px 10px;border-radius:20px;white-space:nowrap">⏱ ${dur}</span>
+    </div>`;
+  }).join('');
 }
 function calcWorkerEarnings(wId, projId){
   const w=S.workers.find(x=>x.id===wId);
