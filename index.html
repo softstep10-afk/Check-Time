@@ -1166,18 +1166,19 @@ function updateWorkerUI(){
   const btn=document.getElementById('ci-btn'),badge=document.getElementById('sc-badge'),needVid=S.user?.require_video;
   const isMyProj = S.selectedProj === S.user?.last_proj_id;
   if(S.checkedIn && isMyProj){
-    // On their checked-in project
+    // On their current project — show Check Out
     btn.textContent=needVid?'🚪 Check Out (video required)':'🚪 Check Out';
     btn.className='ci-btn do-out';btn.disabled=false;
+    btn.style.background='';btn.style.color='';
     badge.textContent='✅ Checked In';badge.className='sc-badge badge-in';
   } else if(S.checkedIn && !isMyProj){
-    // Viewing a different project while checked in elsewhere
-    btn.textContent='⚠️ Checked in on another project';
-    btn.className='ci-btn';btn.disabled=true;
-    btn.style.background='rgba(245,158,11,.15)';btn.style.color='var(--gold)';
-    badge.textContent='Checked In (other project)';badge.className='sc-badge badge-in';
+    // Viewing another project while checked in elsewhere — allow to check in here (auto-checkout from old)
+    const myProj=S.projects.find(p=>p.id===S.user?.last_proj_id);
+    btn.textContent=`✅ Check In here`;
+    btn.className='ci-btn do-in';btn.disabled=false;
+    btn.style.background='';btn.style.color='';
+    badge.textContent=myProj?`On: ${myProj.name}`:'Checked In';badge.className='sc-badge badge-in';
   } else {
-    // Not checked in
     btn.textContent='✅ Check In';btn.className='ci-btn do-in';btn.disabled=false;
     btn.style.background='';btn.style.color='';
     badge.textContent='Checked Out';badge.className='sc-badge badge-out';
@@ -1185,13 +1186,22 @@ function updateWorkerUI(){
 }
 async function toggleCI(){
   if(!S.selectedProj){toast('Select a project first','err');return;}
-  // Block checkin if already checked in on a different project
-  if(S.checkedIn && S.selectedProj !== S.user?.last_proj_id){
-    toast('Check out from your current project first','err');return;
-  }
   const proj=S.projects.find(p=>p.id===S.selectedProj),gpsOn=document.getElementById('gps-req').checked;
   const isDriver=S.user?.role==='driver';
   if(!S.checkedIn){
+    // If already checked in on a DIFFERENT project — auto checkout from old one first
+    if(S.user?.last_proj_id && S.user.last_proj_id !== S.selectedProj){
+      const oldProj=S.projects.find(p=>p.id===S.user.last_proj_id);
+      // Insert checkout event for old project
+      await db.from('events').insert({
+        type:'out',
+        worker_id:S.user.id,worker_name:S.user.name,
+        project_id:S.user.last_proj_id,
+        project_name:oldProj?.name||'',
+        gps_lat:S.gps?.lat,gps_lon:S.gps?.lon
+      });
+      toast(`👋 Auto checked out from ${oldProj?.name||'previous project'}`,'ok');
+    }
     // GPS distance check — only if GPS on, not driver, GPS available, AND project has coordinates
     if(gpsOn && !isDriver && S.gps && proj?.gps_lat && proj?.gps_lon){
       const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
