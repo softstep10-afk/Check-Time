@@ -99,7 +99,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .w-top p{font-size:11px;color:var(--muted);margin-top:1px}
 .out-btn{padding:8px 14px;background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text-secondary);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap;min-height:36px}
 .out-btn:hover{border-color:var(--text-secondary);color:var(--text)}
-.w-body{padding:20px 24px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;max-width:960px;margin:0 auto;width:100%}
+.w-body{padding:20px 24px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;width:100%}
 .sec-h{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:20px 0 10px;display:flex;align-items:center;gap:6px}
 .proj-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px}
 
@@ -1269,7 +1269,7 @@ function renderWorkerProjStats(projId){
 }
 async function refreshWorker(){
   const btn=document.querySelector('[onclick="refreshWorker()"]');
-  if(btn){btn.textContent='🔄';btn.disabled=true;}
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
   try{
     const [proj,tasks,wk,ev]=await Promise.all([
       db.from('projects').select('*').order('created_at').limit(500),
@@ -1281,22 +1281,35 @@ async function refreshWorker(){
     S.tasks=tasks.data||[];
     S.workers=wk.data||[];
     S.events=(ev.data||[]).reverse();
-    // Refresh current user's latest data
     const me=S.workers.find(w=>w.id===S.user?.id);
-    if(me)S.user={...S.user,...me};
+    if(me)Object.assign(S.user,me);
+    // Re-render everything visible
     renderProjPicker();
-    if(S.selectedProj){
-      loadWorkerTasks();
-      renderJournal();
-      renderWorkerProjStats(S.selectedProj);
-    }
-    checkWorkerMessageBell();
-    await loadUnreadMessages();
     loadWorkerTasks();
+    await loadUnreadMessages();
+    if(S.selectedProj){
+      renderJournal();
+      // Update On Site / Total Hours stats
+      const sc=document.getElementById('sc-proj');
+      if(sc) updateWorkerProjCard(S.selectedProj);
+    }
+    toast('✅ Updated','ok');
   }catch(err){
     toast('No connection — try again','err');
   }finally{
     if(btn){btn.textContent='🔄';btn.disabled=false;}
+  }
+}
+
+function updateWorkerProjCard(projId){
+  // Update On Site count and Total Hours shown on worker project card
+  const onSite=S.workers.filter(w=>w.checked_in&&w.last_proj_id===projId).length;
+  const totalH=calcHours(S.user?.id,projId);
+  const statsEl=document.getElementById('w-proj-stats');
+  if(statsEl&&statsEl.children.length>=2){
+    const c=statsEl.children;
+    if(c[0])c[0].querySelector('.sv').textContent=onSite;
+    if(c[1])c[1].querySelector('.sv').textContent=totalH.toFixed(1)+'h';
   }
 }
 
