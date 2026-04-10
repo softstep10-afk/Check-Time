@@ -1637,19 +1637,40 @@ function openProjDetail(projId){
     const isStale=isOn&&locAge!==null&&locAge>120;
     let statusLabel,statusClass;
     if(isOn&&!isStale){statusLabel='On Site';statusClass='on';}
-    else if(isOn&&isStale){statusLabel='⚠️ No GPS update';statusClass='away';}
+    else if(isOn&&isStale){statusLabel='⚠️ No GPS';statusClass='away';}
     else if(isOnOther){
       const otherProj=S.projects.find(p=>p.id===w.last_proj_id);
-      statusLabel=`↗ ${otherProj?otherProj.name:'Other project'}`;statusClass='away';
+      statusLabel=`↗ ${otherProj?otherProj.name:'Other'}`;statusClass='away';
     }
     else{statusLabel='Offline';statusClass='off';}
-    return`<div class="wrow" onclick="openWorkerDetail('${projId}','${w.id}')"><div class="wrow-av" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div class="wrow-info"><div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div><div class="wrow-stats"><div class="ws">Hours: <span>${h.toFixed(1)}h</span></div><div class="ws">Days: <span>${wd}</span></div><div class="ws">Earned: <span>$${earned.toFixed(2)}</span></div><div class="ws">Rate: <span>${rateLabel}</span></div></div></div><div class="wrow-status ${statusClass}">${statusLabel}</div></div>`;
+    // Force checkout button for managers — only if worker appears checked in
+    const forceCoBtn=w.checked_in
+      ?`<button onclick="event.stopPropagation();forceCheckout('${w.id}','${w.name.replace(/'/g,"\\'")}',event)" style="font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid rgba(239,68,68,.3);background:none;color:var(--red);cursor:pointer;font-family:var(--font);margin-top:4px;display:block">Force checkout</button>`
+      :'';
+    return`<div class="wrow" onclick="openWorkerDetail('${projId}','${w.id}')">
+      <div class="wrow-av" style="background:${w.color||'#f59e0b'};${!isOn?'opacity:0.5':''}">
+        ${w.name.charAt(0)}
+      </div>
+      <div class="wrow-info" style="${!isOn?'opacity:0.6':''}">
+        <div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div>
+        <div class="wrow-stats">
+          <div class="ws">Hours: <span>${h.toFixed(1)}h</span></div>
+          <div class="ws">Days: <span>${wd}</span></div>
+          <div class="ws">Earned: <span>$${earned.toFixed(2)}</span></div>
+          <div class="ws">Rate: <span>${rateLabel}</span></div>
+        </div>
+        ${forceCoBtn}
+      </div>
+      <div class="wrow-status ${statusClass}">${statusLabel}</div>
+    </div>`;
   }).join('');
   showDrillView('view-proj-detail');
   renderProjTasks();
   activeMediaTab=null;
   const folder=document.getElementById('proj-media-folder');
   if(folder)folder.style.display='none';
+  const list=document.getElementById('proj-media-list');
+  if(list)list.innerHTML='';
   ['photo','video','pdf'].forEach(t=>{
     const btn=document.getElementById('mtab-'+t);
     if(btn){btn.style.borderBottomColor='transparent';btn.style.color='var(--muted)';btn.style.background='none';}
@@ -2892,20 +2913,23 @@ let activeMediaTab = 'photo';
 
 function openMediaTab(type){
   const folder=document.getElementById('proj-media-folder');
+  const list=document.getElementById('proj-media-list');
   const colors={photo:'var(--gold)',video:'var(--red)',pdf:'var(--blue)'};
   const labels={photo:'📷 Add Photo',video:'🎥 Add Video',pdf:'📄 Add PDF'};
-  // Toggle: if same tab clicked and folder is open → close it
-  if(activeMediaTab===type && folder.style.display!=='none'){
+  // Toggle close if same tab clicked
+  if(activeMediaTab===type && folder && folder.style.display!=='none'){
     activeMediaTab=null;
     folder.style.display='none';
+    if(list)list.innerHTML=''; // clear content on close
     ['photo','video','pdf'].forEach(t=>{
       const btn=document.getElementById('mtab-'+t);
       if(btn){btn.style.borderBottomColor='transparent';btn.style.color='var(--muted)';btn.style.background='none';}
     });
     return;
   }
-  // Open folder
+  // Switch or open
   activeMediaTab=type;
+  if(list)list.innerHTML=''; // clear old content before loading new
   ['photo','video','pdf'].forEach(t=>{
     const btn=document.getElementById('mtab-'+t);
     if(!btn)return;
@@ -2914,14 +2938,13 @@ function openMediaTab(type){
     btn.style.color=active?colors[t]:'var(--muted)';
     btn.style.background=active?`rgba(${t==='photo'?'245,158,11':t==='video'?'239,68,68':'59,130,246'},.08)`:'none';
   });
-  // Update upload button inside folder
   const uploadBtn=document.getElementById('media-upload-btn');
   if(uploadBtn){
     uploadBtn.textContent=labels[type];
     uploadBtn.style.borderColor=colors[type];
     uploadBtn.style.color=colors[type];
   }
-  folder.style.display='block';
+  if(folder)folder.style.display='block';
   renderProjMedia();
 }
 
@@ -3423,6 +3446,21 @@ async function submitHourAdj(){
   closeModal('mod-adj-hours');
   await refreshManager();
   toast(`✅ ${hrs>0?'+':''}${hrs}h applied to ${w?.name}`,'ok');
+}
+
+async function forceCheckout(wId, wName, e){
+  if(e)e.stopPropagation();
+  if(!confirm(`Force checkout ${wName}?\nThis will mark them as checked out.`))return;
+  const w=S.workers.find(x=>x.id===wId);
+  await db.from('workers').update({checked_in:false,check_in_time:null}).eq('id',wId);
+  await db.from('events').insert({
+    type:'out',worker_id:wId,worker_name:wName,
+    project_id:w?.last_proj_id,project_name:null,
+    gps_lat:null,gps_lon:null
+  });
+  toast(`✅ ${wName} checked out`,'ok');
+  await refreshManager();
+  openProjDetail(S.drillProj);
 }
 
 function checkWorkerMessageBell(){
