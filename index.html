@@ -16,8 +16,8 @@
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0f1117;--surface:#181c27;--card:#1e2333;--border:#2a3045;--gold:#f59e0b;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--purple:#a855f7;--text:#e8eaf0;--muted:#6b7280;--font:'DM Sans',sans-serif;--mono:'DM Mono',monospace}
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font)}
-.page{display:none;min-height:100vh;height:100%;overflow-y:auto;flex-direction:column;-webkit-overflow-scrolling:touch}
-.page.show{display:flex}
+.page{display:none;min-height:100vh;height:100%;overflow-y:auto;flex-direction:column;-webkit-overflow-scrolling:touch;pointer-events:none}
+.page.show{display:flex;pointer-events:all}
 #pg-loading{align-items:center;justify-content:center}
 .loading-box{text-align:center}
 .loading-box .ico{font-size:52px;margin-bottom:12px}
@@ -434,7 +434,6 @@ tr:hover td{background:rgba(255,255,255,.015)}
       </div>
 
     </div>
-    <div class="submit-row"><button class="sub-btn" onclick="submitReport()">📨 Submit Daily Report</button></div>
   </div>
 </div>
 <!-- IN-APP MEDIA VIEWER -->
@@ -3624,7 +3623,12 @@ function checkWorkerMessageBell(){
 
 function showWorkerMessage(){
   const w=S.workers.find(x=>x.id===S.user?.id)||S.user;
-  if(!w?.message)return;
+  if(!w?.message||!w.message.trim()){
+    // No message — hide bell silently, don't bubble
+    const bell=document.getElementById('w-msg-bell');
+    if(bell)bell.style.display='none';
+    return;
+  }
   const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
   const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
   const c=w.message_color||'gold';
