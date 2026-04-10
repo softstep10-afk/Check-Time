@@ -219,6 +219,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .wrow-status::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
 .wrow-status.on{background:rgba(34,197,94,.12);color:var(--green)}
 .wrow-status.off{background:rgba(107,114,128,.1);color:var(--muted)}
+.wrow-status.away{background:rgba(239,68,68,.12);color:var(--red)}
 .dayrow{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:space-between}
 .dayrow:hover{border-color:var(--gold)}
 .day-h{font-size:14px;font-weight:700}
@@ -1629,14 +1630,17 @@ function openProjDetail(projId){
     const earned=calcWorkerEarnings(w.id,projId);
     const wd=new Set(S.events.filter(e=>e.worker_id===w.id&&e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;
     const isOn=w.checked_in&&w.last_proj_id===projId;
+    const isOnOther=w.checked_in&&w.last_proj_id!==projId;
     const rateLabel=w.role==='subcontractor'?`Fixed: $${w.fixed_amount||0}`:`$${w.rate||0}/hr`;
-    // Check if location is stale (checked in but no GPS update for 2+ hours)
     const locAge=w.location_updated_at?Math.round((Date.now()-new Date(w.location_updated_at))/60000):null;
     const isStale=isOn&&locAge!==null&&locAge>120;
-    const hasLive=isOn&&w.current_lat&&w.current_lon;
     let statusLabel,statusClass;
-    if(isOn&&!isStale){statusLabel='● On Site';statusClass='on';}
-    else if(isOn&&isStale){statusLabel='? Unknown';statusClass='off';}
+    if(isOn&&!isStale){statusLabel='On Site';statusClass='on';}
+    else if(isOn&&isStale){statusLabel='⚠️ No GPS update';statusClass='away';}
+    else if(isOnOther){
+      const otherProj=S.projects.find(p=>p.id===w.last_proj_id);
+      statusLabel=`↗ ${otherProj?otherProj.name:'Other project'}`;statusClass='away';
+    }
     else{statusLabel='Offline';statusClass='off';}
     return`<div class="wrow" onclick="openWorkerDetail('${projId}','${w.id}')"><div class="wrow-av" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div class="wrow-info"><div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div><div class="wrow-stats"><div class="ws">Hours: <span>${h.toFixed(1)}h</span></div><div class="ws">Days: <span>${wd}</span></div><div class="ws">Earned: <span>$${earned.toFixed(2)}</span></div><div class="ws">Rate: <span>${rateLabel}</span></div></div></div><div class="wrow-status ${statusClass}">${statusLabel}</div></div>`;
   }).join('');
