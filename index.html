@@ -650,12 +650,68 @@ tr:hover td{background:rgba(255,255,255,.012)}
 
 /* Desktop: worker project detail = two columns */
 @media (min-width:768px){
+  /* Project detail two columns */
   #w-detail-inner{grid-template-columns:380px 1fr!important;align-items:start}
+
+  /* Desktop body padding */
   .w-gps-strip{padding:8px 32px}
   .w-body{padding:24px 32px}
+
+  /* Desktop home: two-column layout */
+  .wh-state{
+    flex-direction:row!important;
+    align-items:flex-start;
+    gap:28px;
+    max-width:1040px;
+    margin:0 auto;
+    padding:32px 40px!important;
+    width:100%;
+  }
+
+  /* Left col: project card + check in (fixed width) */
+  .wh-col-left{
+    flex:0 0 400px;
+    display:flex;
+    flex-direction:column;
+    gap:14px;
+  }
+
+  /* Right col: task + quick actions */
+  .wh-col-right{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+
+  /* Out state: left col only, centered */
+  #wh-state-out .wh-col-right{ display:none; }
+  #wh-state-out{
+    justify-content:center;
+    min-height:calc(100vh - 56px);
+    align-items:center;
+  }
+  #wh-state-out .wh-col-left{
+    flex:0 0 460px;
+  }
+
+  /* Bigger clock and button on desktop */
+  .wh-clock{font-size:52px!important}
+  .wh-primary-btn{font-size:19px!important;padding:24px!important}
+
+  /* Checked-in: right col shows task prominently */
+  #wh-state-in .wh-task-block{
+    flex:1;
+  }
+  #wh-state-in .wh-quick-actions{
+    grid-template-columns:repeat(4,1fr);
+  }
 }
+
 @media (min-width:1200px){
   #w-detail-inner{grid-template-columns:420px 1fr!important}
+  .wh-state{max-width:1200px!important;padding:40px 48px!important}
+  .wh-col-left{flex:0 0 440px!important}
 }
 
 @media (max-width:640px){
@@ -746,92 +802,102 @@ tr:hover td{background:rgba(255,255,255,.012)}
 
     <!-- STATE: Not checked in -->
     <div id="wh-state-out" class="wh-state">
+      <div class="wh-col-left">
 
-      <!-- Current project card — auto-filled from last_proj_id -->
-      <div class="wh-current-proj-card" id="wh-current-proj-card">
-        <div class="wh-cp-label">CURRENT PROJECT</div>
-        <div class="wh-cp-name" id="wh-selected-name">No project selected</div>
-        <div class="wh-cp-addr" id="wh-selected-addr"></div>
-        <button class="wh-change-btn" onclick="showWorkerProjectBrowse()">Change project →</button>
-      </div>
-
-      <!-- GPS status — compact, not dominant -->
-      <div class="wh-gps-compact">
-        <div class="wh-gps-status">
-          <div class="gdot spin" id="wh-gps-dot"></div>
-          <span id="wh-gps-txt">Acquiring GPS...</span>
+        <!-- Current project card — auto-filled from last_proj_id -->
+        <div class="wh-current-proj-card" id="wh-current-proj-card">
+          <div class="wh-cp-label">CURRENT PROJECT</div>
+          <div class="wh-cp-name" id="wh-selected-name">No project selected</div>
+          <div class="wh-cp-addr" id="wh-selected-addr"></div>
+          <button class="wh-change-btn" onclick="showWorkerProjectBrowse()">Change project →</button>
         </div>
-        <div class="wh-gps-toggle">
-          <span style="font-size:11px;color:var(--muted)">GPS</span>
-          <label class="tog"><input type="checkbox" id="wh-gps-req" checked onchange="syncGpsToggle(this)"><div class="tog-sl"></div></label>
+
+        <!-- GPS status — compact -->
+        <div class="wh-gps-compact">
+          <div class="wh-gps-status">
+            <div class="gdot spin" id="wh-gps-dot"></div>
+            <span id="wh-gps-txt">Acquiring GPS...</span>
+          </div>
+          <div class="wh-gps-toggle">
+            <span style="font-size:11px;color:var(--muted)">GPS</span>
+            <label class="tog"><input type="checkbox" id="wh-gps-req" checked onchange="syncGpsToggle(this)"><div class="tog-sl"></div></label>
+          </div>
         </div>
-      </div>
 
-      <!-- THE ONE BIG ACTION -->
-      <button id="wh-checkin-btn" class="wh-primary-btn wh-btn-in" onclick="whCheckIn()" disabled>
-        <span class="wh-btn-icon">✅</span>
-        <span class="wh-btn-label">Check In</span>
-      </button>
-
-      <!-- No project yet? Inline prompt -->
-      <div id="wh-no-proj-hint" class="wh-no-proj-hint" style="display:none">
-        <button onclick="showWorkerProjectBrowse()" class="wh-select-proj-btn">
-          📍 Select a project to start
+        <!-- THE ONE BIG ACTION -->
+        <button id="wh-checkin-btn" class="wh-primary-btn wh-btn-in" onclick="whCheckIn()" disabled>
+          <span class="wh-btn-icon">✅</span>
+          <span class="wh-btn-label">Check In</span>
         </button>
-      </div>
 
+        <!-- No project yet? Inline prompt -->
+        <div id="wh-no-proj-hint" class="wh-no-proj-hint" style="display:none">
+          <button onclick="showWorkerProjectBrowse()" class="wh-select-proj-btn">
+            📍 Select a project to start
+          </button>
+        </div>
+
+      </div><!-- end wh-col-left -->
     </div>
 
     <!-- STATE: Checked in -->
     <div id="wh-state-in" class="wh-state" style="display:none">
-      <div class="wh-project-banner checked-in">
-        <div class="wh-banner-top">
-          <div class="wh-banner-label">ON SITE</div>
-          <button class="wh-change-proj-btn" onclick="showWorkerProjectBrowse()">Change project</button>
-        </div>
-        <div class="wh-banner-name" id="wh-banner-name">—</div>
-        <div class="wh-banner-addr" id="wh-banner-addr"></div>
-        <div class="wh-banner-clock">
-          <div class="wh-clock" id="wh-clock">00:00:00</div>
-          <div class="wh-clock-sub">Time on site today</div>
-        </div>
-      </div>
 
-      <div class="wh-task-block">
-        <div class="wh-task-header">
-          <span class="wh-task-label">ACTIVE TASK</span>
-          <button class="wh-task-see-all" onclick="showWorkerTaskList()">All tasks →</button>
+      <!-- LEFT: project banner + check out -->
+      <div class="wh-col-left">
+        <div class="wh-project-banner checked-in">
+          <div class="wh-banner-top">
+            <div class="wh-banner-label">ON SITE</div>
+            <button class="wh-change-proj-btn" onclick="showWorkerProjectBrowse()">Change</button>
+          </div>
+          <div class="wh-banner-name" id="wh-banner-name">—</div>
+          <div class="wh-banner-addr" id="wh-banner-addr"></div>
+          <div class="wh-banner-clock">
+            <div class="wh-clock" id="wh-clock">00:00:00</div>
+            <div class="wh-clock-sub">Time on site today</div>
+          </div>
         </div>
-        <div id="wh-current-task" class="wh-task-content">
-          <div class="wh-no-task">⚠️ No active task assigned</div>
+
+        <button class="wh-primary-btn wh-btn-out" id="wh-checkout-btn" onclick="whCheckOut()">
+          <span class="wh-btn-icon">🚪</span>
+          <span class="wh-btn-label">Check Out</span>
+        </button>
+
+        <button class="wh-detail-link" onclick="whOpenDetail()">📊 Project Details & Media →</button>
+      </div><!-- end wh-col-left -->
+
+      <!-- RIGHT: task + quick actions -->
+      <div class="wh-col-right">
+        <div class="wh-task-block">
+          <div class="wh-task-header">
+            <span class="wh-task-label">ACTIVE TASK</span>
+            <button class="wh-task-see-all" onclick="showWorkerTaskList()">All tasks →</button>
+          </div>
+          <div id="wh-current-task" class="wh-task-content">
+            <div class="wh-no-task">⚠️ No active task assigned</div>
+          </div>
         </div>
-      </div>
 
-      <div class="wh-quick-actions">
-        <button class="wh-quick-btn" onclick="whOpenDetail()">
-          <span class="wh-qa-icon">📋</span>
-          <span class="wh-qa-label">Tasks</span>
-        </button>
-        <button class="wh-quick-btn" onclick="whOpenMediaAdd()">
-          <span class="wh-qa-icon">📷</span>
-          <span class="wh-qa-label">Photo</span>
-        </button>
-        <button class="wh-quick-btn" onclick="showWorkerHours()">
-          <span class="wh-qa-icon">⏱</span>
-          <span class="wh-qa-label">Hours</span>
-        </button>
-        <button class="wh-quick-btn" onclick="showWorkerMessage()">
-          <span class="wh-qa-icon">✉️</span>
-          <span class="wh-qa-label">Messages</span>
-        </button>
-      </div>
+        <div class="wh-quick-actions">
+          <button class="wh-quick-btn" onclick="whOpenDetail()">
+            <span class="wh-qa-icon">📋</span>
+            <span class="wh-qa-label">Tasks</span>
+          </button>
+          <button class="wh-quick-btn" onclick="whOpenMediaAdd()">
+            <span class="wh-qa-icon">📷</span>
+            <span class="wh-qa-label">Photo</span>
+          </button>
+          <button class="wh-quick-btn" onclick="showWorkerHours()">
+            <span class="wh-qa-icon">⏱</span>
+            <span class="wh-qa-label">Hours</span>
+          </button>
+          <button class="wh-quick-btn" onclick="showWorkerMessage()">
+            <span class="wh-qa-icon">✉️</span>
+            <span class="wh-qa-label">Messages</span>
+          </button>
+        </div>
+      </div><!-- end wh-col-right -->
 
-      <button class="wh-primary-btn wh-btn-out" id="wh-checkout-btn" onclick="whCheckOut()">
-        <span class="wh-btn-icon">🚪</span>
-        <span class="wh-btn-label">Check Out</span>
-      </button>
-
-      <button class="wh-detail-link" onclick="whOpenDetail()">📊 Project Details & Media →</button>
     </div>
   </div>
 
