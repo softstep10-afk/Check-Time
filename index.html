@@ -414,22 +414,23 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="sec-h">📋 Tasks for this project</div>
       <div id="w-tasks" style="margin-bottom:16px"></div>
 
-      <!-- 3. PHOTO / VIDEO — tabbed folders -->
+      <!-- 3. PHOTO / VIDEO — accordion folders -->
       <div class="sec-h">📸 Project Journal</div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px">
-        <!-- Upload buttons — OUTSIDE folder content -->
-        <div style="display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)">
-          <button onclick="document.getElementById('cam-photo').click()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📷 Add Photo</button>
-          <button onclick="document.getElementById('cam-video').click()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">🎥 Add Video</button>
-        </div>
         <!-- Tab buttons -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--border)">
-          <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" style="padding:11px;background:rgba(245,158,11,.08);border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+          <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
           <button id="wtab-video" onclick="openWorkerMediaTab('video')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🎥 Videos</button>
         </div>
         <input type="file" id="cam-photo" accept="image/*" capture="environment" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
         <input type="file" id="cam-video" accept="video/*" capture="environment" style="display:none" onchange="captureJournalMedia(event,'video')">
-        <div id="journal-entries" style="padding:0"></div>
+        <!-- Folder content — hidden until tab is opened -->
+        <div id="worker-media-folder" style="display:none">
+          <div style="padding:8px 12px;border-bottom:1px solid var(--border)">
+            <button id="worker-upload-btn" onclick="triggerWorkerMediaAdd()" style="padding:6px 14px;border-radius:7px;border:1px solid var(--gold);background:none;color:var(--gold);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📷 Add Photo</button>
+          </div>
+          <div id="journal-entries" style="padding:0"></div>
+        </div>
       </div>
 
     </div>
@@ -555,22 +556,22 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <!-- PROJECT MEDIA -->
           <div class="tcard" style="margin-bottom:14px">
             <div class="tcard-h"><h3>📸 Photos & Videos</h3></div>
-            <!-- Upload buttons row — OUTSIDE folder content -->
-            <div style="display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)">
-              <button onclick="document.getElementById('mgr-photo').click()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📷 Add Photo</button>
-              <button onclick="document.getElementById('mgr-video').click()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">🎥 Add Video</button>
-              <button onclick="document.getElementById('mgr-pdf').click()" style="padding:5px 12px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📄 Add PDF</button>
-            </div>
-            <!-- Tab buttons -->
+            <!-- Three folder tabs — click to open/close -->
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;border-bottom:1px solid var(--border)">
-              <button id="mtab-photo" onclick="openMediaTab('photo')" style="padding:12px;background:rgba(245,158,11,.08);border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
+              <button id="mtab-photo" onclick="openMediaTab('photo')" style="padding:12px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
               <button id="mtab-video" onclick="openMediaTab('video')" style="padding:12px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🎥 Videos</button>
               <button id="mtab-pdf" onclick="openMediaTab('pdf')" style="padding:12px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📄 PDFs</button>
             </div>
             <input type="file" id="mgr-photo" accept="image/*" multiple style="display:none" onchange="captureMgrMedia(event,'photo')">
             <input type="file" id="mgr-video" accept="video/*" style="display:none" onchange="captureMgrMedia(event,'video')">
             <input type="file" id="mgr-pdf" accept=".pdf" multiple style="display:none" onchange="uploadPDF(event)">
-            <div id="proj-media-list" style="padding:0"></div>
+            <!-- Folder content — hidden until a tab is opened -->
+            <div id="proj-media-folder" style="display:none">
+              <div style="padding:8px 12px;border-bottom:1px solid var(--border)">
+                <button id="media-upload-btn" onclick="triggerMediaAdd()" style="padding:6px 14px;border-radius:7px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📷 Add Photo</button>
+              </div>
+              <div id="proj-media-list" style="padding:0"></div>
+            </div>
           </div>
           <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">👷 Team on this project</h3>
           <div id="pd-workers"></div>
@@ -1646,10 +1647,14 @@ function openProjDetail(projId){
   }).join('');
   showDrillView('view-proj-detail');
   renderProjTasks();
-  activeMediaTab='photo';
-  renderProjMedia();
-  // Reset tab UI
-  setTimeout(()=>openMediaTab('photo'),0);
+  activeMediaTab=null;
+  const folder=document.getElementById('proj-media-folder');
+  if(folder)folder.style.display='none';
+  ['photo','video','pdf'].forEach(t=>{
+    const btn=document.getElementById('mtab-'+t);
+    if(btn){btn.style.borderBottomColor='transparent';btn.style.color='var(--muted)';btn.style.background='none';}
+  });
+  renderProjTasks();
 }
 function openWorkerDetail(projId,workerId){
   S.drillProj=projId;S.drillWorker=workerId;
@@ -2202,19 +2207,34 @@ function cancelJournal() {
 let activeWorkerMediaTab='photo';
 
 function openWorkerMediaTab(type){
+  const folder=document.getElementById('worker-media-folder');
+  // Toggle close if same tab clicked
+  if(activeWorkerMediaTab===type && folder && folder.style.display!=='none'){
+    activeWorkerMediaTab=null;
+    if(folder)folder.style.display='none';
+    ['photo','video'].forEach(t=>{
+      const btn=document.getElementById('wtab-'+t);
+      if(btn){btn.style.borderBottomColor='transparent';btn.style.color='var(--muted)';btn.style.background='none';}
+    });
+    return;
+  }
   activeWorkerMediaTab=type;
+  const colors={photo:'var(--gold)',video:'var(--red)'};
   ['photo','video'].forEach(t=>{
     const btn=document.getElementById('wtab-'+t);
     if(!btn)return;
     const active=t===type;
-    btn.style.borderBottomColor=active?'var(--gold)':'transparent';
-    btn.style.color=active?'var(--gold)':'var(--muted)';
-    btn.style.background=active?'rgba(245,158,11,.08)':'none';
+    btn.style.borderBottomColor=active?colors[t]:'transparent';
+    btn.style.color=active?colors[t]:'var(--muted)';
+    btn.style.background=active?`rgba(${t==='photo'?'245,158,11':'239,68,68'},.08)`:'none';
   });
-  const addBtn=document.getElementById('w-add-media-btn');
-  if(addBtn){
-    addBtn.textContent=type==='photo'?'📷 Add Photo':'🎥 Add Video';
+  const uploadBtn=document.getElementById('worker-upload-btn');
+  if(uploadBtn){
+    uploadBtn.textContent=type==='photo'?'📷 Add Photo':'🎥 Add Video';
+    uploadBtn.style.borderColor=colors[type];
+    uploadBtn.style.color=colors[type];
   }
+  if(folder)folder.style.display='block';
   renderJournal();
 }
 
@@ -2871,9 +2891,21 @@ async function clearMsgWorker(){
 let activeMediaTab = 'photo';
 
 function openMediaTab(type){
-  activeMediaTab = type;
-  const labels = {photo:'📷 Photos', video:'🎥 Videos', pdf:'📄 PDFs'};
-  const colors = {photo:'var(--gold)', video:'var(--red)', pdf:'var(--blue)'};
+  const folder=document.getElementById('proj-media-folder');
+  const colors={photo:'var(--gold)',video:'var(--red)',pdf:'var(--blue)'};
+  const labels={photo:'📷 Add Photo',video:'🎥 Add Video',pdf:'📄 Add PDF'};
+  // Toggle: if same tab clicked and folder is open → close it
+  if(activeMediaTab===type && folder.style.display!=='none'){
+    activeMediaTab=null;
+    folder.style.display='none';
+    ['photo','video','pdf'].forEach(t=>{
+      const btn=document.getElementById('mtab-'+t);
+      if(btn){btn.style.borderBottomColor='transparent';btn.style.color='var(--muted)';btn.style.background='none';}
+    });
+    return;
+  }
+  // Open folder
+  activeMediaTab=type;
   ['photo','video','pdf'].forEach(t=>{
     const btn=document.getElementById('mtab-'+t);
     if(!btn)return;
@@ -2882,12 +2914,14 @@ function openMediaTab(type){
     btn.style.color=active?colors[t]:'var(--muted)';
     btn.style.background=active?`rgba(${t==='photo'?'245,158,11':t==='video'?'239,68,68':'59,130,246'},.08)`:'none';
   });
-  // Update add button label
-  const addBtn=document.getElementById('media-add-btn');
-  if(addBtn){
-    addBtn.textContent=type==='photo'?'📷 Take Photo':type==='video'?'🎥 Record Video':'📄 Upload PDF';
-    addBtn.style.background=colors[type];
+  // Update upload button inside folder
+  const uploadBtn=document.getElementById('media-upload-btn');
+  if(uploadBtn){
+    uploadBtn.textContent=labels[type];
+    uploadBtn.style.borderColor=colors[type];
+    uploadBtn.style.color=colors[type];
   }
+  folder.style.display='block';
   renderProjMedia();
 }
 
