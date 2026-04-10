@@ -348,17 +348,24 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button id="w-back-btn" onclick="workerBackToProjects()" style="display:none;background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0">←</button>
       <div><h2 id="w-name">Worker</h2><p id="w-sub" style="font-size:11px;color:var(--muted);margin-top:2px">Select a project</p></div>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
+    <div style="display:flex;gap:6px;align-items:center">
       <button onclick="refreshWorker()" style="padding:7px 10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer">🔄</button>
-      <!-- Sound mode toggle -->
+      <!-- Sound mode -->
       <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-        <button id="notif-btn-sound" onclick="setNotifMode('sound')" style="padding:6px 8px;background:var(--gold);color:#000;border:none;font-size:13px;cursor:pointer" title="Sound on">🔔</button>
-        <button id="notif-btn-vibrate" onclick="setNotifMode('vibrate')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Vibrate only">📳</button>
+        <button id="notif-btn-sound" onclick="setNotifMode('sound')" style="padding:6px 8px;background:var(--gold);color:#000;border:none;font-size:13px;cursor:pointer" title="Sound">🔔</button>
+        <button id="notif-btn-vibrate" onclick="setNotifMode('vibrate')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Vibrate">📳</button>
         <button id="notif-btn-silent" onclick="setNotifMode('silent')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Silent">🔕</button>
       </div>
-      <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--blue);border-radius:8px;color:var(--blue);font-size:16px;cursor:pointer" title="Your tasks">📋<span style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">0</span></button>
-      <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:16px;cursor:pointer" title="You have a message">💬<span id="w-msg-dot" style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--red);border-radius:50%;border:2px solid var(--surface)"></span></button>
+      <!-- PROJECT TASKS bell — shows when there are undone tasks on current project -->
+      <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--blue);border-radius:8px;color:var(--blue);font-size:15px;cursor:pointer" title="Project tasks">
+        📋<span id="w-task-count" style="position:absolute;top:-6px;right:-6px;background:var(--blue);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">0</span>
+      </button>
+      <!-- PERSONAL MESSAGE bell — always visible when manager sent YOU a message -->
+      <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:rgba(245,158,11,.1);border:2px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:15px;cursor:pointer" title="Personal message from manager">
+        ✉️<span style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">1</span>
+      </button>
       <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
+      <button class="out-btn" onclick="doLogout()">Sign Out</button>
     </div>
   </div>
 
@@ -436,6 +443,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
   </div>
 </div>
+<!-- WORKER TASKS OVERLAY -->
+<div class="co-ov" id="worker-tasks-ov">
+  <div class="co-box" style="padding:0;overflow:hidden">
+    <div id="worker-tasks-body" style="max-height:80vh;overflow-y:auto"></div>
+  </div>
+</div>
+
 <!-- IN-APP MEDIA VIEWER -->
 <div id="media-viewer-ov" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.95);flex-direction:column" onclick="closeMediaViewer()">
   <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;flex-shrink:0" onclick="event.stopPropagation()">
@@ -1386,10 +1400,18 @@ async function loadWorkerTasks(){
   const undone=total-done;
   // Update task bell
   const bell=document.getElementById('w-task-bell');
+  const countEl=document.getElementById('w-task-count');
   if(bell){
-    if(undone>0){bell.style.display='block';bell.querySelector('span').textContent=undone;}
-    else if(total>0){bell.style.display='block';bell.querySelector('span').textContent='✓';bell.style.borderColor='var(--green)';bell.style.color='var(--green)';}
-    else{bell.style.display='none';}
+    if(undone>0){
+      bell.style.display='block';
+      if(countEl)countEl.textContent=undone;
+    } else if(total>0){
+      bell.style.display='block';
+      if(countEl){countEl.textContent='✓';countEl.style.background='var(--green)';}
+      bell.style.borderColor='var(--green)';bell.style.color='var(--green)';
+    } else {
+      bell.style.display='none';
+    }
   }
   S._lastTaskCount=undone;
   if(!all.length){c.innerHTML='<div class="empty"><div class="ei">✅</div><p>No tasks assigned</p></div>';return;}
@@ -3511,18 +3533,40 @@ function startRealtimeManager(){
 }
 
 function showWorkerTaskList(){
-  if(!S.selectedProj){
-    toast('Open a project to see your tasks','ok');
-    return;
+  // Load current tasks and show overlay
+  const tasks=S.tasks.filter(t=>{
+    const mine=t.worker_id===S.user?.id;
+    const proj=S.selectedProj&&t.project_id===S.selectedProj&&!t.worker_id;
+    return (mine||proj)&&!t.done;
+  });
+  const done=S.tasks.filter(t=>(t.worker_id===S.user?.id)&&t.done).length;
+  let html=`<div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+    <div style="font-size:14px;font-weight:700">📋 Your Tasks</div>
+    <button onclick="document.getElementById('worker-tasks-ov').className='co-ov'" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">×</button>
+  </div>`;
+  if(!tasks.length){
+    html+=`<div style="padding:32px;text-align:center;color:var(--muted)">
+      ${done>0?`✅ All ${done} task${done>1?'s':''} completed!`:'No tasks assigned'}
+    </div>`;
+  } else {
+    html+=tasks.map(t=>{
+      const proj=S.projects.find(p=>p.id===t.project_id);
+      const isOtherProj=t.project_id&&t.project_id!==S.selectedProj;
+      return`<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:flex-start;gap:10px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600">${t.title}</div>
+            ${isOtherProj&&proj?`<div style="font-size:11px;color:var(--blue);margin-top:2px">📍 ${proj.name}</div>`:''}
+            ${t.description?`<div style="font-size:12px;color:var(--muted);margin-top:3px">${t.description}</div>`:''}
+          </div>
+          <span style="font-size:10px;padding:2px 7px;border-radius:10px;background:${t.priority==='high'?'rgba(239,68,68,.15)':t.priority==='medium'?'rgba(245,158,11,.15)':'rgba(34,197,94,.15)'};color:${t.priority==='high'?'var(--red)':t.priority==='medium'?'var(--gold)':'var(--green)'};flex-shrink:0">${t.priority==='high'?'High':t.priority==='medium'?'Med':'Low'}</span>
+        </div>
+        <button onclick="markDone('${t.id}');document.getElementById('worker-tasks-ov').className='co-ov'" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid rgba(34,197,94,.3);background:rgba(34,197,94,.07);color:var(--green);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">✅ Mark Done</button>
+      </div>`;
+    }).join('');
   }
-  // Scroll the worker page container (not window) to tasks section
-  const tasksEl=document.getElementById('w-tasks');
-  const page=document.getElementById('pg-worker');
-  if(tasksEl && page){
-    // Get position of tasks relative to the scrollable page container
-    const taskTop=tasksEl.getBoundingClientRect().top - page.getBoundingClientRect().top + page.scrollTop - 80;
-    page.scrollTo({top: taskTop, behavior:'smooth'});
-  }
+  document.getElementById('worker-tasks-body').innerHTML=html;
+  document.getElementById('worker-tasks-ov').className='co-ov show';
 }
 async function workerMsgDone(){
   document.getElementById('worker-msg-ov').className='co-ov';
@@ -3613,12 +3657,15 @@ function checkWorkerMessageBell(){
   const w=S.workers.find(x=>x.id===S.user?.id)||S.user;
   if(w?.message&&w.message.trim()){
     bell.style.display='block';
+    // Unread = gold pulse, read = muted
     if(w.message_read){
       bell.style.borderColor='var(--muted)';
       bell.style.color='var(--muted)';
+      bell.style.background='none';
     } else {
       bell.style.borderColor='var(--gold)';
       bell.style.color='var(--gold)';
+      bell.style.background='rgba(245,158,11,.1)';
     }
   } else {
     bell.style.display='none';
