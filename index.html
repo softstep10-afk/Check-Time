@@ -1698,81 +1698,6 @@ function renderWorkerProjStats(projId){
     </div>
   `;
 }
-async function refreshWorker(){
-  const btn=document.querySelector('[onclick="refreshWorker()"]');
-  if(btn){btn.textContent='⏳';btn.disabled=true;}
-  try{
-    // ── STEP 1: HARD RESET all mutable state ──
-    S.projects     = [];
-    S.workers      = [];
-    S.tasks        = [];
-    S.events       = [];
-    S.managers     = [];
-    S._unreadMessages = [];
-    S._mediaCache  = null;
-    S._workerMsgCounts = {};
-    S._lastTaskCount = 0;
-
-    // ── STEP 2: FULL RE-FETCH from Supabase ──
-    const [projRes, tasksRes, wkRes, evRes, meRes] = await Promise.all([
-      db.from('projects').select('*').order('created_at').limit(500),
-      db.from('tasks').select('*').order('created_at').limit(500),
-      db.from('workers').select('*').order('created_at').limit(200),
-      db.from('events').select('*').order('created_at',{ascending:false}).limit(2000),
-      db.from('workers').select('*').eq('id', S.user.id).single()
-    ]);
-
-    // ── STEP 3: REBUILD state exclusively from fresh data ──
-    S.projects = projRes.data || [];
-    S.tasks    = tasksRes.data || [];
-    S.workers  = wkRes.data || [];
-    S.events   = (evRes.data || []).reverse();
-
-    // Re-sync current user from DB — full replace, no merge
-    if(meRes.data){
-      const freshMe = meRes.data;
-      // Preserve non-DB fields
-      const keep = {
-        isManager: S.user.isManager,
-        _pin: S.user._pin,
-      };
-      S.user = { ...freshMe, ...keep };
-      // Rebuild checkin state from fresh DB row
-      S.checkedIn   = !!freshMe.checked_in;
-      S.checkInTime = freshMe.check_in_time
-        ? new Date(freshMe.check_in_time).getTime()
-        : null;
-      S.selectedProj = freshMe.last_proj_id || null;
-    }
-
-    // ── STEP 4: RELOAD messages from DB ──
-    await loadUnreadMessages();
-
-    // ── STEP 5: FORCE FULL RE-RENDER ──
-    renderProjPicker();
-    loadWorkerTasks();
-    showWorkerView('home'); // rebuilds home from fresh S.checkedIn / S.user
-
-    toast('✅ Updated','ok');
-  }catch(err){
-    console.error('Refresh error:', err);
-    toast('No connection — try again','err');
-  }finally{
-    if(btn){btn.textContent='🔄';btn.disabled=false;}
-  }
-}
-
-function updateWorkerProjCard(projId){
-  // Update On Site count and Total Hours shown on worker project card
-  const onSite=S.workers.filter(w=>w.checked_in&&w.last_proj_id===projId).length;
-  const totalH=calcHours(S.user?.id,projId);
-  const statsEl=document.getElementById('w-proj-stats');
-  if(statsEl&&statsEl.children.length>=2){
-    const c=statsEl.children;
-    if(c[0])c[0].querySelector('.sv').textContent=onSite;
-    if(c[1])c[1].querySelector('.sv').textContent=totalH.toFixed(1)+'h';
-  }
-}
 
 // ═══ OFFLINE UPLOAD QUEUE ═══
 // Saves pending uploads to localStorage when offline
@@ -1800,7 +1725,6 @@ async function retryOfflineUploads(){
     localStorage.removeItem(OFFLINE_QUEUE_KEY);
   }catch(e){}
 }
-function workerBackToProjects(){ showWorkerView('home'); }
 function pickProj(id){openWorkerProject(id);}
 function updateWorkerUI(){
   const btn=document.getElementById('ci-btn'),badge=document.getElementById('sc-badge'),needVid=S.user?.require_video;
@@ -1864,15 +1788,6 @@ async function toggleCI(){
     setWorkerCheckedIn(true, S.selectedProj);
     // Retry up to 3 times on weak connection
     let saved=false;
-    for(let attempt=1;attempt<=3;attempt++){
-      try{
-        await db.from('workers').update({checked_in:true,check_in_time:new Date(S.checkInTime).toISOString(),last_proj_id:S.selectedProj}).eq('id',S.user.id);
-        await db.from('events').insert({type:'in',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
-        saved=true;break;
-      }catch(err){
-        if(attempt<3){await new Promise(r=>setTimeout(r,1500));}
-      }
-    }
     if(!saved){toast('⚠️ Checked in locally — will sync when connection improves','ok');}
     else{toast('✅ Checked in!','ok');}
     startLiveTracking();
@@ -4128,96 +4043,12 @@ async function deleteActivity(id){
 
 // ─── SINGLE VIEW CONTROLLER ───────────────────────────────────────────
 // ALL view switching must go through this one function. No exceptions.
-function showWorkerView(view){
-  const home    = document.getElementById('w-view-home');
-  const browse  = document.getElementById('w-view-projects');
-  const detail  = document.getElementById('w-view-detail');
-  const backBtn = document.getElementById('w-back-btn');
-  if(home)   home.style.display   = 'none';
-  if(browse) browse.style.display = 'none';
-  if(detail) detail.style.display = 'none';
-  if(backBtn)backBtn.style.display= 'none';
-  switch(view){
-    case 'home':
-      if(home)home.style.display='flex';
-      document.getElementById('w-sub').textContent=
-        S.checkedIn ? `✅ ${S.projects.find(p=>p.id===S.user?.last_proj_id)?.name||'Checked In'}` : 'Select a project';
-      renderWorkerHome();
-      break;
-    case 'browse':
-      if(browse)browse.style.display='block';
-      if(backBtn)backBtn.style.display='block';
-      renderProjPicker();
-      break;
-    case 'detail':
-      if(detail)detail.style.display='block';
-      if(backBtn)backBtn.style.display='block';
-      break;
-  }
-}
 
 // Convenience aliases
-function showWorkerHome()          { showWorkerView('home'); }
-function showWorkerProjectBrowse() { showWorkerView('browse'); }
 
 // ─── SINGLE STATE SETTER ──────────────────────────────────────────────
 // All check-in/out state changes must use this.
-function setWorkerCheckedIn(val, projId){
-  S.checkedIn = val;
-  if(val && projId){
-    S.selectedProj = projId;
-    if(S.user) S.user.last_proj_id = projId;
-    S.checkInTime = S.checkInTime || Date.now();
-  } else {
-    S.checkInTime = null;
-    if(S.user){ S.user.last_proj_id = null; S.user.check_in_time = null; }
-  }
-}
 
-function renderWorkerHome(){
-  const checkedIn = S.checkedIn && S.user?.last_proj_id;
-  document.getElementById('wh-state-out').style.display = checkedIn ? 'none' : 'flex';
-  document.getElementById('wh-state-in').style.display  = checkedIn ? 'flex' : 'none';
-
-  if(checkedIn){
-    // ── Checked-in state ──
-    const p = S.projects.find(x=>x.id===S.user.last_proj_id);
-    document.getElementById('wh-banner-name').textContent = p?.name || '—';
-    document.getElementById('wh-banner-addr').textContent = p?.address || '';
-    S.selectedProj = S.user.last_proj_id;
-    document.getElementById('w-sub').textContent = `✅ ${p?.name||'Checked In'}`;
-    renderHomeTask();
-
-  } else {
-    // ── Not checked-in state ──
-    // Auto-select last used project — worker doesn't need to pick every time
-    const lastId = S.user?.last_proj_id;
-    const lastProj = lastId ? S.projects.find(x=>x.id===lastId) : null;
-
-    const noHint  = document.getElementById('wh-no-proj-hint');
-    const cpCard  = document.getElementById('wh-current-proj-card');
-    const ciBtn   = document.getElementById('wh-checkin-btn');
-
-    if(lastProj){
-      // Have a last project — auto-select it, enable Check In immediately
-      S.selectedProj = lastProj.id;
-      document.getElementById('wh-selected-name').textContent = lastProj.name;
-      document.getElementById('wh-selected-addr').textContent = lastProj.address || '';
-      if(cpCard) cpCard.style.borderColor = 'rgba(245,158,11,.4)';
-      if(ciBtn)  ciBtn.disabled = false;
-      if(noHint) noHint.style.display = 'none';
-    } else {
-      // No last project — show "select a project" hint
-      document.getElementById('wh-selected-name').textContent = 'No project selected';
-      document.getElementById('wh-selected-addr').textContent = '';
-      if(cpCard) cpCard.style.borderColor = 'var(--border)';
-      if(ciBtn)  ciBtn.disabled = true;
-      if(noHint) noHint.style.display = 'block';
-    }
-
-    syncGpsDots();
-  }
-}
 
 function renderHomeProjList(){
   const el=document.getElementById('wh-proj-list');
@@ -4238,12 +4069,6 @@ function renderHomeProjList(){
   }).join('');
 }
 
-function whSelectProj(projId){
-  S.selectedProj = projId;
-  if(S.user) S.user.last_proj_id = projId; // persist in memory
-  // Return to home — it will show this project and enable Check In
-  showWorkerView('home');
-}
 
 function renderHomeTask(){
   const el=document.getElementById('wh-current-task');
@@ -4275,37 +4100,142 @@ function renderHomeTask(){
   `;
 }
 
+
+
+
+
+
+
+// ═══ WORKER HOME SCREEN ═══
+function setWorkerCheckedIn(isIn, projId=null){
+  S.checkedIn = !!isIn;
+  if(isIn){
+    S.checkInTime = Date.now();
+    S.selectedProj = projId || S.selectedProj || S.user?.last_proj_id || null;
+    if(S.user){
+      S.user.checked_in = true;
+      S.user.check_in_time = new Date(S.checkInTime).toISOString();
+      if(S.selectedProj) S.user.last_proj_id = S.selectedProj;
+    }
+  } else {
+    S.checkInTime = null;
+    if(S.user){ S.user.checked_in = false; S.user.check_in_time = null; }
+  }
+}
+function showWorkerView(view){
+  const home=document.getElementById('w-view-home');
+  const browse=document.getElementById('w-view-projects');
+  const detail=document.getElementById('w-view-detail');
+  const backBtn=document.getElementById('w-back-btn');
+  if(home)home.style.display='none';
+  if(browse)browse.style.display='none';
+  if(detail)detail.style.display='none';
+  if(backBtn)backBtn.style.display='none';
+  switch(view){
+    case 'home':
+      if(home)home.style.display='flex';
+      document.getElementById('w-sub').textContent=
+        S.checkedIn
+          ?`✅ ${S.projects.find(p=>p.id===(S.user?.last_proj_id||S.selectedProj))?.name||'Checked In'}`
+          :(S.selectedProj
+              ?(S.projects.find(p=>p.id===S.selectedProj)?.name||'Ready to check in')
+              :'Ready to start');
+      renderWorkerHome();
+      break;
+    case 'browse':
+      if(browse)browse.style.display='block';
+      if(backBtn)backBtn.style.display='block';
+      document.getElementById('w-sub').textContent='Change project';
+      renderProjPicker();
+      break;
+    case 'detail':
+      if(detail)detail.style.display='block';
+      if(backBtn)backBtn.style.display='block';
+      break;
+  }
+}
+function showWorkerHome(){ showWorkerView('home'); }
+function showWorkerProjectBrowse(){ showWorkerView('browse'); }
+function workerBackToProjects(){ showWorkerView('home'); }
+function renderWorkerHome(){
+  const checkedIn=!!(S.checkedIn&&(S.user?.last_proj_id||S.selectedProj));
+  const stateOut=document.getElementById('wh-state-out');
+  const stateIn=document.getElementById('wh-state-in');
+  if(stateOut)stateOut.style.display=checkedIn?'none':'flex';
+  if(stateIn)stateIn.style.display=checkedIn?'flex':'none';
+  if(checkedIn){
+    const activeProjId=S.user?.last_proj_id||S.selectedProj;
+    const p=S.projects.find(x=>x.id===activeProjId);
+    S.selectedProj=activeProjId;
+    const bn=document.getElementById('wh-banner-name');
+    const ba=document.getElementById('wh-banner-addr');
+    if(bn)bn.textContent=p?.name||'—';
+    if(ba)ba.textContent=p?.address||'';
+    renderHomeTask();
+    syncGpsDots();
+    return;
+  }
+  const noHint=document.getElementById('wh-no-proj-hint');
+  const cpCard=document.getElementById('wh-current-proj-card');
+  const ciBtn=document.getElementById('wh-checkin-btn');
+  const selName=document.getElementById('wh-selected-name');
+  const selAddr=document.getElementById('wh-selected-addr');
+  const prefId=S.selectedProj||S.user?.last_proj_id||null;
+  const prefProj=prefId?S.projects.find(x=>x.id===prefId):null;
+  if(prefProj){
+    S.selectedProj=prefProj.id;
+    if(selName)selName.textContent=prefProj.name;
+    if(selAddr)selAddr.textContent=prefProj.address||'';
+    if(cpCard)cpCard.style.borderColor='rgba(245,158,11,.4)';
+    if(ciBtn)ciBtn.disabled=false;
+    if(noHint)noHint.style.display='none';
+  } else {
+    S.selectedProj=null;
+    if(selName)selName.textContent='No project selected';
+    if(selAddr)selAddr.textContent='';
+    if(cpCard)cpCard.style.borderColor='var(--border)';
+    if(ciBtn)ciBtn.disabled=true;
+    if(noHint)noHint.style.display='block';
+  }
+  syncGpsDots();
+}
+function whSelectProj(projId){
+  const p=S.projects.find(x=>x.id===projId);
+  S.selectedProj=projId;
+  if(S.user)S.user.last_proj_id=projId;
+  const selName=document.getElementById('wh-selected-name');
+  const selAddr=document.getElementById('wh-selected-addr');
+  const ciBtn=document.getElementById('wh-checkin-btn');
+  const noHint=document.getElementById('wh-no-proj-hint');
+  const cpCard=document.getElementById('wh-current-proj-card');
+  if(selName)selName.textContent=p?.name||'—';
+  if(selAddr)selAddr.textContent=p?.address||'';
+  if(ciBtn)ciBtn.disabled=false;
+  if(noHint)noHint.style.display='none';
+  if(cpCard)cpCard.style.borderColor='rgba(245,158,11,.4)';
+  showWorkerView('home');
+}
 async function whCheckIn(){
   if(!S.selectedProj){toast('Select a project first','err');return;}
   const btn=document.getElementById('wh-checkin-btn');
   if(btn){btn.disabled=true;const lbl=btn.querySelector('.wh-btn-label');if(lbl)lbl.textContent='Checking in...';}
-  // Sync GPS toggle from home screen to detail screen before toggleCI reads it
   const whGps=document.getElementById('wh-gps-req');
   const detGps=document.getElementById('gps-req');
   if(whGps&&detGps)detGps.checked=whGps.checked;
-  // toggleCI needs selectedProj set (already is) and calls showWorkerView('home') at end
   await toggleCI();
   if(btn){btn.disabled=false;const lbl=btn.querySelector('.wh-btn-label');if(lbl)lbl.textContent='Check In';}
 }
-
 async function whCheckOut(){
   S.selectedProj=S.user?.last_proj_id||S.selectedProj;
   if(!S.selectedProj){toast('No active project','err');return;}
-  // toggleCI reads S.checkedIn=true → goes to checkout path → showWorkerView('home')
   await toggleCI();
 }
-
 function whOpenDetail(){
   S.selectedProj=S.user?.last_proj_id||S.selectedProj;
   if(!S.selectedProj){toast('No project selected','err');return;}
-  openWorkerProject(S.selectedProj); // sets view to 'detail' via showWorkerView
+  openWorkerProject(S.selectedProj);
 }
-
-function whOpenMediaAdd(){
-  whOpenDetail();
-  setTimeout(()=>openWorkerMediaTab('photo'),200);
-}
-
+function whOpenMediaAdd(){ whOpenDetail(); setTimeout(()=>openWorkerMediaTab('photo'),200); }
 function syncGpsDots(){
   const dot=document.getElementById('gps-dot');
   const whDot=document.getElementById('wh-gps-dot');
@@ -4314,13 +4244,48 @@ function syncGpsDots(){
   if(dot&&whDot)whDot.className=dot.className;
   if(txt&&whTxt)whTxt.textContent=txt.textContent;
 }
-
 function syncGpsToggle(el){
   const detail=document.getElementById('gps-req');
   if(detail)detail.checked=el.checked;
 }
+async function refreshWorker(){
+  const btn=document.querySelector('[onclick="refreshWorker()"]');
+  if(btn){btn.textContent='⏳';btn.disabled=true;}
+  try{
+    S.projects=[];S.workers=[];S.tasks=[];S.events=[];
+    S._unreadMessages=[];S._workerMsgCounts={};S._lastTaskCount=0;
+    const [projRes,tasksRes,wkRes,evRes,meRes]=await Promise.all([
+      db.from('projects').select('*').order('created_at').limit(500),
+      db.from('tasks').select('*').order('created_at').limit(500),
+      db.from('workers').select('*').order('created_at').limit(200),
+      db.from('events').select('*').order('created_at',{ascending:false}).limit(2000),
+      db.from('workers').select('*').eq('id',S.user.id).single()
+    ]);
+    S.projects=projRes.data||[];
+    S.tasks=tasksRes.data||[];
+    S.workers=wkRes.data||[];
+    S.events=(evRes.data||[]).reverse();
+    if(meRes.data){
+      const f=meRes.data;
+      S.user={...f,isManager:false};
+      S.checkedIn=!!f.checked_in;
+      S.checkInTime=f.check_in_time?new Date(f.check_in_time).getTime():null;
+      S.selectedProj=f.last_proj_id||null;
+    }
+    await loadUnreadMessages();
+    renderProjPicker();
+    loadWorkerTasks();
+    if(S.selectedProj){renderWorkerProjStats(S.selectedProj);renderJournal();}
+    showWorkerView('home');
+    toast('✅ Updated','ok');
+  }catch(err){
+    console.error('Refresh error:',err);
+    toast('No connection — try again','err');
+  }finally{
+    if(btn){btn.textContent='🔄';btn.disabled=false;}
+  }
+}
 
-// ═══ WORKER HOME SCREEN ═══
 function startRealtimeWorker(){
   // Channel 1: Personal messages for this worker only
   db.channel('personal-msgs-'+S.user.id)
