@@ -3092,7 +3092,31 @@ function triggerMediaAdd(){
   else document.getElementById('mgr-pdf').click();
 }
 // ═══ SOUND NOTIFICATIONS ═══
-// ═══ SOUND & VIBRATION ═══
+// ═══ SOUND & VIBRATION — single AudioContext, initialized on first touch ═══
+const NOTIF_KEY='cc_notif_mode';
+let _audioCtx=null;
+
+// Initialize audio on first user interaction
+function initAudioCtx(){
+  if(_audioCtx)return;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(AC){_audioCtx=new AC();}
+  }catch(e){}
+}
+
+// Call this on every user interaction to unlock audio
+function unlockAudio(){
+  if(!_audioCtx){initAudioCtx();}
+  if(_audioCtx&&_audioCtx.state==='suspended'){
+    _audioCtx.resume().catch(()=>{});
+  }
+}
+
+// Attach unlock to document once
+document.addEventListener('touchstart',unlockAudio,{once:false,passive:true});
+document.addEventListener('click',unlockAudio,{once:false,passive:true});
+
 function getNotifMode(){return localStorage.getItem(NOTIF_KEY)||'sound';}
 function setNotifMode(mode){
   localStorage.setItem(NOTIF_KEY,mode);
@@ -3102,43 +3126,42 @@ function setNotifMode(mode){
     btn.style.background=m===mode?'var(--gold)':'var(--border)';
     btn.style.color=m===mode?'#000':'var(--muted)';
   });
-  const labels={sound:'🔔 Sound on',vibrate:'📳 Vibrate only',silent:'🔕 Silent'};
-  toast(labels[mode],'ok');
+  toast({sound:'🔔 Sound on',vibrate:'📳 Vibrate only',silent:'🔕 Silent'}[mode],'ok');
 }
 
 function playSound(type){
   const mode=getNotifMode();
   if(mode==='silent')return;
-  // Vibration — works on Android Chrome
-  if(mode==='vibrate'||mode==='sound'){
-    if(navigator.vibrate){
-      if(type==='task')navigator.vibrate([150,80,150]);
-      else if(type==='message')navigator.vibrate([300]);
-      else if(type==='checkin')navigator.vibrate([100]);
-    }
+  // Vibration (Android Chrome only)
+  if(navigator.vibrate){
+    const patterns={task:[150,60,150],message:[250,80,250],checkin:[100]};
+    navigator.vibrate(patterns[type]||[150]);
   }
   if(mode!=='sound')return;
-  // Simple beep using AudioContext — requires prior user gesture on mobile
+  // Use shared AudioContext
+  unlockAudio();
+  if(!_audioCtx||_audioCtx.state==='closed')return;
   try{
-    const AudioCtx=window.AudioContext||window.webkitAudioContext;
-    if(!AudioCtx)return;
-    const ctx=new AudioCtx();
+    const ctx=_audioCtx;
     const gain=ctx.createGain();
     gain.connect(ctx.destination);
-    gain.gain.setValueAtTime(0,ctx.currentTime);
-    const freqs=type==='task'?[880,1100,880]:type==='message'?[660,880,1100]:type==='checkin'?[440,660,880]:[440];
-    freqs.forEach((f,i)=>{
+    const now=ctx.currentTime;
+    const configs={
+      task:    [{f:880,t:0},{f:1100,t:0.13},{f:880,t:0.26}],
+      message: [{f:660,t:0},{f:880,t:0.15},{f:1100,t:0.30}],
+      checkin: [{f:440,t:0},{f:660,t:0.12},{f:880,t:0.24}]
+    };
+    const notes=configs[type]||configs.task;
+    gain.gain.setValueAtTime(0.35,now);
+    gain.gain.exponentialRampToValueAtTime(0.001,now+notes.length*0.13+0.2);
+    notes.forEach(n=>{
       const osc=ctx.createOscillator();
       osc.type='sine';
-      osc.frequency.setValueAtTime(f,ctx.currentTime+i*0.12);
+      osc.frequency.setValueAtTime(n.f,now+n.t);
       osc.connect(gain);
-      osc.start(ctx.currentTime+i*0.12);
-      osc.stop(ctx.currentTime+i*0.12+0.1);
+      osc.start(now+n.t);
+      osc.stop(now+n.t+0.12);
     });
-    gain.gain.setValueAtTime(0.4,ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+freqs.length*0.12+0.15);
-    // Auto close context
-    setTimeout(()=>ctx.close(),1000);
   }catch(e){}
 }
 
@@ -3184,21 +3207,18 @@ function startAutoRefresh(){
       } else {
         const[t,me]=await Promise.all([
           db.from('tasks').select('*').order('created_at').limit(500),
-          db.from('workers').select('id,message,message_color,checked_in,check_in_time,last_proj_id').eq('id',S.user.id).single()
+          db.from('workers').select('*').eq('id',S.user.id).single()
         ]);
         if(t.data)S.tasks=t.data;
         if(me.data){
           const oldMsg=S.user?.message;
           Object.assign(S.user,me.data);
-          const w=S.workers.find(x=>x.id===S.user.id);
-          if(w)Object.assign(w,me.data);
-          if(me.data.message&&me.data.message!==oldMsg&&me.data.message.trim()){
-            const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
-            const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
-            const c=me.data.message_color||'gold';
-            const el=document.getElementById('worker-msg-text');
-            if(el){el.textContent=me.data.message;el.style.borderColor=msgColors[c];el.style.background=msgBg[c];el.style.color=msgColors[c];}
-            document.getElementById('worker-msg-ov').className='co-ov show';
+          const idx=S.workers.findIndex(x=>x.id===S.user.id);
+          if(idx>=0)Object.assign(S.workers[idx],me.data);
+          // New message arrived via polling
+          if(me.data.message&&me.data.message.trim()&&me.data.message!==oldMsg){
+            showPersonalMessageOverlay(me.data.message,me.data.message_color||'gold');
+            playSound('message');
           }
           checkWorkerMessageBell();
         }
@@ -3422,41 +3442,29 @@ async function deleteActivity(id){
 
 // ═══ REALTIME SUBSCRIPTIONS ═══
 function startRealtimeWorker(){
-  db.channel('worker-realtime')
-    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers',filter:`id=eq.${S.user.id}`},payload=>{
+  // Subscribe without row-level filter for reliability
+  // (row-level filters require Supabase RLS — filter in JS instead)
+  db.channel('worker-rt-'+Date.now())
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers'},payload=>{
+      if(payload.new.id!==S.user.id)return; // filter in JS
       const updated=payload.new;
       const oldMsg=S.user?.message;
-      S.user={...S.user,...updated};
-      const w=S.workers.find(x=>x.id===S.user.id);
-      if(w)Object.assign(w,updated);
+      Object.assign(S.user,updated);
+      const idx=S.workers.findIndex(x=>x.id===S.user.id);
+      if(idx>=0)Object.assign(S.workers[idx],updated);
       checkWorkerMessageBell();
-      // Show message overlay if new message arrived while logged in
-      if(updated.message&&updated.message!==oldMsg&&updated.message.trim()){
-        const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
-        const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
-        const c=updated.message_color||'gold';
-        const el=document.getElementById('worker-msg-text');
-        el.textContent=updated.message;
-        el.style.borderColor=msgColors[c]||'var(--gold)';
-        el.style.background=msgBg[c]||'rgba(245,158,11,.08)';
-        el.style.color=msgColors[c]||'var(--gold)';
-        document.getElementById('worker-msg-ov').className='co-ov show';
+      if(updated.message&&updated.message.trim()&&updated.message!==oldMsg){
+        showPersonalMessageOverlay(updated.message,updated.message_color||'gold');
         playSound('message');
-        toast('💬 New message from manager!','ok');
+        toast('✉️ Personal message from manager','ok');
       }
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks'},payload=>{
       const t=payload.new;
-      // Avoid duplicate
-      if(!S.tasks.find(x=>x.id===t.id)) S.tasks.push(t);
+      if(!S.tasks.find(x=>x.id===t.id))S.tasks.push(t);
       const isMyTask=t.worker_id===S.user.id;
       const isMyProject=t.project_id===S.selectedProj;
-      const isGeneral=!t.worker_id;
-      if(isMyTask||( isMyProject && isGeneral)){
-        loadWorkerTasks();
-        playSound('task');
-        toast(`📋 New task: ${t.title}`,'ok');
-      } else if(isMyTask){
+      if(isMyTask||(isMyProject&&!t.worker_id)){
         loadWorkerTasks();
         playSound('task');
         toast(`📋 New task: ${t.title}`,'ok');
@@ -3469,6 +3477,18 @@ function startRealtimeWorker(){
       loadWorkerTasks();
     })
     .subscribe();
+}
+
+function showPersonalMessageOverlay(message,color){
+  const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
+  const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
+  const el=document.getElementById('worker-msg-text');
+  if(!el)return;
+  el.textContent=message;
+  el.style.borderColor=msgColors[color]||'var(--gold)';
+  el.style.background=msgBg[color]||'rgba(245,158,11,.08)';
+  el.style.color=msgColors[color]||'var(--gold)';
+  document.getElementById('worker-msg-ov').className='co-ov show';
 }
 
 function startRealtimeManager(){
@@ -3654,22 +3674,12 @@ function checkWorkerMessageBell(){
 }
 
 function showWorkerMessage(){
-  const w=S.workers.find(x=>x.id===S.user?.id)||S.user;
-  if(!w?.message||!w.message.trim()){
-    // No message — hide bell silently, don't bubble
-    const bell=document.getElementById('w-msg-bell');
-    if(bell)bell.style.display='none';
+  const msg=S.user?.message;
+  if(!msg||!msg.trim()){
+    checkWorkerMessageBell();
     return;
   }
-  const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
-  const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
-  const c=w.message_color||'gold';
-  const el=document.getElementById('worker-msg-text');
-  el.textContent=w.message;
-  el.style.borderColor=msgColors[c]||'var(--gold)';
-  el.style.background=msgBg[c]||'rgba(245,158,11,.08)';
-  el.style.color=msgColors[c]||'var(--gold)';
-  document.getElementById('worker-msg-ov').className='co-ov show';
+  showPersonalMessageOverlay(msg, S.user?.message_color||'gold');
 }
 
 function showMgrNotifications(){
