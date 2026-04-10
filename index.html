@@ -94,25 +94,193 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
 /* ── Worker Page ── */
 #pg-worker{background:var(--bg);width:100%}
-.w-top{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;gap:12px}
-.w-top h2{font-size:15px;font-weight:700;line-height:1.2}
-.w-top p{font-size:11px;color:var(--muted);margin-top:1px}
-.out-btn{padding:8px 14px;background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--text-secondary);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap;min-height:36px}
-.out-btn:hover{border-color:var(--text-secondary);color:var(--text)}
-.w-body{padding:20px 24px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;width:100%}
-.sec-h{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:20px 0 10px;display:flex;align-items:center;gap:6px}
-.proj-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:12px}
 
-/* Project list items */
-.proj-item{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-md);padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:space-between;animation:slideUp .2s ease}
-.proj-item:hover{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.03)}
+/* ── Worker Top Bar ── */
+.w-top{
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:0 20px;
+  height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:20;
+  gap:12px;
+}
+.w-top-left{display:flex;align-items:center;gap:10px;min-width:0}
+.w-back-btn{
+  display:none;background:none;border:none;
+  color:var(--gold);font-size:22px;cursor:pointer;
+  padding:4px 8px 4px 0;line-height:1;flex-shrink:0;
+}
+.w-identity{min-width:0}
+.w-identity h2{font-size:15px;font-weight:700;letter-spacing:-.2px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w-identity p{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.w-top-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+/* Bell group */
+.w-bell-group{display:flex;gap:4px;align-items:center}
+.w-bell-btn{
+  position:relative;width:38px;height:38px;
+  border-radius:var(--r-sm);border:1.5px solid var(--border);
+  background:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.w-bell-btn:hover{border-color:rgba(255,255,255,.2);background:var(--card)}
+.w-bell-task{border-color:rgba(59,130,246,.4);color:var(--blue)}
+.w-bell-msg{border-color:var(--gold);background:rgba(245,158,11,.08);color:var(--gold)}
+.w-bell-icon{font-size:15px;line-height:1}
+.w-bell-badge{
+  position:absolute;top:-5px;right:-5px;
+  background:var(--red);color:#fff;
+  font-size:9px;font-weight:700;
+  padding:1px 4px;border-radius:var(--r-full);
+  font-family:var(--font);min-width:15px;text-align:center;
+  border:1.5px solid var(--surface);
+}
+.w-bell-badge-msg{background:var(--gold);color:#000}
+
+/* Sound group */
+.w-sound-group{display:flex;border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden;flex-shrink:0}
+.w-sound-btn{
+  width:32px;height:36px;border:none;
+  background:var(--card);color:var(--muted);
+  font-size:13px;cursor:pointer;transition:all .15s;
+}
+.w-sound-btn:hover{background:var(--border)}
+.w-sound-btn.active{background:var(--gold);color:#000}
+
+/* Top bar action buttons */
+.w-action-btn{
+  height:36px;padding:0 12px;
+  border-radius:var(--r-sm);border:1px solid var(--border);
+  background:none;color:var(--text-secondary);
+  font-family:var(--font);font-size:12px;font-weight:500;
+  cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0;
+}
+.w-action-btn:hover{border-color:rgba(255,255,255,.2);color:var(--text)}
+.w-action-gold{border-color:rgba(245,158,11,.4);color:var(--gold)}
+.w-action-gold:hover{background:rgba(245,158,11,.08)}
+.w-action-logout{color:var(--muted)}
+.w-action-logout:hover{color:var(--red);border-color:rgba(239,68,68,.3)}
+
+/* ── Worker Body ── */
+.w-body{padding:20px 24px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;width:100%}
+
+/* ── GPS Strip ── */
+.w-gps-strip{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 24px;
+  background:rgba(0,0,0,.2);
+  border-bottom:1px solid var(--border-soft);
+  font-size:11px;
+}
+.w-gps-left{display:flex;align-items:center;gap:7px;color:var(--muted)}
+.w-gps-right{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.w-gps-label{font-size:11px;font-weight:600;letter-spacing:.03em}
+
+/* ── Project List ── */
+.proj-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px}
+
+/* ── Section Labels (worker right col) ── */
+.w-section-label{
+  display:flex;align-items:center;gap:8px;
+  font-size:11px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--muted);
+  margin:0 0 12px;padding-bottom:8px;
+  border-bottom:1px solid var(--border-soft);
+}
+.w-sec-icon{font-size:14px}
+
+/* ── Status Card ── */
+.w-status-card{
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:20px;
+  margin-bottom:16px;
+  transition:border-color .25s;
+}
+.w-status-card.checked-in{
+  border-color:rgba(34,197,94,.35);
+  background:linear-gradient(180deg,rgba(34,197,94,.04) 0%,var(--surface) 60%);
+}
+.w-status-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+.w-status-meta{flex:1;min-width:0}
+.w-status-proj-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:4px}
+.sc-name{font-size:20px;font-weight:700;letter-spacing:-.3px;line-height:1.2;margin-bottom:4px}
+.w-status-addr{font-size:12px;color:var(--blue);margin-top:2px}
+.w-status-badge-wrap{flex-shrink:0}
+.w-stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.w-clock-area{
+  display:flex;align-items:center;justify-content:center;
+  padding:14px 0 16px;
+  border-top:1px solid var(--border-soft);
+  border-bottom:1px solid var(--border-soft);
+  margin-bottom:16px;
+  background:rgba(0,0,0,.12);
+  border-radius:var(--r-sm);
+}
+.w-clock-block{text-align:center}
+.clock{font-family:var(--mono);font-size:40px;font-weight:400;color:var(--gold);letter-spacing:3px;line-height:1}
+.clock-lbl{font-size:11px;color:var(--muted);margin-top:5px;font-weight:500;letter-spacing:.02em}
+.ci-btn{
+  width:100%;padding:18px;border-radius:var(--r-md);border:none;
+  font-family:var(--font);font-size:16px;font-weight:700;
+  cursor:pointer;transition:all .25s;letter-spacing:-.1px;
+}
+.ci-btn.do-in{
+  background:linear-gradient(135deg,#22c55e,#16a34a);
+  color:#fff;box-shadow:0 4px 20px rgba(34,197,94,.25);
+}
+.ci-btn.do-out{
+  background:linear-gradient(135deg,#ef4444,#dc2626);
+  color:#fff;box-shadow:0 4px 20px rgba(239,68,68,.25);
+}
+.ci-btn:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 6px 24px rgba(0,0,0,.3)}
+.ci-btn:disabled{background:var(--card);color:var(--muted);box-shadow:none;cursor:not-allowed;transform:none;filter:none}
+
+/* ── Notes box ── */
+.notes-box{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.18);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px}
+.notes-box h4{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:8px}
+.notes-box p{font-size:13px;line-height:1.65;color:var(--text);white-space:pre-wrap}
+
+/* ── Media Card ── */
+.w-media-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-md);overflow:hidden;margin-bottom:16px;
+}
+.w-media-tabs{display:grid;grid-template-columns:1fr 1fr}
+.w-media-tab{
+  padding:13px;background:none;border:none;
+  border-bottom:2px solid transparent;
+  color:var(--muted);font-family:var(--font);
+  font-size:13px;font-weight:600;cursor:pointer;
+  transition:all .15s;
+}
+.w-media-tab:hover{color:var(--text)}
+.w-media-tab.active-photo{border-bottom-color:var(--gold);color:var(--gold);background:rgba(245,158,11,.05)}
+.w-media-tab.active-video{border-bottom-color:var(--red);color:var(--red);background:rgba(239,68,68,.05)}
+.w-media-upload-row{padding:10px 14px;border-bottom:1px solid var(--border)}
+.w-media-upload-btn{
+  padding:8px 18px;border-radius:var(--r-sm);
+  border:1.5px solid var(--gold);background:rgba(245,158,11,.08);
+  color:var(--gold);font-family:var(--font);
+  font-size:12px;font-weight:700;cursor:pointer;
+  transition:all .15s;
+}
+.w-media-upload-btn:hover{background:rgba(245,158,11,.15)}
+
+/* ── Project items (legacy - unused but kept) ── */
+.proj-item{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-md);padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:space-between}
+.proj-item:hover{border-color:rgba(245,158,11,.4)}
 .proj-item.picked{border-color:var(--gold);background:rgba(245,158,11,.05)}
 .proj-item-name{font-size:14px;font-weight:600}
-.proj-item-addr a{font-size:12px;color:var(--blue);text-decoration:none;margin-top:3px;display:block}
-.proj-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;transition:all .2s}
+.proj-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
 .proj-item.picked .proj-check{background:var(--gold);border-color:var(--gold);color:#000}
 
-/* Notes box */
+/* ── Sec-h (fallback) ── */
+.sec-h{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:20px 0 10px;display:flex;align-items:center;gap:6px}
 .notes-box{background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.2);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px}
 .notes-box h4{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--gold);margin-bottom:8px}
 .notes-box p{font-size:13px;line-height:1.65;color:var(--text);white-space:pre-wrap}
@@ -404,12 +572,15 @@ tr:hover td{background:rgba(255,255,255,.012)}
 
 /* Worker full-screen layout adjustments */
 #pg-worker .w-top{max-width:100%}
-#pg-worker .gps-row{max-width:960px;margin-left:auto;margin-right:auto}
 
 /* Desktop: worker project detail = two columns */
 @media (min-width:768px){
-  #w-detail-inner{grid-template-columns:360px 1fr!important;align-items:start}
-  #w-col-left .ci-btn{font-size:15px;padding:16px}
+  #w-detail-inner{grid-template-columns:380px 1fr!important;align-items:start}
+  .w-gps-strip{padding:8px 32px}
+  .w-body{padding:24px 32px}
+}
+@media (min-width:1200px){
+  #w-detail-inner{grid-template-columns:420px 1fr!important}
 }
 
 @media (max-width:640px){
@@ -421,8 +592,11 @@ tr:hover td{background:rgba(255,255,255,.012)}
   .main-top{padding:14px 16px}
   #mgr-drill{padding:16px}
   /* Worker mobile */
-  .w-body{padding:16px!important;max-width:100%!important}
-  .w-top{padding:12px 16px}
+  .w-body{padding:16px!important}
+  .w-top{padding:0 14px;height:52px}
+  .w-action-btn span,.w-action-btn{font-size:11px}
+  .clock{font-size:32px!important}
+  .w-gps-strip{padding:7px 16px}
 }
 
 @media (max-width:380px){
@@ -458,28 +632,37 @@ tr:hover td{background:rgba(255,255,255,.012)}
 <div class="page" id="pg-worker">
   <!-- TOP BAR -->
   <div class="w-top">
-    <div style="display:flex;align-items:center;gap:10px">
-      <button id="w-back-btn" onclick="workerBackToProjects()" style="display:none;background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0">←</button>
-      <div><h2 id="w-name">Worker</h2><p id="w-sub" style="font-size:11px;color:var(--muted);margin-top:2px">Select a project</p></div>
-    </div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <button onclick="refreshWorker()" style="padding:7px 10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer">🔄</button>
-      <!-- Sound mode -->
-      <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-        <button id="notif-btn-sound" onclick="setNotifMode('sound')" style="padding:6px 8px;background:var(--gold);color:#000;border:none;font-size:13px;cursor:pointer" title="Sound">🔔</button>
-        <button id="notif-btn-vibrate" onclick="setNotifMode('vibrate')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Vibrate">📳</button>
-        <button id="notif-btn-silent" onclick="setNotifMode('silent')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Silent">🔕</button>
+    <!-- Left: back + identity -->
+    <div class="w-top-left">
+      <button id="w-back-btn" onclick="workerBackToProjects()" class="w-back-btn" title="Back to projects">←</button>
+      <div class="w-identity">
+        <h2 id="w-name">Worker</h2>
+        <p id="w-sub">Select a project</p>
       </div>
-      <!-- PROJECT TASKS bell — shows when there are undone tasks on current project -->
-      <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--blue);border-radius:8px;color:var(--blue);font-size:15px;cursor:pointer" title="Project tasks">
-        📋<span id="w-task-count" style="position:absolute;top:-6px;right:-6px;background:var(--blue);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">0</span>
-      </button>
-      <!-- PERSONAL MESSAGE bell — always visible when manager sent YOU a message -->
-      <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:rgba(245,158,11,.1);border:2px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:15px;cursor:pointer" title="Personal message from manager">
-        ✉️<span style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">1</span>
-      </button>
-      <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
-      <button class="out-btn" onclick="doLogout()">Sign Out</button>
+    </div>
+    <!-- Right: controls grouped logically -->
+    <div class="w-top-right">
+      <!-- Notification bell group: tasks + messages -->
+      <div class="w-bell-group">
+        <button id="w-task-bell" onclick="showWorkerTaskList()" class="w-bell-btn w-bell-task" style="display:none" title="Your tasks">
+          <span class="w-bell-icon">📋</span>
+          <span id="w-task-count" class="w-bell-badge">0</span>
+        </button>
+        <button id="w-msg-bell" onclick="showWorkerMessage()" class="w-bell-btn w-bell-msg" style="display:none" title="Personal message">
+          <span class="w-bell-icon">✉️</span>
+          <span class="w-bell-badge w-bell-badge-msg">1</span>
+        </button>
+      </div>
+      <!-- Sound mode toggle -->
+      <div class="w-sound-group">
+        <button id="notif-btn-sound" onclick="setNotifMode('sound')" class="w-sound-btn" title="Sound">🔔</button>
+        <button id="notif-btn-vibrate" onclick="setNotifMode('vibrate')" class="w-sound-btn" title="Vibrate">📳</button>
+        <button id="notif-btn-silent" onclick="setNotifMode('silent')" class="w-sound-btn" title="Silent">🔕</button>
+      </div>
+      <!-- Action buttons -->
+      <button onclick="refreshWorker()" class="w-action-btn" title="Refresh">🔄</button>
+      <button onclick="showWorkerHours()" class="w-action-btn w-action-gold">⏱ Hours</button>
+      <button onclick="doLogout()" class="w-action-btn w-action-logout">Sign Out</button>
     </div>
   </div>
 
@@ -491,76 +674,95 @@ tr:hover td{background:rgba(255,255,255,.012)}
 
   <!-- VIEW 2: PROJECT DETAIL -->
   <div id="w-view-detail" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;width:100%">
-    <!-- GPS status bar -->
-    <div style="padding:10px 24px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;max-width:960px;margin:0 auto;width:100%">
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+
+    <!-- GPS strip — slim, informational only -->
+    <div class="w-gps-strip">
+      <div class="w-gps-left">
         <div class="gdot spin" id="gps-dot"></div>
         <span id="gps-txt">Acquiring location...</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
-        <span>GPS</span>
+      <div class="w-gps-right">
+        <span class="w-gps-label">GPS</span>
         <label class="tog"><input type="checkbox" id="gps-req" checked><div class="tog-sl"></div></label>
       </div>
     </div>
 
-    <div class="w-body" style="padding-bottom:40px">
-      <div id="w-detail-inner" style="display:grid;grid-template-columns:1fr;gap:16px">
+    <div class="w-body" style="padding-bottom:48px">
+      <div id="w-detail-inner" style="display:grid;grid-template-columns:1fr;gap:20px">
 
-      <!-- LEFT: PROJECT CARD + CHECKIN -->
+      <!-- LEFT COL: Status card + notes -->
       <div id="w-col-left">
-      <!-- 1. PROJECT STATS -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:20px;margin-bottom:16px">
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.08em;margin-bottom:6px">📍 Project</div>
-        <div class="sc-name" id="sc-proj" style="font-size:20px;font-weight:700;margin-bottom:4px">—</div>
-        <div id="w-proj-addr" style="margin-bottom:14px;font-size:13px;color:var(--blue)"></div>
-        <!-- Live stats row -->
-        <div id="w-proj-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px"></div>
-        <!-- Status + clock -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-          <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
-          <div style="text-align:right">
-            <div class="clock" id="sc-clock">00:00:00</div>
-            <div class="clock-lbl" id="sc-lbl">Not checked in</div>
+
+        <!-- PRIMARY ACTION CARD: Project + Check In/Out -->
+        <div class="w-status-card" id="w-status-card">
+          <div class="w-status-header">
+            <div class="w-status-meta">
+              <div class="w-status-proj-label">📍 PROJECT</div>
+              <div class="sc-name" id="sc-proj">—</div>
+              <div id="w-proj-addr" class="w-status-addr"></div>
+            </div>
+            <div class="w-status-badge-wrap">
+              <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
+            </div>
+          </div>
+
+          <!-- Stats row -->
+          <div id="w-proj-stats" class="w-stats-grid"></div>
+
+          <!-- Clock area -->
+          <div class="w-clock-area">
+            <div class="w-clock-block">
+              <div class="clock" id="sc-clock">00:00:00</div>
+              <div class="clock-lbl" id="sc-lbl">Not checked in</div>
+            </div>
+          </div>
+
+          <!-- Primary action button -->
+          <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>✅ Check In</button>
+        </div>
+
+        <!-- Manager notes -->
+        <div id="notes-wrap" style="display:none">
+          <div class="notes-box">
+            <h4>📋 Manager Notes</h4>
+            <p id="notes-txt"></p>
           </div>
         </div>
-        <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>✅ Check In</button>
-      </div>
 
-      <!-- MANAGER NOTES -->
-      <div id="notes-wrap" style="display:none">
-        <div class="notes-box" style="margin-bottom:16px">
-          <h4>📋 Manager's Notes</h4>
-          <p id="notes-txt"></p>
-        </div>
-      </div>
       </div><!-- end w-col-left -->
 
-      <!-- RIGHT: TASKS + MEDIA -->
+      <!-- RIGHT COL: Tasks + Media -->
       <div id="w-col-right">
-      <div class="sec-h">📋 Tasks for this project</div>
-      <div id="w-tasks" style="margin-bottom:16px"></div>
 
-      <!-- 3. PHOTO / VIDEO — accordion folders -->
-      <div class="sec-h">📸 Project Journal</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px">
-        <!-- Tab buttons -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-          <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
-          <button id="wtab-video" onclick="openWorkerMediaTab('video')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🎥 Videos</button>
+        <!-- Tasks section -->
+        <div class="w-section-label">
+          <span class="w-sec-icon">📋</span>
+          <span>Tasks</span>
         </div>
-        <input type="file" id="cam-photo" accept="image/*" capture="environment" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
-        <input type="file" id="cam-video" accept="video/*" capture="environment" style="display:none" onchange="captureJournalMedia(event,'video')">
-        <!-- Folder content — hidden until tab is opened -->
-        <div id="worker-media-folder" style="display:none">
-          <div style="padding:8px 12px;border-bottom:1px solid var(--border)">
-            <button id="worker-upload-btn" onclick="triggerWorkerMediaAdd()" style="padding:6px 14px;border-radius:7px;border:1px solid var(--gold);background:none;color:var(--gold);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📷 Add Photo</button>
+        <div id="w-tasks" style="margin-bottom:20px"></div>
+
+        <!-- Media section -->
+        <div class="w-section-label">
+          <span class="w-sec-icon">📸</span>
+          <span>Project Journal</span>
+        </div>
+        <div class="w-media-card">
+          <div class="w-media-tabs">
+            <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" class="w-media-tab">📷 Photos</button>
+            <button id="wtab-video" onclick="openWorkerMediaTab('video')" class="w-media-tab">🎥 Videos</button>
           </div>
-          <div id="journal-entries" style="padding:0"></div>
+          <input type="file" id="cam-photo" accept="image/*" capture="environment" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
+          <input type="file" id="cam-video" accept="video/*" capture="environment" style="display:none" onchange="captureJournalMedia(event,'video')">
+          <div id="worker-media-folder" style="display:none">
+            <div class="w-media-upload-row">
+              <button id="worker-upload-btn" onclick="triggerWorkerMediaAdd()" class="w-media-upload-btn">📷 Add Photo</button>
+            </div>
+            <div id="journal-entries"></div>
+          </div>
         </div>
-      </div>
 
       </div><!-- end w-col-right -->
-      </div><!-- end w-detail-inner grid -->
+      </div><!-- end w-detail-inner -->
     </div><!-- end w-body -->
   </div><!-- end w-view-detail -->
 </div><!-- end pg-worker -->
@@ -1328,24 +1530,23 @@ function workerBackToProjects(){
 function pickProj(id){openWorkerProject(id);}
 function updateWorkerUI(){
   const btn=document.getElementById('ci-btn'),badge=document.getElementById('sc-badge'),needVid=S.user?.require_video;
-  const isMyProj = S.selectedProj === S.user?.last_proj_id;
-  if(S.checkedIn && isMyProj){
-    // On their current project — show Check Out
+  const card=document.getElementById('w-status-card');
+  const isMyProj=S.selectedProj===S.user?.last_proj_id;
+  if(S.checkedIn&&isMyProj){
     btn.textContent=needVid?'🚪 Check Out (video required)':'🚪 Check Out';
     btn.className='ci-btn do-out';btn.disabled=false;
-    btn.style.background='';btn.style.color='';
     badge.textContent='✅ Checked In';badge.className='sc-badge badge-in';
-  } else if(S.checkedIn && !isMyProj){
-    // Viewing another project while checked in elsewhere — allow to check in here (auto-checkout from old)
+    if(card)card.classList.add('checked-in');
+  } else if(S.checkedIn&&!isMyProj){
     const myProj=S.projects.find(p=>p.id===S.user?.last_proj_id);
-    btn.textContent=`✅ Check In here`;
+    btn.textContent='✅ Check In here';
     btn.className='ci-btn do-in';btn.disabled=false;
-    btn.style.background='';btn.style.color='';
     badge.textContent=myProj?`On: ${myProj.name}`:'Checked In';badge.className='sc-badge badge-in';
+    if(card)card.classList.remove('checked-in');
   } else {
     btn.textContent='✅ Check In';btn.className='ci-btn do-in';btn.disabled=false;
-    btn.style.background='';btn.style.color='';
     badge.textContent='Checked Out';badge.className='sc-badge badge-out';
+    if(card)card.classList.remove('checked-in');
   }
 }
 async function toggleCI(){
@@ -2505,31 +2706,22 @@ let activeWorkerMediaTab='photo';
 
 function openWorkerMediaTab(type){
   const folder=document.getElementById('worker-media-folder');
-  // Toggle close if same tab clicked
-  if(activeWorkerMediaTab===type && folder && folder.style.display!=='none'){
+  if(activeWorkerMediaTab===type&&folder&&folder.style.display!=='none'){
     activeWorkerMediaTab=null;
     if(folder)folder.style.display='none';
-    ['photo','video'].forEach(t=>{
-      const btn=document.getElementById('wtab-'+t);
-      if(btn){btn.style.borderBottomColor='transparent';btn.style.color='var(--muted)';btn.style.background='none';}
-    });
+    document.querySelectorAll('.w-media-tab').forEach(b=>{b.className='w-media-tab';});
     return;
   }
   activeWorkerMediaTab=type;
-  const colors={photo:'var(--gold)',video:'var(--red)'};
-  ['photo','video'].forEach(t=>{
-    const btn=document.getElementById('wtab-'+t);
-    if(!btn)return;
-    const active=t===type;
-    btn.style.borderBottomColor=active?colors[t]:'transparent';
-    btn.style.color=active?colors[t]:'var(--muted)';
-    btn.style.background=active?`rgba(${t==='photo'?'245,158,11':'239,68,68'},.08)`:'none';
-  });
+  document.querySelectorAll('.w-media-tab').forEach(b=>{b.className='w-media-tab';});
+  const activeBtn=document.getElementById('wtab-'+type);
+  if(activeBtn)activeBtn.className=`w-media-tab active-${type}`;
   const uploadBtn=document.getElementById('worker-upload-btn');
   if(uploadBtn){
     uploadBtn.textContent=type==='photo'?'📷 Add Photo':'🎥 Add Video';
-    uploadBtn.style.borderColor=colors[type];
-    uploadBtn.style.color=colors[type];
+    uploadBtn.style.borderColor=type==='photo'?'var(--gold)':'var(--red)';
+    uploadBtn.style.color=type==='photo'?'var(--gold)':'var(--red)';
+    uploadBtn.style.background=type==='photo'?'rgba(245,158,11,.08)':'rgba(239,68,68,.08)';
   }
   if(folder)folder.style.display='block';
   renderJournal();
@@ -3297,12 +3489,10 @@ document.addEventListener('click',unlockAudio,{once:false,passive:true});
 function getNotifMode(){return localStorage.getItem(NOTIF_KEY)||'sound';}
 function setNotifMode(mode){
   localStorage.setItem(NOTIF_KEY,mode);
-  ['sound','vibrate','silent'].forEach(m=>{
-    const btn=document.getElementById('notif-btn-'+m);
-    if(!btn)return;
-    btn.style.background=m===mode?'var(--gold)':'var(--border)';
-    btn.style.color=m===mode?'#000':'var(--muted)';
-  });
+  document.querySelectorAll('.w-sound-btn').forEach(btn=>btn.classList.remove('active'));
+  const map={sound:'notif-btn-sound',vibrate:'notif-btn-vibrate',silent:'notif-btn-silent'};
+  const btn=document.getElementById(map[mode]);
+  if(btn)btn.classList.add('active');
   toast({sound:'🔔 Sound on',vibrate:'📳 Vibrate only',silent:'🔕 Silent'}[mode],'ok');
 }
 
