@@ -3429,15 +3429,19 @@ function startRealtimeWorker(){
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks'},payload=>{
       const t=payload.new;
-      S.tasks.push(t);
-      if(t.worker_id===S.user.id){
+      // Avoid duplicate
+      if(!S.tasks.find(x=>x.id===t.id)) S.tasks.push(t);
+      const isMyTask=t.worker_id===S.user.id;
+      const isMyProject=t.project_id===S.selectedProj;
+      const isGeneral=!t.worker_id;
+      if(isMyTask||( isMyProject && isGeneral)){
         loadWorkerTasks();
         playSound('task');
         toast(`📋 New task: ${t.title}`,'ok');
-      } else if(t.project_id===S.selectedProj && !t.worker_id){
+      } else if(isMyTask){
         loadWorkerTasks();
         playSound('task');
-        toast(`📋 New task on this project: ${t.title}`,'ok');
+        toast(`📋 New task: ${t.title}`,'ok');
       }
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tasks'},payload=>{
@@ -3467,11 +3471,9 @@ function startRealtimeManager(){
       renderOverview();
     })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers'},payload=>{
-      // Worker updated (checked in/out, message, etc.)
       const idx=S.workers.findIndex(w=>w.id===payload.new.id);
       if(idx>=0)S.workers[idx]={...S.workers[idx],...payload.new};
       else S.workers.push(payload.new);
-      // Show notification for checkin/checkout changes
       const old=idx>=0?S.workers[idx]:null;
       if(payload.new.checked_in!==old?.checked_in){
         S.newNotifCount=(S.newNotifCount||0)+1;
@@ -3483,6 +3485,28 @@ function startRealtimeManager(){
       renderOverview();
       const activeView=document.querySelector('.view.on')?.id;
       if(activeView==='view-team')renderTeam();
+    })
+    // ── Task changes — update manager view instantly ──
+    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'tasks'},payload=>{
+      const idx=S.tasks.findIndex(t=>t.id===payload.new.id);
+      if(idx>=0)S.tasks[idx]=payload.new;
+      else S.tasks.push(payload.new);
+      // Update project task list if currently viewing that project
+      if(S.drillProj && payload.new.project_id===S.drillProj){
+        renderProjTasks();
+      }
+      renderOverview(); // update open tasks count
+      const activeView=document.querySelector('.view.on')?.id;
+      if(activeView==='view-tasks')renderTaskList();
+    })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks'},payload=>{
+      S.tasks.push(payload.new);
+      if(S.drillProj && payload.new.project_id===S.drillProj){
+        renderProjTasks();
+      }
+      renderOverview();
+      const activeView=document.querySelector('.view.on')?.id;
+      if(activeView==='view-tasks')renderTaskList();
     })
     .subscribe();
 }
