@@ -598,7 +598,107 @@ tr:hover td{background:rgba(255,255,255,.012)}
 }
 
 /* ── STICKY ACTION BUTTON (bottom anchor) ── */
-/* ── FIXED ACTION BUTTON (always visible, bottom of screen) ── */
+/* ══════════════════════════════════════════
+   WORK MODE — body.mode-work
+   Complete UI transformation when checked in
+══════════════════════════════════════════ */
+
+/* Tint the whole page */
+body.mode-work #pg-worker{
+  background:linear-gradient(180deg,rgba(22,163,74,.06) 0%,var(--bg) 320px);
+}
+
+/* Top bar: show only essential controls in work mode */
+body.mode-work .w-sound-group{ display:none }
+body.mode-work .w-action-logout{ display:none }
+
+/* Hide the not-checked-in state completely */
+body.mode-work #wh-state-out{ display:none!important }
+
+/* Ensure checked-in state is visible */
+body.mode-work #wh-state-in{ display:flex!important }
+
+/* Work mode: project banner — compact */
+body.mode-work .wh-project-banner{
+  background:rgba(22,163,74,.08);
+  border-color:rgba(34,197,94,.25);
+  padding:14px 18px;
+}
+body.mode-work .wh-banner-name{
+  font-size:20px;
+  font-weight:700;
+}
+body.mode-work .wh-banner-clock{
+  padding:10px 0 2px;
+}
+body.mode-work .wh-clock{
+  font-size:36px!important;
+  letter-spacing:3px;
+}
+
+/* Task block — DOMINANT in work mode */
+body.mode-work .wh-task-block{
+  border-color:rgba(59,130,246,.3);
+  background:var(--surface);
+}
+body.mode-work .wh-task-header{
+  background:rgba(59,130,246,.08);
+  border-bottom-color:rgba(59,130,246,.2);
+}
+body.mode-work .wh-task-label{
+  color:var(--blue);
+}
+body.mode-work .wh-task-content{
+  padding:24px 20px;
+}
+body.mode-work .wh-task-title{
+  font-size:24px!important;
+  font-weight:700;
+  line-height:1.35;
+  color:var(--text);
+}
+body.mode-work .wh-no-task{
+  font-size:16px;
+  padding:28px 16px;
+}
+body.mode-work .wh-task-mark-done{
+  height:52px;
+  font-size:15px;
+  margin-top:20px;
+}
+
+/* Quick actions — smaller in work mode, not competing */
+body.mode-work .wh-quick-actions{
+  gap:6px;
+}
+body.mode-work .wh-quick-btn{
+  padding:10px 6px;
+  background:rgba(255,255,255,.03);
+  border-color:var(--border-soft);
+}
+body.mode-work .wh-qa-icon{ font-size:18px }
+body.mode-work .wh-qa-label{ font-size:10px;color:var(--muted) }
+
+/* Detail link — subtle */
+body.mode-work .wh-detail-link{
+  color:var(--muted);
+  border-color:var(--border-soft);
+  font-size:11px;
+}
+
+/* Desktop work mode: task block takes full right column height */
+@media (min-width:768px){
+  body.mode-work .wh-col-right{
+    min-height:300px;
+  }
+  body.mode-work .wh-task-title{
+    font-size:26px!important;
+  }
+}
+
+/* ══ END WORK MODE ══ */
+
+
 .wh-sticky-action{
   position:fixed;
   bottom:0;left:0;
@@ -4230,6 +4330,8 @@ function workerBackToProjects(){ showWorkerView('home'); }
 function renderWorkerHome(){
   const activeId=getActiveProjectId();
   const checkedIn=!!(S.checkedIn&&activeId);
+  // Hard mode class on body — CSS does the rest
+  document.body.classList.toggle('mode-work', checkedIn);
   const stateOut=document.getElementById('wh-state-out');
   const stateIn=document.getElementById('wh-state-in');
   if(stateOut) stateOut.style.display=checkedIn?'none':'flex';
