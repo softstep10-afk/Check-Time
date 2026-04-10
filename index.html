@@ -573,6 +573,67 @@ tr:hover td{background:rgba(255,255,255,.012)}
 /* Worker full-screen layout adjustments */
 #pg-worker .w-top{max-width:100%}
 
+/* ── Worker Home Screen ── */
+.w-home-screen{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column}
+.wh-state{display:flex;flex-direction:column;padding:16px 20px 24px;gap:14px}
+/* Out state */
+.wh-out-hero{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:20px;text-align:center}
+.wh-out-label{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.wh-selected-proj{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.3px;margin-bottom:4px;min-height:28px}
+.wh-selected-addr{font-size:12px;color:var(--blue);min-height:18px}
+/* Primary action buttons */
+.wh-primary-btn{width:100%;padding:22px 20px;border-radius:var(--r-lg);border:none;font-family:var(--font);font-size:18px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px;transition:all .2s}
+.wh-primary-btn:active{transform:scale(.97)}
+.wh-btn-in{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;box-shadow:0 6px 28px rgba(34,197,94,.3)}
+.wh-btn-in:disabled{background:var(--card);color:var(--muted);box-shadow:none;cursor:not-allowed;transform:none!important}
+.wh-btn-out{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 6px 28px rgba(239,68,68,.3)}
+.wh-btn-icon{font-size:22px}.wh-btn-label{font-size:18px;font-weight:700}
+/* GPS row */
+.wh-gps-row{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px}
+.wh-gps-status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}
+.wh-gps-toggle{display:flex;align-items:center;gap:8px}
+/* Checked in banner */
+.wh-project-banner{background:linear-gradient(135deg,rgba(34,197,94,.1),rgba(34,197,94,.03));border:1.5px solid rgba(34,197,94,.3);border-radius:var(--r-lg);padding:20px}
+.wh-banner-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.wh-banner-label{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--green)}
+.wh-change-proj-btn{font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);border-radius:var(--r-xs);padding:4px 10px;cursor:pointer;font-family:var(--font)}
+.wh-banner-name{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:3px}
+.wh-banner-addr{font-size:12px;color:var(--blue);margin-bottom:14px}
+.wh-banner-clock{text-align:center;padding:14px 0 2px;border-top:1px solid rgba(34,197,94,.15)}
+.wh-clock{font-family:var(--mono);font-size:44px;font-weight:400;color:var(--gold);letter-spacing:4px;line-height:1}
+.wh-clock-sub{font-size:11px;color:var(--muted);margin-top:6px;font-weight:500}
+/* Task block */
+.wh-task-block{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden}
+.wh-task-header{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid var(--border);background:rgba(0,0,0,.15)}
+.wh-task-label{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.wh-task-see-all{font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;font-family:var(--font);padding:0;font-weight:600}
+.wh-task-content{padding:16px}
+.wh-no-task{text-align:center;padding:12px;font-size:13px;color:var(--gold);font-weight:600;background:rgba(245,158,11,.06);border-radius:var(--r-sm)}
+.wh-task-item{display:flex;align-items:flex-start;gap:10px}
+.wh-task-pri{font-size:10px;font-weight:700;padding:3px 9px;border-radius:var(--r-full);flex-shrink:0;text-transform:uppercase}
+.wh-task-title{font-size:15px;font-weight:600;line-height:1.4;flex:1}
+.wh-task-mark-done{width:100%;margin-top:12px;padding:12px;border-radius:var(--r-sm);border:1.5px solid rgba(34,197,94,.3);background:rgba(34,197,94,.06);color:var(--green);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;transition:all .15s}
+/* Quick actions */
+.wh-quick-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.wh-quick-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);cursor:pointer;transition:all .15s}
+.wh-quick-btn:active{transform:scale(.93)}
+.wh-qa-icon{font-size:22px}.wh-qa-label{font-size:11px;font-weight:600;color:var(--text-secondary)}
+/* Project list in home */
+.wh-proj-section{margin-top:4px}
+.wh-proj-section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.wh-proj-section-title{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.wh-proj-browse-btn{font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;font-family:var(--font);padding:0;font-weight:600}
+.wh-proj-list{display:flex;flex-direction:column;gap:6px}
+.wh-proj-row{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border:1.5px solid var(--border);border-radius:var(--r-md);padding:13px 16px;cursor:pointer;transition:all .15s}
+.wh-proj-row:hover,.wh-proj-row:active{border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.04)}
+.wh-proj-row.selected{border-color:var(--gold);background:rgba(245,158,11,.07)}
+.wh-proj-row-info{flex:1;min-width:0}
+.wh-proj-row-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wh-proj-row-addr{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wh-proj-row-arrow{color:var(--muted);flex-shrink:0;margin-left:8px;font-size:16px}
+.wh-detail-link{width:100%;padding:12px;border-radius:var(--r-sm);border:1px solid var(--border);background:none;color:var(--text-secondary);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s}
+.wh-detail-link:hover{color:var(--text);border-color:rgba(255,255,255,.2)}
+
 /* Desktop: worker project detail = two columns */
 @media (min-width:768px){
   #w-detail-inner{grid-template-columns:380px 1fr!important;align-items:start}
@@ -666,9 +727,98 @@ tr:hover td{background:rgba(255,255,255,.012)}
     </div>
   </div>
 
-  <!-- VIEW 1: PROJECT LIST -->
-  <div id="w-view-projects" class="w-body">
-    <div class="proj-label">📍 Select Today's Project</div>
+  <!-- VIEW 0: HOME — primary state-driven screen -->
+  <div id="w-view-home" class="w-home-screen">
+
+    <!-- STATE: Not checked in -->
+    <div id="wh-state-out" class="wh-state">
+      <div class="wh-out-hero">
+        <div class="wh-out-label">WHERE ARE YOU WORKING TODAY?</div>
+        <div class="wh-selected-proj" id="wh-selected-name">— Select a project below —</div>
+        <div class="wh-selected-addr" id="wh-selected-addr"></div>
+      </div>
+      <button id="wh-checkin-btn" class="wh-primary-btn wh-btn-in" onclick="whCheckIn()" disabled>
+        <span class="wh-btn-icon">✅</span>
+        <span class="wh-btn-label">Check In</span>
+      </button>
+      <div class="wh-gps-row">
+        <div class="wh-gps-status">
+          <div class="gdot spin" id="wh-gps-dot"></div>
+          <span id="wh-gps-txt">Acquiring GPS...</span>
+        </div>
+        <div class="wh-gps-toggle">
+          <span style="font-size:11px;color:var(--muted)">GPS</span>
+          <label class="tog"><input type="checkbox" id="wh-gps-req" checked onchange="syncGpsToggle(this)"><div class="tog-sl"></div></label>
+        </div>
+      </div>
+      <div class="wh-proj-section">
+        <div class="wh-proj-section-header">
+          <span class="wh-proj-section-title">PROJECTS</span>
+          <button class="wh-proj-browse-btn" onclick="showWorkerProjectBrowse()">Browse all →</button>
+        </div>
+        <div id="wh-proj-list" class="wh-proj-list"></div>
+      </div>
+    </div>
+
+    <!-- STATE: Checked in -->
+    <div id="wh-state-in" class="wh-state" style="display:none">
+      <div class="wh-project-banner checked-in">
+        <div class="wh-banner-top">
+          <div class="wh-banner-label">ON SITE</div>
+          <button class="wh-change-proj-btn" onclick="showWorkerProjectBrowse()">Change project</button>
+        </div>
+        <div class="wh-banner-name" id="wh-banner-name">—</div>
+        <div class="wh-banner-addr" id="wh-banner-addr"></div>
+        <div class="wh-banner-clock">
+          <div class="wh-clock" id="wh-clock">00:00:00</div>
+          <div class="wh-clock-sub">Time on site today</div>
+        </div>
+      </div>
+
+      <div class="wh-task-block">
+        <div class="wh-task-header">
+          <span class="wh-task-label">ACTIVE TASK</span>
+          <button class="wh-task-see-all" onclick="showWorkerTaskList()">All tasks →</button>
+        </div>
+        <div id="wh-current-task" class="wh-task-content">
+          <div class="wh-no-task">⚠️ No active task assigned</div>
+        </div>
+      </div>
+
+      <div class="wh-quick-actions">
+        <button class="wh-quick-btn" onclick="whOpenDetail()">
+          <span class="wh-qa-icon">📋</span>
+          <span class="wh-qa-label">Tasks</span>
+        </button>
+        <button class="wh-quick-btn" onclick="whOpenMediaAdd()">
+          <span class="wh-qa-icon">📷</span>
+          <span class="wh-qa-label">Photo</span>
+        </button>
+        <button class="wh-quick-btn" onclick="showWorkerHours()">
+          <span class="wh-qa-icon">⏱</span>
+          <span class="wh-qa-label">Hours</span>
+        </button>
+        <button class="wh-quick-btn" onclick="showWorkerMessage()">
+          <span class="wh-qa-icon">✉️</span>
+          <span class="wh-qa-label">Messages</span>
+        </button>
+      </div>
+
+      <button class="wh-primary-btn wh-btn-out" id="wh-checkout-btn" onclick="whCheckOut()">
+        <span class="wh-btn-icon">🚪</span>
+        <span class="wh-btn-label">Check Out</span>
+      </button>
+
+      <button class="wh-detail-link" onclick="whOpenDetail()">📊 Project Details & Media →</button>
+    </div>
+  </div>
+
+  <!-- VIEW 1: PROJECT BROWSE (secondary, opened via "Browse all" or project card) -->
+  <div id="w-view-projects" class="w-body" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div class="proj-label" style="margin:0">📍 Select Project</div>
+      <button onclick="showWorkerHome()" style="font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;padding:4px">← Back</button>
+    </div>
     <div id="proj-list" class="cards"></div>
   </div>
 
@@ -1223,7 +1373,8 @@ async function doLogin(){
       document.getElementById('w-name').textContent=w.name;
       document.getElementById('w-sub').textContent='Select a project';
       document.getElementById('w-back-btn').style.display='none';
-      document.getElementById('w-view-projects').style.display='block';
+      document.getElementById('w-view-home').style.display='flex';
+      document.getElementById('w-view-projects').style.display='none';
       document.getElementById('w-view-detail').style.display='none';
       const proj=await db.from('projects').select('*').order('created_at');
       S.projects=proj.data||[];
@@ -1234,7 +1385,7 @@ async function doLogin(){
       getGPS();
       showPage('pg-worker');
       startRealtimeWorker();
-      await loadUnreadMessages(); // fetch & show unread personal messages
+      await loadUnreadMessages();
       startAutoRefresh();
       initBackButton();
       setNotifMode(getNotifMode());
@@ -1245,6 +1396,8 @@ async function doLogin(){
         S.checkInTime = w.check_in_time ? new Date(w.check_in_time).getTime() : Date.now();
         openWorkerProject(w.last_proj_id);
       }
+      // Always show home screen as primary view
+      renderWorkerHome();
     }
   }catch(e){showErr('Connection error: '+e.message);}
   btn.disabled=false;btn.textContent='Sign In →';
@@ -1268,17 +1421,22 @@ function doLogout(){
 }
 function getGPS(){
   const dot=document.getElementById('gps-dot'),txt=document.getElementById('gps-txt');
-  dot.className='gdot spin';txt.textContent='Acquiring location...';
-  if(!navigator.geolocation){dot.className='gdot bad';txt.textContent='GPS not supported';return;}
+  const whDot=document.getElementById('wh-gps-dot'),whTxt=document.getElementById('wh-gps-txt');
+  const setDot=(cls,label)=>{
+    dot.className=cls;txt.textContent=label;
+    if(whDot)whDot.className=cls;
+    if(whTxt)whTxt.textContent=label;
+  };
+  setDot('gdot spin','Acquiring location...');
+  if(!navigator.geolocation){setDot('gdot bad','GPS not supported');return;}
   navigator.geolocation.getCurrentPosition(p=>{
     S.gps={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy};
-    dot.className='gdot good';
-    txt.textContent=`Location found (±${Math.round(p.coords.accuracy)}m)`;
+    setDot('gdot good',`Location found (±${Math.round(p.coords.accuracy)}m)`);
     if(S.checkedIn)startLiveTracking();
   },()=>{
-    S.gps=null;dot.className='gdot bad';
-    txt.textContent='Location denied — disable GPS toggle';
-    document.getElementById('gps-req').checked=false;
+    S.gps=null;setDot('gdot bad','Location denied');
+    const gpsEl=document.getElementById('gps-req');if(gpsEl)gpsEl.checked=false;
+    const whGps=document.getElementById('wh-gps-req');if(whGps)whGps.checked=false;
   },{enableHighAccuracy:true,timeout:10000});
 }
 
@@ -1467,10 +1625,12 @@ async function refreshWorker(){
     await loadUnreadMessages();
     if(S.selectedProj){
       renderJournal();
-      // Update On Site / Total Hours stats
       const sc=document.getElementById('sc-proj');
       if(sc) updateWorkerProjCard(S.selectedProj);
     }
+    // Refresh home screen if visible
+    const homeEl=document.getElementById('w-view-home');
+    if(homeEl&&homeEl.style.display!=='none') renderWorkerHome();
     toast('✅ Updated','ok');
   }catch(err){
     toast('No connection — try again','err');
@@ -1518,14 +1678,17 @@ async function retryOfflineUploads(){
   }catch(e){}
 }
 function workerBackToProjects(){
-  // Always allow going back — worker stays checked in, just browsing other projects
-  const prevProj = S.selectedProj;
-  S.selectedProj = S.checkedIn ? prevProj : null; // keep selectedProj if checked in
+  // Back goes to home screen
   document.getElementById('w-back-btn').style.display='none';
-  document.getElementById('w-sub').textContent = S.checkedIn ? '✅ Checked In' : 'Select a project';
-  document.getElementById('w-view-projects').style.display='block';
   document.getElementById('w-view-detail').style.display='none';
-  renderProjPicker();
+  document.getElementById('w-view-projects').style.display='none';
+  if(S.checkedIn){
+    // If checked in, go home (shows current project state)
+    showWorkerHome();
+  } else {
+    // Not checked in — go home (shows project selector)
+    showWorkerHome();
+  }
 }
 function pickProj(id){openWorkerProject(id);}
 function updateWorkerUI(){
@@ -1597,6 +1760,7 @@ async function toggleCI(){
     }
     if(!saved){toast('⚠️ Checked in locally — will sync when connection improves','ok');}
     else{toast('✅ Checked in!','ok');}
+    if(S.user)S.user.last_proj_id=S.selectedProj;
     updateWorkerUI();
     startLiveTracking();
   }else{
@@ -1606,15 +1770,30 @@ async function toggleCI(){
       stopLiveTracking();
       await db.from('workers').update({checked_in:false,check_in_time:null,current_lat:null,current_lon:null}).eq('id',S.user.id);
       await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
-      toast('👋 Checked out!','ok');updateWorkerUI();
+      toast('👋 Checked out!','ok');
+      updateWorkerUI();
     }
   }
   const[ev,wk]=await Promise.all([db.from('events').select('*').order('created_at'),db.from('workers').select('*').order('created_at')]);
   S.events=ev.data||[];S.workers=wk.data||[];
+  // After any check in/out — go back to home and refresh it
+  showWorkerHome();
 }
 function startClock(){
   if(S.clockTimer)clearInterval(S.clockTimer);
-  S.clockTimer=setInterval(()=>{if(S.checkedIn&&S.checkInTime){const s=Math.floor((Date.now()-S.checkInTime)/1000);document.getElementById('sc-clock').textContent=fmt(s);document.getElementById('sc-lbl').textContent='Time on site today';}else{document.getElementById('sc-clock').textContent='00:00:00';document.getElementById('sc-lbl').textContent='Not checked in';}},1000);
+  S.clockTimer=setInterval(()=>{
+    if(S.checkedIn&&S.checkInTime){
+      const s=Math.floor((Date.now()-S.checkInTime)/1000);
+      const t=fmt(s);
+      const el=document.getElementById('sc-clock');if(el)el.textContent=t;
+      const lbl=document.getElementById('sc-lbl');if(lbl)lbl.textContent='Time on site today';
+      const whEl=document.getElementById('wh-clock');if(whEl)whEl.textContent=t;
+    } else {
+      const el=document.getElementById('sc-clock');if(el)el.textContent='00:00:00';
+      const lbl=document.getElementById('sc-lbl');if(lbl)lbl.textContent='Not checked in';
+      const whEl=document.getElementById('wh-clock');if(whEl)whEl.textContent='00:00:00';
+    }
+  },1000);
 }
 function fmt(s){return[Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');}
 function openCO(){document.getElementById('vid-in').value='';document.getElementById('vid-prev').style.display='none';document.getElementById('vid-ok').style.display='none';document.getElementById('vid-drop').style.display='block';const btn=document.getElementById('co-go');btn.disabled=true;btn.className='co-go';S.coVideo=null;document.getElementById('co-ov').className='co-ov show';}
@@ -1681,6 +1860,7 @@ async function confirmCO() {
       db.from('workers').select('*').order('created_at')
     ]);
     S.events = ev.data || []; S.workers = wk.data || [];
+    showWorkerHome(); // return to home after checkout
   } catch(err) {
     // Checkout is BLOCKED — worker remains checked in
     console.error('Checkout video upload failed:', err);
@@ -1786,7 +1966,9 @@ async function markDone(id){
     completed_at:new Date().toISOString()
   }).eq('id',id);
   const tk=await db.from('tasks').select('*').order('created_at');S.tasks=tk.data||[];
-  loadWorkerTasks();toast('Task done!','ok');
+  loadWorkerTasks();
+  renderHomeTask(); // refresh task on home screen too
+  toast('✅ Task done!','ok');
 }
 async function submitReport(){
   if(!S.checkedIn){toast('Check in first to submit a report','err');return;}
@@ -3807,7 +3989,158 @@ async function deleteActivity(id){
   toast('Deleted','ok');
 }
 
-// ═══ REALTIME SUBSCRIPTIONS ═══
+// ═══ WORKER HOME SCREEN ═══
+function showWorkerHome(){
+  document.getElementById('w-view-home').style.display='flex';
+  document.getElementById('w-view-projects').style.display='none';
+  document.getElementById('w-view-detail').style.display='none';
+  document.getElementById('w-back-btn').style.display='none';
+  renderWorkerHome();
+}
+
+function showWorkerProjectBrowse(){
+  document.getElementById('w-view-home').style.display='none';
+  document.getElementById('w-view-projects').style.display='block';
+  document.getElementById('w-view-detail').style.display='none';
+  document.getElementById('w-back-btn').style.display='block';
+  renderProjPicker();
+}
+
+function renderWorkerHome(){
+  const checkedIn=S.checkedIn&&S.user?.last_proj_id;
+  document.getElementById('wh-state-out').style.display=checkedIn?'none':'flex';
+  document.getElementById('wh-state-in').style.display=checkedIn?'flex':'none';
+
+  if(checkedIn){
+    // Checked-in state
+    const p=S.projects.find(x=>x.id===S.user.last_proj_id);
+    document.getElementById('wh-banner-name').textContent=p?.name||'—';
+    document.getElementById('wh-banner-addr').textContent=p?.address||'';
+    S.selectedProj=S.user.last_proj_id;
+    document.getElementById('w-sub').textContent=`✅ ${p?.name||'Checked In'}`;
+    renderHomeTask();
+  } else {
+    // Not checked in — show project selector
+    renderHomeProjList();
+    // Sync GPS dot
+    syncGpsDots();
+  }
+}
+
+function renderHomeProjList(){
+  const el=document.getElementById('wh-proj-list');
+  if(!el)return;
+  const active=S.projects.filter(p=>p.status==='active').sort((a,b)=>a.name.localeCompare(b.name));
+  // Show top 6 closest or alphabetical
+  const top=active.slice(0,6);
+  if(!top.length){el.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:16px">No active projects</div>';return;}
+  el.innerHTML=top.map(p=>{
+    const isSel=S.selectedProj===p.id;
+    return`<div class="wh-proj-row${isSel?' selected':''}" onclick="whSelectProj('${p.id}')">
+      <div class="wh-proj-row-info">
+        <div class="wh-proj-row-name">${p.name}</div>
+        <div class="wh-proj-row-addr">${p.address||''}</div>
+      </div>
+      <div class="wh-proj-row-arrow">${isSel?'✓':'›'}</div>
+    </div>`;
+  }).join('');
+}
+
+function whSelectProj(projId){
+  S.selectedProj=projId;
+  const p=S.projects.find(x=>x.id===projId);
+  document.getElementById('wh-selected-name').textContent=p?.name||'—';
+  document.getElementById('wh-selected-addr').textContent=p?.address||'';
+  // Enable check in button
+  const btn=document.getElementById('wh-checkin-btn');
+  if(btn)btn.disabled=false;
+  // Update project list selection
+  renderHomeProjList();
+}
+
+function renderHomeTask(){
+  const el=document.getElementById('wh-current-task');
+  if(!el)return;
+  const projId=S.user?.last_proj_id;
+  const undone=S.tasks.filter(t=>{
+    const mine=t.worker_id===S.user?.id;
+    const general=t.project_id===projId&&!t.worker_id;
+    return(mine||general)&&!t.done;
+  }).sort((a,b)=>{
+    const pri={high:0,medium:1,low:2};
+    return(pri[a.priority]||1)-(pri[b.priority]||1);
+  });
+  if(!undone.length){
+    el.innerHTML='<div class="wh-no-task">✅ All tasks completed!</div>';
+    return;
+  }
+  const t=undone[0];
+  const priColor=t.priority==='high'?'var(--red)':t.priority==='medium'?'var(--gold)':'var(--green)';
+  const priBg=t.priority==='high'?'rgba(239,68,68,.12)':t.priority==='medium'?'rgba(245,158,11,.12)':'rgba(34,197,94,.12)';
+  el.innerHTML=`
+    <div class="wh-task-item">
+      <span class="wh-task-pri" style="background:${priBg};color:${priColor}">${t.priority||'med'}</span>
+      <div class="wh-task-title">${t.title}</div>
+    </div>
+    ${t.description?`<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;line-height:1.5">${t.description}</div>`:''}
+    ${undone.length>1?`<div style="font-size:11px;color:var(--muted);margin-top:8px">+${undone.length-1} more task${undone.length-1>1?'s':''}</div>`:''}
+    <button class="wh-task-mark-done" onclick="markDone('${t.id}');renderHomeTask()">✅ Mark Done</button>
+  `;
+}
+
+async function whCheckIn(){
+  if(!S.selectedProj){toast('Select a project first','err');return;}
+  const btn=document.getElementById('wh-checkin-btn');
+  if(btn){btn.disabled=true;const lbl=btn.querySelector('.wh-btn-label');if(lbl)lbl.textContent='Checking in...';}
+  // Prep the detail view (needed for GPS bar + toggleCI state)
+  document.getElementById('w-view-home').style.display='none';
+  document.getElementById('w-view-detail').style.display='block';
+  document.getElementById('w-back-btn').style.display='block';
+  openWorkerProject(S.selectedProj);
+  await toggleCI();
+  // toggleCI calls showWorkerHome() at end — button state reset there
+  if(btn){btn.disabled=false;const lbl=btn.querySelector('.wh-btn-label');if(lbl)lbl.textContent='Check In';}
+}
+
+async function whCheckOut(){
+  S.selectedProj=S.user?.last_proj_id||S.selectedProj;
+  if(!S.selectedProj){toast('No active project','err');return;}
+  document.getElementById('w-view-home').style.display='none';
+  document.getElementById('w-view-detail').style.display='block';
+  document.getElementById('w-back-btn').style.display='block';
+  openWorkerProject(S.selectedProj);
+  toggleCI(); // opens checkout flow; returns home when done
+}
+
+function whOpenDetail(){
+  S.selectedProj=S.user?.last_proj_id||S.selectedProj;
+  if(!S.selectedProj){toast('No project selected','err');return;}
+  document.getElementById('w-view-home').style.display='none';
+  document.getElementById('w-view-detail').style.display='block';
+  document.getElementById('w-back-btn').style.display='block';
+  openWorkerProject(S.selectedProj);
+}
+
+function whOpenMediaAdd(){
+  whOpenDetail();
+  setTimeout(()=>openWorkerMediaTab('photo'),200);
+}
+
+function syncGpsDots(){
+  const dot=document.getElementById('gps-dot');
+  const whDot=document.getElementById('wh-gps-dot');
+  const txt=document.getElementById('gps-txt');
+  const whTxt=document.getElementById('wh-gps-txt');
+  if(dot&&whDot)whDot.className=dot.className;
+  if(txt&&whTxt)whTxt.textContent=txt.textContent;
+}
+
+function syncGpsToggle(el){
+  const detail=document.getElementById('gps-req');
+  if(detail)detail.checked=el.checked;
+}
+
+// ═══ WORKER HOME SCREEN ═══
 function startRealtimeWorker(){
   // Channel 1: Personal messages for this worker only
   db.channel('personal-msgs-'+S.user.id)
