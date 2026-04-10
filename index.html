@@ -936,23 +936,10 @@ async function doLogin(){
       getGPS();
       showPage('pg-worker');
       startRealtimeWorker();
-      checkWorkerMessageBell();
+      await loadUnreadMessages(); // fetch & show unread personal messages
       startAutoRefresh();
       initBackButton();
-      // Restore saved notification mode
       setNotifMode(getNotifMode());
-      // Show message from manager if one exists
-      if(w.message&&w.message.trim()){
-        const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
-        const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
-        const c=w.message_color||'gold';
-        const el=document.getElementById('worker-msg-text');
-        el.textContent=w.message;
-        el.style.borderColor=msgColors[c]||'var(--gold)';
-        el.style.background=msgBg[c]||'rgba(245,158,11,.08)';
-        el.style.color=msgColors[c]||'var(--gold)';
-        document.getElementById('worker-msg-ov').className='co-ov show';
-      }
       // Restore selected project if worker is already checked in
       if(w.checked_in && w.last_proj_id){
         S.selectedProj = w.last_proj_id;
@@ -1107,6 +1094,7 @@ function openWorkerProject(id){
   // Checkin on wrong project is blocked inside toggleCI
   S.selectedProj=id;
   const p=S.projects.find(x=>x.id===id);
+  startProjectMsgChannel(id); // subscribe to project messages
   document.getElementById('w-sub').textContent=p?.name||'';
   document.getElementById('w-back-btn').style.display='block';
   document.getElementById('w-view-projects').style.display='none';
@@ -1168,9 +1156,8 @@ async function refreshWorker(){
       renderWorkerProjStats(S.selectedProj);
     }
     checkWorkerMessageBell();
-    // Retry any pending offline uploads
-    retryOfflineUploads();
-    toast('✅ Updated!','ok');
+    await loadUnreadMessages();
+    loadWorkerTasks();
   }catch(err){
     toast('No connection — try again','err');
   }finally{
@@ -1872,7 +1859,7 @@ function renderTeam(){
       <td style="display:flex;gap:5px;flex-wrap:wrap">
         <button class="action" onclick="openEditWorker('${w.id}')">✏️ Edit</button>
         <button class="action" onclick="openAdjHours('${w.id}')" title="Adjust hours" style="border-color:rgba(245,158,11,.4);color:var(--gold)">⏱️</button>
-        <button class="action ${hasMsg?'gold':''}" onclick="openMsgWorker('${w.id}')" title="${hasMsg?w.message_read?'📖 Read — pending':'💬 Unread message':'Send message'}" style="${hasMsg?w.message_read?'border-color:var(--muted);color:var(--muted)':'border-color:var(--gold)':''}">💬${hasMsg?w.message_read?' 📖':' ●':''}</button>
+        <button class="action" onclick="openMsgWorker('${w.id}')" title="Send message">✉️ Msg</button>
         <button class="action red" onclick="delWorker('${w.id}')">Remove</button>
       </td>
     </tr>`;
@@ -3035,15 +3022,26 @@ async function saveMsgWorker(){
   const msg=document.getElementById('msg-text').value.trim();
   const color=document.getElementById('msg-color').value||'gold';
   if(!msg){toast('Write a message first','err');return;}
-  await db.from('workers').update({message:msg, message_color:color, message_read:false}).eq('id',id);
-  const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
-  closeModal('mod-msg-worker');renderTeam();toast('💬 Message sent!','ok');
+  // Insert into messages table (personal message to worker)
+  const {error}=await db.from('messages').insert({
+    sender_name: S.user?.name||'Manager',
+    receiver_id: id,
+    project_id: null,
+    text: msg,
+    color: color,
+    read: false
+  });
+  if(error){toast('Failed to send: '+error.message,'err');return;}
+  closeModal('mod-msg-worker');
+  toast('✉️ Message sent!','ok');
 }
+
 async function clearMsgWorker(){
   const id=document.getElementById('msg-worker-id').value;
-  await db.from('workers').update({message:null, message_color:null}).eq('id',id);
-  const wk=await db.from('workers').select('*').order('created_at');S.workers=wk.data||[];
-  closeModal('mod-msg-worker');renderTeam();toast('Message cleared','ok');
+  // Mark all personal messages to this worker as read
+  await db.from('messages').update({read:true}).eq('receiver_id',id).is('project_id',null);
+  closeModal('mod-msg-worker');
+  toast('Messages cleared','ok');
 }
 
 // ═══ MEDIA TABS ═══
@@ -3207,20 +3205,20 @@ function startAutoRefresh(){
       } else {
         const[t,me]=await Promise.all([
           db.from('tasks').select('*').order('created_at').limit(500),
-          db.from('workers').select('*').eq('id',S.user.id).single()
+          db.from('workers').select('id,checked_in,check_in_time,last_proj_id,current_lat,current_lon,location_updated_at').eq('id',S.user.id).single()
         ]);
         if(t.data)S.tasks=t.data;
-        if(me.data){
-          const oldMsg=S.user?.message;
-          Object.assign(S.user,me.data);
-          const idx=S.workers.findIndex(x=>x.id===S.user.id);
-          if(idx>=0)Object.assign(S.workers[idx],me.data);
-          // New message arrived via polling
-          if(me.data.message&&me.data.message.trim()&&me.data.message!==oldMsg){
-            showPersonalMessageOverlay(me.data.message,me.data.message_color||'gold');
-            playSound('message');
-          }
-          checkWorkerMessageBell();
+        if(me.data)Object.assign(S.user,me.data);
+        // Re-fetch unread messages silently
+        const{data:msgs}=await db.from('messages').select('*')
+          .eq('receiver_id',S.user.id).eq('read',false).is('project_id',null)
+          .order('created_at',{ascending:false});
+        const prev=(S._unreadMessages||[]).length;
+        S._unreadMessages=msgs||[];
+        updatePersonalBell();
+        if((msgs||[]).length>prev&&msgs.length>0){
+          showPersonalMessageOverlay(msgs[0].text,msgs[0].color||'gold',msgs[0].id);
+          playSound('message');
         }
         loadWorkerTasks();
       }
@@ -3442,23 +3440,21 @@ async function deleteActivity(id){
 
 // ═══ REALTIME SUBSCRIPTIONS ═══
 function startRealtimeWorker(){
-  // Subscribe without row-level filter for reliability
-  // (row-level filters require Supabase RLS — filter in JS instead)
-  db.channel('worker-rt-'+Date.now())
-    .on('postgres_changes',{event:'UPDATE',schema:'public',table:'workers'},payload=>{
-      if(payload.new.id!==S.user.id)return; // filter in JS
-      const updated=payload.new;
-      const oldMsg=S.user?.message;
-      Object.assign(S.user,updated);
-      const idx=S.workers.findIndex(x=>x.id===S.user.id);
-      if(idx>=0)Object.assign(S.workers[idx],updated);
-      checkWorkerMessageBell();
-      if(updated.message&&updated.message.trim()&&updated.message!==oldMsg){
-        showPersonalMessageOverlay(updated.message,updated.message_color||'gold');
-        playSound('message');
-        toast('✉️ Personal message from manager','ok');
-      }
+  // Channel 1: Personal messages for this worker only
+  db.channel('personal-msgs-'+S.user.id)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`receiver_id=eq.${S.user.id}`},payload=>{
+      const msg=payload.new;
+      S._unreadMessages=(S._unreadMessages||[]);
+      S._unreadMessages.push(msg);
+      updatePersonalBell();
+      showPersonalMessageOverlay(msg.text,msg.color||'gold',msg.id);
+      playSound('message');
+      toast('✉️ Personal message from manager','ok');
     })
+    .subscribe();
+
+  // Channel 2: Tasks for this worker
+  db.channel('worker-tasks-'+S.user.id)
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks'},payload=>{
       const t=payload.new;
       if(!S.tasks.find(x=>x.id===t.id))S.tasks.push(t);
@@ -3479,7 +3475,55 @@ function startRealtimeWorker(){
     .subscribe();
 }
 
-function showPersonalMessageOverlay(message,color){
+function startProjectMsgChannel(projId){
+  // Start listening to project messages when entering a project
+  if(S._projMsgChannel){
+    try{S._projMsgChannel.unsubscribe();}catch(e){}
+  }
+  if(!projId)return;
+  S._projMsgChannel=db.channel('proj-msgs-'+projId)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:`project_id=eq.${projId}`},payload=>{
+      const msg=payload.new;
+      playSound('task');
+      toast(`📌 Project update: ${msg.text.substring(0,50)}`,'ok');
+    })
+    .subscribe();
+}
+
+async function loadUnreadMessages(){
+  // Fetch unread personal messages for this worker
+  const {data}=await db.from('messages')
+    .select('*')
+    .eq('receiver_id',S.user.id)
+    .eq('read',false)
+    .is('project_id',null)
+    .order('created_at',{ascending:false});
+  S._unreadMessages=data||[];
+  updatePersonalBell();
+  // Show latest unread message overlay if any
+  if(S._unreadMessages.length>0){
+    const latest=S._unreadMessages[0];
+    showPersonalMessageOverlay(latest.text,latest.color||'gold',latest.id);
+  }
+}
+
+function updatePersonalBell(){
+  const bell=document.getElementById('w-msg-bell');
+  if(!bell)return;
+  const count=(S._unreadMessages||[]).length;
+  if(count>0){
+    bell.style.display='block';
+    bell.style.borderColor='var(--gold)';
+    bell.style.color='var(--gold)';
+    bell.style.background='rgba(245,158,11,.12)';
+    const span=bell.querySelector('span');
+    if(span)span.textContent=count;
+  } else {
+    bell.style.display='none';
+  }
+}
+
+function showPersonalMessageOverlay(message,color,msgId){
   const msgColors={gold:'var(--gold)',green:'var(--green)',red:'var(--red)',blue:'var(--blue)'};
   const msgBg={gold:'rgba(245,158,11,.08)',green:'rgba(34,197,94,.08)',red:'rgba(239,68,68,.08)',blue:'rgba(59,130,246,.08)'};
   const el=document.getElementById('worker-msg-text');
@@ -3488,6 +3532,8 @@ function showPersonalMessageOverlay(message,color){
   el.style.borderColor=msgColors[color]||'var(--gold)';
   el.style.background=msgBg[color]||'rgba(245,158,11,.08)';
   el.style.color=msgColors[color]||'var(--gold)';
+  // Store current message id for marking read
+  if(msgId)document.getElementById('worker-msg-ov').dataset.msgId=msgId;
   document.getElementById('worker-msg-ov').className='co-ov show';
 }
 
@@ -3588,18 +3634,17 @@ function showWorkerTaskList(){
 async function workerMsgDone(){
   document.getElementById('worker-msg-ov').className='co-ov';
   if(!S.user?.id)return;
-  await db.from('workers').update({message:null,message_color:null,message_read:true}).eq('id',S.user.id);
-  S.user.message=null;S.user.message_color=null;S.user.message_read=true;
-  checkWorkerMessageBell();
-  toast('✅ Message done','ok');
+  // Mark ALL unread personal messages as read in messages table
+  await db.from('messages').update({read:true})
+    .eq('receiver_id',S.user.id).eq('read',false).is('project_id',null);
+  S._unreadMessages=[];
+  updatePersonalBell();
+  toast('✅ Done','ok');
 }
 
 async function workerMsgReadLater(){
+  // Just close overlay — stays unread, bell remains
   document.getElementById('worker-msg-ov').className='co-ov';
-  if(!S.user?.id)return;
-  await db.from('workers').update({message_read:true}).eq('id',S.user.id);
-  S.user.message_read=true;
-  checkWorkerMessageBell();
   toast('📖 Saved — tap ✉️ to read again','ok');
 }
 
@@ -3674,12 +3719,18 @@ function checkWorkerMessageBell(){
 }
 
 function showWorkerMessage(){
-  const msg=S.user?.message;
-  if(!msg||!msg.trim()){
-    checkWorkerMessageBell();
+  const msgs=S._unreadMessages||[];
+  if(!msgs.length){
+    updatePersonalBell();
     return;
   }
-  showPersonalMessageOverlay(msg, S.user?.message_color||'gold');
+  const latest=msgs[0];
+  showPersonalMessageOverlay(latest.text,latest.color||'gold',latest.id);
+}
+
+function checkWorkerMessageBell(){
+  // Legacy — now handled by updatePersonalBell
+  updatePersonalBell();
 }
 
 function showMgrNotifications(){
