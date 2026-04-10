@@ -4107,15 +4107,21 @@ function renderHomeTask(){
 
 
 // ═══ WORKER HOME SCREEN ═══
+
+
+function getActiveProjectId(){
+  return S.user?.last_proj_id || S.selectedProj || null;
+}
 function setWorkerCheckedIn(isIn, projId=null){
   S.checkedIn = !!isIn;
   if(isIn){
+    const pid = projId || getActiveProjectId();
     S.checkInTime = Date.now();
-    S.selectedProj = projId || S.selectedProj || S.user?.last_proj_id || null;
+    S.selectedProj = pid;
     if(S.user){
       S.user.checked_in = true;
       S.user.check_in_time = new Date(S.checkInTime).toISOString();
-      if(S.selectedProj) S.user.last_proj_id = S.selectedProj;
+      if(pid) S.user.last_proj_id = pid;
     }
   } else {
     S.checkInTime = null;
@@ -4127,30 +4133,28 @@ function showWorkerView(view){
   const browse=document.getElementById('w-view-projects');
   const detail=document.getElementById('w-view-detail');
   const backBtn=document.getElementById('w-back-btn');
-  if(home)home.style.display='none';
-  if(browse)browse.style.display='none';
-  if(detail)detail.style.display='none';
-  if(backBtn)backBtn.style.display='none';
+  [home,browse,detail].forEach(el=>{ if(el) el.style.display='none'; });
+  if(backBtn) backBtn.style.display='none';
   switch(view){
     case 'home':
-      if(home)home.style.display='flex';
+      if(home) home.style.display='flex';
+      const activeId=getActiveProjectId();
+      const proj=S.projects.find(p=>p.id===activeId);
       document.getElementById('w-sub').textContent=
         S.checkedIn
-          ?`✅ ${S.projects.find(p=>p.id===(S.user?.last_proj_id||S.selectedProj))?.name||'Checked In'}`
-          :(S.selectedProj
-              ?(S.projects.find(p=>p.id===S.selectedProj)?.name||'Ready to check in')
-              :'Ready to start');
+          ? `✅ ${proj?.name||'Checked In'}`
+          : (proj ? proj.name : 'Ready to start');
       renderWorkerHome();
       break;
     case 'browse':
-      if(browse)browse.style.display='block';
-      if(backBtn)backBtn.style.display='block';
+      if(browse) browse.style.display='block';
+      if(backBtn) backBtn.style.display='block';
       document.getElementById('w-sub').textContent='Change project';
       renderProjPicker();
       break;
     case 'detail':
-      if(detail)detail.style.display='block';
-      if(backBtn)backBtn.style.display='block';
+      if(detail) detail.style.display='block';
+      if(backBtn) backBtn.style.display='block';
       break;
   }
 }
@@ -4158,102 +4162,96 @@ function showWorkerHome(){ showWorkerView('home'); }
 function showWorkerProjectBrowse(){ showWorkerView('browse'); }
 function workerBackToProjects(){ showWorkerView('home'); }
 function renderWorkerHome(){
-  const checkedIn=!!(S.checkedIn&&(S.user?.last_proj_id||S.selectedProj));
+  const activeId=getActiveProjectId();
+  const checkedIn=!!(S.checkedIn && activeId);
   const stateOut=document.getElementById('wh-state-out');
   const stateIn=document.getElementById('wh-state-in');
-  if(stateOut)stateOut.style.display=checkedIn?'none':'flex';
-  if(stateIn)stateIn.style.display=checkedIn?'flex':'none';
+  if(stateOut) stateOut.style.display=checkedIn?'none':'flex';
+  if(stateIn)  stateIn.style.display=checkedIn?'flex':'none';
   if(checkedIn){
-    const activeProjId=S.user?.last_proj_id||S.selectedProj;
-    const p=S.projects.find(x=>x.id===activeProjId);
-    S.selectedProj=activeProjId;
-    const bn=document.getElementById('wh-banner-name');
-    const ba=document.getElementById('wh-banner-addr');
-    if(bn)bn.textContent=p?.name||'—';
-    if(ba)ba.textContent=p?.address||'';
+    const p=S.projects.find(x=>x.id===activeId);
+    S.selectedProj=activeId;
+    safeSet('wh-banner-name', p?.name||'—');
+    safeSet('wh-banner-addr', p?.address||'');
     renderHomeTask();
     syncGpsDots();
     return;
   }
-  const noHint=document.getElementById('wh-no-proj-hint');
-  const cpCard=document.getElementById('wh-current-proj-card');
-  const ciBtn=document.getElementById('wh-checkin-btn');
-  const selName=document.getElementById('wh-selected-name');
-  const selAddr=document.getElementById('wh-selected-addr');
-  const prefId=S.selectedProj||S.user?.last_proj_id||null;
-  const prefProj=prefId?S.projects.find(x=>x.id===prefId):null;
-  if(prefProj){
-    S.selectedProj=prefProj.id;
-    if(selName)selName.textContent=prefProj.name;
-    if(selAddr)selAddr.textContent=prefProj.address||'';
-    if(cpCard)cpCard.style.borderColor='rgba(245,158,11,.4)';
-    if(ciBtn)ciBtn.disabled=false;
-    if(noHint)noHint.style.display='none';
+  const preferred=activeId ? S.projects.find(x=>x.id===activeId) : null;
+  if(preferred){
+    S.selectedProj=preferred.id;
+    safeSet('wh-selected-name', preferred.name);
+    safeSet('wh-selected-addr', preferred.address||'');
+    safeStyle('wh-current-proj-card','borderColor','rgba(245,158,11,.4)');
+    safeDisable('wh-checkin-btn', false);
+    safeDisplay('wh-no-proj-hint', false);
   } else {
     S.selectedProj=null;
-    if(selName)selName.textContent='No project selected';
-    if(selAddr)selAddr.textContent='';
-    if(cpCard)cpCard.style.borderColor='var(--border)';
-    if(ciBtn)ciBtn.disabled=true;
-    if(noHint)noHint.style.display='block';
+    safeSet('wh-selected-name','No project selected');
+    safeSet('wh-selected-addr','');
+    safeStyle('wh-current-proj-card','borderColor','var(--border)');
+    safeDisable('wh-checkin-btn', true);
+    safeDisplay('wh-no-proj-hint', true);
   }
   syncGpsDots();
 }
 function whSelectProj(projId){
   const p=S.projects.find(x=>x.id===projId);
+  if(!p) return;
   S.selectedProj=projId;
-  if(S.user)S.user.last_proj_id=projId;
-  const selName=document.getElementById('wh-selected-name');
-  const selAddr=document.getElementById('wh-selected-addr');
-  const ciBtn=document.getElementById('wh-checkin-btn');
-  const noHint=document.getElementById('wh-no-proj-hint');
-  const cpCard=document.getElementById('wh-current-proj-card');
-  if(selName)selName.textContent=p?.name||'—';
-  if(selAddr)selAddr.textContent=p?.address||'';
-  if(ciBtn)ciBtn.disabled=false;
-  if(noHint)noHint.style.display='none';
-  if(cpCard)cpCard.style.borderColor='rgba(245,158,11,.4)';
+  if(S.user) S.user.last_proj_id=projId;
+  safeSet('wh-selected-name', p.name);
+  safeSet('wh-selected-addr', p.address||'');
+  safeDisable('wh-checkin-btn', false);
+  safeDisplay('wh-no-proj-hint', false);
+  safeStyle('wh-current-proj-card','borderColor','rgba(245,158,11,.4)');
   showWorkerView('home');
 }
 async function whCheckIn(){
-  if(!S.selectedProj){toast('Select a project first','err');return;}
-  const btn=document.getElementById('wh-checkin-btn');
-  if(btn){btn.disabled=true;const lbl=btn.querySelector('.wh-btn-label');if(lbl)lbl.textContent='Checking in...';}
-  const whGps=document.getElementById('wh-gps-req');
-  const detGps=document.getElementById('gps-req');
-  if(whGps&&detGps)detGps.checked=whGps.checked;
+  const pid=getActiveProjectId();
+  if(!pid){ toast('Select a project first','err'); return; }
+  lockBtn('wh-checkin-btn','Checking in...');
+  syncGpsToggleFromHome();
   await toggleCI();
-  if(btn){btn.disabled=false;const lbl=btn.querySelector('.wh-btn-label');if(lbl)lbl.textContent='Check In';}
+  unlockBtn('wh-checkin-btn','Check In');
 }
 async function whCheckOut(){
-  S.selectedProj=S.user?.last_proj_id||S.selectedProj;
-  if(!S.selectedProj){toast('No active project','err');return;}
+  if(!getActiveProjectId()){ toast('No active project','err'); return; }
   await toggleCI();
 }
 function whOpenDetail(){
-  S.selectedProj=S.user?.last_proj_id||S.selectedProj;
-  if(!S.selectedProj){toast('No project selected','err');return;}
-  openWorkerProject(S.selectedProj);
+  const pid=getActiveProjectId();
+  if(!pid){ toast('No project selected','err'); return; }
+  S.selectedProj=pid;
+  openWorkerProject(pid);
 }
 function whOpenMediaAdd(){ whOpenDetail(); setTimeout(()=>openWorkerMediaTab('photo'),200); }
+function syncGpsToggleFromHome(){
+  const wh=document.getElementById('wh-gps-req');
+  const dt=document.getElementById('gps-req');
+  if(wh&&dt) dt.checked=wh.checked;
+}
+function syncGpsToggle(el){ syncGpsToggleFromHome(); }
 function syncGpsDots(){
   const dot=document.getElementById('gps-dot');
   const whDot=document.getElementById('wh-gps-dot');
   const txt=document.getElementById('gps-txt');
   const whTxt=document.getElementById('wh-gps-txt');
-  if(dot&&whDot)whDot.className=dot.className;
-  if(txt&&whTxt)whTxt.textContent=txt.textContent;
+  if(dot&&whDot) whDot.className=dot.className;
+  if(txt&&whTxt) whTxt.textContent=txt.textContent;
 }
-function syncGpsToggle(el){
-  const detail=document.getElementById('gps-req');
-  if(detail)detail.checked=el.checked;
-}
+function safeSet(id,val){ const el=document.getElementById(id); if(el) el.textContent=val; }
+function safeStyle(id,prop,val){ const el=document.getElementById(id); if(el) el.style[prop]=val; }
+function safeDisable(id,state){ const el=document.getElementById(id); if(el) el.disabled=state; }
+function safeDisplay(id,show){ const el=document.getElementById(id); if(el) el.style.display=show?'block':'none'; }
+function lockBtn(id,text){ const btn=document.getElementById(id); if(!btn) return; btn.disabled=true; const lbl=btn.querySelector('.wh-btn-label'); if(lbl) lbl.textContent=text; }
+function unlockBtn(id,text){ const btn=document.getElementById(id); if(!btn) return; btn.disabled=false; const lbl=btn.querySelector('.wh-btn-label'); if(lbl) lbl.textContent=text; }
 async function refreshWorker(){
   const btn=document.querySelector('[onclick="refreshWorker()"]');
   if(btn){btn.textContent='⏳';btn.disabled=true;}
   try{
     S.projects=[];S.workers=[];S.tasks=[];S.events=[];
-    S._unreadMessages=[];S._workerMsgCounts={};S._lastTaskCount=0;
+    S._unreadMessages=[];S._workerMsgCounts={};
     const [projRes,tasksRes,wkRes,evRes,meRes]=await Promise.all([
       db.from('projects').select('*').order('created_at').limit(500),
       db.from('tasks').select('*').order('created_at').limit(500),
@@ -4266,21 +4264,20 @@ async function refreshWorker(){
     S.workers=wkRes.data||[];
     S.events=(evRes.data||[]).reverse();
     if(meRes.data){
-      const f=meRes.data;
-      S.user={...f,isManager:false};
-      S.checkedIn=!!f.checked_in;
-      S.checkInTime=f.check_in_time?new Date(f.check_in_time).getTime():null;
-      S.selectedProj=f.last_proj_id||null;
+      S.user={...meRes.data,isManager:false};
+      S.checkedIn=!!S.user.checked_in;
+      S.checkInTime=S.user.check_in_time?new Date(S.user.check_in_time).getTime():null;
+      S.selectedProj=S.user.last_proj_id||null;
     }
     await loadUnreadMessages();
     renderProjPicker();
     loadWorkerTasks();
-    if(S.selectedProj){renderWorkerProjStats(S.selectedProj);renderJournal();}
+    if(S.selectedProj){ renderWorkerProjStats(S.selectedProj); renderJournal(); }
     showWorkerView('home');
     toast('✅ Updated','ok');
-  }catch(err){
-    console.error('Refresh error:',err);
-    toast('No connection — try again','err');
+  }catch(e){
+    console.error(e);
+    toast('Refresh failed','err');
   }finally{
     if(btn){btn.textContent='🔄';btn.disabled=false;}
   }
