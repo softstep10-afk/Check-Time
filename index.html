@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v4.6</title>
+<title>Construction Clock v4.7</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1042,12 +1042,13 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="modal-top"><h3 id="mod-client-title">👤 Add Client</h3><button class="modal-close" onclick="closeModal('mod-client')">×</button></div>
     <div class="modal-body">
       <input type="hidden" id="cl-edit-id" value="">
-      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Client Name *</label><input id="cl-name" placeholder="John Smith" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
+      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Client Name * <button onclick="micFocus('cl-name')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label><input id="cl-name" placeholder="John Smith" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
         <div><label style="font-size:11px;color:var(--muted)">Phone</label><input id="cl-phone" placeholder="+1 555-0100" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
         <div><label style="font-size:11px;color:var(--muted)">Email</label><input id="cl-email" placeholder="john@email.com" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
       </div>
-      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Notes</label><textarea id="cl-notes" rows="3" placeholder="Client details, preferences..." style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;resize:vertical"></textarea></div>
+      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Client Address <button onclick="micFocus('cl-address')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label><input id="cl-address" placeholder="123 Main St, City, State" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
+      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Notes <button onclick="micFocus('cl-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label><textarea id="cl-notes" rows="3" placeholder="Client details, preferences..." style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;resize:vertical"></textarea></div>
       <div style="margin-bottom:14px"><label style="font-size:11px;color:var(--muted)">Link Projects</label>
         <div id="cl-proj-checkboxes" style="max-height:150px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px"></div>
       </div>
@@ -4522,6 +4523,8 @@ function renderClients(){
           ${cl.email?`<span>✉️ ${cl.email}</span>`:''}
           <span>🏗️ ${projCount} project${projCount!==1?'s':''}</span>
         </div>
+        ${cl.address?`<div style="font-size:11px;color:var(--muted);margin-top:2px">📍 ${cl.address}</div>`:''}
+        </div>
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div style="font-size:11px;font-weight:700;color:${urg.color};padding:3px 10px;border-radius:12px;background:${urg.bg}">${urg.label}</div>
@@ -4544,6 +4547,7 @@ function openClientModal(editId){
       document.getElementById('cl-name').value=cl.name||'';
       document.getElementById('cl-phone').value=cl.phone||'';
       document.getElementById('cl-email').value=cl.email||'';
+      document.getElementById('cl-address').value=cl.address||'';
       document.getElementById('cl-notes').value=cl.notes||'';
       checkedIds=cl.project_ids||[];
     }
@@ -4551,6 +4555,7 @@ function openClientModal(editId){
     document.getElementById('cl-name').value='';
     document.getElementById('cl-phone').value='';
     document.getElementById('cl-email').value='';
+    document.getElementById('cl-address').value='';
     document.getElementById('cl-notes').value='';
   }
   pcEl.innerHTML=allProj.map(p=>`<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;color:var(--text);cursor:pointer"><input type="checkbox" value="${p.id}" ${checkedIds.includes(p.id)?'checked':''}> ${p.name}</label>`).join('')||'<div style="color:var(--muted);font-size:12px;padding:4px">No active projects</div>';
@@ -4563,15 +4568,14 @@ function saveClient(){
   if(!name){toast('Client name required','err');return;}
   const phone=document.getElementById('cl-phone').value.trim();
   const email=document.getElementById('cl-email').value.trim();
+  const address=document.getElementById('cl-address').value.trim();
   const notes=document.getElementById('cl-notes').value.trim();
   const project_ids=[...document.querySelectorAll('#cl-proj-checkboxes input:checked')].map(cb=>cb.value);
   if(id){
-    // Edit
     const cl=S.clients.find(c=>c.id===id);
-    if(cl){Object.assign(cl,{name,phone,email,notes,project_ids,updated_at:new Date().toISOString()});}
+    if(cl){Object.assign(cl,{name,phone,email,address,notes,project_ids,updated_at:new Date().toISOString()});}
   } else {
-    // New
-    S.clients.push({id:crypto.randomUUID(),name,phone,email,notes,project_ids,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+    S.clients.push({id:crypto.randomUUID(),name,phone,email,address,notes,project_ids,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
   }
   saveClientsData();
   closeModal('mod-client');
@@ -4634,7 +4638,8 @@ function openClientDetail(clientId){
         ${cl.phone?`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Phone</div><a href="tel:${cl.phone}" style="font-size:14px;font-weight:700;color:var(--blue);text-decoration:none">${cl.phone}</a></div>`:''}
         ${cl.email?`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Email</div><a href="mailto:${cl.email}" style="font-size:14px;font-weight:700;color:var(--blue);text-decoration:none;word-break:break-all">${cl.email}</a></div>`:''}
       </div>
-      ${cl.notes?`<div style="margin-top:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Notes</div><div style="font-size:13px;color:var(--text);white-space:pre-wrap">${cl.notes}</div></div>`:''}
+      ${cl.address?`<div style="margin-top:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Address</div><div style="font-size:13px;color:var(--text)">📍 ${cl.address}</div></div>`:''}
+      ${cl.notes?`<div style="margin-top:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Notes</div><div style="font-size:13px;color:var(--text);white-space:pre-wrap">${cl.notes}</div></div>`:''}
     </div>
     <h3 style="font-size:14px;font-weight:700;margin-bottom:10px">🏗️ Linked Projects (${linkedProjs.length})</h3>
     <div style="display:grid;gap:8px;margin-bottom:16px">${projHtml}</div>
