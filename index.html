@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v4.4</title>
+<title>Construction Clock v4.5</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -222,11 +222,11 @@ tr:hover td{background:rgba(255,255,255,.015)}
 .bc span:hover{color:var(--gold)}
 .bc span.cur{color:var(--text);cursor:default;font-weight:600}
 .bc-sep{color:var(--border);cursor:default!important}
-.wrow{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px}
+.wrow{background:var(--surface);border:2px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:10px}
 .wrow:hover{border-color:var(--blue);transform:translateX(3px)}
-.wrow-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:#000;flex-shrink:0}
+.wrow-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#000;flex-shrink:0}
 .wrow-info{flex:1}
-.wrow-name{font-size:14px;font-weight:700}
+.wrow-name{font-size:13px;font-weight:700}
 .wrow-stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
 .ws{font-size:11px;color:var(--muted)}
 .ws span{color:var(--text);font-weight:700}
@@ -2165,22 +2165,22 @@ function openProjDetail(projId){
           <div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div>
           <div class="wrow-status ${statusClass}" style="position:static;margin:0">${statusLabel}</div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-          <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">Total on Project</div>
-            <div style="font-size:18px;font-weight:800;color:#06d6a0;font-family:var(--mono)">${h.toFixed(1)}h</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:6px;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div style="padding:6px 10px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:2px">Total on Project</div>
+            <div style="font-size:16px;font-weight:800;color:#06d6a0;font-family:var(--mono)">${h.toFixed(1)}h</div>
           </div>
-          <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">Earned</div>
-            <div style="font-size:18px;font-weight:800;color:#22c55e;font-family:var(--mono)">$${earned.toFixed(2)}</div>
+          <div style="padding:6px 10px;border-bottom:1px solid var(--border)">
+            <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:2px">Earned</div>
+            <div style="font-size:14px;font-weight:700;color:#22c55e;font-family:var(--mono)">$${earned.toFixed(2)}</div>
           </div>
-          <div style="padding:10px 12px;border-right:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">${todayH>0?'Today':'Last Day'}</div>
-            <div style="font-size:16px;font-weight:700;font-family:var(--mono)">${dayLabel||'<span style="color:#8b95a5">—</span>'}</div>
+          <div style="padding:6px 10px;border-right:1px solid var(--border)">
+            <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:2px">${todayH>0?'Today':'Last Day'}</div>
+            <div style="font-size:14px;font-weight:700;font-family:var(--mono)">${dayLabel||'<span style="color:#8b95a5">—</span>'}</div>
           </div>
-          <div style="padding:10px 12px">
-            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">Rate</div>
-            <div style="font-size:16px;font-weight:700;color:#7c8db0;font-family:var(--mono)">${rateLabel}</div>
+          <div style="padding:6px 10px">
+            <div style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:2px">Rate</div>
+            <div style="font-size:13px;font-weight:700;color:#7c8db0;font-family:var(--mono)">${rateLabel}</div>
           </div>
         </div>
         ${forceCoBtn}
