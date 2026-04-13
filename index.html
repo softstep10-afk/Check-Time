@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v4.7</title>
+<title>Construction Clock v4.8</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -621,6 +621,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button class="side-item" id="nav-timeline" onclick="showView('timeline')"><span class="side-ico">🕐</span>Timeline</button>
       <button class="side-item" id="nav-tasks" onclick="showView('tasks')"><span class="side-ico">📋</span>Tasks</button>
       <div class="side-sec">Business</div>
+      <button class="side-item" id="nav-schedule" onclick="showView('schedule')"><span class="side-ico">📅</span>Schedule</button>
       <button class="side-item" id="nav-clients" onclick="openClientsGate()"><span class="side-ico">🔒</span>Clients</button>
       <div class="side-sec">Archive</div>
       <button class="side-item" id="nav-archive" onclick="showView('archive')"><span class="side-ico">📦</span>Archive</button>
@@ -777,6 +778,26 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div class="view" id="view-arc-proj-detail">
           <div class="bc"><span onclick="showView('archive')">📦 Archive</span><span class="bc-sep">›</span><span class="cur" id="bc-arc-proj">Project</span></div>
           <div id="arc-proj-detail-content"></div>
+        </div>
+
+        <!-- ═══ SCHEDULE VIEW ═══ -->
+        <div class="view" id="view-schedule">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;gap:4px">
+              <button id="sch-v-month" onclick="setSchView('month')" style="padding:6px 14px;border-radius:8px;border:2px solid var(--gold);background:rgba(245,158,11,.1);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">Month</button>
+              <button id="sch-v-week" onclick="setSchView('week')" style="padding:6px 14px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">Week</button>
+              <button id="sch-v-day" onclick="setSchView('day')" style="padding:6px 14px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">Day</button>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button onclick="schNav(-1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:16px;cursor:pointer">‹</button>
+              <button onclick="schNavToday()" style="padding:5px 12px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer">Today</button>
+              <span id="sch-title" style="font-size:15px;font-weight:700;color:var(--text);min-width:160px;text-align:center"></span>
+              <button onclick="schNav(1)" style="background:none;border:1px solid var(--border);border-radius:8px;padding:5px 10px;color:var(--text);font-size:16px;cursor:pointer">›</button>
+            </div>
+            <button onclick="openSchItemModal()" class="action gold" style="padding:7px 14px;font-size:12px">+ Add Event</button>
+          </div>
+          <div id="sch-calendar"></div>
+          <div id="sch-day-detail" style="margin-top:14px"></div>
         </div>
 
         <!-- ═══ CLIENTS VIEW ═══ -->
@@ -1006,6 +1027,46 @@ tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 
+<!-- ═══ SCHEDULE ITEM MODAL ═══ -->
+<div class="modal-ov" id="mod-sch-item">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-top"><h3 id="mod-sch-title">📅 Add Event</h3><button class="modal-close" onclick="closeModal('mod-sch-item')">×</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="sch-edit-id" value="">
+      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Title * <button onclick="micFocus('sch-title')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label><input id="sch-title" placeholder="e.g. Template at Main St" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div><label style="font-size:11px;color:var(--muted)">Event Type</label><select id="sch-type" onchange="updateSchColor()" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+          <option value="work_block">🔵 Work Block</option>
+          <option value="project_start">🟢 Project Start</option>
+          <option value="project_end">🔴 Project End</option>
+          <option value="template">🟠 Template Date</option>
+          <option value="countertop">🟠 Countertop Install</option>
+          <option value="delivery">🟠 Delivery</option>
+          <option value="inspection">🟡 Inspection</option>
+          <option value="reminder">🟣 Reminder / Note</option>
+          <option value="other">⚪ Other</option>
+        </select></div>
+        <div><label style="font-size:11px;color:var(--muted)">Link Project</label><select id="sch-project" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none">
+          <option value="">— None (private) —</option>
+        </select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div><label style="font-size:11px;color:var(--muted)">Start Date *</label><input type="date" id="sch-start-date" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div>
+        <div><label style="font-size:11px;color:var(--muted)">Start Time</label><input type="time" id="sch-start-time" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div><label style="font-size:11px;color:var(--muted)">End Date</label><input type="date" id="sch-end-date" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div>
+        <div><label style="font-size:11px;color:var(--muted)">End Time</label><input type="time" id="sch-end-time" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div>
+      </div>
+      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Notes <button onclick="micFocus('sch-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label><textarea id="sch-notes" rows="2" placeholder="Details, reminders..." style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;resize:vertical"></textarea></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="saveSchItem()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer">Save</button>
+        <button id="sch-del-btn" onclick="deleteSchItem()" style="display:none;padding:11px 16px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:none;color:var(--red);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">🗑️ Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ CLIENTS PIN GATE ═══ -->
 <div class="modal-ov" id="mod-clients-pin">
   <div class="modal" style="max-width:360px">
@@ -1067,7 +1128,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 const SURL='https://khmcdtrzqfqabdpbcjkj.supabase.co';
 const SKEY='sb_publishable_IDbH48JlyaoFImiBcHCRrw_X7zsqyOv';
 const db=supabase.createClient(SURL,SKEY);
-const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],clients:[],clientsUnlocked:false,checkedIn:false,checkInTime:null,clockTimer:null,gps:null,gpsState:'unavailable',coVideo:null,selectedProj:null,drillProj:null,drillWorker:null,noGpsSession:false};
+const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],clients:[],clientsUnlocked:false,scheduleItems:[],schView:'month',schDate:new Date(),schSelectedDate:null,checkedIn:false,checkInTime:null,clockTimer:null,gps:null,gpsState:'unavailable',coVideo:null,selectedProj:null,drillProj:null,drillWorker:null,noGpsSession:false};
 
 // ═══ PREVIEW URL MEMORY MANAGEMENT ═══
 // Auto-refresh when internet connection is restored
@@ -2714,8 +2775,8 @@ function showView(id){
   document.getElementById('view-'+id).classList.add('on');
   const ni=document.getElementById('nav-'+id);if(ni)ni.classList.add('on');
   const mi=document.getElementById('mob-'+id);if(mi)mi.classList.add('on');
-  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers',archive:'Archive',trash:'Trash',clients:'Clients'};
-  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control',archive:'Finished projects & paid hours history',trash:'Deleted items — restore or remove permanently',clients:'Protected client records'};
+  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers',archive:'Archive',trash:'Trash',clients:'Clients',schedule:'Schedule'};
+  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control',archive:'Finished projects & paid hours history',trash:'Deleted items — restore or remove permanently',clients:'Protected client records',schedule:'Project calendar & reminders'};
   document.getElementById('view-title').textContent=titles[id]||id;
   document.getElementById('view-sub').textContent=subs[id]||'';
   if(id==='overview')renderOverview();
@@ -2726,6 +2787,7 @@ function showView(id){
   if(id==='archive')renderArchive();
   if(id==='trash')renderTrash();
   if(id==='clients')renderClients();
+  if(id==='schedule')renderSchedule();
 }
 function showDrillView(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
@@ -4399,6 +4461,282 @@ async function renderPaidHours(){
 function renderOtherArchive(){
   const c=document.getElementById('arc-content');
   c.innerHTML=`<div class="empty"><div class="ei">📁</div><p>Other archives will appear here</p><p style="margin-top:4px;font-size:11px">This section is ready for future archive categories</p></div>`;
+}
+
+// ═══ SCHEDULE MODULE ═══
+const SCH_DATA_KEY='cc_schedule_data';
+const SCH_TYPES={
+  work_block:{label:'Work Block',icon:'🔵',color:'#3b82f6',bg:'rgba(59,130,246,.1)',border:'rgba(59,130,246,.3)'},
+  project_start:{label:'Project Start',icon:'🟢',color:'#22c55e',bg:'rgba(34,197,94,.1)',border:'rgba(34,197,94,.3)'},
+  project_end:{label:'Project End',icon:'🔴',color:'#ef4444',bg:'rgba(239,68,68,.1)',border:'rgba(239,68,68,.3)'},
+  template:{label:'Template Date',icon:'🟠',color:'#f97316',bg:'rgba(249,115,22,.1)',border:'rgba(249,115,22,.3)'},
+  countertop:{label:'Countertop Install',icon:'🟠',color:'#f97316',bg:'rgba(249,115,22,.1)',border:'rgba(249,115,22,.3)'},
+  delivery:{label:'Delivery',icon:'🟠',color:'#f97316',bg:'rgba(249,115,22,.1)',border:'rgba(249,115,22,.3)'},
+  inspection:{label:'Inspection',icon:'🟡',color:'#eab308',bg:'rgba(234,179,8,.1)',border:'rgba(234,179,8,.3)'},
+  reminder:{label:'Reminder',icon:'🟣',color:'#a855f7',bg:'rgba(168,85,247,.1)',border:'rgba(168,85,247,.3)'},
+  other:{label:'Other',icon:'⚪',color:'#6b7280',bg:'rgba(107,114,128,.1)',border:'rgba(107,114,128,.3)'}
+};
+
+function loadSchData(){try{S.scheduleItems=JSON.parse(localStorage.getItem(SCH_DATA_KEY)||'[]');}catch(e){S.scheduleItems=[];}}
+function saveSchData(){localStorage.setItem(SCH_DATA_KEY,JSON.stringify(S.scheduleItems));}
+
+function setSchView(v){
+  S.schView=v;
+  ['month','week','day'].forEach(t=>{
+    const b=document.getElementById('sch-v-'+t);if(!b)return;
+    if(t===v){b.style.borderColor='var(--gold)';b.style.background='rgba(245,158,11,.1)';b.style.color='var(--gold)';}
+    else{b.style.borderColor='var(--border)';b.style.background='none';b.style.color='var(--muted)';}
+  });
+  renderSchedule();
+}
+function schNav(dir){
+  const d=S.schDate;
+  if(S.schView==='month')d.setMonth(d.getMonth()+dir);
+  else if(S.schView==='week')d.setDate(d.getDate()+(dir*7));
+  else d.setDate(d.getDate()+dir);
+  renderSchedule();
+}
+function schNavToday(){S.schDate=new Date();S.schSelectedDate=new Date().toISOString().split('T')[0];renderSchedule();}
+
+function getSchItemsForDate(dateStr){
+  return S.scheduleItems.filter(it=>{
+    if(!it.start_date)return false;
+    if(it.start_date===dateStr)return true;
+    if(it.end_date&&it.start_date<=dateStr&&it.end_date>=dateStr)return true;
+    return false;
+  });
+}
+
+function fmtSchDate(d){return d.toISOString().split('T')[0];}
+
+function renderSchedule(){
+  loadSchData();
+  const cal=document.getElementById('sch-calendar');if(!cal)return;
+  const title=document.getElementById('sch-title');
+  if(S.schView==='month')renderSchMonth(cal,title);
+  else if(S.schView==='week')renderSchWeek(cal,title);
+  else renderSchDay(cal,title);
+}
+
+function renderSchMonth(cal,titleEl){
+  const d=S.schDate;
+  const y=d.getFullYear(),m=d.getMonth();
+  titleEl.textContent=d.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const first=new Date(y,m,1);const startDay=first.getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const todayStr=fmtSchDate(new Date());
+  let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+  const dayNames=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  dayNames.forEach(dn=>{html+=`<div style="padding:8px 4px;text-align:center;font-size:10px;font-weight:700;color:var(--muted);background:var(--surface);text-transform:uppercase">${dn}</div>`;});
+  // Empty cells before 1st
+  for(let i=0;i<startDay;i++){html+=`<div style="padding:6px;min-height:72px;background:var(--card);opacity:.4"></div>`;}
+  for(let day=1;day<=daysInMonth;day++){
+    const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const items=getSchItemsForDate(dateStr);
+    const isToday=dateStr===todayStr;
+    const isSelected=dateStr===S.schSelectedDate;
+    let bg='var(--surface)';
+    if(isSelected)bg='rgba(245,158,11,.08)';
+    else if(isToday)bg='rgba(59,130,246,.06)';
+    let dots='';
+    items.slice(0,3).forEach(it=>{
+      const t=SCH_TYPES[it.type]||SCH_TYPES.other;
+      dots+=`<div style="font-size:9px;padding:1px 4px;border-radius:4px;background:${t.bg};color:${t.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:1px solid ${t.border}">${t.icon} ${it.title.length>10?it.title.slice(0,10)+'…':it.title}</div>`;
+    });
+    if(items.length>3)dots+=`<div style="font-size:8px;color:var(--muted)">+${items.length-3} more</div>`;
+    html+=`<div onclick="selectSchDate('${dateStr}')" style="padding:4px 5px;min-height:72px;background:${bg};cursor:pointer;transition:background .15s;border:${isSelected?'2px solid var(--gold)':'2px solid transparent'}" onmouseenter="this.style.background='rgba(245,158,11,.05)'" onmouseleave="this.style.background='${bg}'">
+      <div style="font-size:12px;font-weight:${isToday?'800':'600'};color:${isToday?'var(--blue)':'var(--text)'};margin-bottom:3px;${isToday?'background:var(--blue);color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px':''}">${day}</div>
+      <div style="display:flex;flex-direction:column;gap:1px">${dots}</div>
+    </div>`;
+  }
+  // Fill remaining cells
+  const totalCells=startDay+daysInMonth;
+  const remaining=totalCells%7===0?0:7-(totalCells%7);
+  for(let i=0;i<remaining;i++){html+=`<div style="padding:6px;min-height:72px;background:var(--card);opacity:.4"></div>`;}
+  html+='</div>';
+  cal.innerHTML=html;
+  renderSchDayDetail();
+}
+
+function renderSchWeek(cal,titleEl){
+  const d=new Date(S.schDate);
+  const dayOfWeek=d.getDay();
+  const weekStart=new Date(d);weekStart.setDate(d.getDate()-dayOfWeek);
+  const weekEnd=new Date(weekStart);weekEnd.setDate(weekStart.getDate()+6);
+  titleEl.textContent=`${weekStart.toLocaleDateString('en-US',{month:'short',day:'numeric'})} — ${weekEnd.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+  const todayStr=fmtSchDate(new Date());
+  let html='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden">';
+  for(let i=0;i<7;i++){
+    const cd=new Date(weekStart);cd.setDate(weekStart.getDate()+i);
+    const dateStr=fmtSchDate(cd);
+    const items=getSchItemsForDate(dateStr);
+    const isToday=dateStr===todayStr;
+    const isSelected=dateStr===S.schSelectedDate;
+    let bg='var(--surface)';if(isSelected)bg='rgba(245,158,11,.08)';else if(isToday)bg='rgba(59,130,246,.06)';
+    const dayLabel=cd.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    let evHtml='';
+    items.forEach(it=>{
+      const t=SCH_TYPES[it.type]||SCH_TYPES.other;
+      const time=it.start_time?`<span style="color:${t.color};font-size:9px">${it.start_time}</span> `:'';
+      evHtml+=`<div onclick="event.stopPropagation();openSchItemModal('${it.id}')" style="font-size:10px;padding:4px 6px;border-radius:6px;background:${t.bg};border:1px solid ${t.border};color:var(--text);margin-bottom:2px;cursor:pointer">${time}${t.icon} ${it.title}</div>`;
+    });
+    html+=`<div onclick="selectSchDate('${dateStr}')" style="padding:8px 6px;min-height:120px;background:${bg};cursor:pointer;border:${isSelected?'2px solid var(--gold)':'2px solid transparent'}">
+      <div style="font-size:11px;font-weight:700;color:${isToday?'var(--blue)':'var(--muted)'};margin-bottom:6px;text-align:center">${dayLabel}</div>
+      ${evHtml}
+    </div>`;
+  }
+  html+='</div>';
+  cal.innerHTML=html;
+  renderSchDayDetail();
+}
+
+function renderSchDay(cal,titleEl){
+  const d=S.schDate;
+  const dateStr=fmtSchDate(d);
+  titleEl.textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const items=getSchItemsForDate(dateStr);
+  // Sort by time
+  items.sort((a,b)=>(a.start_time||'99:99').localeCompare(b.start_time||'99:99'));
+  if(!items.length){
+    cal.innerHTML=`<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:32px;margin-bottom:8px">📅</div><p>No events this day</p><button onclick="openSchItemModal(null,'${dateStr}')" style="margin-top:10px;padding:8px 20px;border-radius:8px;border:1px solid var(--gold);background:rgba(245,158,11,.1);color:var(--gold);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">+ Add Event</button></div>`;
+    document.getElementById('sch-day-detail').innerHTML='';
+    return;
+  }
+  let html='<div style="display:flex;flex-direction:column;gap:6px">';
+  items.forEach(it=>{
+    const t=SCH_TYPES[it.type]||SCH_TYPES.other;
+    const proj=it.project_id?S.projects.find(p=>p.id===it.project_id):null;
+    const timeStr=it.start_time?(it.end_time?`${it.start_time} — ${it.end_time}`:it.start_time):'All day';
+    html+=`<div onclick="openSchItemModal('${it.id}')" style="background:${t.bg};border:2px solid ${t.border};border-radius:10px;padding:12px 14px;cursor:pointer;transition:transform .15s" onmouseenter="this.style.transform='translateX(3px)'" onmouseleave="this.style.transform=''">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="font-size:14px;font-weight:700;color:var(--text)">${t.icon} ${it.title}</div>
+        <span style="font-size:10px;font-weight:700;color:${t.color};padding:2px 8px;border-radius:8px;background:var(--surface);border:1px solid ${t.border}">${t.label}</span>
+      </div>
+      <div style="display:flex;gap:12px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+        <span>🕐 ${timeStr}</span>
+        ${proj?`<span>🏗️ ${proj.name}</span>`:'<span>🔒 Private</span>'}
+      </div>
+      ${it.notes?`<div style="font-size:11px;color:var(--muted);margin-top:4px;border-top:1px solid ${t.border};padding-top:4px">${it.notes}</div>`:''}
+    </div>`;
+  });
+  html+='</div>';
+  cal.innerHTML=html;
+  document.getElementById('sch-day-detail').innerHTML='';
+}
+
+function selectSchDate(dateStr){
+  S.schSelectedDate=dateStr;
+  if(S.schView==='month'||S.schView==='week'){
+    renderSchedule();
+  } else {
+    S.schDate=new Date(dateStr+'T12:00:00');
+    renderSchedule();
+  }
+}
+
+function renderSchDayDetail(){
+  const el=document.getElementById('sch-day-detail');if(!el)return;
+  const dateStr=S.schSelectedDate;
+  if(!dateStr){el.innerHTML='<div style="text-align:center;padding:16px;font-size:12px;color:var(--muted)">Click a date to see events</div>';return;}
+  const items=getSchItemsForDate(dateStr);
+  const dateFmt=new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="font-size:13px;font-weight:700;color:var(--text)">${dateFmt} <span style="color:var(--muted);font-weight:400">(${items.length} event${items.length!==1?'s':''})</span></div>
+    <button onclick="openSchItemModal(null,'${dateStr}')" style="padding:5px 12px;border-radius:8px;border:1px solid var(--gold);background:rgba(245,158,11,.1);color:var(--gold);font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer">+ Add</button>
+  </div>`;
+  if(!items.length){
+    html+='<div style="text-align:center;padding:20px;color:var(--muted);font-size:12px">No events</div>';
+  } else {
+    items.sort((a,b)=>(a.start_time||'99:99').localeCompare(b.start_time||'99:99'));
+    items.forEach(it=>{
+      const t=SCH_TYPES[it.type]||SCH_TYPES.other;
+      const proj=it.project_id?S.projects.find(p=>p.id===it.project_id):null;
+      const timeStr=it.start_time?(it.end_time?`${it.start_time} — ${it.end_time}`:it.start_time):'All day';
+      html+=`<div onclick="openSchItemModal('${it.id}')" style="background:${t.bg};border:1px solid ${t.border};border-radius:8px;padding:10px 12px;margin-bottom:4px;cursor:pointer;display:flex;gap:10px;align-items:center;transition:transform .15s" onmouseenter="this.style.transform='translateX(2px)'" onmouseleave="this.style.transform=''">
+        <div style="width:4px;height:32px;border-radius:2px;background:${t.color};flex-shrink:0"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;color:var(--text)">${t.icon} ${it.title}</div>
+          <div style="font-size:10px;color:var(--muted);display:flex;gap:8px;margin-top:2px">
+            <span>${timeStr}</span>
+            ${proj?`<span>🏗️ ${proj.name}</span>`:''}
+            ${it.notes?`<span>📝 ${it.notes.slice(0,30)}${it.notes.length>30?'…':''}</span>`:''}
+          </div>
+        </div>
+        <span style="font-size:9px;font-weight:700;color:${t.color};padding:2px 6px;border-radius:6px;background:var(--surface)">${t.label}</span>
+      </div>`;
+    });
+  }
+  el.innerHTML=html;
+}
+
+function openSchItemModal(editId,prefillDate){
+  const isEdit=!!editId;
+  document.getElementById('mod-sch-title').textContent=isEdit?'✏️ Edit Event':'📅 Add Event';
+  document.getElementById('sch-edit-id').value=editId||'';
+  document.getElementById('sch-del-btn').style.display=isEdit?'block':'none';
+  // Fill project dropdown
+  const projSel=document.getElementById('sch-project');
+  projSel.innerHTML='<option value="">— None (private) —</option>'+S.projects.filter(p=>p.status==='active'||!p.status).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  if(isEdit){
+    const it=S.scheduleItems.find(i=>i.id===editId);
+    if(it){
+      document.getElementById('sch-title').value=it.title||'';
+      document.getElementById('sch-type').value=it.type||'work_block';
+      projSel.value=it.project_id||'';
+      document.getElementById('sch-start-date').value=it.start_date||'';
+      document.getElementById('sch-start-time').value=it.start_time||'';
+      document.getElementById('sch-end-date').value=it.end_date||'';
+      document.getElementById('sch-end-time').value=it.end_time||'';
+      document.getElementById('sch-notes').value=it.notes||'';
+    }
+  } else {
+    document.getElementById('sch-title').value='';
+    document.getElementById('sch-type').value='work_block';
+    projSel.value='';
+    document.getElementById('sch-start-date').value=prefillDate||S.schSelectedDate||fmtSchDate(new Date());
+    document.getElementById('sch-start-time').value='';
+    document.getElementById('sch-end-date').value='';
+    document.getElementById('sch-end-time').value='';
+    document.getElementById('sch-notes').value='';
+  }
+  openModal('mod-sch-item');
+}
+
+function updateSchColor(){/* reserved for future custom color override */}
+
+function saveSchItem(){
+  const id=document.getElementById('sch-edit-id').value;
+  const title=document.getElementById('sch-title').value.trim();
+  if(!title){toast('Title required','err');return;}
+  const start_date=document.getElementById('sch-start-date').value;
+  if(!start_date){toast('Start date required','err');return;}
+  const type=document.getElementById('sch-type').value;
+  const project_id=document.getElementById('sch-project').value||null;
+  const project_name=project_id?S.projects.find(p=>p.id===project_id)?.name||'':'';
+  const start_time=document.getElementById('sch-start-time').value||null;
+  const end_date=document.getElementById('sch-end-date').value||null;
+  const end_time=document.getElementById('sch-end-time').value||null;
+  const notes=document.getElementById('sch-notes').value.trim();
+  if(id){
+    const it=S.scheduleItems.find(i=>i.id===id);
+    if(it)Object.assign(it,{title,type,project_id,project_name,start_date,start_time,end_date,end_time,notes,updated_at:new Date().toISOString()});
+  } else {
+    S.scheduleItems.push({id:crypto.randomUUID(),title,type,project_id,project_name,start_date,start_time,end_date,end_time,notes,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+  }
+  saveSchData();
+  closeModal('mod-sch-item');
+  renderSchedule();
+  toast(id?'Event updated':'Event added','ok');
+}
+
+function deleteSchItem(){
+  const id=document.getElementById('sch-edit-id').value;
+  if(!id||!confirm('Delete this event?'))return;
+  S.scheduleItems=S.scheduleItems.filter(i=>i.id!==id);
+  saveSchData();
+  closeModal('mod-sch-item');
+  renderSchedule();
+  toast('Event deleted','ok');
 }
 
 // ═══ CLIENTS MODULE ═══
