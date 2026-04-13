@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v3.9</title>
+<title>Construction Clock v4.0</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2053,7 +2053,7 @@ function renderProjCards(){
   c.innerHTML = `<div onclick="openModal('mod-proj')" style="background:var(--surface);border:2px dashed var(--border);border-radius:13px;padding:16px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:140px;gap:8px" onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
     <span style="font-size:36px">➕</span>
     <span style="font-size:14px;font-weight:700;color:var(--gold)">Add Project</span>
-  </div>` + [...S.projects].sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+  </div>` + [...S.projects].filter(p=>p.status==='active').sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
     const pw=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id));
     const on=pw.filter(w=>w.checked_in&&w.last_proj_id===p.id).length;
     const totalH=pw.reduce((s,w)=>s+calcHours(w.id,p.id),0);
@@ -2087,7 +2087,7 @@ function renderProjCards(){
       <div class="btn-row" onclick="event.stopPropagation()">
         <button onclick="openProjDetail('${p.id}')">📊 Details</button>
         <button onclick="openEditProj('${p.id}')">✏️ Edit</button>
-        <button onclick="archiveProject('${p.id}')" style="color:var(--gold);border-color:rgba(245,158,11,.3)">📦 Archive</button>
+        <button onclick="archiveProject('${p.id}')" style="color:var(--gold);border-color:rgba(245,158,11,.3)">📦 Add to Archive</button>
         <button class="red" onclick="delProject('${p.id}')">Remove</button>
       </div>
     </div>`;
