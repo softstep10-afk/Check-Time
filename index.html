@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v2.4</title>
+<title>Construction Clock v2.7</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -16,6 +16,7 @@
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0f1117;--surface:#181c27;--card:#1e2333;--border:#2a3045;--gold:#f59e0b;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--purple:#a855f7;--text:#e8eaf0;--muted:#6b7280;--font:'DM Sans',sans-serif;--mono:'DM Mono',monospace}
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font)}
+*::-webkit-scrollbar{display:none}*{scrollbar-width:none;-ms-overflow-style:none}
 .page{display:none;min-height:100vh;height:100%;overflow-y:auto;flex-direction:column;-webkit-overflow-scrolling:touch;pointer-events:none}
 .page.show{display:flex;pointer-events:all}
 #pg-loading{align-items:center;justify-content:center}
@@ -46,18 +47,30 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .hint-txt{font-size:12px;color:var(--muted);text-align:center;margin-top:14px}
 .hint-txt a{color:var(--gold);cursor:pointer}
 .err-msg{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--red);text-align:center;margin-top:12px;display:none}
-#pg-worker{background:var(--bg);max-width:500px;margin:0 auto;width:100%}
-.w-top{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
-.w-top h2{font-size:16px;font-weight:700}
-.w-top p{font-size:11px;color:var(--muted);margin-top:2px}
-.out-btn{padding:7px 14px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:12px;cursor:pointer}
-.w-body{padding:16px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#pg-worker{background:var(--bg);max-width:100%;margin:0 auto;width:100%}
+.w-top{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;gap:8px}
+.w-top h2{font-size:14px;font-weight:600;line-height:1.2}
+.w-top p{font-size:10px;color:var(--muted);margin-top:1px}
+.w-top-right{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.w-top-btn{padding:5px 7px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:var(--font);font-size:11px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;min-width:30px;min-height:30px}
+.w-top-btn:active{background:rgba(255,255,255,.04)}
+.out-btn{padding:5px 10px;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-family:var(--font);font-size:11px;cursor:pointer;line-height:1;min-height:30px}
+.w-body{padding:16px 20px;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .sec-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 10px}
-.proj-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}
-.proj-item{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:space-between}
-.proj-item:hover{border-color:rgba(245,158,11,.5)}
+.proj-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:12px}
+#proj-list{display:grid;grid-template-columns:1fr;gap:10px}
+@media(min-width:540px){#proj-list{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:900px){#proj-list{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:1200px){#proj-list{grid-template-columns:repeat(4,1fr)}}
+.proj-item{background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:18px;margin-bottom:0;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:10px}
+.proj-item:hover{border-color:rgba(245,158,11,.4);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.proj-item:active{transform:scale(.98)}
 .proj-item.picked{border-color:var(--gold);background:rgba(245,158,11,.07)}
-.proj-item-name{font-size:14px;font-weight:600}
+.proj-item-name{font-size:16px;font-weight:700;line-height:1.3}
+.proj-open-btn{width:100%;padding:12px;border-radius:10px;border:none;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;background:linear-gradient(135deg,var(--gold),#d97706);color:#000;transition:all .2s;text-align:center;letter-spacing:.01em}
+.proj-open-btn:hover{box-shadow:0 3px 12px rgba(245,158,11,.3)}
+.proj-open-btn.checked-in{background:linear-gradient(135deg,var(--green),#16a34a);color:#fff}
+.proj-sec-actions{display:flex;gap:6px;flex-wrap:wrap}
 .proj-item-addr a{font-size:12px;color:var(--blue);text-decoration:none;margin-top:4px;display:block}
 .proj-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;transition:all .2s}
 .proj-item.picked .proj-check{background:var(--gold);border-color:var(--gold);color:#000}
@@ -80,16 +93,17 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .status-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
 .sc-proj{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
 .sc-name{font-size:18px;font-weight:700;margin-bottom:14px}
-.sc-badge{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;margin-bottom:14px}
-.sc-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor}
+.sc-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:700;margin-bottom:0}
+.sc-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor}
 .badge-out{background:rgba(239,68,68,.12);color:var(--red)}
 .badge-in{background:rgba(34,197,94,.12);color:var(--green)}
 .clock{font-family:var(--mono);font-size:34px;font-weight:500;color:var(--gold)}
 .clock-lbl{font-size:12px;color:var(--muted);margin-top:2px}
-.ci-btn{width:100%;padding:16px;border-radius:12px;border:none;font-family:var(--font);font-size:16px;font-weight:700;cursor:pointer;margin-top:16px;transition:all .3s}
-.ci-btn.do-in{background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;box-shadow:0 4px 18px rgba(34,197,94,.25)}
-.ci-btn.do-out{background:linear-gradient(135deg,var(--red),#dc2626);color:#fff;box-shadow:0 4px 18px rgba(239,68,68,.25)}
-.ci-btn:disabled{background:#2a3045;color:var(--muted);box-shadow:none;cursor:not-allowed}
+.ci-btn{width:100%;padding:22px;border-radius:16px;border:none;font-family:var(--font);font-size:20px;font-weight:700;cursor:pointer;margin-top:0;transition:all .2s;letter-spacing:.02em}
+.ci-btn:active{transform:scale(.97)}
+.ci-btn.do-in{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;box-shadow:0 8px 28px rgba(34,197,94,.35)}
+.ci-btn.do-out{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 8px 28px rgba(239,68,68,.35)}
+.ci-btn:disabled{background:#2a3045;color:var(--muted);box-shadow:none;cursor:not-allowed;transform:none}
 .upload-box{border:2px dashed var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer;position:relative;margin-bottom:12px;transition:border-color .2s}
 .upload-box:hover{border-color:var(--gold)}
 .upload-box input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
@@ -108,8 +122,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .pri.medium{background:rgba(245,158,11,.12);color:var(--gold)}
 .pri.low{background:rgba(34,197,94,.12);color:var(--green)}
 .task-desc{font-size:12px;color:var(--muted);line-height:1.5}
-.task-done-btn{width:100%;margin-top:10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:none;color:var(--text);font-family:var(--font);font-size:12px;cursor:pointer;transition:all .2s}
-.task-done-btn:hover{border-color:var(--green);color:var(--green)}
+.task-done-btn{width:100%;margin-top:10px;padding:12px;border-radius:10px;border:1px solid rgba(34,197,94,.3);background:rgba(34,197,94,.06);color:var(--green);font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
+.task-done-btn:hover{border-color:var(--green);background:rgba(34,197,94,.12)}
+.task-done-btn:active{transform:scale(.97)}
 .submit-row{padding:14px;border-top:1px solid var(--border);background:var(--bg);position:sticky;bottom:0}
 .sub-btn{width:100%;padding:14px;border-radius:12px;border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer}
 .co-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:200;align-items:center;justify-content:center;padding:20px}
@@ -345,26 +360,26 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <!-- TOP BAR -->
   <div class="w-top">
     <div style="display:flex;align-items:center;gap:10px">
-      <button id="w-back-btn" onclick="workerBackToProjects()" style="display:none;background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0">←</button>
+      <button id="w-back-btn" onclick="workerBackToProjects()" style="display:none;background:none;border:none;color:var(--gold);font-size:17px;cursor:pointer;padding:0;line-height:1">←</button>
       <div><h2 id="w-name">Worker</h2><p id="w-sub" style="font-size:11px;color:var(--muted);margin-top:2px">Select a project</p></div>
     </div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <button onclick="refreshWorker()" style="padding:7px 10px;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-family:var(--font);font-size:12px;cursor:pointer">🔄</button>
+    <div class="w-top-right">
+      <button class="w-top-btn" onclick="refreshWorker()" title="Refresh">🔄</button>
       <!-- Sound mode -->
-      <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-        <button id="notif-btn-sound" onclick="setNotifMode('sound')" style="padding:6px 8px;background:var(--gold);color:#000;border:none;font-size:13px;cursor:pointer" title="Sound">🔔</button>
-        <button id="notif-btn-vibrate" onclick="setNotifMode('vibrate')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Vibrate">📳</button>
-        <button id="notif-btn-silent" onclick="setNotifMode('silent')" style="padding:6px 8px;background:var(--border);color:var(--muted);border:none;font-size:13px;cursor:pointer" title="Silent">🔕</button>
+      <div style="display:flex;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+        <button id="notif-btn-sound" onclick="setNotifMode('sound')" style="padding:4px 6px;background:var(--gold);color:#000;border:none;font-size:11px;cursor:pointer;line-height:1" title="Sound">🔔</button>
+        <button id="notif-btn-vibrate" onclick="setNotifMode('vibrate')" style="padding:4px 6px;background:var(--border);color:var(--muted);border:none;font-size:11px;cursor:pointer;line-height:1" title="Vibrate">📳</button>
+        <button id="notif-btn-silent" onclick="setNotifMode('silent')" style="padding:4px 6px;background:var(--border);color:var(--muted);border:none;font-size:11px;cursor:pointer;line-height:1" title="Silent">🔕</button>
       </div>
       <!-- PROJECT TASKS bell — shows when there are undone tasks on current project -->
-      <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:7px 10px;background:none;border:1px solid var(--blue);border-radius:8px;color:var(--blue);font-size:15px;cursor:pointer" title="Project tasks">
-        📋<span id="w-task-count" style="position:absolute;top:-6px;right:-6px;background:var(--blue);color:#fff;font-size:10px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">0</span>
+      <button id="w-task-bell" onclick="showWorkerTaskList()" style="display:none;position:relative;padding:5px 7px;background:none;border:1px solid var(--blue);border-radius:6px;color:var(--blue);font-size:13px;cursor:pointer;line-height:1" title="Project tasks">
+        📋<span id="w-task-count" style="position:absolute;top:-5px;right:-5px;background:var(--blue);color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:10px;font-family:var(--font)">0</span>
       </button>
       <!-- PERSONAL MESSAGE bell — always visible when manager sent YOU a message -->
-      <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:7px 10px;background:rgba(245,158,11,.1);border:2px solid var(--gold);border-radius:8px;color:var(--gold);font-family:var(--font);font-size:15px;cursor:pointer" title="Personal message from manager">
-        ✉️<span style="position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;font-family:var(--font)">1</span>
+      <button id="w-msg-bell" onclick="showWorkerMessage()" style="display:none;position:relative;padding:5px 7px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:6px;color:var(--gold);font-family:var(--font);font-size:13px;cursor:pointer;line-height:1" title="Personal message from manager">
+        ✉️<span style="position:absolute;top:-5px;right:-5px;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:10px;font-family:var(--font)">1</span>
       </button>
-      <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.4)" onclick="showWorkerHours()">⏱️ Hours</button>
+      <button class="out-btn" style="color:var(--gold);border-color:rgba(245,158,11,.25)" onclick="showWorkerHours()">⏱️ Hours</button>
       <button class="out-btn" onclick="doLogout()">Sign Out</button>
     </div>
   </div>
@@ -379,34 +394,72 @@ tr:hover td{background:rgba(255,255,255,.015)}
   <div id="w-view-detail" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch">
     <!-- GPS status bar -->
     <div style="padding:8px 16px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
+      <button id="gps-status-btn" style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);background:none;border:none;cursor:pointer;font-family:var(--font);padding:4px 8px;border-radius:6px;transition:background .2s" title="Click to refresh GPS">
         <div class="gdot spin" id="gps-dot"></div>
         <span id="gps-txt">Acquiring location...</span>
-      </div>
+      </button>
       <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
         <span>GPS</span>
         <label class="tog"><input type="checkbox" id="gps-req" checked><div class="tog-sl"></div></label>
       </div>
     </div>
+    <!-- GPS debug info -->
+    <div id="gps-debug" style="display:none;padding:4px 16px;background:var(--card);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--muted)"></div>
 
-    <div class="w-body" style="padding-bottom:80px">
+    <div class="w-body" style="padding-bottom:80px;max-width:600px;margin:0 auto">
 
-      <!-- 1. PROJECT STATS -->
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">📍 Project</div>
-        <div class="sc-name" id="sc-proj" style="font-size:16px;font-weight:700;margin-bottom:4px">—</div>
-        <div id="w-proj-addr" style="margin-bottom:10px;font-size:12px;color:var(--blue)"></div>
+      <!-- 1. PROJECT INFO -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:10px">
+        <div class="sc-name" id="sc-proj" style="font-size:18px;font-weight:700;margin-bottom:4px;line-height:1.3">—</div>
+        <div id="w-proj-addr" style="font-size:12px;color:var(--blue)"></div>
         <!-- Live stats row -->
-        <div id="w-proj-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px"></div>
-        <!-- Status + clock -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div class="sc-badge badge-out" id="sc-badge">Checked Out</div>
-          <div style="text-align:right">
-            <div class="clock" id="sc-clock" style="font-size:20px">00:00:00</div>
-            <div class="clock-lbl" id="sc-lbl" style="font-size:10px">Not checked in</div>
+        <div id="w-proj-stats" style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:12px"></div>
+      </div>
+
+      <!-- 2. MAIN ACTION BLOCK — visually dominant -->
+      <div style="background:linear-gradient(180deg,var(--surface),var(--card));border:1px solid var(--border);border-radius:18px;padding:24px 20px;margin-bottom:16px">
+        <!-- Status text -->
+        <div id="ci-status-text" style="text-align:center;font-size:14px;font-weight:600;color:var(--muted);margin-bottom:14px">You are NOT checked in</div>
+
+        <!-- Clock — centered -->
+        <div style="text-align:center;margin-bottom:6px">
+          <div class="clock" id="sc-clock" style="font-size:38px;line-height:1">00:00:00</div>
+          <div class="clock-lbl" id="sc-lbl" style="font-size:11px;margin-top:4px">Not checked in</div>
+        </div>
+
+        <!-- No-GPS live warning -->
+        <div id="no-gps-live" style="display:none;text-align:center;padding:8px 14px;margin-bottom:10px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25)">
+          <span style="font-size:12px;font-weight:700;color:var(--gold)">📍 No GPS — location not tracked</span>
+        </div>
+
+        <!-- Badge + Today hours row -->
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:18px">
+          <div class="sc-badge badge-out" id="sc-badge" style="margin:0">Checked Out</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--card);border:1px solid var(--border);border-radius:20px">
+            <span style="font-size:11px;color:var(--muted);font-weight:600">TODAY</span>
+            <span id="w-today-val" style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--gold)">0.0h</span>
           </div>
         </div>
-        <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>✅ Check In</button>
+
+        <!-- GPS banner -->
+        <div id="gps-banner" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:10px;margin-bottom:16px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25)">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="gdot spin" id="gps-dot2"></div>
+            <span id="gps-txt2" style="font-size:12px;font-weight:600;color:var(--green)">GPS Active</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:11px;color:var(--muted)">GPS</span>
+            <label class="tog"><input type="checkbox" id="gps-req2" checked onchange="onGpsToggleChange()"><div class="tog-sl"></div></label>
+          </div>
+        </div>
+
+        <!-- Desktop GPS warning -->
+        <div id="desktop-gps-warn" style="display:none;text-align:center;padding:8px 14px;margin-bottom:10px;border-radius:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2)">
+          <span style="font-size:11px;color:var(--gold)">💻 GPS works best on mobile devices</span>
+        </div>
+
+        <!-- ACTION BUTTON — strongest element on screen -->
+        <button class="ci-btn do-in" id="ci-btn" onclick="toggleCI()" disabled>▶ START WORK</button>
       </div>
 
       <!-- MANAGER NOTES -->
@@ -417,27 +470,43 @@ tr:hover td{background:rgba(255,255,255,.015)}
         </div>
       </div>
 
-      <!-- 2. TASKS -->
-      <div class="sec-h">📋 Tasks for this project</div>
-      <div id="w-tasks" style="margin-bottom:16px"></div>
-
-      <!-- 3. PHOTO / VIDEO — accordion folders -->
-      <div class="sec-h">📸 Project Journal</div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:12px">
-        <!-- Tab buttons -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
-          <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">📷 Photos</button>
-          <button id="wtab-video" onclick="openWorkerMediaTab('video')" style="padding:11px;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🎥 Videos</button>
+      <!-- 2. WORK UPDATES — photo/video/notes -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;margin-bottom:16px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+        <!-- Header -->
+        <div style="padding:16px 18px 12px">
+          <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px">Work Updates</div>
+          <!-- 3 action buttons -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <button id="wtab-photo" onclick="openWorkerMediaTab('photo')" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s">
+              <span style="font-size:24px">📸</span>Photo
+            </button>
+            <button id="wtab-video" onclick="openWorkerMediaTab('video')" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s">
+              <span style="font-size:24px">🎥</span>Video
+            </button>
+            <button onclick="openQuickNote()" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 8px;background:var(--card);border:1px solid var(--border);border-radius:12px;color:var(--muted);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s">
+              <span style="font-size:24px">📝</span>Note
+            </button>
+          </div>
         </div>
+        <!-- Hidden file inputs -->
         <input type="file" id="cam-photo" accept="image/*" capture="environment" multiple style="display:none" onchange="captureJournalMedia(event,'photo')">
         <input type="file" id="cam-video" accept="video/*" capture="environment" style="display:none" onchange="captureJournalMedia(event,'video')">
-        <!-- Folder content — hidden until tab is opened -->
+        <!-- Expandable media folder -->
         <div id="worker-media-folder" style="display:none">
-          <div style="padding:8px 12px;border-bottom:1px solid var(--border)">
-            <button id="worker-upload-btn" onclick="triggerWorkerMediaAdd()" style="padding:6px 14px;border-radius:7px;border:1px solid var(--gold);background:none;color:var(--gold);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer">📷 Add Photo</button>
+          <div style="padding:12px 18px;border-top:1px solid var(--border);border-bottom:1px solid var(--border)">
+            <button id="worker-upload-btn" onclick="triggerWorkerMediaAdd()" style="width:100%;padding:14px;border-radius:12px;border:none;background:linear-gradient(135deg,var(--gold),#d97706);color:#000;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 3px 10px rgba(245,158,11,.2)">📷 Add Photo</button>
           </div>
           <div id="journal-entries" style="padding:0"></div>
         </div>
+      </div>
+
+      <!-- 3. TASKS -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">📋 Tasks</div>
+          <span id="w-tasks-count" style="font-size:11px;color:var(--muted);font-weight:600"></span>
+        </div>
+        <div id="w-tasks" style="padding:0"></div>
       </div>
 
     </div>
@@ -593,6 +662,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div class="view" id="view-worker-detail">
           <div class="bc"><span onclick="showView('projects')">🏗️ Projects</span><span class="bc-sep">›</span><span id="bc-proj2" onclick="goBack2Proj()">Project</span><span class="bc-sep">›</span><span class="cur" id="bc-worker">Worker</span></div>
           <div class="stats" id="wd-stats"></div>
+          <div id="wd-month-summary"></div>
           <h3 style="font-size:14px;font-weight:700;margin-bottom:12px">Work Days</h3>
           <div id="wd-days"></div>
         </div>
@@ -609,7 +679,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
                 <button class="action gold" onclick="openModal('mod-worker')">+ Add</button>
               </div>
             </div>
-            <table><thead><tr><th>Name</th><th>Category</th><th>Status</th><th>Total Hrs</th><th>Rate</th><th>Earned</th><th>Video</th><th>Actions</th></tr></thead><tbody id="team-table"></tbody><tfoot id="team-totals"></tfoot></table>
+            <table><thead><tr><th>Name</th><th>Category</th><th>Status</th><th>Today</th><th>Today $</th><th>Total Hrs</th><th>Earned</th><th>Actions</th></tr></thead><tbody id="team-table"></tbody><tfoot id="team-totals"></tfoot></table>
           </div>
         </div>
         <div class="view" id="view-timeline">
@@ -852,7 +922,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 const SURL='https://khmcdtrzqfqabdpbcjkj.supabase.co';
 const SKEY='sb_publishable_IDbH48JlyaoFImiBcHCRrw_X7zsqyOv';
 const db=supabase.createClient(SURL,SKEY);
-const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,coVideo:null,selectedProj:null,drillProj:null,drillWorker:null};
+const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,gpsState:'unavailable',coVideo:null,selectedProj:null,drillProj:null,drillWorker:null,noGpsSession:false};
 
 // ═══ PREVIEW URL MEMORY MANAGEMENT ═══
 // Auto-refresh when internet connection is restored
@@ -956,7 +1026,7 @@ function doLogout(){
   if(S.clockTimer)clearInterval(S.clockTimer);
   if(S._autoRefreshTimer)clearInterval(S._autoRefreshTimer);
   try{db.removeAllChannels();}catch(e){}
-  S.user=null;S.checkedIn=false;S.coVideo=null;S.selectedProj=null;
+  S.user=null;S.checkedIn=false;S.coVideo=null;S.selectedProj=null;S.noGpsSession=false;
   document.getElementById('pin-in').value='';
   document.getElementById('err-msg').style.display='none';
   // Reset worker views
@@ -968,21 +1038,82 @@ function doLogout(){
   if(vd)vd.style.display='none';
   switchTab('worker');showPage('pg-login');
 }
+const GPS_ACCURACY_LIMIT=1000; // meters — above this, GPS is "inaccurate"
+const IS_DESKTOP=!('ontouchstart' in window) && window.innerWidth>1024;
+
 function getGPS(){
+  console.log('GPS function started');
   const dot=document.getElementById('gps-dot'),txt=document.getElementById('gps-txt');
   dot.className='gdot spin';txt.textContent='Acquiring location...';
-  if(!navigator.geolocation){dot.className='gdot bad';txt.textContent='GPS not supported';return;}
+  if(!navigator.geolocation){dot.className='gdot bad';txt.textContent='GPS not supported';S.gpsState='unavailable';return;}
   navigator.geolocation.getCurrentPosition(p=>{
-    S.gps={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy};
-    dot.className='gdot good';
-    txt.textContent=`Location found (±${Math.round(p.coords.accuracy)}m)`;
-    if(S.checkedIn)startLiveTracking();
-  },()=>{
-    S.gps=null;dot.className='gdot bad';
-    txt.textContent='Location denied — disable GPS toggle';
-    document.getElementById('gps-req').checked=false;
-  },{enableHighAccuracy:true,timeout:10000});
+    const acc=p.coords.accuracy;
+    if(acc>GPS_ACCURACY_LIMIT){
+      // GPS returned but accuracy is too poor to trust
+      S.gps=null;
+      S.gpsState='inaccurate';
+      dot.className='gdot bad';
+      txt.textContent=`⚠️ Low accuracy (±${Math.round(acc)}m) — not reliable`;
+    } else {
+      S.gps={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:acc};
+      S.gpsState='accurate';
+      dot.className='gdot good';
+      txt.textContent=`Location found (±${Math.round(acc)}m)`;
+      if(S.checkedIn)startLiveTracking();
+    }
+    updateGpsDebug();
+    updateWorkerUI();
+  },err=>{
+    S.gps=null;
+    S.gpsState='unavailable';
+    dot.className='gdot bad';
+    const msg=err.code===1?'Location denied — disable GPS toggle'
+              :err.code===3?'Location timeout — try again'
+              :'Location unavailable';
+    txt.textContent=msg;
+    if(err.code===1){
+      document.getElementById('gps-req').checked=false;
+      const gps2=document.getElementById('gps-req2');if(gps2)gps2.checked=false;
+    }
+    updateGpsDebug();
+    updateWorkerUI();
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:30000});
 }
+
+function updateGpsDebug(){
+  const el=document.getElementById('gps-debug');
+  if(!el)return;
+  const proj=S.projects.find(p=>p.id===S.selectedProj);
+  let lines=[];
+  if(S.gpsState==='accurate'&&S.gps){
+    lines.push(`Accuracy: ±${Math.round(S.gps.accuracy)}m`);
+    if(proj?.gps_lat&&proj?.gps_lon){
+      const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
+      const radius=proj.gps_radius||300;
+      const inside=d<=radius;
+      lines.push(`Distance: ${Math.round(d)}m / ${radius}m ${inside?'✅':'❌'}`);
+    } else {
+      lines.push('Project has no GPS coordinates');
+    }
+  } else if(S.gpsState==='inaccurate'){
+    lines.push('⚠️ GPS signal too weak');
+  } else {
+    lines.push('GPS unavailable');
+  }
+  el.textContent=lines.join(' · ');
+  el.style.display='block';
+}
+
+// GPS button click handler
+(function(){
+  const btn=document.getElementById('gps-status-btn');
+  if(btn){
+    btn.addEventListener('click',function(){
+      console.log('GPS button clicked');
+      getGPS();
+    });
+  }
+})();
 
 // ═══ LIVE LOCATION TRACKING ═══
 let liveTrackingTimer=null;
@@ -1003,7 +1134,19 @@ async function updateLiveLocation(){
   if(!S.checkedIn||!S.user?.id)return;
   navigator.geolocation.getCurrentPosition(
     async p=>{
-      S.gps={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:p.coords.accuracy};
+      const acc=p.coords.accuracy;
+      const dot=document.getElementById('gps-dot');
+      const txt=document.getElementById('gps-txt');
+      if(acc>GPS_ACCURACY_LIMIT){
+        // Don't update server with inaccurate location
+        S.gpsState='inaccurate';
+        if(dot)dot.className='gdot bad';
+        if(txt)txt.textContent=`📍 Live · ⚠️ Low accuracy (±${Math.round(acc)}m)`;
+        updateGpsDebug();
+        return;
+      }
+      S.gps={lat:p.coords.latitude,lon:p.coords.longitude,accuracy:acc};
+      S.gpsState='accurate';
       try{
         await db.from('workers').update({
           current_lat:p.coords.latitude,
@@ -1011,13 +1154,12 @@ async function updateLiveLocation(){
           location_updated_at:new Date().toISOString()
         }).eq('id',S.user.id);
       }catch(e){}
-      const dot=document.getElementById('gps-dot');
-      const txt=document.getElementById('gps-txt');
       if(dot)dot.className='gdot good';
-      if(txt)txt.textContent=`📍 Live · ±${Math.round(p.coords.accuracy)}m`;
+      if(txt)txt.textContent=`📍 Live · ±${Math.round(acc)}m`;
+      updateGpsDebug();
     },
     ()=>{},
-    {enableHighAccuracy:true,timeout:8000,maximumAge:60000}
+    {enableHighAccuracy:true,timeout:15000,maximumAge:30000}
   );
 }
 function gpsDist(a,b,c,d){const R=6371000,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
@@ -1049,19 +1191,19 @@ function renderProjPicker(){
   }
   c.innerHTML=nearbyBanner+active.map(p=>{
     const isMyProj=S.checkedIn && S.selectedProj===p.id;
-    return`<div class="proj-item" onclick="openWorkerProject('${p.id}')" style="${isMyProj?'border-left:3px solid var(--green);background:rgba(34,197,94,.05)':''}">
-      <div style="flex:1">
-        <div class="proj-item-name" style="display:flex;align-items:center;gap:8px">
+    return`<div class="proj-item" onclick="openWorkerProject('${p.id}')" style="${isMyProj?'border-color:var(--green);background:rgba(34,197,94,.04)':''}">
+      <div>
+        <div class="proj-item-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           ${p.name}
           ${isMyProj?'<span style="font-size:10px;background:rgba(34,197,94,.15);color:var(--green);padding:2px 8px;border-radius:10px;font-weight:700">✅ Checked In</span>':''}
         </div>
-        <div style="font-size:12px;color:var(--blue);margin-top:4px">🗺️ ${p.address}</div>
-        <div style="display:flex;gap:8px;margin-top:8px" onclick="event.stopPropagation()">
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:11px;padding:5px 10px;border-radius:6px;background:rgba(59,130,246,.12);color:var(--blue);text-decoration:none;font-weight:600">📍 Navigate</a>
-          <button onclick="copyAddress('${p.address.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}'))" style="font-size:11px;padding:5px 10px;border-radius:6px;background:rgba(245,158,11,.12);color:var(--gold);border:none;font-family:var(--font);cursor:pointer;font-weight:600">📋 Copy</button>
-        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">${p.address||''}</div>
       </div>
-      <div style="font-size:20px;color:var(--muted);padding-left:10px">›</div>
+      <div class="proj-open-btn${isMyProj?' checked-in':''}">${isMyProj?'✅ Continue Work':'Open Project →'}</div>
+      <div class="proj-sec-actions" onclick="event.stopPropagation()">
+        <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.address)}" target="_blank" style="font-size:10px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);color:var(--muted);text-decoration:none;font-weight:600">📍 Navigate</a>
+        <button onclick="copyAddress('${p.address.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}'))" style="font-size:10px;padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--muted);font-family:var(--font);cursor:pointer;font-weight:600">📋 Copy</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -1121,6 +1263,13 @@ function renderWorkerProjStats(projId){
   const totalH=pw.reduce((s,w)=>s+calcHours(w.id,projId),0);
   const totalCost=calcProjectCost(projId);
   const days=new Set(S.events.filter(e=>e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0])).size;
+  // Update today's hours for current worker
+  const todayEl=document.getElementById('w-today-val');
+  if(todayEl && S.user?.id){
+    const today=new Date().toISOString().split('T')[0];
+    const todayH=calcHours(S.user.id,projId,today);
+    todayEl.textContent=todayH.toFixed(1)+'h';
+  }
   st.innerHTML=`
     <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center">
       <div style="font-size:20px;font-weight:700;color:var(--green)">${onSite}</div>
@@ -1204,35 +1353,121 @@ function workerBackToProjects(){
 function pickProj(id){openWorkerProject(id);}
 function updateWorkerUI(){
   const btn=document.getElementById('ci-btn'),badge=document.getElementById('sc-badge'),needVid=S.user?.require_video;
+  const statusTxt=document.getElementById('ci-status-text');
+  const noGpsLive=document.getElementById('no-gps-live');
   const isMyProj = S.selectedProj === S.user?.last_proj_id;
+  const isDriver=S.user?.role==='driver';
+  // No-GPS live indicator
+  if(noGpsLive)noGpsLive.style.display=(S.noGpsSession&&S.checkedIn)?'block':'none';
+  const gpsOn=document.getElementById('gps-req2')?.checked;
+  const gpsWaiting=gpsOn && !isDriver && (!S.gps || S.gpsState==='inaccurate'); // GPS on but no valid coordinates
+  updateGpsBanner();
+  updateGpsDebug();
   if(S.checkedIn && isMyProj){
-    // On their current project — show Check Out
-    btn.textContent=needVid?'🚪 Check Out (video required)':'🚪 Check Out';
+    // Checked in on THIS project — show CHECK OUT
+    btn.textContent=needVid?'⏹ CHECK OUT (video required)':'⏹ CHECK OUT';
     btn.className='ci-btn do-out';btn.disabled=false;
     btn.style.background='';btn.style.color='';
-    badge.textContent='✅ Checked In';badge.className='sc-badge badge-in';
+    if(statusTxt){statusTxt.textContent='You are currently working';statusTxt.style.color='var(--green)';}
+    if(S.noGpsSession){
+      badge.textContent='⚠️ Working (No GPS)';badge.className='sc-badge badge-in';
+      badge.style.background='rgba(245,158,11,.12)';badge.style.color='var(--gold)';
+    } else {
+      badge.textContent='✅ Working';badge.className='sc-badge badge-in';
+      badge.style.background='';badge.style.color='';
+    }
   } else if(S.checkedIn && !isMyProj){
-    // Viewing another project while checked in elsewhere — allow to check in here (auto-checkout from old)
+    // Checked in elsewhere — offer to switch
     const myProj=S.projects.find(p=>p.id===S.user?.last_proj_id);
-    btn.textContent=`✅ Check In here`;
-    btn.className='ci-btn do-in';btn.disabled=false;
-    btn.style.background='';btn.style.color='';
-    badge.textContent=myProj?`On: ${myProj.name}`:'Checked In';badge.className='sc-badge badge-in';
+    if(statusTxt){statusTxt.textContent=`Working on: ${myProj?.name||'other project'}`;statusTxt.style.color='var(--gold)';}
+    if(gpsWaiting){
+      btn.textContent='📍 Waiting for GPS...';btn.className='ci-btn';btn.disabled=true;
+      btn.style.background='var(--border)';btn.style.color='var(--muted)';
+    } else {
+      btn.textContent='▶ START WORK HERE';btn.className='ci-btn do-in';btn.disabled=false;
+      btn.style.background='';btn.style.color='';
+    }
+    badge.textContent=myProj?`On: ${myProj.name}`:'Working';badge.className='sc-badge badge-in';
+    badge.style.background='';badge.style.color='';
   } else {
-    btn.textContent='✅ Check In';btn.className='ci-btn do-in';btn.disabled=false;
-    btn.style.background='';btn.style.color='';
-    badge.textContent='Checked Out';badge.className='sc-badge badge-out';
+    // Not checked in
+    if(statusTxt){
+      const stTxt=gpsOn?(S.gpsState==='inaccurate'?'⚠️ GPS accuracy too low':'GPS mode — location required'):'Manual mode — no GPS';
+      statusTxt.textContent=stTxt;statusTxt.style.color=gpsOn?(S.gpsState==='inaccurate'?'var(--gold)':'var(--muted)'):'var(--gold)';
+    }
+    if(gpsWaiting){
+      if(S.gpsState==='inaccurate'){
+        btn.textContent='🔄 Retry GPS or turn GPS off';btn.className='ci-btn';btn.disabled=false;
+        btn.style.background='rgba(245,158,11,.15)';btn.style.color='var(--gold)';
+      } else {
+        btn.textContent='📍 Waiting for GPS...';btn.className='ci-btn';btn.disabled=true;
+        btn.style.background='var(--border)';btn.style.color='var(--muted)';
+      }
+    } else {
+      btn.textContent=gpsOn?'▶ START WORK':'▶ START WORK (No GPS)';
+      btn.className='ci-btn do-in';btn.disabled=false;
+      btn.style.background='';btn.style.color='';
+    }
+    badge.textContent='Not Working';badge.className='sc-badge badge-out';
+    badge.style.background='';badge.style.color='';
   }
 }
+function updateGpsBanner(){
+  const banner=document.getElementById('gps-banner');
+  const dot=document.getElementById('gps-dot2');
+  const txt=document.getElementById('gps-txt2');
+  const gpsOn=document.getElementById('gps-req2')?.checked;
+  if(!banner||!dot||!txt)return;
+  // Sync the hidden original toggle
+  const origTog=document.getElementById('gps-req');
+  if(origTog)origTog.checked=!!gpsOn;
+  if(S.noGpsSession && S.checkedIn){
+    banner.style.background='rgba(245,158,11,.08)';
+    banner.style.borderColor='rgba(245,158,11,.25)';
+    dot.className='gdot bad';
+    txt.textContent='⚠️ Working without GPS';txt.style.color='var(--gold)';
+  } else if(!gpsOn){
+    banner.style.background='rgba(245,158,11,.06)';
+    banner.style.borderColor='rgba(245,158,11,.2)';
+    dot.className='gdot';dot.style.background='var(--gold)';
+    txt.textContent='GPS Off — manual mode';txt.style.color='var(--gold)';
+  } else if(S.gpsState==='inaccurate'){
+    banner.style.background='rgba(245,158,11,.08)';
+    banner.style.borderColor='rgba(245,158,11,.25)';
+    dot.className='gdot bad';
+    txt.textContent='⚠️ Low GPS accuracy — not reliable';txt.style.color='var(--gold)';
+  } else if(!S.gps){
+    banner.style.background='rgba(239,68,68,.08)';
+    banner.style.borderColor='rgba(239,68,68,.25)';
+    dot.className='gdot spin';
+    txt.textContent='GPS unavailable';txt.style.color='var(--red)';
+  } else {
+    banner.style.background='rgba(34,197,94,.08)';
+    banner.style.borderColor='rgba(34,197,94,.25)';
+    dot.className='gdot good';
+    txt.textContent=`GPS Active (±${Math.round(S.gps.accuracy)}m)`;txt.style.color='var(--green)';
+  }
+  // Desktop GPS warning
+  const dw=document.getElementById('desktop-gps-warn');
+  if(dw)dw.style.display=(IS_DESKTOP&&gpsOn)?'block':'none';
+}
+function onGpsToggleChange(){
+  const gpsOn=document.getElementById('gps-req2')?.checked;
+  const origTog=document.getElementById('gps-req');
+  if(origTog)origTog.checked=!!gpsOn;
+  if(gpsOn && !S.gps)getGPS();
+  updateWorkerUI();
+}
+// toggleCI_noGPS removed — GPS OFF toggle now handles no-GPS check-in directly via toggleCI
 async function toggleCI(){
   if(!S.selectedProj){toast('Select a project first','err');return;}
-  const proj=S.projects.find(p=>p.id===S.selectedProj),gpsOn=document.getElementById('gps-req').checked;
+  const proj=S.projects.find(p=>p.id===S.selectedProj);
+  const gpsOn=document.getElementById('gps-req2')?.checked;
   const isDriver=S.user?.role==='driver';
   if(!S.checkedIn){
     // If already checked in on a DIFFERENT project — auto checkout from old one first
     if(S.user?.last_proj_id && S.user.last_proj_id !== S.selectedProj){
       const oldProj=S.projects.find(p=>p.id===S.user.last_proj_id);
-      // Insert checkout event for old project
       await db.from('events').insert({
         type:'out',
         worker_id:S.user.id,worker_name:S.user.name,
@@ -1242,42 +1477,70 @@ async function toggleCI(){
       });
       toast(`👋 Auto checked out from ${oldProj?.name||'previous project'}`,'ok');
     }
-    // GPS distance check — only if GPS on, not driver, GPS available, AND project has coordinates
-    if(gpsOn && !isDriver && S.gps && proj?.gps_lat && proj?.gps_lon){
-      const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
-      const radius=proj.gps_radius||300;
-      if(d>radius){
-        // Show distance info + offer override option
-        const override=confirm(`You are ${Math.round(d)}m from ${proj.name}.\nRequired: within ${radius}m.\n\nCheck in anyway?`);
-        if(!override)return;
-        // Log that override was used
-        toast(`⚠️ Checked in from ${Math.round(d)}m away`,'ok');
+
+    // === GPS ON MODE ===
+    if(gpsOn && !isDriver){
+      // GPS returned inaccurate — warn and block
+      if(S.gpsState==='inaccurate'){
+        toast('⚠️ GPS accuracy too low — move to open area or turn GPS off','err');
+        getGPS(); // retry
+        return;
       }
+      // GPS on but no coordinates yet — block
+      if(!S.gps){
+        toast('📍 GPS required — waiting for location','err');
+        getGPS();
+        return;
+      }
+      // GPS on + project has coordinates — enforce radius (NO override)
+      if(proj?.gps_lat && proj?.gps_lon){
+        const d=gpsDist(S.gps.lat,S.gps.lon,proj.gps_lat,proj.gps_lon);
+        const radius=proj.gps_radius||300;
+        if(d>radius){
+          toast(`🚫 Too far from ${proj.name} (${Math.round(d)}m away, need ${radius}m). Move closer or turn GPS off.`,'err');
+          return;
+        }
+      }
+      // GPS check passed — check in WITH GPS
+      S.noGpsSession=false;
     }
-    // GPS toggle on but GPS not yet available — allow with warning
-    if(gpsOn && !isDriver && !S.gps){
-      toast('⚠️ GPS unavailable — checking in without location','ok');
+    // === GPS OFF MODE === (manual no-GPS)
+    else if(!gpsOn && !isDriver){
+      S.noGpsSession=true;
     }
+    // === DRIVER === (GPS not enforced)
+    else {
+      S.noGpsSession=!S.gps;
+    }
+
     S.checkedIn=true;S.checkInTime=Date.now();
-    // Retry up to 3 times on weak connection
+    const eventNotes=S.noGpsSession?'no-gps':'gps';
     let saved=false;
     for(let attempt=1;attempt<=3;attempt++){
       try{
         await db.from('workers').update({checked_in:true,check_in_time:new Date(S.checkInTime).toISOString(),last_proj_id:S.selectedProj}).eq('id',S.user.id);
-        await db.from('events').insert({type:'in',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
+        await db.from('events').insert({
+          type:'in',worker_id:S.user.id,worker_name:S.user.name,
+          project_id:S.selectedProj,project_name:proj?.name,
+          gps_lat:S.noGpsSession?null:S.gps?.lat,
+          gps_lon:S.noGpsSession?null:S.gps?.lon,
+          notes:eventNotes
+        });
         saved=true;break;
       }catch(err){
         if(attempt<3){await new Promise(r=>setTimeout(r,1500));}
       }
     }
-    if(!saved){toast('⚠️ Checked in locally — will sync when connection improves','ok');}
-    else{toast('✅ Checked in!','ok');}
+    if(!saved){toast('⚠️ Checked in locally — will sync later','ok');}
+    else{toast(S.noGpsSession?'⚠️ Checked in (No GPS)':'✅ Checked in!','ok');}
+    playSound('checkin');
     updateWorkerUI();
-    startLiveTracking();
+    if(!S.noGpsSession)startLiveTracking();
   }else{
     if(S.user.require_video){openCO();}
     else{
       S.checkedIn=false;
+      S.noGpsSession=false;
       stopLiveTracking();
       await db.from('workers').update({checked_in:false,check_in_time:null,current_lat:null,current_lon:null}).eq('id',S.user.id);
       await db.from('events').insert({type:'out',worker_id:S.user.id,worker_name:S.user.name,project_id:S.selectedProj,project_name:proj?.name,gps_lat:S.gps?.lat,gps_lon:S.gps?.lon});
@@ -1289,7 +1552,20 @@ async function toggleCI(){
 }
 function startClock(){
   if(S.clockTimer)clearInterval(S.clockTimer);
-  S.clockTimer=setInterval(()=>{if(S.checkedIn&&S.checkInTime){const s=Math.floor((Date.now()-S.checkInTime)/1000);document.getElementById('sc-clock').textContent=fmt(s);document.getElementById('sc-lbl').textContent='Time on site today';}else{document.getElementById('sc-clock').textContent='00:00:00';document.getElementById('sc-lbl').textContent='Not checked in';}},1000);
+  let tickCount=0;
+  S.clockTimer=setInterval(()=>{
+    if(S.checkedIn&&S.checkInTime){
+      const s=Math.floor((Date.now()-S.checkInTime)/1000);
+      document.getElementById('sc-clock').textContent=fmt(s);
+      document.getElementById('sc-lbl').textContent='Time on site today';
+      // Update today hours every 30s
+      tickCount++;
+      if(tickCount%30===0){
+        const te=document.getElementById('w-today-val');
+        if(te&&S.user?.id&&S.selectedProj){const today=new Date().toISOString().split('T')[0];te.textContent=calcHours(S.user.id,S.selectedProj,today).toFixed(1)+'h';}
+      }
+    }else{document.getElementById('sc-clock').textContent='00:00:00';document.getElementById('sc-lbl').textContent='Not checked in';}
+  },1000);
 }
 function fmt(s){return[Math.floor(s/3600),Math.floor((s%3600)/60),s%60].map(v=>String(v).padStart(2,'0')).join(':');}
 function openCO(){document.getElementById('vid-in').value='';document.getElementById('vid-prev').style.display='none';document.getElementById('vid-ok').style.display='none';document.getElementById('vid-drop').style.display='block';const btn=document.getElementById('co-go');btn.disabled=true;btn.className='co-go';S.coVideo=null;document.getElementById('co-ov').className='co-ov show';}
@@ -1341,6 +1617,7 @@ async function confirmCO() {
     if (mErr) throw new Error(mErr.message);
     // Step 3: Complete checkout only after confirmed media row
     S.checkedIn = false;
+    S.noGpsSession = false;
     await db.from('workers').update({ checked_in: false, check_in_time: null }).eq('id', S.user.id);
     await db.from('events').insert({
       type: 'out', worker_id: S.user.id, worker_name: S.user.name,
@@ -1369,11 +1646,19 @@ async function confirmCO() {
 
 async function loadWorkerTasks(){
   const c=document.getElementById('w-tasks');
+  if(!c)return;
+  // Fresh fetch if cache looks empty or stale
+  if(!S.tasks.length||!S.tasks.some(t=>t.project_id===S.selectedProj)){
+    try{
+      const r=await db.from('tasks').select('*').order('created_at').limit(500);
+      if(r.data)S.tasks=r.data;
+    }catch(e){}
+  }
   // ALL tasks for this worker (done and undone) + general project tasks
-  const mine=S.tasks.filter(t=>t.worker_id===S.user.id);
+  const mine=S.tasks.filter(t=>t.worker_id===S.user?.id);
   const projTasks=S.selectedProj?S.tasks.filter(t=>
     t.project_id===S.selectedProj&&
-    (!t.worker_id||t.worker_id===S.user.id)
+    (!t.worker_id||t.worker_id===S.user?.id)
   ):[];
   const all=[...new Map([...mine,...projTasks].map(t=>[t.id,t])).values()]
     .sort((a,b)=>{
@@ -1401,7 +1686,10 @@ async function loadWorkerTasks(){
     }
   }
   S._lastTaskCount=undone;
-  if(!all.length){c.innerHTML='<div class="empty"><div class="ei">✅</div><p>No tasks assigned</p></div>';return;}
+  // Update count in header
+  const countEl2=document.getElementById('w-tasks-count');
+  if(countEl2)countEl2.textContent=total>0?`${done}/${total} done`:'';
+  if(!all.length){c.innerHTML='<div style="padding:20px;text-align:center;color:var(--muted)"><div style="font-size:28px;margin-bottom:6px">✅</div><div style="font-size:12px">No tasks for this project</div></div>';return;}
   const roleColors={worker:'#f59e0b',supervisor:'#3b82f6',driver:'#22c55e',subcontractor:'#a855f7'};
   const myColor=roleColors[S.user?.role||'worker']||'#f59e0b';
   // Progress bar
@@ -1415,7 +1703,7 @@ async function loadWorkerTasks(){
       <div style="background:${pct===100?'var(--green)':'var(--gold)'};height:100%;width:${pct}%;transition:width .3s;border-radius:6px"></div>
     </div>
   </div>`;
-  c.innerHTML=progressBar+all.map(t=>{
+  c.innerHTML='<div style="padding:12px 14px">'+progressBar+all.map(t=>{
     const proj=S.projects.find(p=>p.id===t.project_id);
     const isCurrentProj=t.project_id===S.selectedProj;
     const isForMe=t.worker_id===S.user.id;
@@ -1435,7 +1723,7 @@ async function loadWorkerTasks(){
       ${t.description?`<div class="task-desc" style="${t.done?'color:var(--muted)':''}">${t.description}</div>`:''}
       ${!t.done?`<button class="task-done-btn" onclick="event.stopPropagation();markDone('${t.id}')">✅ Mark Done</button>`:''}
     </div>`;
-  }).join('');
+  }).join('')+'</div>';
 }
 function openTaskDetail(id){
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
@@ -1557,11 +1845,12 @@ function renderOverview(){
   tb.innerHTML=active.map(w=>{
     const proj=S.projects.find(p=>p.id===w.last_proj_id);
     const lastIn=S.events.filter(e=>e.worker_id===w.id&&e.type==='in').pop();
-    const h=lastIn?((Date.now()-new Date(lastIn.created_at))/3600000).toFixed(1):0;
-    const hNum=parseFloat(h);
-    const longSession=hNum>10;
-    const veryLong=hNum>14;
-    const sessionWarning=longSession?`<span style="font-size:10px;background:${veryLong?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${veryLong?'var(--red)':'var(--gold)'};padding:2px 6px;border-radius:6px;margin-left:4px">${veryLong?'🚨 '+Math.round(hNum)+'h':'⚠️ '+Math.round(hNum)+'h'}</span>`:'';
+    const todayH=calcTodayHours(w.id);
+    const h=todayH.toFixed(1);
+    const hNum=todayH;
+    const longSession=hNum>11;
+    const veryLong=hNum>13;
+    const sessionWarning=longSession?`<span style="font-size:10px;background:${veryLong?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)'};color:${veryLong?'var(--red)':'var(--gold)'};padding:2px 6px;border-radius:6px;margin-left:4px">${veryLong?'🚨':'⚠️'} ${hNum.toFixed(1)}h today</span>`:'';
     const role=w.role||'worker';
     const rColor=roleColors[role]||'#f59e0b';
     // GPS — prefer live current location, fall back to checkin location
@@ -1577,19 +1866,22 @@ function renderOverview(){
       const dist=gpsDist(w.current_lat,w.current_lon,proj.gps_lat,proj.gps_lon);
       leftSite=dist>(proj.gps_radius||300)*2; // 2x radius = clearly left
     }
+    const checkinNoGps=lastIn&&(!lastIn.gps_lat&&!lastIn.gps_lon);
     const gpsLink=lat&&lon
       ?`<a href="https://www.google.com/maps?q=${lat},${lon}" target="_blank" style="text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:1px">
           <span style="font-size:18px">${leftSite?'🚗':hasLive?'📍':'📌'}</span>
           ${locAge!==null?`<span style="font-size:9px;color:${leftSite?'var(--red)':locAge<15?'var(--green)':'var(--muted)'}">${leftSite?'left site':locAge+'m ago'}</span>`:'<span style="font-size:9px;color:var(--muted)">checkin</span>'}
         </a>`
-      :'<span style="color:var(--muted);font-size:11px">—</span>';
+      :checkinNoGps
+        ?'<span style="font-size:10px;background:rgba(245,158,11,.15);color:var(--gold);padding:3px 8px;border-radius:6px;font-weight:700">No GPS</span>'
+        :'<span style="color:var(--muted);font-size:11px">—</span>';
     const leftSiteWarning=leftSite?`<span style="font-size:10px;background:rgba(239,68,68,.15);color:var(--red);padding:2px 7px;border-radius:6px;margin-left:6px">🚗 Left site</span>`:'';
     return`<tr style="${veryLong?'background:rgba(239,68,68,.04)':leftSite?'background:rgba(239,68,68,.03)':longSession?'background:rgba(245,158,11,.03)':''}">
       <td>
         <div class="cell-name">
           <div class="av-sm" style="background:${w.color||rColor};border:2px solid ${rColor}">${w.name.charAt(0)}</div>
           <div>
-            <div class="nm">${w.name}${sessionWarning}${leftSiteWarning}</div>
+            <div class="nm">${w.name}${sessionWarning}${leftSiteWarning}${checkinNoGps&&!leftSite?'<span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);padding:2px 6px;border-radius:6px;font-weight:700;margin-left:4px">No GPS</span>':''}</div>
             <div style="font-size:10px;color:${rColor}">${roleIcons[role]} ${role}</div>
           </div>
         </div>
@@ -1599,19 +1891,21 @@ function renderOverview(){
         ${proj?.address?`<div style="font-size:10px;color:var(--muted)">${proj.address.split(',').slice(0,2).join(',')}</div>`:''}
       </td>
       <td style="font-size:12px">${lastIn?fmtTime(lastIn.created_at):'—'}</td>
-      <td style="font-family:var(--mono);font-weight:700;color:${veryLong?'var(--red)':longSession?'var(--gold)':'var(--gold)'}">${h}h</td>
+      <td style="font-family:var(--mono);font-weight:700;color:${veryLong?'var(--red)':longSession?'var(--gold)':'var(--text)'}">${h}h</td>
       <td style="text-align:center">${gpsLink}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:20px">No workers on site</td></tr>';
   const tl=document.getElementById('ov-tl');
   const rec=[...S.events].reverse().slice(0,8);
   const isOwner=S.user?.role==='owner';
-  tl.innerHTML=rec.map(e=>`<div style="display:flex;align-items:center;gap:10px;padding:7px 14px">
+  tl.innerHTML=rec.map(e=>{
+    const isNoGps=e.type==='in'&&(e.notes==='no-gps'||(!e.gps_lat&&!e.gps_lon));
+    return`<div style="display:flex;align-items:center;gap:10px;padding:7px 14px">
     <div class="tl-dot ${e.type}"></div>
-    <div style="flex:1;font-size:12px"><strong>${e.worker_name}</strong> ${e.type==='in'?'checked in':e.type==='out'?'checked out':e.type==='payroll'?'payroll processed':'submitted report'} — ${e.project_name||''}</div>
+    <div style="flex:1;font-size:12px"><strong>${e.worker_name}</strong> ${e.type==='in'?'checked in':e.type==='out'?'checked out':e.type==='payroll'?'payroll processed':'submitted report'} — ${e.project_name||''}${isNoGps?' <span style="font-size:10px;background:rgba(245,158,11,.15);color:var(--gold);padding:1px 6px;border-radius:6px;font-weight:700">No GPS</span>':''}</div>
     <div style="font-size:10px;color:var(--muted)">${fmtDT(e.created_at)}</div>
     ${isOwner?`<button onclick="deleteActivity('${e.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:2px 6px;opacity:.6" title="Delete">🗑</button>`:''}
-  </div>`).join('')||'<div class="empty"><p>No activity yet</p></div>';
+  </div>`;}).join('')||'<div class="empty"><p>No activity yet</p></div>';
 
   // ── Untracked time gaps ──
   // For each worker find checkout→checkin pairs today with gap ≥ 30 min
@@ -1821,6 +2115,140 @@ function openWorkerDetail(projId,workerId){
   const dc=document.getElementById('wd-days');
   if(!days.length){dc.innerHTML='<div class="empty"><div class="ei">📅</div><p>No work days yet</p></div>';}
   else dc.innerHTML=days.map(ds=>{const h=calcHours(workerId,projId,ds);const inEv=S.events.filter(e=>e.worker_id===workerId&&e.project_id===projId&&e.type==='in'&&e.created_at.startsWith(ds))[0];const outEv=S.events.filter(e=>e.worker_id===workerId&&e.project_id===projId&&e.type==='out'&&e.created_at.startsWith(ds)).pop();const dn=new Date(ds).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});return`<div class="dayrow" onclick="openDayDetail('${projId}','${workerId}','${ds}')"><div><div class="day-h">${dn}</div><div class="day-sub">${inEv?fmtTime(inEv.created_at):'—'} → ${outEv?fmtTime(outEv.created_at):'still on site'}</div></div><div><div class="day-hrs">${h.toFixed(1)}h</div></div></div>`;}).join('');
+  // Monthly summary
+  const msEl=document.getElementById('wd-month-summary');
+  if(msEl){
+    const now=new Date();
+    const monthPfx=now.toISOString().slice(0,7);
+    const monthName=now.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const monthIns=S.events.filter(e=>e.worker_id===workerId&&e.type==='in'&&e.created_at.startsWith(monthPfx));
+    const md={};
+    monthIns.forEach(inEv=>{
+      const day=inEv.created_at.split('T')[0];
+      if(!md[day])md[day]={noGps:false,hours:0};
+      if(!inEv.gps_lat&&!inEv.gps_lon)md[day].noGps=true;
+      const outEv=S.events.find(e=>e.worker_id===workerId&&e.type==='out'&&e.created_at.startsWith(day)&&new Date(e.created_at)>new Date(inEv.created_at));
+      md[day].hours+=outEv?((new Date(outEv.created_at)-new Date(inEv.created_at))/3600000):0;
+    });
+    const vals=Object.values(md);
+    const mWorked=vals.length;
+    const mHours=vals.reduce((s,d)=>s+d.hours,0);
+    const mNoGps=vals.filter(d=>d.noGps).length;
+    const m11=vals.filter(d=>d.hours>11).length;
+    const m13=vals.filter(d=>d.hours>13).length;
+    const hasWarnings=mNoGps||m11||m13;
+    msEl.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;margin-bottom:10px">📅 ${monthName}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${hasWarnings?'12':'0'}px">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--blue)">${mWorked}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Days Worked</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--gold)">${mHours.toFixed(1)}h</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Total Hours</div>
+        </div>
+      </div>
+      ${hasWarnings?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${mNoGps?`<div style="flex:1;min-width:80px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--gold)">${mNoGps}</div>
+          <div style="font-size:9px;color:var(--gold);margin-top:2px;font-weight:600">No GPS days</div>
+        </div>`:''}
+        ${m11?`<div style="flex:1;min-width:80px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--gold)">${m11}</div>
+          <div style="font-size:9px;color:var(--gold);margin-top:2px;font-weight:600">Days 11h+</div>
+        </div>`:''}
+        ${m13?`<div style="flex:1;min-width:80px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px;text-align:center">
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--red)">${m13}</div>
+          <div style="font-size:9px;color:var(--red);margin-top:2px;font-weight:600">Days 13h+</div>
+        </div>`:''}
+      </div>`:''}
+    </div>`;
+  }
+  showDrillView('view-worker-detail');
+}
+function openWorkerFromTeam(workerId){
+  S.drillWorker=workerId;S.drillProj=null;S._fromTeam=true;
+  const w=S.workers.find(x=>x.id===workerId);if(!w)return;
+  document.getElementById('bc-worker').textContent=w.name;
+  document.getElementById('bc-worker2').textContent=w.name;
+  // Update breadcrumb for Team context
+  document.getElementById('bc-proj2').textContent='👷 Team';
+  document.getElementById('bc-proj2').setAttribute('onclick',"showView('team')");
+  // Stats across ALL projects
+  const totalH=calcHours(workerId,null);
+  const totalEarned=calcWorkerEarnings(workerId,null);
+  const allDays=[...new Set(S.events.filter(e=>e.worker_id===workerId&&e.type==='in').map(e=>e.created_at.split('T')[0]))].sort().reverse();
+  const rateLabel=w.role==='subcontractor'?`Fixed $${w.fixed_amount||0}`:`$${w.rate||0}/hr`;
+  const isOwner=S.user?.role==='owner';
+  document.getElementById('wd-stats').innerHTML=`
+    <div class="stat a"><div class="sl">Total Hours</div><div class="sv">${totalH.toFixed(1)}h</div><div class="sd">all projects</div></div>
+    <div class="stat b"><div class="sl">Days Worked</div><div class="sv">${allDays.length}</div><div class="sd">days</div></div>
+    <div class="stat p"><div class="sl">Earned</div><div class="sv">$${totalEarned.toFixed(2)}</div><div class="sd">${rateLabel}</div></div>
+    <div class="stat g"><div class="sl">Status</div><div class="sv" style="font-size:14px">${w.checked_in?'✅':'⭕'}</div><div class="sd">${w.checked_in?'On Site':'Offline'}</div></div>
+    ${isOwner?`<div style="grid-column:1/-1;margin-top:4px"><button onclick="openAdjustHours('${workerId}','')" style="padding:9px 18px;border-radius:8px;border:1px solid var(--gold);background:rgba(245,158,11,.1);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">⏱️ Adjust Hours</button></div>`:''}
+  `;
+  // Daily breakdown across all projects
+  const dc=document.getElementById('wd-days');
+  if(!allDays.length){dc.innerHTML='<div class="empty"><div class="ei">📅</div><p>No work days yet</p></div>';}
+  else dc.innerHTML=allDays.map(ds=>{
+    const h=calcHours(workerId,null,ds);
+    const dayIns=S.events.filter(e=>e.worker_id===workerId&&e.type==='in'&&e.created_at.startsWith(ds));
+    const dayOuts=S.events.filter(e=>e.worker_id===workerId&&e.type==='out'&&e.created_at.startsWith(ds));
+    const inEv=dayIns[0];const outEv=dayOuts[dayOuts.length-1];
+    const projs=[...new Set(dayIns.map(e=>e.project_name).filter(Boolean))].join(', ');
+    const isNoGps=dayIns.some(e=>!e.gps_lat&&!e.gps_lon);
+    const longDay=h>11;const veryLong=h>13;
+    const dn=new Date(ds).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+    return`<div class="dayrow" style="border-color:${veryLong?'rgba(239,68,68,.3)':longDay?'rgba(245,158,11,.3)':'var(--border)'}">
+      <div style="flex:1;min-width:0">
+        <div class="day-h" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${dn}${isNoGps?'<span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);padding:2px 6px;border-radius:6px;font-weight:700">No GPS</span>':''}${veryLong?'<span style="font-size:9px;background:rgba(239,68,68,.15);color:var(--red);padding:2px 6px;border-radius:6px;font-weight:700">🚨 '+h.toFixed(1)+'h</span>':longDay?'<span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);padding:2px 6px;border-radius:6px;font-weight:700">⚠️ '+h.toFixed(1)+'h</span>':''}</div>
+        <div class="day-sub">${projs||'—'} · ${inEv?fmtTime(inEv.created_at):'?'} → ${outEv?fmtTime(outEv.created_at):'on site'}</div>
+      </div>
+      <div class="day-hrs">${h.toFixed(1)}h</div>
+    </div>`;
+  }).join('');
+  // Monthly summary (reuse same logic)
+  const msEl=document.getElementById('wd-month-summary');
+  if(msEl){
+    const now=new Date();
+    const monthPfx=now.toISOString().slice(0,7);
+    const monthName=now.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const monthIns=S.events.filter(e=>e.worker_id===workerId&&e.type==='in'&&e.created_at.startsWith(monthPfx));
+    const md={};
+    monthIns.forEach(inEv=>{
+      const day=inEv.created_at.split('T')[0];
+      if(!md[day])md[day]={noGps:false,hours:0};
+      if(!inEv.gps_lat&&!inEv.gps_lon)md[day].noGps=true;
+      const outEv=S.events.find(e=>e.worker_id===workerId&&e.type==='out'&&e.created_at.startsWith(day)&&new Date(e.created_at)>new Date(inEv.created_at));
+      md[day].hours+=outEv?((new Date(outEv.created_at)-new Date(inEv.created_at))/3600000):0;
+    });
+    const vals=Object.values(md);
+    const mWorked=vals.length;
+    const mHours=vals.reduce((s,d)=>s+d.hours,0);
+    const mNoGps=vals.filter(d=>d.noGps).length;
+    const m11=vals.filter(d=>d.hours>11).length;
+    const m13=vals.filter(d=>d.hours>13).length;
+    const hasWarnings=mNoGps||m11||m13;
+    msEl.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.06em;margin-bottom:10px">📅 ${monthName}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:${hasWarnings?'12':'0'}px">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--blue)">${mWorked}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Days Worked</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-family:var(--mono);font-size:20px;font-weight:700;color:var(--gold)">${mHours.toFixed(1)}h</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Total Hours</div>
+        </div>
+      </div>
+      ${hasWarnings?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${mNoGps?`<div style="flex:1;min-width:80px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:8px;text-align:center"><div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--gold)">${mNoGps}</div><div style="font-size:9px;color:var(--gold);margin-top:2px;font-weight:600">No GPS days</div></div>`:''}
+        ${m11?`<div style="flex:1;min-width:80px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:8px;text-align:center"><div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--gold)">${m11}</div><div style="font-size:9px;color:var(--gold);margin-top:2px;font-weight:600">Days 11h+</div></div>`:''}
+        ${m13?`<div style="flex:1;min-width:80px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:8px;text-align:center"><div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--red)">${m13}</div><div style="font-size:9px;color:var(--red);margin-top:2px;font-weight:600">Days 13h+</div></div>`:''}
+      </div>`:''}
+    </div>`;
+  }
   showDrillView('view-worker-detail');
 }
 function openDayDetail(projId,workerId,ds){
@@ -1841,26 +2269,54 @@ function renderTeam(){
   const rf=document.getElementById('role-filter')?.value||'all',sr=document.getElementById('team-search')?.value.toLowerCase()||'';
   const ws=S.workers.filter(w=>(rf==='all'||(w.role||'worker')===rf)&&(!sr||w.name.toLowerCase().includes(sr))).sort((a,b)=>a.name.localeCompare(b.name));
   const tb=document.getElementById('team-table');
-  let totalHours=0, totalEarned=0;
+  let totalHours=0, totalEarned=0, totalTodayH=0, totalTodayEarned=0;
   tb.innerHTML=ws.map(w=>{
     const h=calcHours(w.id,null);
     const earned=calcWorkerEarnings(w.id,null);
     totalHours+=h; totalEarned+=earned;
-    const rateLabel=w.role==='subcontractor'?`$${w.fixed_amount||0} fixed`:`$${w.rate||0}/hr`;
-    const hasMsg=w.message&&w.message.trim();
-    return`<tr>
-      <td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div><div class="nm">${w.name}</div><div class="np">PIN: ${w.pin}</div></div></div></td>
+    // Today's hours & earnings
+    const todayH=calcTodayHours(w.id);
+    const todayE=w.role==='subcontractor'?0:todayH*(w.rate||0);
+    totalTodayH+=todayH; totalTodayEarned+=todayE;
+    const overtime11=todayH>11;
+    const overtime13=todayH>13;
+    const overtimeBadge=overtime13?'<span style="font-size:9px;background:rgba(239,68,68,.18);color:var(--red);padding:2px 7px;border-radius:8px;font-weight:700;margin-left:4px">🚨</span>'
+      :overtime11?'<span style="font-size:9px;background:rgba(245,158,11,.18);color:var(--gold);padding:2px 7px;border-radius:8px;font-weight:700;margin-left:4px">⚠️</span>':'';
+    // Check if last check-in was no-GPS
+    const lastIn=S.events.filter(e=>e.worker_id===w.id&&e.type==='in').pop();
+    const isNoGps=w.checked_in&&lastIn&&(lastIn.notes==='no-gps'||(!lastIn.gps_lat&&!lastIn.gps_lon));
+    const noGpsBadge=isNoGps?'<span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);padding:2px 6px;border-radius:8px;font-weight:700;margin-left:4px">No GPS</span>':'';
+    // Monthly warning stats
+    const now=new Date();
+    const monthPfx=now.toISOString().slice(0,7);
+    const monthIns=S.events.filter(e=>e.worker_id===w.id&&e.type==='in'&&e.created_at.startsWith(monthPfx));
+    const monthDays={};
+    monthIns.forEach(inEv=>{
+      const day=inEv.created_at.split('T')[0];
+      if(!monthDays[day])monthDays[day]={noGps:false,hours:0};
+      if(!inEv.gps_lat&&!inEv.gps_lon)monthDays[day].noGps=true;
+      const outEv=S.events.find(e=>e.worker_id===w.id&&e.type==='out'&&e.created_at.startsWith(day)&&new Date(e.created_at)>new Date(inEv.created_at));
+      monthDays[day].hours+=outEv?((new Date(outEv.created_at)-new Date(inEv.created_at))/3600000):0;
+    });
+    const mDays=Object.values(monthDays);
+    const mNoGps=mDays.filter(d=>d.noGps).length;
+    const m11=mDays.filter(d=>d.hours>11).length;
+    const m13=mDays.filter(d=>d.hours>13).length;
+    const monthBadges=(mNoGps||m11||m13)?`<div style="display:flex;gap:3px;margin-top:2px;flex-wrap:wrap">${mNoGps?`<span style="font-size:8px;background:rgba(245,158,11,.12);color:var(--gold);padding:1px 5px;border-radius:4px;font-weight:600">${mNoGps}d no-gps</span>`:''}${m11?`<span style="font-size:8px;background:rgba(245,158,11,.12);color:var(--gold);padding:1px 5px;border-radius:4px;font-weight:600">${m11}d 11h+</span>`:''}${m13?`<span style="font-size:8px;background:rgba(239,68,68,.12);color:var(--red);padding:1px 5px;border-radius:4px;font-weight:600">${m13}d 13h+</span>`:''}</div>`:'';
+    const rowBg=overtime13?'background:rgba(239,68,68,.04)':overtime11?'background:rgba(245,158,11,.03)':'';
+    return`<tr style="${rowBg};cursor:pointer" onclick="openWorkerFromTeam('${w.id}')">
+      <td><div class="cell-name"><div class="av-sm" style="background:${w.color||'#f59e0b'}">${w.name.charAt(0)}</div><div><div class="nm">${w.name}${overtimeBadge}${noGpsBadge}</div><div class="np">PIN: ${w.pin}</div>${monthBadges}</div></div></td>
       <td><span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></td>
       <td><span class="tag ${w.checked_in?'on':'off'}">${w.checked_in?'On Site':'Offline'}</span></td>
+      <td style="font-family:var(--mono);font-weight:700;color:${overtime13?'var(--red)':overtime11?'var(--gold)':todayH>0?'var(--text)':'var(--muted)'}">${todayH>0?todayH.toFixed(1)+'h':'—'}</td>
+      <td style="font-family:var(--mono);font-weight:600;color:${todayE>0?'var(--green)':'var(--muted)'};font-size:12px">${todayE>0?'$'+todayE.toFixed(0):w.role==='subcontractor'?'fixed':'—'}</td>
       <td><b>${h.toFixed(1)}h</b></td>
-      <td style="font-size:12px;font-weight:600;color:var(--gold)">${rateLabel}</td>
       <td style="font-family:var(--mono);font-weight:700;color:var(--green);font-size:13px">$${earned.toFixed(2)}</td>
-      <td><label class="tog"><input type="checkbox" ${w.require_video?'checked':''} onchange="toggleVid('${w.id}',this.checked)"><div class="tog-sl"></div></label></td>
-      <td style="display:flex;gap:5px;flex-wrap:wrap">
-        <button class="action" onclick="openEditWorker('${w.id}')">✏️ Edit</button>
+      <td style="display:flex;gap:5px;flex-wrap:wrap" onclick="event.stopPropagation()">
+        <button class="action" onclick="openEditWorker('${w.id}')">✏️</button>
         <button class="action" onclick="openAdjHours('${w.id}')" title="Adjust hours" style="border-color:rgba(245,158,11,.4);color:var(--gold)">⏱️</button>
-        <button class="action" onclick="openMsgWorker('${w.id}')" title="Send message">✉️ Msg</button>
-        <button class="action red" onclick="delWorker('${w.id}')">Remove</button>
+        <button class="action" onclick="openMsgWorker('${w.id}')" title="Send message">✉️</button>
+        <button class="action red" onclick="delWorker('${w.id}')">🗑</button>
       </td>
     </tr>`;
   }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">No team members yet</td></tr>';
@@ -1869,10 +2325,11 @@ function renderTeam(){
   if(ws.length){
     tf.innerHTML=`<tr style="background:rgba(245,158,11,.06);border-top:2px solid var(--border)">
       <td colspan="3" style="padding:11px 14px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">TOTAL (${ws.length} people)</td>
-      <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--gold);font-size:14px">${totalHours.toFixed(1)}h</td>
+      <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--gold);font-size:13px">${totalTodayH.toFixed(1)}h</td>
+      <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--green);font-size:12px">$${totalTodayEarned.toFixed(0)}</td>
+      <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--gold);font-size:13px">${totalHours.toFixed(1)}h</td>
+      <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--green);font-size:13px">$${totalEarned.toFixed(2)}</td>
       <td></td>
-      <td style="padding:11px 14px;font-family:var(--mono);font-weight:700;color:var(--green);font-size:14px">$${totalEarned.toFixed(2)}</td>
-      <td colspan="2"></td>
     </tr>`;
   } else {
     tf.innerHTML='';
@@ -1885,7 +2342,12 @@ function renderTimeline(){
   const c=document.getElementById('tl-list');
   if(!evs.length){c.innerHTML='<div class="empty"><div class="ei">🕐</div><p>No activity yet</p></div>';return;}
   const icons={in:'🟢',out:'🔴',upload:'📷'};
-  c.innerHTML=evs.slice(0,80).map(e=>`<div class="tl-item"><div class="tl-dot ${e.type}"></div><div style="flex:1"><div class="tl-main">${icons[e.type]||'•'} <strong>${e.worker_name}</strong> — ${e.type==='in'?'Checked In':e.type==='out'?'Checked Out':'Submitted Report'}</div><div class="tl-sub">${e.project_name||''} ${e.gps_lat?'· GPS ✅':''}</div></div><div class="tl-time">${fmtDT(e.created_at)}</div></div>`).join('');
+  c.innerHTML=evs.slice(0,80).map(e=>{
+    const isNoGps=e.notes==='no-gps'||((e.type==='in'||e.type==='out')&&!e.gps_lat&&!e.gps_lon);
+    const gpsLabel=e.gps_lat?'· 📍 GPS':'';
+    const noGpsLabel=(e.type==='in'&&isNoGps)?'· <span style="color:var(--gold);font-weight:700">⚠️ No GPS</span>':'';
+    return`<div class="tl-item"><div class="tl-dot ${e.type}"></div><div style="flex:1"><div class="tl-main">${icons[e.type]||'•'} <strong>${e.worker_name}</strong> — ${e.type==='in'?'Checked In':e.type==='out'?'Checked Out':'Submitted Report'}</div><div class="tl-sub">${e.project_name||''} ${gpsLabel}${noGpsLabel}</div></div><div class="tl-time">${fmtDT(e.created_at)}</div></div>`;
+  }).join('');
 }
 function renderTaskList(){
   const c=document.getElementById('task-list');
@@ -2068,6 +2530,7 @@ function fillWorkerSelect(){const s=document.getElementById('t-worker');s.innerH
 function fillTlFilters(){const tw=document.getElementById('tl-worker'),tp=document.getElementById('tl-proj');const cw=tw.value,cp=tp.value;tw.innerHTML='<option value="all">All Workers</option>'+S.workers.map(w=>`<option value="${w.id}">${w.name}</option>`).join('');tp.innerHTML='<option value="all">All Projects</option>'+S.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');tw.value=cw||'all';tp.value=cp||'all';}
 function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('show'));document.getElementById(id).classList.add('show');}
 function showView(id){
+  S._fromTeam=false;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
   document.querySelectorAll('.side-item').forEach(n=>n.classList.remove('on'));
   document.querySelectorAll('.mob-btn').forEach(n=>n.classList.remove('on'));
@@ -2085,7 +2548,24 @@ function showView(id){
   if(id==='projects')renderProjCards();
   if(id==='trash')renderTrash();
 }
-function showDrillView(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));document.querySelectorAll('.side-item').forEach(n=>n.classList.remove('on'));document.querySelectorAll('.mob-btn').forEach(n=>n.classList.remove('on'));document.getElementById(id).classList.add('on');document.getElementById('nav-projects').classList.add('on');const mi=document.getElementById('mob-projects');if(mi)mi.classList.add('on');document.getElementById('view-title').textContent='Projects';document.getElementById('view-sub').textContent='Drill-down view';}
+function showDrillView(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('.side-item').forEach(n=>n.classList.remove('on'));
+  document.querySelectorAll('.mob-btn').forEach(n=>n.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  if(S._fromTeam){
+    document.getElementById('nav-team')?.classList.add('on');
+    const mi=document.getElementById('mob-team');if(mi)mi.classList.add('on');
+    const w=S.workers.find(x=>x.id===S.drillWorker);
+    document.getElementById('view-title').textContent=w?.name||'Worker';
+    document.getElementById('view-sub').textContent='Worker detail';
+  } else {
+    document.getElementById('nav-projects')?.classList.add('on');
+    const mi=document.getElementById('mob-projects');if(mi)mi.classList.add('on');
+    document.getElementById('view-title').textContent='Projects';
+    document.getElementById('view-sub').textContent='Drill-down view';
+  }
+}
 function openModal(id){document.getElementById(id).className='modal-ov show';}
 function closeModal(id){document.getElementById(id).className='modal-ov';}
 function roleLabel(r){return{worker:'👷 Worker',supervisor:'👔 Supervisor',driver:'🚚 Driver',subcontractor:'🤝 Sub'}[r]||'👷 Worker';}
@@ -2256,20 +2736,29 @@ async function saveJournalEntry() {
   const btn = document.getElementById('journal-ov').querySelector('.co-go');
   const projId = pending.forManager ? S.drillProj : S.selectedProj;
   if (!projId) { toast('Select a project first', 'err'); return; }
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Uploading...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving...'; }
   try {
-    const mediaCategory = pending.type === 'video' ? 'video' : 'photo';
-    validateFile(pending.file, mediaCategory);
     const proj = S.projects.find(p => p.id === projId);
-    const folder = pending.type === 'video' ? 'videos' : 'photos';
-    const { filePath, fileUrl } = await uploadFileToStorage(pending.file, projId, folder);
+    let filePath = null, fileUrl = null;
+    if (pending.file) {
+      // Has media file — upload it
+      const mediaCategory = pending.type === 'video' ? 'video' : 'photo';
+      validateFile(pending.file, mediaCategory);
+      const folder = pending.type === 'video' ? 'videos' : 'photos';
+      const uploaded = await uploadFileToStorage(pending.file, projId, folder);
+      filePath = uploaded.filePath; fileUrl = uploaded.fileUrl;
+    } else if (!comment) {
+      toast('Write something first', 'err');
+      if (btn) { btn.disabled = false; btn.textContent = '💾 Save to Journal'; }
+      return;
+    }
     const { error } = await db.from('media').insert({
       worker_id: S.user?.id || null,
       worker_name: S.user?.name || 'Unknown',
       project_id: projId,
       project_name: proj?.name || '',
-      type: pending.type,
-      name: pending.name,
+      type: pending.file ? pending.type : 'note',
+      name: pending.file ? pending.name : 'text-note',
       file_path: filePath,
       file_url: fileUrl,
       comment: comment,
@@ -2278,7 +2767,7 @@ async function saveJournalEntry() {
     if (error) throw new Error(error.message);
     journalPending = null;
     document.getElementById('journal-ov').className = 'co-ov';
-    toast('📸 Saved!', 'ok');
+    toast(pending.file ? '📸 Saved!' : '📝 Note saved!', 'ok');
     if (pending.forManager) {
       renderProjMedia();
     } else {
@@ -2324,18 +2813,7 @@ function setComment(txt) {
 }
 
 function voiceJournal() {
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { toast('Voice not supported', 'err'); return; }
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const r = new SR(); r.lang = 'ru-RU'; r.continuous = false; r.interimResults = false;
-  toast('🎤 Listening...', 'ok');
-  r.onresult = e => {
-    const txt = e.results[0][0].transcript;
-    const el = document.getElementById('journal-comment');
-    el.value = (el.value ? el.value + ' ' : '') + txt;
-    toast('✅ Saved!', 'ok');
-  };
-  r.onerror = () => toast('Voice error — try again', 'err');
-  r.start();
+  voiceInput('journal-comment');
 }
 
 function cancelJournal() {
@@ -2360,28 +2838,47 @@ function openWorkerMediaTab(type){
     if(folder)folder.style.display='none';
     ['photo','video'].forEach(t=>{
       const btn=document.getElementById('wtab-'+t);
-      if(btn){btn.style.borderBottomColor='transparent';btn.style.color='var(--muted)';btn.style.background='none';}
+      if(btn){btn.style.borderColor='var(--border)';btn.style.color='var(--muted)';btn.style.background='var(--card)';}
     });
     return;
   }
   activeWorkerMediaTab=type;
   const colors={photo:'var(--gold)',video:'var(--red)'};
+  const bgs={photo:'rgba(245,158,11,.12)',video:'rgba(239,68,68,.12)'};
   ['photo','video'].forEach(t=>{
     const btn=document.getElementById('wtab-'+t);
     if(!btn)return;
     const active=t===type;
-    btn.style.borderBottomColor=active?colors[t]:'transparent';
+    btn.style.borderColor=active?colors[t]:'var(--border)';
     btn.style.color=active?colors[t]:'var(--muted)';
-    btn.style.background=active?`rgba(${t==='photo'?'245,158,11':'239,68,68'},.08)`:'none';
+    btn.style.background=active?bgs[t]:'var(--card)';
   });
   const uploadBtn=document.getElementById('worker-upload-btn');
   if(uploadBtn){
-    uploadBtn.textContent=type==='photo'?'📷 Add Photo':'🎥 Add Video';
-    uploadBtn.style.borderColor=colors[type];
-    uploadBtn.style.color=colors[type];
+    if(type==='photo'){
+      uploadBtn.textContent='📷 Add Photo';
+      uploadBtn.style.background='linear-gradient(135deg,var(--gold),#d97706)';
+    } else {
+      uploadBtn.textContent='🎥 Add Video';
+      uploadBtn.style.background='linear-gradient(135deg,var(--red),#dc2626)';
+    }
   }
   if(folder)folder.style.display='block';
   renderJournal();
+}
+function openQuickNote(){
+  // Open journal overlay with no media — just a text note
+  journalPending={file:null,type:'note',name:'text-note',forManager:false};
+  const prev=document.getElementById('journal-preview');
+  if(prev){prev.style.display='none';prev.innerHTML='';}
+  document.getElementById('journal-ov-ico').textContent='📝';
+  document.getElementById('journal-comment').value='';
+  document.getElementById('journal-comment').placeholder='Write what you did today...';
+  document.getElementById('journal-ov').className='co-ov show';
+  // Ensure folder will be visible after save
+  if(!activeWorkerMediaTab)activeWorkerMediaTab='photo';
+  const folder=document.getElementById('worker-media-folder');
+  if(folder)folder.style.display='block';
 }
 
 function triggerWorkerMediaAdd(){
@@ -2397,31 +2894,47 @@ async function renderJournal() {
     .order('created_at', { ascending: false });
   if (error) { c.innerHTML='<div style="text-align:center;padding:12px;color:var(--red);font-size:12px">Failed to load</div>'; return; }
   const all = data || [];
-  const visible = all.filter(m => activeWorkerMediaTab==='photo'
+  // Split by type
+  const notes = all.filter(m => m.type==='note');
+  const media = all.filter(m => activeWorkerMediaTab==='photo'
     ? (m.type==='photo'||m.type==='image') : m.type==='video');
-  if (!visible.length) {
-    c.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">No ${activeWorkerMediaTab==='photo'?'photos':'videos'} yet</div>`;
-    return;
-  }
-  if (activeWorkerMediaTab === 'photo') {
-    c.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">` +
-      visible.map(m => `
+  let html = '';
+  // Render media
+  if (activeWorkerMediaTab === 'photo' && media.length) {
+    html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:2px">` +
+      media.map(m => `
         <div style="position:relative;padding-top:100%;cursor:pointer" onclick="openMediaViewer('${m.file_url}','${m.type||'photo'}','','${(m.worker_name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','${m.created_at||''}')">
           <img src="${m.file_url}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;border-radius:2px" loading="lazy">
           <div style="position:absolute;bottom:0;left:0;right:0;padding:3px 5px;background:linear-gradient(transparent,rgba(0,0,0,.7));font-size:8px;color:rgba(255,255,255,.8)">${m.worker_name||''}</div>
         </div>`).join('') + `</div>`;
+  } else if (activeWorkerMediaTab === 'video' && media.length) {
+    html += media.map(m => `
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 8px 8px;cursor:pointer" onclick="openMediaViewer('${m.file_url}','video','','${(m.worker_name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','${m.created_at||''}')">
+        <div style="background:#000;position:relative">
+          <video src="${m.file_url}" style="width:100%;max-height:180px;display:block;pointer-events:none"></video>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+            <div style="width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font-size:18px">▶</div>
+          </div>
+        </div>
+        <div style="padding:6px 10px;font-size:10px;color:var(--muted)">${m.worker_name||''} · ${fmtDT(m.created_at)}</div>
+      </div>`).join('');
+  }
+  // Render notes
+  if (notes.length) {
+    html += notes.map(m => `
+      <div style="padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:flex-start">
+        <div style="font-size:18px;flex-shrink:0;margin-top:1px">📝</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">${m.comment||''}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px">${m.worker_name||''} · ${fmtDT(m.created_at)}</div>
+        </div>
+      </div>`).join('');
+  }
+  if (!html) {
+    c.innerHTML = `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px">No updates yet — add a photo, video or note</div>`;
     return;
   }
-  c.innerHTML = visible.map(m => `
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:4px 8px 8px;cursor:pointer" onclick="openMediaViewer('${m.file_url}','video','','${(m.worker_name||'').replace(/'/g,"\\'").replace(/"/g,'&quot;')}','${m.created_at||''}')">
-      <div style="background:#000;position:relative">
-        <video src="${m.file_url}" style="width:100%;max-height:180px;display:block;pointer-events:none"></video>
-        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
-          <div style="width:40px;height:40px;border-radius:50%;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;font-size:18px">▶</div>
-        </div>
-      </div>
-      <div style="padding:6px 10px;font-size:10px;color:var(--muted)">${m.worker_name||''} · ${fmtDT(m.created_at)}</div>
-    </div>`).join('');
+  c.innerHTML = html;
 }
 
 // ═══ COMPANION: deleteMediaEntry ═══
@@ -2654,25 +3167,91 @@ function closeMediaViewer(){
 }
 
 // ═══ VOICE INPUT ═══
-function voiceInput(fieldId){
-  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('Voice not supported — type manually','err');return;}
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const r=new SR();
-  r.lang='ru-RU';
-  r.continuous=false;r.interimResults=false;
-  toast('🎤 Listening...','ok');
-  r.onresult=e=>{
+// Single shared recognition instance — created once, reused forever
+const _SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
+let _voiceRec=null;
+let _voiceActive=false;
+let _voiceTargetEl=null;
+
+// Create once at startup
+if(_SpeechRec){
+  _voiceRec=new _SpeechRec();
+  _voiceRec.lang='en-US';
+  _voiceRec.continuous=false;
+  _voiceRec.interimResults=false;
+  _voiceRec.maxAlternatives=1;
+
+  _voiceRec.onstart=function(){
+    console.log('Voice started');
+    _voiceActive=true;
+  };
+
+  _voiceRec.onresult=function(e){
     const txt=e.results[0][0].transcript;
-    const el=document.getElementById(fieldId);
-    if(el){el.value=(el.value?el.value+' ':'')+txt;toast('✅ Saved!','ok');}
+    console.log('Voice result:',txt);
+    _voiceActive=false;
+    if(_voiceTargetEl){
+      _voiceTargetEl.value=(_voiceTargetEl.value?_voiceTargetEl.value+' ':'')+txt;
+      _voiceTargetEl.focus();
+      _voiceTargetEl.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+    toast('✅ '+(txt.length>40?txt.substring(0,40)+'…':txt),'ok');
   };
-  r.onerror=e=>{
-    const r2=new SR();r2.lang='en-US';r2.continuous=false;r2.interimResults=false;
-    r2.onresult=ev=>{const txt=ev.results[0][0].transcript;const el=document.getElementById(fieldId);if(el){el.value=(el.value?el.value+' ':'')+txt;toast('✅ Captured!','ok');}};
-    r2.onerror=()=>toast('Voice error — try again','err');
-    r2.start();
+
+  _voiceRec.onerror=function(e){
+    console.error('Voice error:',e.error);
+    _voiceActive=false;
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      toast('🎤 Microphone blocked — check browser settings','err');
+    } else if(e.error==='no-speech'){
+      toast('🎤 No speech detected — tap mic and speak','err');
+    } else if(e.error==='audio-capture'){
+      toast('🎤 No microphone found','err');
+    } else if(e.error==='network'){
+      toast('🎤 Network error — check internet','err');
+    } else if(e.error==='aborted'){
+      // User aborted or restarted — silent
+    } else {
+      toast('🎤 Voice error ('+e.error+') — try again','err');
+    }
   };
-  r.start();
+
+  _voiceRec.onend=function(){
+    console.log('Voice ended');
+    _voiceActive=false;
+  };
+}
+
+function voiceInput(fieldId){
+  if(!_voiceRec){toast('🎤 Voice not supported — type manually','err');return;}
+  const el=document.getElementById(fieldId);
+  if(!el){toast('Voice target not found','err');return;}
+
+  console.log('Voice input clicked for:',fieldId);
+
+  // If already listening — stop it first
+  if(_voiceActive){
+    try{_voiceRec.abort();}catch(e){}
+    _voiceActive=false;
+    // Small delay before restarting
+    setTimeout(()=>{ _startVoice(el); },200);
+    return;
+  }
+
+  _startVoice(el);
+}
+
+function _startVoice(el){
+  _voiceTargetEl=el;
+  toast('🎤 Listening...','ok');
+  try{
+    _voiceRec.start();
+  }catch(ex){
+    console.error('Voice start error:',ex);
+    // If instance is stuck, recreate
+    _voiceActive=false;
+    toast('🎤 Tap mic again to retry','err');
+  }
 }
 
 // ═══ WORKER HOURS ═══
@@ -2712,8 +3291,17 @@ async function renderWorkerHoursCalc(){
       `<button id="wc-btn-${id}" onclick="setWorkerCalcPeriod('${id}')" style="padding:7px 12px;font-size:11px;font-weight:700;border-radius:8px;border:none;cursor:pointer;background:${workerCalcPeriod===id?'var(--gold)':'var(--border)'};color:${workerCalcPeriod===id?'#000':'var(--muted)'};font-family:var(--font)">${lbl}</button>`
     ).join('')}
   </div>`;
+  // Calculate GPS vs no-GPS hours
+  let gpsHours=0,noGpsHours=0;
+  const inEvs=evs.filter(e=>e.type==='in');
+  inEvs.forEach(inEv=>{
+    const outEv=evs.find(e=>e.type==='out'&&e.worker_id===inEv.worker_id&&new Date(e.created_at)>new Date(inEv.created_at)&&e.project_id===inEv.project_id);
+    const dur=outEv?((new Date(outEv.created_at)-new Date(inEv.created_at))/3600000):((S.user?.checked_in&&!outEv)?((Date.now()-new Date(inEv.created_at))/3600000):0);
+    if(inEv.notes==='no-gps'||(!inEv.gps_lat&&!inEv.gps_lon))noGpsHours+=dur;
+    else gpsHours+=dur;
+  });
   let html=btns+`
-    <div style="display:grid;grid-template-columns:1fr 1fr${S.user.rate>0?';1fr':''};gap:8px;margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">${label}</div>
         <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--gold)">${totalH.toFixed(1)}h</div>
@@ -2722,9 +3310,19 @@ async function renderWorkerHoursCalc(){
         <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Days</div>
         <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--blue)">${days.length}</div>
       </div>
-      ${S.user.rate>0?`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center">
-        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Earned</div>
-        <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green)">$${earned.toFixed(0)}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr${S.user.rate>0?' 1fr':''};gap:8px;margin-bottom:16px">
+      <div style="background:var(--card);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--green);text-transform:uppercase;margin-bottom:3px">📍 GPS</div>
+        <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)">${gpsHours.toFixed(1)}h</div>
+      </div>
+      <div style="background:var(--card);border:1px solid ${noGpsHours>0?'rgba(245,158,11,.3)':'var(--border)'};border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:9px;color:${noGpsHours>0?'var(--gold)':'var(--muted)'};text-transform:uppercase;margin-bottom:3px">⚠️ No GPS</div>
+        <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:${noGpsHours>0?'var(--gold)':'var(--muted)'}">${noGpsHours.toFixed(1)}h</div>
+      </div>
+      ${S.user.rate>0?`<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center">
+        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">💰 Earned</div>
+        <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)">$${earned.toFixed(0)}</div>
       </div>`:''}
     </div>
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Daily Breakdown</div>`;
@@ -2736,12 +3334,14 @@ async function renderWorkerHoursCalc(){
     const outEv=[...dayEvs].reverse().find(e=>e.type==='out');
     const dn=new Date(ds).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
     const proj=S.projects.find(p=>p.id===inEv?.project_id);
-    html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:6px">
-      <div>
-        <div style="font-size:13px;font-weight:600">${dn}</div>
+    const isNoGps=inEv&&(inEv.notes==='no-gps'||(!inEv.gps_lat&&!inEv.gps_lon));
+    const longDay=h>11;
+    html+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--card);border:1px solid ${isNoGps?'rgba(245,158,11,.25)':longDay?'rgba(239,68,68,.2)':'var(--border)'};border-radius:10px;margin-bottom:6px">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap">${dn}${isNoGps?'<span style="font-size:9px;background:rgba(245,158,11,.15);color:var(--gold);padding:2px 7px;border-radius:8px;font-weight:700">No GPS</span>':''}${longDay?`<span style="font-size:9px;background:rgba(239,68,68,.15);color:var(--red);padding:2px 7px;border-radius:8px;font-weight:700">${h>13?'🚨':'⚠️'} ${Math.round(h)}h</span>`:''}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px">${proj?.name||'—'} · ${inEv?fmtTime(inEv.created_at):'?'} → ${outEv?fmtTime(outEv.created_at):'on site'}</div>
       </div>
-      <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--gold)">${h.toFixed(1)}h</div>
+      <div style="font-family:var(--mono);font-size:15px;font-weight:700;color:var(--gold);flex-shrink:0;margin-left:8px">${h.toFixed(1)}h</div>
     </div>`;
   });
   c.innerHTML=html;
@@ -2754,6 +3354,21 @@ function calcHoursFromEvents(evs,projId,dateStr){
     if(ev.type==='in')lastIn=new Date(ev.created_at);
     else if(ev.type==='out'&&lastIn){total+=(new Date(ev.created_at)-lastIn)/3600000;lastIn=null;}
   });
+  return total;
+}
+function calcTodayHours(workerId){
+  const today=new Date().toISOString().split('T')[0];
+  const dayEvs=S.events.filter(e=>e.worker_id===workerId&&e.created_at.startsWith(today));
+  let total=0,lastIn=null;
+  [...dayEvs].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(ev=>{
+    if(ev.type==='in')lastIn=new Date(ev.created_at);
+    else if(ev.type==='out'&&lastIn){total+=(new Date(ev.created_at)-lastIn)/3600000;lastIn=null;}
+  });
+  // If still checked in, add current open session
+  if(lastIn){
+    const w=S.workers.find(x=>x.id===workerId);
+    if(w?.checked_in)total+=(Date.now()-lastIn)/3600000;
+  }
   return total;
 }
 
