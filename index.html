@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v4.3</title>
+<title>Construction Clock v4.4</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2122,14 +2122,14 @@ function openProjDetail(projId){
     const todayH=calcHours(w.id,projId,todayStr);
     let dayLabel='';
     if(todayH>0){
-      dayLabel=`<span style="font-weight:600;color:#22c55e">Today: ${todayH.toFixed(1)}h</span>`;
+      dayLabel=`<span style="color:#22c55e">${todayH.toFixed(1)}h</span>`;
     } else {
       const wDays=[...new Set(S.events.filter(e=>e.worker_id===w.id&&e.project_id===projId&&e.type==='in').map(e=>e.created_at.split('T')[0]))].sort().reverse();
       const lastDay=wDays.find(d=>d!==todayStr);
       if(lastDay){
         const ldH=calcHours(w.id,projId,lastDay);
         const ldFmt=new Date(lastDay).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-        dayLabel=`<span style="font-weight:600;color:#f59e0b">Last Day: ${ldFmt} — ${ldH.toFixed(1)}h</span>`;
+        dayLabel=`<span style="color:#f59e0b">${ldFmt} — ${ldH.toFixed(1)}h</span>`;
       }
     }
     // Time-based stale check: if checked in for 12+ hours → suspect
@@ -2161,20 +2161,30 @@ function openProjDetail(projId){
         ${w.name.charAt(0)}
       </div>
       <div class="wrow-info" style="${!isOn?'opacity:0.6':''}">
-        <div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:8px">
-          <div style="font-size:11px;color:#8b95a5">Total on Project</div>
-          <div style="font-size:11px;color:#8b95a5">Earned</div>
-          <div style="font-size:15px;font-weight:700;color:#06d6a0;font-family:var(--mono)">${h.toFixed(1)}h</div>
-          <div style="font-size:15px;font-weight:700;color:#22c55e;font-family:var(--mono)">$${earned.toFixed(2)}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="wrow-name">${w.name} <span class="role-tag rt-${w.role||'worker'}">${roleLabel(w.role)}</span></div>
+          <div class="wrow-status ${statusClass}" style="position:static;margin:0">${statusLabel}</div>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
-          <div style="font-size:12px">${dayLabel||'<span style="color:#8b95a5">No activity</span>'}</div>
-          <div style="font-size:11px;color:#7c8db0">${rateLabel}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div style="padding:10px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">Total on Project</div>
+            <div style="font-size:18px;font-weight:800;color:#06d6a0;font-family:var(--mono)">${h.toFixed(1)}h</div>
+          </div>
+          <div style="padding:10px 12px;border-bottom:1px solid var(--border)">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">Earned</div>
+            <div style="font-size:18px;font-weight:800;color:#22c55e;font-family:var(--mono)">$${earned.toFixed(2)}</div>
+          </div>
+          <div style="padding:10px 12px;border-right:1px solid var(--border)">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">${todayH>0?'Today':'Last Day'}</div>
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono)">${dayLabel||'<span style="color:#8b95a5">—</span>'}</div>
+          </div>
+          <div style="padding:10px 12px">
+            <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#8b95a5;margin-bottom:4px">Rate</div>
+            <div style="font-size:16px;font-weight:700;color:#7c8db0;font-family:var(--mono)">${rateLabel}</div>
+          </div>
         </div>
         ${forceCoBtn}
       </div>
-      <div class="wrow-status ${statusClass}">${statusLabel}</div>
     </div>`;
   }).join('');
   showDrillView('view-proj-detail');
