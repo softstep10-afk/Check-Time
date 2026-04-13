@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v4.5</title>
+<title>Construction Clock v4.6</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -620,6 +620,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="side-sec">Work</div>
       <button class="side-item" id="nav-timeline" onclick="showView('timeline')"><span class="side-ico">🕐</span>Timeline</button>
       <button class="side-item" id="nav-tasks" onclick="showView('tasks')"><span class="side-ico">📋</span>Tasks</button>
+      <div class="side-sec">Business</div>
+      <button class="side-item" id="nav-clients" onclick="openClientsGate()"><span class="side-ico">🔒</span>Clients</button>
       <div class="side-sec">Archive</div>
       <button class="side-item" id="nav-archive" onclick="showView('archive')"><span class="side-ico">📦</span>Archive</button>
       <div class="side-sec" id="adm-sec">Admin</div>
@@ -775,6 +777,26 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div class="view" id="view-arc-proj-detail">
           <div class="bc"><span onclick="showView('archive')">📦 Archive</span><span class="bc-sep">›</span><span class="cur" id="bc-arc-proj">Project</span></div>
           <div id="arc-proj-detail-content"></div>
+        </div>
+
+        <!-- ═══ CLIENTS VIEW ═══ -->
+        <div class="view" id="view-clients">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="search" id="client-search" placeholder="Search clients..." oninput="renderClients()" style="width:200px">
+            </div>
+            <div style="display:flex;gap:8px">
+              <button onclick="lockClients()" style="padding:7px 14px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:none;color:var(--red);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer">🔒 Lock</button>
+              <button class="action gold" onclick="openClientModal()">+ Add Client</button>
+            </div>
+          </div>
+          <div id="clients-list"></div>
+        </div>
+
+        <!-- ═══ CLIENT DETAIL VIEW ═══ -->
+        <div class="view" id="view-client-detail">
+          <div class="bc"><span onclick="showView('clients')">🔒 Clients</span><span class="bc-sep">›</span><span class="cur" id="bc-client">Client</span></div>
+          <div id="client-detail-content"></div>
         </div>
 
         <div class="view" id="view-trash">
@@ -984,6 +1006,56 @@ tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 
+<!-- ═══ CLIENTS PIN GATE ═══ -->
+<div class="modal-ov" id="mod-clients-pin">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-top"><h3>🔒 Clients Vault</h3><button class="modal-close" onclick="closeModal('mod-clients-pin')">×</button></div>
+    <div class="modal-body" style="text-align:center">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:16px">Enter PIN to access client records</p>
+      <input type="password" id="clients-pin-input" maxlength="8" placeholder="PIN" style="width:140px;text-align:center;padding:12px;font-size:20px;letter-spacing:6px;background:var(--card);border:2px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--mono);outline:none" onkeydown="if(event.key==='Enter')verifyClientsPin()">
+      <div id="clients-pin-err" style="color:var(--red);font-size:12px;margin-top:8px;min-height:18px"></div>
+      <button onclick="verifyClientsPin()" style="margin-top:8px;padding:10px 32px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer">Unlock</button>
+      <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px">
+        <button onclick="showSetClientsPin()" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:var(--font)">Set / Change PIN</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ CLIENTS SET PIN ═══ -->
+<div class="modal-ov" id="mod-clients-setpin">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-top"><h3>🔑 Set Clients PIN</h3><button class="modal-close" onclick="closeModal('mod-clients-setpin')">×</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">Current Manager PIN (verify)</label><input type="password" id="cp-mgr-pin" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:15px;outline:none"></div>
+      <div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">New Clients PIN</label><input type="password" id="cp-new-pin" maxlength="8" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:15px;outline:none"></div>
+      <div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted)">Confirm PIN</label><input type="password" id="cp-confirm-pin" maxlength="8" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:15px;outline:none"></div>
+      <div id="cp-err" style="color:var(--red);font-size:12px;min-height:18px;margin-bottom:8px"></div>
+      <button onclick="saveClientsPin()" style="width:100%;padding:11px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer">Save PIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ADD / EDIT CLIENT MODAL ═══ -->
+<div class="modal-ov" id="mod-client">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-top"><h3 id="mod-client-title">👤 Add Client</h3><button class="modal-close" onclick="closeModal('mod-client')">×</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="cl-edit-id" value="">
+      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Client Name *</label><input id="cl-name" placeholder="John Smith" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div><label style="font-size:11px;color:var(--muted)">Phone</label><input id="cl-phone" placeholder="+1 555-0100" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
+        <div><label style="font-size:11px;color:var(--muted)">Email</label><input id="cl-email" placeholder="john@email.com" style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:14px;outline:none"></div>
+      </div>
+      <div style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">Notes</label><textarea id="cl-notes" rows="3" placeholder="Client details, preferences..." style="width:100%;padding:10px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--font);font-size:13px;outline:none;resize:vertical"></textarea></div>
+      <div style="margin-bottom:14px"><label style="font-size:11px;color:var(--muted)">Link Projects</label>
+        <div id="cl-proj-checkboxes" style="max-height:150px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:4px"></div>
+      </div>
+      <button onclick="saveClient()" style="width:100%;padding:11px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer">Save Client</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-ov" id="mod-annual">
   <div class="modal" style="max-width:500px">
     <div class="modal-top"><h3>📊 Annual Report</h3><button class="modal-close" onclick="closeModal('mod-annual')">×</button></div>
@@ -994,7 +1066,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
 const SURL='https://khmcdtrzqfqabdpbcjkj.supabase.co';
 const SKEY='sb_publishable_IDbH48JlyaoFImiBcHCRrw_X7zsqyOv';
 const db=supabase.createClient(SURL,SKEY);
-const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],checkedIn:false,checkInTime:null,clockTimer:null,gps:null,gpsState:'unavailable',coVideo:null,selectedProj:null,drillProj:null,drillWorker:null,noGpsSession:false};
+const S={loginRole:'worker',user:null,projects:[],workers:[],events:[],tasks:[],managers:[],clients:[],clientsUnlocked:false,checkedIn:false,checkInTime:null,clockTimer:null,gps:null,gpsState:'unavailable',coVideo:null,selectedProj:null,drillProj:null,drillWorker:null,noGpsSession:false};
 
 // ═══ PREVIEW URL MEMORY MANAGEMENT ═══
 // Auto-refresh when internet connection is restored
@@ -2641,8 +2713,8 @@ function showView(id){
   document.getElementById('view-'+id).classList.add('on');
   const ni=document.getElementById('nav-'+id);if(ni)ni.classList.add('on');
   const mi=document.getElementById('mob-'+id);if(mi)mi.classList.add('on');
-  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers',archive:'Archive',trash:'Trash'};
-  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control',archive:'Finished projects & paid hours history',trash:'Deleted items — restore or remove permanently'};
+  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers',archive:'Archive',trash:'Trash',clients:'Clients'};
+  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control',archive:'Finished projects & paid hours history',trash:'Deleted items — restore or remove permanently',clients:'Protected client records'};
   document.getElementById('view-title').textContent=titles[id]||id;
   document.getElementById('view-sub').textContent=subs[id]||'';
   if(id==='overview')renderOverview();
@@ -2652,6 +2724,7 @@ function showView(id){
   if(id==='projects')renderProjCards();
   if(id==='archive')renderArchive();
   if(id==='trash')renderTrash();
+  if(id==='clients')renderClients();
 }
 function showDrillView(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
@@ -4325,6 +4398,261 @@ async function renderPaidHours(){
 function renderOtherArchive(){
   const c=document.getElementById('arc-content');
   c.innerHTML=`<div class="empty"><div class="ei">📁</div><p>Other archives will appear here</p><p style="margin-top:4px;font-size:11px">This section is ready for future archive categories</p></div>`;
+}
+
+// ═══ CLIENTS MODULE ═══
+const CLIENTS_PIN_KEY='cc_clients_pin';
+const CLIENTS_DATA_KEY='cc_clients_data';
+
+function openClientsGate(){
+  if(S.clientsUnlocked){showView('clients');return;}
+  const stored=localStorage.getItem(CLIENTS_PIN_KEY);
+  if(!stored){
+    // No PIN set yet — go straight to set PIN
+    showSetClientsPin();
+    return;
+  }
+  document.getElementById('clients-pin-input').value='';
+  document.getElementById('clients-pin-err').textContent='';
+  openModal('mod-clients-pin');
+  setTimeout(()=>document.getElementById('clients-pin-input').focus(),200);
+}
+
+function verifyClientsPin(){
+  const input=document.getElementById('clients-pin-input').value.trim();
+  const stored=localStorage.getItem(CLIENTS_PIN_KEY);
+  if(!stored){document.getElementById('clients-pin-err').textContent='No PIN set. Set one first.';return;}
+  if(input===stored){
+    S.clientsUnlocked=true;
+    closeModal('mod-clients-pin');
+    loadClientsData();
+    showView('clients');
+  } else {
+    document.getElementById('clients-pin-err').textContent='Wrong PIN';
+    document.getElementById('clients-pin-input').value='';
+    document.getElementById('clients-pin-input').focus();
+  }
+}
+
+function showSetClientsPin(){
+  closeModal('mod-clients-pin');
+  document.getElementById('cp-mgr-pin').value='';
+  document.getElementById('cp-new-pin').value='';
+  document.getElementById('cp-confirm-pin').value='';
+  document.getElementById('cp-err').textContent='';
+  openModal('mod-clients-setpin');
+}
+
+function saveClientsPin(){
+  const mgrPin=document.getElementById('cp-mgr-pin').value.trim();
+  const newPin=document.getElementById('cp-new-pin').value.trim();
+  const confirm=document.getElementById('cp-confirm-pin').value.trim();
+  const errEl=document.getElementById('cp-err');
+  // Verify manager identity
+  const mgr=S.managers.find(m=>m.pin===mgrPin);
+  if(!mgr){errEl.textContent='Manager PIN incorrect';return;}
+  if(newPin.length<4){errEl.textContent='Clients PIN must be at least 4 characters';return;}
+  if(newPin!==confirm){errEl.textContent='PINs do not match';return;}
+  localStorage.setItem(CLIENTS_PIN_KEY,newPin);
+  S.clientsUnlocked=true;
+  closeModal('mod-clients-setpin');
+  loadClientsData();
+  showView('clients');
+  toast('Clients PIN saved!','ok');
+}
+
+function lockClients(){
+  S.clientsUnlocked=false;
+  showView('overview');
+  toast('Clients locked','ok');
+}
+
+function loadClientsData(){
+  try{S.clients=JSON.parse(localStorage.getItem(CLIENTS_DATA_KEY)||'[]');}
+  catch(e){S.clients=[];}
+}
+
+function saveClientsData(){
+  localStorage.setItem(CLIENTS_DATA_KEY,JSON.stringify(S.clients));
+}
+
+function getClientUrgency(client){
+  // Find nearest upcoming project date linked to this client
+  const linkedProjs=S.projects.filter(p=>client.project_ids&&client.project_ids.includes(p.id));
+  const now=new Date();now.setHours(0,0,0,0);
+  let nearestDays=Infinity;
+  linkedProjs.forEach(p=>{
+    if(p.start_date){
+      const sd=new Date(p.start_date);sd.setHours(0,0,0,0);
+      const diff=Math.ceil((sd-now)/(1000*60*60*24));
+      if(diff>=0&&diff<nearestDays)nearestDays=diff;
+    }
+  });
+  if(nearestDays===Infinity)return{level:'none',days:null,color:'#6b7280',bg:'rgba(107,114,128,.08)',border:'rgba(107,114,128,.2)',label:'No upcoming'};
+  if(nearestDays<=14)return{level:'red',days:nearestDays,color:'#ef4444',bg:'rgba(239,68,68,.08)',border:'rgba(239,68,68,.25)',label:nearestDays===0?'Today':nearestDays===1?'Tomorrow':`${nearestDays}d away`};
+  if(nearestDays<=60)return{level:'yellow',days:nearestDays,color:'#f59e0b',bg:'rgba(245,158,11,.08)',border:'rgba(245,158,11,.25)',label:`${nearestDays}d away`};
+  return{level:'green',days:nearestDays,color:'#22c55e',bg:'rgba(34,197,94,.08)',border:'rgba(34,197,94,.25)',label:`${nearestDays}d away`};
+}
+
+function renderClients(){
+  if(!S.clientsUnlocked)return;
+  const c=document.getElementById('clients-list');if(!c)return;
+  const q=(document.getElementById('client-search')?.value||'').toLowerCase();
+  let list=S.clients.filter(cl=>!cl.deleted);
+  if(q)list=list.filter(cl=>(cl.name||'').toLowerCase().includes(q)||(cl.phone||'').includes(q)||(cl.email||'').toLowerCase().includes(q));
+  // Sort by urgency: red first, then yellow, green, none
+  const order={red:0,yellow:1,green:2,none:3};
+  list.sort((a,b)=>{
+    const ua=getClientUrgency(a),ub=getClientUrgency(b);
+    if(order[ua.level]!==order[ub.level])return order[ua.level]-order[ub.level];
+    if(ua.days!==null&&ub.days!==null)return ua.days-ub.days;
+    return(a.name||'').localeCompare(b.name||'');
+  });
+  if(!list.length){c.innerHTML='<div class="empty"><div class="ei">👤</div><p>No clients yet</p><p style="font-size:12px;color:var(--muted)">Click "+ Add Client" to get started</p></div>';return;}
+  c.innerHTML=list.map(cl=>{
+    const urg=getClientUrgency(cl);
+    const projCount=(cl.project_ids||[]).filter(pid=>S.projects.some(p=>p.id===pid)).length;
+    const initials=cl.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    return`<div onclick="openClientDetail('${cl.id}')" style="background:var(--surface);border:2px solid ${urg.border};border-radius:10px;padding:12px 14px;margin-bottom:6px;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:12px" onmouseenter="this.style.transform='translateX(3px)'" onmouseleave="this.style.transform=''">
+      <div style="width:40px;height:40px;border-radius:50%;background:${urg.bg};border:2px solid ${urg.border};display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:${urg.color};flex-shrink:0">${initials}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${cl.name}</div>
+        <div style="display:flex;gap:12px;margin-top:4px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+          ${cl.phone?`<span>📞 ${cl.phone}</span>`:''}
+          ${cl.email?`<span>✉️ ${cl.email}</span>`:''}
+          <span>🏗️ ${projCount} project${projCount!==1?'s':''}</span>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:11px;font-weight:700;color:${urg.color};padding:3px 10px;border-radius:12px;background:${urg.bg}">${urg.label}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openClientModal(editId){
+  const isEdit=!!editId;
+  document.getElementById('mod-client-title').textContent=isEdit?'✏️ Edit Client':'👤 Add Client';
+  document.getElementById('cl-edit-id').value=editId||'';
+  // Populate project checkboxes
+  const pcEl=document.getElementById('cl-proj-checkboxes');
+  const allProj=S.projects.filter(p=>p.status==='active'||!p.status);
+  let checkedIds=[];
+  if(isEdit){
+    const cl=S.clients.find(c=>c.id===editId);
+    if(cl){
+      document.getElementById('cl-name').value=cl.name||'';
+      document.getElementById('cl-phone').value=cl.phone||'';
+      document.getElementById('cl-email').value=cl.email||'';
+      document.getElementById('cl-notes').value=cl.notes||'';
+      checkedIds=cl.project_ids||[];
+    }
+  } else {
+    document.getElementById('cl-name').value='';
+    document.getElementById('cl-phone').value='';
+    document.getElementById('cl-email').value='';
+    document.getElementById('cl-notes').value='';
+  }
+  pcEl.innerHTML=allProj.map(p=>`<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12px;color:var(--text);cursor:pointer"><input type="checkbox" value="${p.id}" ${checkedIds.includes(p.id)?'checked':''}> ${p.name}</label>`).join('')||'<div style="color:var(--muted);font-size:12px;padding:4px">No active projects</div>';
+  openModal('mod-client');
+}
+
+function saveClient(){
+  const id=document.getElementById('cl-edit-id').value;
+  const name=document.getElementById('cl-name').value.trim();
+  if(!name){toast('Client name required','err');return;}
+  const phone=document.getElementById('cl-phone').value.trim();
+  const email=document.getElementById('cl-email').value.trim();
+  const notes=document.getElementById('cl-notes').value.trim();
+  const project_ids=[...document.querySelectorAll('#cl-proj-checkboxes input:checked')].map(cb=>cb.value);
+  if(id){
+    // Edit
+    const cl=S.clients.find(c=>c.id===id);
+    if(cl){Object.assign(cl,{name,phone,email,notes,project_ids,updated_at:new Date().toISOString()});}
+  } else {
+    // New
+    S.clients.push({id:crypto.randomUUID(),name,phone,email,notes,project_ids,created_at:new Date().toISOString(),updated_at:new Date().toISOString()});
+  }
+  saveClientsData();
+  closeModal('mod-client');
+  renderClients();
+  toast(id?'Client updated':'Client added','ok');
+}
+
+function openClientDetail(clientId){
+  const cl=S.clients.find(c=>c.id===clientId);if(!cl)return;
+  document.getElementById('bc-client').textContent=cl.name;
+  const urg=getClientUrgency(cl);
+  const linkedProjs=S.projects.filter(p=>cl.project_ids&&cl.project_ids.includes(p.id));
+  // Build project cards with individual urgency
+  let projHtml='';
+  if(linkedProjs.length){
+    projHtml=linkedProjs.map(p=>{
+      const now=new Date();now.setHours(0,0,0,0);
+      let pUrg={color:'#6b7280',bg:'rgba(107,114,128,.08)',border:'rgba(107,114,128,.2)',label:'No date'};
+      if(p.start_date){
+        const sd=new Date(p.start_date);sd.setHours(0,0,0,0);
+        const diff=Math.ceil((sd-now)/(1000*60*60*24));
+        if(diff<0)pUrg={color:'#6b7280',bg:'rgba(107,114,128,.08)',border:'rgba(107,114,128,.2)',label:'Started'};
+        else if(diff<=14)pUrg={color:'#ef4444',bg:'rgba(239,68,68,.08)',border:'rgba(239,68,68,.25)',label:diff===0?'Today':diff===1?'Tomorrow':`${diff}d away`};
+        else if(diff<=60)pUrg={color:'#f59e0b',bg:'rgba(245,158,11,.08)',border:'rgba(245,158,11,.25)',label:`${diff}d away`};
+        else pUrg={color:'#22c55e',bg:'rgba(34,197,94,.08)',border:'rgba(34,197,94,.25)',label:`${diff}d away`};
+      }
+      const totalH=S.workers.reduce((s,w)=>s+calcHours(w.id,p.id),0);
+      const wCount=S.workers.filter(w=>S.events.some(e=>e.worker_id===w.id&&e.project_id===p.id)).length;
+      return`<div style="background:${pUrg.bg};border:1px solid ${pUrg.border};border-radius:10px;padding:12px;cursor:pointer" onclick="openProjDetail('${p.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:700;color:var(--text)">${p.name}</div>
+          <span style="font-size:10px;font-weight:700;color:${pUrg.color};padding:2px 8px;border-radius:10px;background:${pUrg.bg};border:1px solid ${pUrg.border}">${pUrg.label}</span>
+        </div>
+        ${p.address?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${p.address}</div>`:''}
+        <div style="display:flex;gap:12px;font-size:11px;color:var(--muted)">
+          <span>👷 ${wCount} workers</span>
+          <span>⏱️ ${totalH.toFixed(1)}h</span>
+          ${p.start_date?`<span>📅 ${new Date(p.start_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } else {
+    projHtml='<div style="color:var(--muted);font-size:12px;text-align:center;padding:16px">No projects linked</div>';
+  }
+
+  const content=document.getElementById('client-detail-content');
+  content.innerHTML=`
+    <div style="background:var(--surface);border:2px solid ${urg.border};border-radius:12px;padding:18px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <h3 style="font-size:18px;font-weight:800;color:var(--text);margin:0">${cl.name}</h3>
+          <div style="font-size:11px;font-weight:700;color:${urg.color};margin-top:4px">${urg.level!=='none'?'Next project: '+urg.label:'No upcoming projects'}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button onclick="openClientModal('${cl.id}')" style="padding:6px 12px;border-radius:8px;border:1px solid var(--gold);background:none;color:var(--gold);font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer">✏️ Edit</button>
+          <button onclick="deleteClient('${cl.id}')" style="padding:6px 12px;border-radius:8px;border:1px solid rgba(239,68,68,.3);background:none;color:var(--red);font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer">🗑️</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        ${cl.phone?`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Phone</div><a href="tel:${cl.phone}" style="font-size:14px;font-weight:700;color:var(--blue);text-decoration:none">${cl.phone}</a></div>`:''}
+        ${cl.email?`<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Email</div><a href="mailto:${cl.email}" style="font-size:14px;font-weight:700;color:var(--blue);text-decoration:none;word-break:break-all">${cl.email}</a></div>`:''}
+      </div>
+      ${cl.notes?`<div style="margin-top:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px"><div style="font-size:9px;font-weight:600;text-transform:uppercase;color:#8b95a5;margin-bottom:3px">Notes</div><div style="font-size:13px;color:var(--text);white-space:pre-wrap">${cl.notes}</div></div>`:''}
+    </div>
+    <h3 style="font-size:14px;font-weight:700;margin-bottom:10px">🏗️ Linked Projects (${linkedProjs.length})</h3>
+    <div style="display:grid;gap:8px;margin-bottom:16px">${projHtml}</div>
+  `;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.querySelectorAll('.side-item').forEach(n=>n.classList.remove('on'));
+  document.getElementById('view-client-detail').classList.add('on');
+  document.getElementById('nav-clients')?.classList.add('on');
+  document.getElementById('view-title').textContent=cl.name;
+  document.getElementById('view-sub').textContent='Client details';
+}
+
+function deleteClient(id){
+  if(!confirm('Delete this client?'))return;
+  S.clients=S.clients.filter(c=>c.id!==id);
+  saveClientsData();
+  showView('clients');
+  toast('Client deleted','ok');
 }
 
 // ═══ TRASH ═══
