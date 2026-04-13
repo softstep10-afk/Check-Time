@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v3.8</title>
+<title>Construction Clock v3.9</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -620,6 +620,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <div class="side-sec">Work</div>
       <button class="side-item" id="nav-timeline" onclick="showView('timeline')"><span class="side-ico">🕐</span>Timeline</button>
       <button class="side-item" id="nav-tasks" onclick="showView('tasks')"><span class="side-ico">📋</span>Tasks</button>
+      <div class="side-sec">Archive</div>
+      <button class="side-item" id="nav-archive" onclick="showView('archive')"><span class="side-ico">📦</span>Archive</button>
       <div class="side-sec" id="adm-sec">Admin</div>
       <button class="side-item" id="nav-managers" onclick="showView('managers')"><span class="side-ico">🔑</span>Managers</button>
       <button class="side-item" id="nav-trash" onclick="showView('trash')"><span class="side-ico">🗑️</span>Trash</button>
@@ -759,6 +761,22 @@ tr:hover td{background:rgba(255,255,255,.015)}
           <div style="display:flex;justify-content:flex-end;margin-bottom:14px"><button class="action gold" onclick="openModal('mod-mgr')">+ Add Manager</button></div>
           <div class="mgr-cards" id="mgr-cards"></div>
         </div>
+        <!-- ═══ ARCHIVE VIEW ═══ -->
+        <div class="view" id="view-archive">
+          <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+            <button id="arc-tab-projects" onclick="showArchiveTab('projects')" style="padding:8px 16px;border-radius:8px;border:2px solid var(--gold);background:rgba(245,158,11,.1);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">🏗️ Archived Projects</button>
+            <button id="arc-tab-paid" onclick="showArchiveTab('paid')" style="padding:8px 16px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">💰 Paid Hours</button>
+            <button id="arc-tab-other" onclick="showArchiveTab('other')" style="padding:8px 16px;border-radius:8px;border:2px solid var(--border);background:none;color:var(--muted);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer">📁 Other</button>
+          </div>
+          <div id="arc-content"></div>
+        </div>
+
+        <!-- ═══ ARCHIVED PROJECT DETAIL VIEW ═══ -->
+        <div class="view" id="view-arc-proj-detail">
+          <div class="bc"><span onclick="showView('archive')">📦 Archive</span><span class="bc-sep">›</span><span class="cur" id="bc-arc-proj">Project</span></div>
+          <div id="arc-proj-detail-content"></div>
+        </div>
+
         <div class="view" id="view-trash">
           <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:var(--muted)">🗑️ Items here are not permanently deleted. Restore or permanently remove them.</div>
           <div id="trash-list"><div class="empty"><div class="ei">🗑️</div><p>Trash is empty</p></div></div>
@@ -2069,6 +2087,7 @@ function renderProjCards(){
       <div class="btn-row" onclick="event.stopPropagation()">
         <button onclick="openProjDetail('${p.id}')">📊 Details</button>
         <button onclick="openEditProj('${p.id}')">✏️ Edit</button>
+        <button onclick="archiveProject('${p.id}')" style="color:var(--gold);border-color:rgba(245,158,11,.3)">📦 Archive</button>
         <button class="red" onclick="delProject('${p.id}')">Remove</button>
       </div>
     </div>`;
@@ -2593,8 +2612,8 @@ function showView(id){
   document.getElementById('view-'+id).classList.add('on');
   const ni=document.getElementById('nav-'+id);if(ni)ni.classList.add('on');
   const mi=document.getElementById('mob-'+id);if(mi)mi.classList.add('on');
-  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers',trash:'Trash'};
-  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control',trash:'Deleted items — restore or remove permanently'};
+  const titles={overview:'Overview',projects:'Projects',team:'Team',timeline:'Timeline',tasks:'Tasks',managers:'Managers',archive:'Archive',trash:'Trash'};
+  const subs={overview:"Today's summary",projects:'Click a project to drill down',team:'Manage your team',timeline:'Full activity log',tasks:'Assign & track work',managers:'Access control',archive:'Finished projects & paid hours history',trash:'Deleted items — restore or remove permanently'};
   document.getElementById('view-title').textContent=titles[id]||id;
   document.getElementById('view-sub').textContent=subs[id]||'';
   if(id==='overview')renderOverview();
@@ -2602,6 +2621,7 @@ function showView(id){
   if(id==='team')renderTeam();
   if(id==='managers')renderMgrCards();
   if(id==='projects')renderProjCards();
+  if(id==='archive')renderArchive();
   if(id==='trash')renderTrash();
 }
 function showDrillView(id){
@@ -4096,6 +4116,186 @@ function renderCalc(){
     <div style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--green)">$${grandTotal.toFixed(2)}</div>
   </div>`;
   c.innerHTML=html;
+}
+
+// ═══ ARCHIVE ═══
+let _arcTab='projects';
+
+function renderArchive(){ showArchiveTab(_arcTab); }
+
+function showArchiveTab(tab){
+  _arcTab=tab;
+  // Update tab buttons
+  ['projects','paid','other'].forEach(t=>{
+    const btn=document.getElementById('arc-tab-'+t);
+    if(!btn)return;
+    if(t===tab){btn.style.borderColor='var(--gold)';btn.style.background='rgba(245,158,11,.1)';btn.style.color='var(--gold)';}
+    else{btn.style.borderColor='var(--border)';btn.style.background='none';btn.style.color='var(--muted)';}
+  });
+  if(tab==='projects')renderArchivedProjects();
+  else if(tab==='paid')renderPaidHours();
+  else renderOtherArchive();
+}
+
+async function renderArchivedProjects(){
+  const c=document.getElementById('arc-content');
+  c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
+  const {data}=await db.from('projects').select('*').eq('status','archived').order('created_at',{ascending:false});
+  if(!data||!data.length){
+    c.innerHTML='<div class="empty"><div class="ei">📦</div><p>No archived projects</p><p style="margin-top:4px;font-size:11px">Use the 📦 Archive button on any project to move it here</p></div>';
+    return;
+  }
+  c.innerHTML=data.map(p=>{
+    const totalWorkers=S.events.filter(e=>e.project_id===p.id&&e.type==='in').reduce((s,e)=>{s.add(e.worker_id);return s;},new Set()).size;
+    const totalEvents=S.events.filter(e=>e.project_id===p.id).length;
+    return`<div style="background:var(--surface);border:2px solid var(--border);border-radius:13px;padding:16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <h3 style="font-size:15px;font-weight:700">${p.name}</h3>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${p.address||'No address'}</div>
+        </div>
+        <span style="font-size:10px;padding:3px 8px;border-radius:20px;background:rgba(245,158,11,.1);color:var(--gold);font-weight:700">ARCHIVED</span>
+      </div>
+      ${p.notes?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5;max-height:40px;overflow:hidden">${p.notes}</div>`:''}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:11px;color:var(--muted)">Workers: <strong style="color:var(--text)">${totalWorkers}</strong></span>
+        <span style="font-size:11px;color:var(--muted)">Events: <strong style="color:var(--text)">${totalEvents}</strong></span>
+        <span style="font-size:11px;color:var(--muted)">Created: <strong style="color:var(--text)">${new Date(p.created_at).toLocaleDateString()}</strong></span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button onclick="viewArchivedProject('${p.id}')" style="padding:6px 14px;border-radius:6px;border:1px solid var(--blue);background:rgba(59,130,246,.08);color:var(--blue);font-family:var(--font);font-size:12px;cursor:pointer;font-weight:600">📊 View Details</button>
+        <button onclick="unarchiveProject('${p.id}')" style="padding:6px 14px;border-radius:6px;border:1px solid var(--green);background:rgba(34,197,94,.08);color:var(--green);font-family:var(--font);font-size:12px;cursor:pointer;font-weight:600">↩️ Restore to Active</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function archiveProject(id){
+  if(!confirm('Archive this project? It will be moved to Archive.'))return;
+  await db.from('projects').update({status:'archived'}).eq('id',id);
+  const pr=await db.from('projects').select('*').order('created_at');S.projects=pr.data||[];
+  refreshManager();
+  toast('📦 Project archived','ok');
+}
+
+async function unarchiveProject(id){
+  await db.from('projects').update({status:'active'}).eq('id',id);
+  const pr=await db.from('projects').select('*').order('created_at');S.projects=pr.data||[];
+  refreshManager();renderArchivedProjects();
+  toast('✅ Project restored to active','ok');
+}
+
+async function viewArchivedProject(id){
+  const c=document.getElementById('arc-proj-detail-content');
+  c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
+  const {data:p}=await db.from('projects').select('*').eq('id',id).single();
+  if(!p){c.innerHTML='<div class="empty"><div class="ei">❌</div><p>Project not found</p></div>';return;}
+  document.getElementById('bc-arc-proj').textContent=p.name;
+  // Get events for this project
+  const projEvents=S.events.filter(e=>e.project_id===id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+  const uniqueWorkers=[...new Set(projEvents.filter(e=>e.type==='in').map(e=>e.worker_id))];
+  // Calculate total hours
+  let totalHours=0;
+  const inEvents=projEvents.filter(e=>e.type==='in');
+  const outEvents=projEvents.filter(e=>e.type==='out');
+  inEvents.forEach(inEv=>{
+    const outEv=outEvents.find(o=>o.worker_id===inEv.worker_id&&new Date(o.created_at)>new Date(inEv.created_at));
+    if(outEv){totalHours+=(new Date(outEv.created_at)-new Date(inEv.created_at))/3600000;}
+  });
+  // Get tasks
+  const projTasks=S.tasks.filter(t=>t.project_id===id);
+  const doneTasks=projTasks.filter(t=>t.status==='done').length;
+
+  let html=`
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <h2 style="font-size:20px;font-weight:700">${p.name}</h2>
+          <div style="font-size:13px;color:var(--muted);margin-top:4px">${p.address||''}</div>
+        </div>
+        <span style="font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(245,158,11,.1);color:var(--gold);font-weight:700">ARCHIVED</span>
+      </div>
+      ${p.notes?`<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:12px;font-size:13px;line-height:1.6;margin-bottom:12px;white-space:pre-wrap">${p.notes}</div>`:''}
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center;flex:1;min-width:100px">
+          <div style="font-size:22px;font-weight:700;color:var(--blue)">${uniqueWorkers.length}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Workers</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center;flex:1;min-width:100px">
+          <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--gold)">${totalHours.toFixed(1)}h</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Total Hours</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center;flex:1;min-width:100px">
+          <div style="font-size:22px;font-weight:700;color:var(--green)">${doneTasks}/${projTasks.length}</div>
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase">Tasks Done</div>
+        </div>
+      </div>
+    </div>`;
+
+  // Timeline
+  if(projEvents.length){
+    html+=`<div class="tcard"><div class="tcard-h"><h3>Activity Timeline (last 50)</h3></div><div style="padding:12px"><div class="tl">`;
+    projEvents.slice(0,50).forEach(e=>{
+      const icon=e.type==='in'?'✅':e.type==='out'?'👋':'📄';
+      html+=`<div class="tl-item"><div class="tl-dot ${e.type}"></div><div style="flex:1"><div class="tl-main">${icon} <strong>${e.worker_name}</strong> — ${e.type==='in'?'Checked In':e.type==='out'?'Checked Out':'Event'}</div></div><div class="tl-time">${fmtDT(e.created_at)}</div></div>`;
+    });
+    html+=`</div></div></div>`;
+  }
+
+  // Restore button
+  html+=`<div style="margin-top:16px"><button onclick="unarchiveProject('${id}');showView('archive')" style="padding:10px 20px;border-radius:8px;border:1px solid var(--green);background:rgba(34,197,94,.08);color:var(--green);font-family:var(--font);font-size:13px;cursor:pointer;font-weight:700">↩️ Restore to Active Projects</button></div>`;
+  c.innerHTML=html;
+  showDrillView('view-arc-proj-detail');
+  document.getElementById('nav-archive')?.classList.add('on');
+}
+
+async function renderPaidHours(){
+  const c=document.getElementById('arc-content');
+  c.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted)">Loading...</div>';
+  const {data}=await db.from('payroll_periods').select('*').order('created_at',{ascending:false});
+  if(!data||!data.length){
+    c.innerHTML='<div class="empty"><div class="ei">💰</div><p>No paid hours yet</p><p style="margin-top:4px;font-size:11px">Process payroll to see history here</p></div>';
+    return;
+  }
+  // Group by period_label
+  const periods={};
+  data.forEach(p=>{
+    const key=p.period_label||'Unknown Period';
+    if(!periods[key])periods[key]={workers:[],totalHours:0,totalAmount:0,date:p.created_at,processedBy:p.processed_by};
+    periods[key].workers.push(p);
+    periods[key].totalHours+=p.hours||0;
+    periods[key].totalAmount+=p.amount||0;
+  });
+  let html='';
+  Object.entries(periods).forEach(([label,pd])=>{
+    html+=`<div style="background:var(--surface);border:2px solid var(--border);border-radius:13px;padding:16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <h3 style="font-size:15px;font-weight:700">💰 ${label}</h3>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Processed ${new Date(pd.date).toLocaleDateString()} by ${pd.processedBy||'Manager'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:var(--mono);font-size:18px;font-weight:700;color:var(--green)">$${pd.totalAmount.toFixed(2)}</div>
+          <div style="font-size:11px;color:var(--muted)">${pd.totalHours.toFixed(1)}h total</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr><th style="text-align:left;padding:6px 10px;font-size:10px;border-bottom:1px solid var(--border)">Worker</th><th style="text-align:right;padding:6px 10px;font-size:10px;border-bottom:1px solid var(--border)">Hours</th><th style="text-align:right;padding:6px 10px;font-size:10px;border-bottom:1px solid var(--border)">Rate</th><th style="text-align:right;padding:6px 10px;font-size:10px;border-bottom:1px solid var(--border)">Amount</th></tr></thead>
+        <tbody>${pd.workers.map(w=>`<tr>
+          <td style="padding:6px 10px;font-size:12px;border-bottom:1px solid rgba(42,48,69,.3)">${w.worker_name}</td>
+          <td style="padding:6px 10px;font-size:12px;text-align:right;font-family:var(--mono);border-bottom:1px solid rgba(42,48,69,.3)">${(w.hours||0).toFixed(1)}h</td>
+          <td style="padding:6px 10px;font-size:12px;text-align:right;color:var(--muted);border-bottom:1px solid rgba(42,48,69,.3)">$${(w.rate||0).toFixed(0)}/h</td>
+          <td style="padding:6px 10px;font-size:12px;text-align:right;font-weight:700;color:var(--green);font-family:var(--mono);border-bottom:1px solid rgba(42,48,69,.3)">$${(w.amount||0).toFixed(2)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  });
+  c.innerHTML=html;
+}
+
+function renderOtherArchive(){
+  const c=document.getElementById('arc-content');
+  c.innerHTML=`<div class="empty"><div class="ei">📁</div><p>Other archives will appear here</p><p style="margin-top:4px;font-size:11px">This section is ready for future archive categories</p></div>`;
 }
 
 // ═══ TRASH ═══
