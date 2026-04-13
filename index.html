@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Construction Clock v2.7</title>
+<title>Construction Clock v3.8</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#f59e0b">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -357,6 +357,59 @@ tr:hover td{background:rgba(255,255,255,.015)}
   </div>
 </div>
 <div class="page" id="pg-worker">
+  <!-- FIRST-RUN PERMISSION SETUP -->
+  <div id="perm-setup" style="display:none;position:absolute;inset:0;z-index:50;background:var(--bg);overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <div style="max-width:400px;margin:0 auto;padding:32px 20px">
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="font-size:48px;margin-bottom:10px">⚙️</div>
+        <h2 style="font-size:20px;font-weight:700">Permission Setup</h2>
+        <p style="font-size:13px;color:var(--muted);margin-top:6px">Allow these for the app to work properly. You only need to do this once.</p>
+      </div>
+
+      <!-- Webview warning -->
+      <div id="perm-webview-warn" style="display:none;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:12px 14px;margin-bottom:16px;text-align:center">
+        <div style="font-size:13px;font-weight:700;color:var(--red)">⚠️ Open in Chrome for stable microphone and permissions</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Telegram/app browsers don't support voice input</div>
+      </div>
+
+      <!-- Location -->
+      <div id="perm-row-location" style="background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px">
+        <div style="font-size:28px;flex-shrink:0">📍</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700">Location</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Required for GPS check-in</div>
+          <div id="perm-status-location" style="font-size:11px;font-weight:700;margin-top:6px;color:var(--muted)">— checking...</div>
+        </div>
+        <button id="perm-btn-location" onclick="requestPerm('location')" style="padding:8px 14px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Allow</button>
+      </div>
+
+      <!-- Microphone -->
+      <div id="perm-row-mic" style="background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px">
+        <div style="font-size:28px;flex-shrink:0">🎤</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700">Microphone</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">For checkout video audio</div>
+          <div id="perm-status-mic" style="font-size:11px;font-weight:700;margin-top:6px;color:var(--muted)">— checking...</div>
+        </div>
+        <button id="perm-btn-mic" onclick="requestPerm('mic')" style="padding:8px 14px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Allow</button>
+      </div>
+
+      <!-- Camera -->
+      <div id="perm-row-camera" style="background:var(--surface);border:2px solid var(--border);border-radius:14px;padding:16px;margin-bottom:10px;display:flex;align-items:center;gap:14px">
+        <div style="font-size:28px;flex-shrink:0">📷</div>
+        <div style="flex:1">
+          <div style="font-size:14px;font-weight:700">Camera</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">For work photos & checkout video</div>
+          <div id="perm-status-camera" style="font-size:11px;font-weight:700;margin-top:6px;color:var(--muted)">— checking...</div>
+        </div>
+        <button id="perm-btn-camera" onclick="requestPerm('camera')" style="padding:8px 14px;border-radius:8px;border:none;background:var(--gold);color:#000;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Allow</button>
+      </div>
+
+      <button id="perm-done-btn" onclick="finishPermSetup()" style="width:100%;padding:16px;border-radius:14px;border:none;background:var(--border);color:var(--muted);font-family:var(--font);font-size:16px;font-weight:700;cursor:not-allowed;margin-top:18px;transition:all .3s">Continue</button>
+      <button onclick="skipPermSetup()" style="width:100%;padding:10px;border:none;background:none;font-family:var(--font);font-size:12px;color:var(--muted);cursor:pointer;margin-top:8px">Skip for now</button>
+    </div>
+  </div>
+
   <!-- TOP BAR -->
   <div class="w-top">
     <div style="display:flex;align-items:center;gap:10px">
@@ -613,7 +666,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
               <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
                 <div style="flex:1;min-width:180px;position:relative">
                   <input type="text" id="ptask-title" placeholder="Task description..." class="fi" style="margin:0;padding-right:42px">
-                  <button onclick="voiceInput('ptask-title')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--gold);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">🎤</button>
+                  <button onclick="micFocus('ptask-title')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:var(--gold);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Use keyboard mic">🎤</button>
                 </div>
                 <select id="ptask-worker" class="fi" style="width:auto;margin:0">
                   <option value="">👷 All workers</option>
@@ -694,8 +747,8 @@ tr:hover td{background:rgba(255,255,255,.015)}
             <div class="form-card">
               <h3>➕ Assign Task</h3>
               <div class="mfield"><label>Worker</label><select id="t-worker" class="fi"></select></div>
-              <div class="mfield"><label>Title <button onclick="voiceInput('t-title')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Voice input">🎤</button></label><input type="text" id="t-title" class="fi" placeholder="e.g. Install drywall Room 3"></div>
-              <div class="mfield"><label>Description <button onclick="voiceInput('t-desc')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Voice input">🎤</button></label><textarea id="t-desc" class="fi" style="resize:vertical;min-height:70px"></textarea></div>
+              <div class="mfield"><label>Title <button onclick="micFocus('t-title')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label><input type="text" id="t-title" class="fi" placeholder="e.g. Install drywall Room 3"></div>
+              <div class="mfield"><label>Description <button onclick="micFocus('t-desc')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label><textarea id="t-desc" class="fi" style="resize:vertical;min-height:70px"></textarea></div>
               <div class="mfield"><label>Priority</label><select id="t-pri" class="fi"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></div>
               <button class="big-btn" style="font-size:13px;padding:12px" onclick="assignTask()">Assign Task</button>
             </div>
@@ -735,9 +788,10 @@ tr:hover td{background:rgba(255,255,255,.015)}
     <div class="co-body">
       <div id="journal-preview" style="margin-bottom:14px;border-radius:10px;overflow:hidden;border:1px solid var(--border);display:none"></div>
       <div style="position:relative;margin-bottom:12px">
-        <textarea id="journal-comment" placeholder="Type or say your comment..." style="width:100%;padding:12px 50px 12px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--font);font-size:14px;resize:none;min-height:80px;outline:none"></textarea>
-        <button onclick="voiceJournal()" style="position:absolute;right:8px;top:8px;width:36px;height:36px;border-radius:50%;background:var(--gold);border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Voice input">🎤</button>
+        <textarea id="journal-comment" placeholder="Write what you did today..." style="width:100%;padding:12px 50px 12px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--text);font-family:var(--font);font-size:14px;resize:none;min-height:80px;outline:none"></textarea>
+        <button onclick="micFocus('journal-comment')" style="position:absolute;right:8px;top:8px;width:36px;height:36px;border-radius:50%;background:var(--gold);border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Use keyboard mic for dictation">🎤</button>
       </div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px;text-align:right">💡 Tap 🎤 then use your keyboard microphone</div>
       <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
         <button onclick="setComment('✅ Done')" style="padding:7px 13px;border-radius:20px;border:1px solid var(--green);background:rgba(34,197,94,.08);color:var(--green);font-family:var(--font);font-size:12px;cursor:pointer;font-weight:600">✅ Done</button>
         <button onclick="setComment('⚠️ Needs attention')" style="padding:7px 13px;border-radius:20px;border:1px solid var(--gold);background:rgba(245,158,11,.08);color:var(--gold);font-family:var(--font);font-size:12px;cursor:pointer;font-weight:600">⚠️ Attention</button>
@@ -822,7 +876,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
         <div style="font-size:11px;color:var(--muted);margin-top:6px">Positive = add hours · Negative = remove hours</div>
       </div>
       <div class="mfield">
-        <label>Reason <button onclick="voiceInput('adj-reason')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label>
+        <label>Reason <button onclick="micFocus('adj-reason')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)" title="Use keyboard mic">🎤</button></label>
         <input type="text" id="adj-reason" placeholder="e.g. Forgot to check out, worked extra...">
       </div>
       <div class="toggle-row" style="margin-bottom:16px">
@@ -832,7 +886,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
       <button class="big-btn" onclick="submitHourAdj()">✅ Apply Adjustment</button>
     </div>
   </div>
-</div><div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="voiceInput('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="mp-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers <button onclick="voiceInput('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
+</div><div class="modal-ov" id="mod-proj"><div class="modal"><div class="modal-top"><h3>Add Project</h3><button class="modal-close" onclick="closeModal('mod-proj')">×</button></div><div class="modal-body"><div class="mfield"><label>Project Name</label><input type="text" id="mp-name" placeholder="Downtown Office Build"></div><div class="mfield"><label>Address <button onclick="micFocus('mp-addr')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><input type="text" id="mp-addr" placeholder="123 Main St, Seattle WA"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="mp-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers <button onclick="micFocus('mp-notes')" style="background:none;border:none;cursor:pointer;font-size:14px;color:var(--gold)">🎤</button></label><textarea id="mp-notes" placeholder="What needs to be done today..."></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="mp-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForProject()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="mp-loc-btn">📍 Use My Current Location</button><div id="mp-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="mp-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="mp-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="addProject()">Add Project</button></div></div></div>
 <div class="modal-ov" id="mod-edit-proj"><div class="modal"><div class="modal-top"><h3>Edit Project</h3><button class="modal-close" onclick="closeModal('mod-edit-proj')">×</button></div><div class="modal-body"><input type="hidden" id="ep-id"><div class="mfield"><label>Project Name</label><input type="text" id="ep-name"></div><div class="mfield"><label>Address</label><input type="text" id="ep-addr"></div><div class="mfield"><label>📅 Start Date</label><input type="date" id="ep-start" style="width:100%;padding:11px 13px;background:var(--card);border:1px solid var(--border);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;outline:none"></div><div class="mfield"><label>Notes for Workers</label><textarea id="ep-notes"></textarea></div><div class="mfield"><label>GPS Radius (meters)</label><input type="number" id="ep-radius" value="200"></div><div style="margin-bottom:12px"><button onclick="useMyLocationForEdit()" style="width:100%;padding:11px;border-radius:9px;border:2px dashed var(--gold);background:rgba(245,158,11,.07);color:var(--gold);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer" id="ep-loc-btn">📍 Use My Current Location</button><div id="ep-loc-status" style="font-size:11px;color:var(--muted);margin-top:5px;text-align:center"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="mfield" style="margin:0"><label>Latitude</label><input type="number" step="any" id="ep-lat" placeholder="auto-filled"></div><div class="mfield" style="margin:0"><label>Longitude</label><input type="number" step="any" id="ep-lon" placeholder="auto-filled"></div></div><div style="height:12px"></div><button class="big-btn" onclick="saveEditProject()">Save</button></div></div></div>
 <div class="modal-ov" id="mod-worker"><div class="modal"><div class="modal-top"><h3>Add Team Member</h3><button class="modal-close" onclick="closeModal('mod-worker')">×</button></div><div class="modal-body"><div class="mfield"><label>Full Name</label><input type="text" id="nw-name" placeholder="John Smith"></div><div class="mfield"><label>PIN (4–6 digits)</label><input type="password" id="nw-pin" maxlength="6"></div><div class="mfield"><label>Category</label><select id="nw-role" onchange="toggleWorkerPayFields()"><option value="worker">👷 Worker</option><option value="supervisor">👔 Supervisor</option><option value="driver">🚚 Driver</option><option value="subcontractor">🤝 Subcontractor</option></select></div><div id="nw-hourly-wrap" class="mfield"><label>Hourly Rate ($/hr)</label><input type="number" id="nw-rate" placeholder="25" min="0" step="0.5"></div><div id="nw-fixed-wrap" class="mfield" style="display:none"><label>Fixed Amount per Project ($)</label><input type="number" id="nw-fixed" placeholder="500" min="0"></div><div class="toggle-row"><div><span>🎬 Require checkout video</span><small>Must upload video before check-out</small></div><label class="tog"><input type="checkbox" id="nw-vid"><div class="tog-sl"></div></label></div><button class="big-btn" onclick="addWorker()">Add Team Member</button></div></div></div>
 
@@ -864,7 +918,7 @@ tr:hover td{background:rgba(255,255,255,.015)}
     </div>
     <div style="position:relative">
       <textarea id="msg-text" style="width:100%;padding:11px 42px 11px 13px;background:var(--card);border:2px solid var(--gold);border-radius:9px;color:var(--text);font-family:var(--font);font-size:13px;resize:vertical;min-height:100px;outline:none;box-sizing:border-box" placeholder="e.g. Please bring your tools tomorrow. Start at 8am on project Papay."></textarea>
-      <button onclick="voiceInput('msg-text')" style="position:absolute;right:8px;top:10px;background:var(--gold);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center">🎤</button>
+      <button onclick="micFocus('msg-text')" style="position:absolute;right:8px;top:10px;background:var(--gold);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center" title="Use keyboard mic">🎤</button>
     </div>
   </div>
   <button class="big-btn" onclick="saveMsgWorker()">📤 Send Message</button>
@@ -1005,6 +1059,8 @@ async function doLogin(){
       startClock();
       getGPS();
       showPage('pg-worker');
+      // First-run permission setup
+      if(shouldShowPermSetup()) showPermSetup();
       startRealtimeWorker();
       await loadUnreadMessages(); // fetch & show unread personal messages
       startAutoRefresh();
@@ -2812,9 +2868,7 @@ function setComment(txt) {
   el.focus();
 }
 
-function voiceJournal() {
-  voiceInput('journal-comment');
-}
+// voiceJournal — disabled, stub in voice section
 
 function cancelJournal() {
   journalPending = null;
@@ -3166,93 +3220,189 @@ function closeMediaViewer(){
   document.getElementById('mv-body').innerHTML='';
 }
 
-// ═══ VOICE INPUT ═══
-// Single shared recognition instance — created once, reused forever
-const _SpeechRec=window.SpeechRecognition||window.webkitSpeechRecognition;
-let _voiceRec=null;
-let _voiceActive=false;
-let _voiceTargetEl=null;
+// ═══ PERMISSION SETUP (first-run) ═══
+const PERM_DONE_KEY='cc_perm_setup_done';
+const _permState={location:'unknown',mic:'unknown',camera:'unknown'};
 
-// Create once at startup
-if(_SpeechRec){
-  _voiceRec=new _SpeechRec();
-  _voiceRec.lang='en-US';
-  _voiceRec.continuous=false;
-  _voiceRec.interimResults=false;
-  _voiceRec.maxAlternatives=1;
-
-  _voiceRec.onstart=function(){
-    console.log('Voice started');
-    _voiceActive=true;
-  };
-
-  _voiceRec.onresult=function(e){
-    const txt=e.results[0][0].transcript;
-    console.log('Voice result:',txt);
-    _voiceActive=false;
-    if(_voiceTargetEl){
-      _voiceTargetEl.value=(_voiceTargetEl.value?_voiceTargetEl.value+' ':'')+txt;
-      _voiceTargetEl.focus();
-      _voiceTargetEl.dispatchEvent(new Event('input',{bubbles:true}));
-    }
-    toast('✅ '+(txt.length>40?txt.substring(0,40)+'…':txt),'ok');
-  };
-
-  _voiceRec.onerror=function(e){
-    console.error('Voice error:',e.error);
-    _voiceActive=false;
-    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-      toast('🎤 Microphone blocked — check browser settings','err');
-    } else if(e.error==='no-speech'){
-      toast('🎤 No speech detected — tap mic and speak','err');
-    } else if(e.error==='audio-capture'){
-      toast('🎤 No microphone found','err');
-    } else if(e.error==='network'){
-      toast('🎤 Network error — check internet','err');
-    } else if(e.error==='aborted'){
-      // User aborted or restarted — silent
-    } else {
-      toast('🎤 Voice error ('+e.error+') — try again','err');
-    }
-  };
-
-  _voiceRec.onend=function(){
-    console.log('Voice ended');
-    _voiceActive=false;
-  };
+function shouldShowPermSetup(){
+  return !localStorage.getItem(PERM_DONE_KEY);
 }
 
-function voiceInput(fieldId){
-  if(!_voiceRec){toast('🎤 Voice not supported — type manually','err');return;}
-  const el=document.getElementById(fieldId);
-  if(!el){toast('Voice target not found','err');return;}
+async function showPermSetup(){
+  const el=document.getElementById('perm-setup');
+  if(!el)return;
+  el.style.display='block';
+  // Show webview warning if needed
+  const wvWarn=document.getElementById('perm-webview-warn');
+  if(wvWarn)wvWarn.style.display=_isWebview?'block':'none';
+  await checkAllPerms();
+}
 
-  console.log('Voice input clicked for:',fieldId);
+async function checkAllPerms(){
+  // Location
+  if(navigator.permissions){
+    try{
+      const loc=await navigator.permissions.query({name:'geolocation'});
+      _permState.location=loc.state; // 'granted','denied','prompt'
+      updatePermRow('location',loc.state);
+      loc.onchange=()=>{ _permState.location=loc.state; updatePermRow('location',loc.state); updatePermDoneBtn(); };
+    }catch(e){ updatePermRow('location','prompt'); }
+  } else { updatePermRow('location','prompt'); }
 
-  // If already listening — stop it first
-  if(_voiceActive){
-    try{_voiceRec.abort();}catch(e){}
-    _voiceActive=false;
-    // Small delay before restarting
-    setTimeout(()=>{ _startVoice(el); },200);
-    return;
+  // Microphone
+  if(navigator.permissions){
+    try{
+      const mic=await navigator.permissions.query({name:'microphone'});
+      _permState.mic=mic.state;
+      updatePermRow('mic',mic.state);
+      mic.onchange=()=>{ _permState.mic=mic.state; updatePermRow('mic',mic.state); updatePermDoneBtn(); };
+    }catch(e){ updatePermRow('mic','prompt'); }
+  } else { updatePermRow('mic','prompt'); }
+
+  // Camera
+  if(navigator.permissions){
+    try{
+      const cam=await navigator.permissions.query({name:'camera'});
+      _permState.camera=cam.state;
+      updatePermRow('camera',cam.state);
+      cam.onchange=()=>{ _permState.camera=cam.state; updatePermRow('camera',cam.state); updatePermDoneBtn(); };
+    }catch(e){ updatePermRow('camera','prompt'); }
+  } else { updatePermRow('camera','prompt'); }
+
+  updatePermDoneBtn();
+}
+
+function updatePermRow(type,state){
+  const status=document.getElementById('perm-status-'+type);
+  const btn=document.getElementById('perm-btn-'+type);
+  const row=document.getElementById('perm-row-'+(type==='mic'?'mic':type));
+  if(!status||!btn)return;
+
+  if(state==='granted'){
+    status.textContent='✅ Granted';
+    status.style.color='var(--green)';
+    btn.textContent='✅';
+    btn.disabled=true;
+    btn.style.background='rgba(34,197,94,.15)';
+    btn.style.color='var(--green)';
+    btn.style.cursor='default';
+    if(row)row.style.borderColor='rgba(34,197,94,.3)';
+  } else if(state==='denied'){
+    status.textContent='❌ Blocked — change in browser settings';
+    status.style.color='var(--red)';
+    btn.textContent='Blocked';
+    btn.disabled=true;
+    btn.style.background='rgba(239,68,68,.12)';
+    btn.style.color='var(--red)';
+    btn.style.cursor='default';
+    if(row)row.style.borderColor='rgba(239,68,68,.3)';
+  } else {
+    status.textContent='Not yet allowed';
+    status.style.color='var(--gold)';
+    btn.textContent='Allow';
+    btn.disabled=false;
+    btn.style.background='var(--gold)';
+    btn.style.color='#000';
+    btn.style.cursor='pointer';
+    if(row)row.style.borderColor='var(--border)';
   }
-
-  _startVoice(el);
 }
 
-function _startVoice(el){
-  _voiceTargetEl=el;
-  toast('🎤 Listening...','ok');
+function updatePermDoneBtn(){
+  const btn=document.getElementById('perm-done-btn');
+  if(!btn)return;
+  const locOk=_permState.location==='granted';
+  // Location is the only hard requirement — mic & camera are nice-to-have
+  if(locOk){
+    btn.style.background='linear-gradient(135deg,var(--green),#16a34a)';
+    btn.style.color='#fff';
+    btn.style.cursor='pointer';
+    btn.textContent='✅ Continue to App';
+  } else {
+    btn.style.background='var(--gold)';
+    btn.style.color='#000';
+    btn.style.cursor='pointer';
+    btn.textContent='Continue';
+  }
+}
+
+async function requestPerm(type){
+  console.log('[PERM] requesting:',type);
   try{
-    _voiceRec.start();
-  }catch(ex){
-    console.error('Voice start error:',ex);
-    // If instance is stuck, recreate
-    _voiceActive=false;
-    toast('🎤 Tap mic again to retry','err');
+    if(type==='location'){
+      navigator.geolocation.getCurrentPosition(
+        ()=>{ console.log('[PERM] location granted'); _permState.location='granted'; updatePermRow('location','granted'); updatePermDoneBtn(); },
+        ()=>{ console.log('[PERM] location denied'); _permState.location='denied'; updatePermRow('location','denied'); updatePermDoneBtn(); },
+        {enableHighAccuracy:true,timeout:10000}
+      );
+    } else if(type==='mic'){
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      stream.getTracks().forEach(t=>t.stop());
+      _permState.mic='granted';
+      console.log('[PERM] mic granted');
+      updatePermRow('mic','granted');
+    } else if(type==='camera'){
+      const stream=await navigator.mediaDevices.getUserMedia({video:true});
+      stream.getTracks().forEach(t=>t.stop());
+      _permState.camera='granted';
+      console.log('[PERM] camera granted');
+      updatePermRow('camera','granted');
+    }
+  }catch(e){
+    console.error('[PERM] error ('+type+'):',e.name,e.message);
+    _permState[type]='denied';
+    updatePermRow(type,'denied');
   }
+  updatePermDoneBtn();
 }
+
+function finishPermSetup(){
+  localStorage.setItem(PERM_DONE_KEY,'1');
+  const el=document.getElementById('perm-setup');
+  if(el)el.style.display='none';
+}
+
+function skipPermSetup(){
+  finishPermSetup();
+}
+
+// ═══ VOICE INPUT ═══
+// One SpeechRecognition instance, created once. Requires HTTPS to save permissions.
+const _SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let _rec=null;
+let _recBusy=false;
+if(_SR){try{_rec=new _SR();_rec.continuous=false;_rec.interimResults=false;}catch(e){}}
+
+function micFocus(fieldId){
+  const el=document.getElementById(fieldId);
+  if(!el)return;
+  // No SpeechRecognition — fallback to keyboard focus
+  if(!_rec){el.focus();toast('🎤 Use keyboard mic to dictate','ok');return;}
+  // If busy — stop current session
+  if(_recBusy){try{_rec.abort();}catch(e){}_recBusy=false;toast('🎤 Stopped','ok');return;}
+  // Detect language
+  const hasRu=/[а-яёА-ЯЁ]/.test(el.value)||(navigator.language||'').startsWith('ru');
+  _rec.lang=hasRu?'ru-RU':'en-US';
+  _rec.onresult=function(e){
+    _recBusy=false;
+    const txt=e.results[0][0].transcript;
+    el.value=(el.value?el.value+' ':'')+txt;
+    el.focus();
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+    toast('✅ '+txt.substring(0,50),'ok');
+  };
+  _rec.onerror=function(e){
+    _recBusy=false;
+    if(e.error==='not-allowed'){toast('🎤 Mic blocked — use HTTPS or check settings','err');}
+    else if(e.error==='no-speech'){toast('🎤 No speech heard','err');}
+    else if(e.error!=='aborted'){toast('🎤 '+e.error,'err');}
+  };
+  _rec.onend=function(){_recBusy=false;};
+  try{_rec.start();_recBusy=true;toast('🎤 Speak now...','ok');}
+  catch(e){_recBusy=false;el.focus();toast('🎤 Use keyboard mic to dictate','ok');}
+}
+function voiceInput(fieldId){micFocus(fieldId);}
+function voiceJournal(){micFocus('journal-comment');}
 
 // ═══ WORKER HOURS ═══
 let workerCalcPeriod='current';
