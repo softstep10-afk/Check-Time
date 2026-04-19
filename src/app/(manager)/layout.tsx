@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, FolderKanban, Users, Clock, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, MapPin, Store, FileBarChart, ScrollText } from "lucide-react";
+import { BarChart3, FolderKanban, Users, Clock, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, MapPin, Store, FileBarChart, ScrollText, Sliders } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
@@ -28,6 +28,7 @@ const sidebarItems: SidebarItem[] = [
   { href: "/stores", icon: Store, label: "Stores", labelKey: "stores.title", ownerOnly: true },
   { href: "/location-data", icon: MapPin, label: "Location Data", labelKey: "gps.adminTitle", ownerOnly: true },
   { href: "/admin/audit", icon: ScrollText, label: "Audit Log", labelKey: "audit.title", ownerOnly: true },
+  { href: "/admin/settings", icon: Sliders, label: "Admin Settings", labelKey: "admin.settings.title", ownerOnly: true },
   { href: "/settings", icon: SettingsIcon, label: "Settings", labelKey: "manager.navSettings" },
   { href: "/trash", icon: Trash2, label: "Trash", labelKey: "nav.trash" },
 ];
