@@ -46,7 +46,7 @@ type BannerState = {
   text: string;
 } | null;
 
-type UploadMode = "journal" | "checkout";
+type UploadMode = "journal" | "checkout" | "before_leave";
 
 type WorkerShellContextValue = {
   shell: WorkerShellData;
@@ -638,7 +638,13 @@ export function WorkerShell({
       return;
     }
 
-    setBusyAction(mode === "checkout" ? "checkout-video" : "journal-upload");
+    setBusyAction(
+      mode === "checkout"
+        ? "checkout-video"
+        : mode === "before_leave"
+          ? "before-leave-video"
+          : "journal-upload",
+    );
     setBanner(null);
 
     try {
@@ -673,11 +679,16 @@ export function WorkerShell({
             file_size: file.size,
             mime_type: file.type,
             caption: caption.trim() || null,
-            is_checkout: mode === "checkout",
+            // before_leave videos are also "checkout proof" videos — the
+            // worker just hasn't pressed Clock Out yet. Tagging them with
+            // is_checkout lets the team page videoUploadedToday indicator
+            // and the gate logic both detect them.
+            is_checkout: mode === "checkout" || mode === "before_leave",
             time_event_id:
               mode === "checkout" ? shell.clockState.pendingCheckoutEventId : null,
             metadata: {
               uploadedBy: "worker-shell",
+              ...(mode === "before_leave" ? { kind: "before_leave" } : {}),
             },
           })
           .select("*")

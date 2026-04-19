@@ -40,6 +40,16 @@ export default async function TeamMemberRoutePage({
     )
     .slice(0, 20);
 
+  // Worker's recent journal entries (newest first), enriched with project name.
+  const projectsById = new Map(data.projects.map((p) => [p.id, p.name]));
+  const workerMedia = data.media
+    .filter((m) => m.uploaded_by === id && !m.deleted_at)
+    .slice(0, 20)
+    .map((m) => ({
+      ...m,
+      projectName: m.project_id ? projectsById.get(m.project_id) ?? null : null,
+    }));
+
   return (
     <TeamMemberPage
       orgId={data.manager.org_id}
@@ -50,6 +60,7 @@ export default async function TeamMemberRoutePage({
       tasks={tasks}
       sessions={workerSessions}
       storeVisits={workerStoreVisits}
+      media={workerMedia}
     />
   );
 }
