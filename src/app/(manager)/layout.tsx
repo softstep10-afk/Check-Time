@@ -53,16 +53,25 @@ export default function ManagerLayout({
 
   // In auth-bypass/preview mode, owner is the default role
   const [userRole, setUserRole] = useState<string>(AUTH_BYPASS_ENABLED ? "owner" : "manager");
+  const [userName, setUserName] = useState<string>(AUTH_BYPASS_ENABLED ? "Preview Owner" : "");
 
   useEffect(() => {
     if (AUTH_BYPASS_ENABLED) return;
-    async function loadRole() {
+    async function loadProfile() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-      if (data) setUserRole((data as { role: string }).role);
+      const { data } = await supabase
+        .from("profiles")
+        .select("role, name")
+        .eq("id", user.id)
+        .single();
+      if (data) {
+        const profile = data as { role: string; name: string | null };
+        setUserRole(profile.role);
+        setUserName(profile.name ?? "");
+      }
     }
-    void loadRole();
+    void loadProfile();
   }, [supabase]);
 
   const isOwnerUser = userRole === "owner" || userRole === "admin";
@@ -149,6 +158,34 @@ export default function ManagerLayout({
           className="px-3 py-3"
           style={{ borderTop: "1px solid var(--border-default)" }}
         >
+          <div className="mb-2 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-2.5 py-2">
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-black"
+              style={{ background: "var(--brand-yellow)" }}
+              aria-hidden
+            >
+              {(userName || "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">
+                {userName || t("sidebar.signedInAs")}
+              </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
+                <span className="uppercase tracking-[0.12em]">{userRole}</span>
+                <span
+                  className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em]"
+                  style={{
+                    background: isOwnerUser
+                      ? "rgba(15, 168, 120, 0.16)"
+                      : "rgba(107, 114, 128, 0.18)",
+                    color: isOwnerUser ? "var(--green)" : "var(--text-muted)",
+                  }}
+                >
+                  {isOwnerUser ? t("sidebar.fullAccess") : t("sidebar.limitedAccess")}
+                </span>
+              </div>
+            </div>
+          </div>
           <button
             onClick={handleLogout}
             className="button-base button-danger-ghost w-full justify-start"
