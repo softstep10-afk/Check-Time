@@ -306,7 +306,7 @@ export function ClockPage() {
               <div className="mt-2 text-lg font-semibold text-[var(--text-primary)]">
                 {lastClosedSession.projectName}
               </div>
-              <div className="mt-1 text-sm font-semibold text-[var(--brand-yellow)]">
+              <div className="mt-1 font-mono text-sm font-semibold text-[var(--brand-yellow)]">
                 {formatDurationCompact(lastClosedSession.durationMinutes)}
               </div>
             </div>

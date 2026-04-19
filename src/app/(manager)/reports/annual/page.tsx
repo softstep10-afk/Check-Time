@@ -389,15 +389,15 @@ export default function AnnualReportPage() {
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalHours")}</div>
-              <div className="mt-2 text-[24px] font-bold text-[var(--text-primary)]">{Math.round(summary.totalHours).toLocaleString()}h</div>
+              <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">{Math.round(summary.totalHours).toLocaleString()}h</div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalPayroll")}</div>
-              <div className="mt-2 text-[24px] font-bold text-[var(--text-primary)]">{currency.format(summary.totalGross)}</div>
+              <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">{currency.format(summary.totalGross)}</div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalMaterials")}</div>
-              <div className="mt-2 text-[24px] font-bold text-[var(--text-primary)]">
+              <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">
                 {summary.totalMaterials > 0 ? currency.format(summary.totalMaterials) : (
                   <span className="text-base text-[var(--text-muted)]">{t("report.noData")}</span>
                 )}
@@ -405,12 +405,12 @@ export default function AnnualReportPage() {
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalProjects")}</div>
-              <div className="mt-2 text-[24px] font-bold text-[var(--text-primary)]">{summary.totalProjectsWorked}</div>
+              <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">{summary.totalProjectsWorked}</div>
               <div className="mt-1 text-xs text-[var(--text-secondary)]">{summary.completedProjects} {t("common.completed").toLowerCase()}</div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.activeWorkers")}</div>
-              <div className="mt-2 text-[24px] font-bold text-[var(--text-primary)]">{summary.activeWorkers}</div>
+              <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">{summary.activeWorkers}</div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalVisits")}</div>
@@ -465,9 +465,9 @@ export default function AnnualReportPage() {
                         <div className="font-semibold text-[var(--text-primary)]">{w.name}</div>
                         <span className="mt-0.5 inline-block rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ background: "rgba(191, 162, 52, 0.12)", color: "var(--brand-yellow)" }}>{w.role}</span>
                       </td>
-                      <td className="py-3 pr-3 text-[var(--text-primary)]">{w.totalHours.toFixed(1)}h</td>
-                      <td className="py-3 pr-3" style={{ color: w.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{w.otHours.toFixed(1)}h</td>
-                      <td className="py-3 pr-3 font-semibold text-[var(--text-primary)]">{currency.format(w.grossPaid)}</td>
+                      <td className="py-3 pr-3 font-mono text-[var(--text-primary)]">{w.totalHours.toFixed(1)}h</td>
+                      <td className="py-3 pr-3 font-mono" style={{ color: w.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{w.otHours.toFixed(1)}h</td>
+                      <td className="py-3 pr-3 font-mono font-semibold text-[var(--text-primary)]">{currency.format(w.grossPaid)}</td>
                       <td className="py-3 pr-3 text-[var(--text-secondary)]">{w.projectCount}</td>
                       <td className="py-3 pr-3 text-[var(--text-secondary)]">{w.avgHoursPerDay}h</td>
                       <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-muted)]">{w.firstShift?.slice(0, 10) ?? "—"}</td>
@@ -502,10 +502,10 @@ export default function AnnualReportPage() {
                         {p.address ? <div className="mt-0.5 text-xs text-[var(--text-muted)]">{p.address}</div> : null}
                         <div className="mt-0.5 text-xs text-[var(--text-secondary)]">{p.startDate ?? "—"} → {p.endDate ?? t("report.ongoing")}</div>
                       </td>
-                      <td className="py-3 pr-3 text-[var(--text-primary)]">{p.laborHours.toFixed(1)}h</td>
-                      <td className="py-3 pr-3 text-[var(--text-primary)]">{currency.format(p.laborCost)}</td>
-                      <td className="py-3 pr-3 text-[var(--text-primary)]">{p.materialCost > 0 ? currency.format(p.materialCost) : "—"}</td>
-                      <td className="py-3 pr-3 font-bold text-[var(--brand-yellow)]">{currency.format(p.totalCost)}</td>
+                      <td className="py-3 pr-3 font-mono text-[var(--text-primary)]">{p.laborHours.toFixed(1)}h</td>
+                      <td className="py-3 pr-3 font-mono text-[var(--text-primary)]">{currency.format(p.laborCost)}</td>
+                      <td className="py-3 pr-3 font-mono text-[var(--text-primary)]">{p.materialCost > 0 ? currency.format(p.materialCost) : "—"}</td>
+                      <td className="py-3 pr-3 font-mono font-bold text-[var(--brand-yellow)]">{currency.format(p.totalCost)}</td>
                       <td className="py-3 text-[var(--text-secondary)]">{p.workerCount}</td>
                     </tr>
                   ))}
