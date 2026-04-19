@@ -305,37 +305,46 @@ export function JournalPage() {
           <div className="text-xs text-[var(--text-muted)]">{shell.media.length} {t("common.total")}</div>
         </div>
 
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-5">
           {shell.media.length === 0 ? (
             <div className="surface-panel p-4 text-sm text-[var(--text-secondary)]">
               {t("journal.noMedia")}
             </div>
           ) : (
-            shell.media.map((entry) => (
-              <div
-                key={entry.id}
-                className="surface-panel p-3"
-                style={{ background: "rgba(15, 17, 23, 0.84)" }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
-                      {entry.filename ?? entry.media_type}
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {entry.projectName ?? t("journal.unlinkedProject")} • {formatDateTime(entry.created_at)}
-                    </div>
-                  </div>
-                  <div
-                    className="status-pill"
-                    data-tone={entry.is_checkout ? "neutral" : "warning"}
-                  >
-                    {entry.is_checkout ? t("journal.checkout") : entry.media_type}
-                  </div>
+            groupMediaByDay(shell.media).map(({ key, label, items }) => (
+              <div key={key}>
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {label === "today" ? t("journal.todayLabel") : label === "yesterday" ? t("journal.yesterdayLabel") : key}
                 </div>
-                {entry.caption ? (
-                  <p className="mt-3 text-sm text-[var(--text-secondary)]">{entry.caption}</p>
-                ) : null}
+                <div className="space-y-3">
+                  {items.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="surface-panel p-3"
+                      style={{ background: "rgba(15, 17, 23, 0.84)" }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-[var(--text-primary)]">
+                            {entry.filename ?? entry.media_type}
+                          </div>
+                          <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                            {entry.projectName ?? t("journal.unlinkedProject")} • {formatDateTime(entry.created_at)}
+                          </div>
+                        </div>
+                        <div
+                          className="status-pill"
+                          data-tone={entry.is_checkout ? "neutral" : "warning"}
+                        >
+                          {entry.is_checkout ? t("journal.checkout") : entry.media_type}
+                        </div>
+                      </div>
+                      {entry.caption ? (
+                        <p className="mt-3 text-sm text-[var(--text-secondary)]">{entry.caption}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
             ))
           )}
@@ -343,4 +352,29 @@ export function JournalPage() {
       </section>
     </div>
   );
+}
+
+function groupMediaByDay<T extends { created_at: string }>(items: T[]) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayKey = today.toISOString().slice(0, 10);
+  const yesterdayKey = new Date(today.getTime() - 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const day = item.created_at.slice(0, 10);
+    const bucket = buckets.get(day) ?? [];
+    bucket.push(item);
+    buckets.set(day, bucket);
+  }
+
+  return [...buckets.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .map(([key, list]) => ({
+      key,
+      label: key === todayKey ? "today" : key === yesterdayKey ? "yesterday" : key,
+      items: list,
+    }));
 }

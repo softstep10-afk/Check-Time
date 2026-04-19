@@ -10,9 +10,9 @@ import type {
   ManagerProjectSummary,
   ManagerSession,
 } from "@/lib/manager-types";
-import type { ProjectAssignment, Task, UserRole } from "@/types/database";
+import type { Media, ProjectAssignment, Task, UserRole } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
-import { Store } from "lucide-react";
+import { Camera, Store } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
@@ -26,6 +26,8 @@ const roleOptions: UserRole[] = [
   "admin",
 ];
 
+type WorkerMediaRow = Media & { projectName: string | null };
+
 export function TeamMemberPage({
   orgId,
   managerId,
@@ -35,6 +37,7 @@ export function TeamMemberPage({
   tasks,
   sessions,
   storeVisits,
+  media,
 }: {
   orgId: string;
   managerId: string;
@@ -44,6 +47,7 @@ export function TeamMemberPage({
   tasks: Task[];
   sessions: ManagerSession[];
   storeVisits: StoreVisit[];
+  media: WorkerMediaRow[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -707,6 +711,55 @@ export function TeamMemberPage({
                   </div>
                 );
               })
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+          <div className="flex items-center gap-2">
+            <Camera size={16} style={{ color: "var(--brand-yellow)" }} />
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("teamMember.journalEntries")}
+            </h2>
+          </div>
+          <div className="mt-4 space-y-2">
+            {media.length === 0 ? (
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+                {t("teamMember.noJournal")}
+              </div>
+            ) : (
+              media.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-[var(--text-primary)]">
+                        {entry.filename ?? entry.media_type}
+                      </div>
+                      <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+                        {entry.projectName ?? t("common.general")} · {formatDateTime(entry.created_at)}
+                      </div>
+                    </div>
+                    <span
+                      className="shrink-0 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                      style={
+                        entry.is_checkout
+                          ? { background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }
+                          : { background: "rgba(191, 162, 52, 0.12)", color: "var(--brand-yellow)" }
+                      }
+                    >
+                      {entry.is_checkout ? t("journal.checkout") : entry.media_type}
+                    </span>
+                  </div>
+                  {entry.caption ? (
+                    <p className="mt-2 text-xs text-[var(--text-secondary)]">{entry.caption}</p>
+                  ) : null}
+                </div>
+              ))
             )}
           </div>
         </div>

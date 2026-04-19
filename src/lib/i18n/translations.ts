@@ -166,6 +166,10 @@ export const translations = {
   "journal.recentEntries": { en: "Recent Entries", ru: "Последние записи" },
   "journal.latestUploads": { en: "Latest uploads", ru: "Последние загрузки" },
   "journal.noMedia": { en: "No photos or videos yet.", ru: "Фото и видео пока нет." },
+  "journal.todayLabel": { en: "Today", ru: "Сегодня" },
+  "journal.yesterdayLabel": { en: "Yesterday", ru: "Вчера" },
+  "teamMember.journalEntries": { en: "Journal entries", ru: "Записи журнала" },
+  "teamMember.noJournal": { en: "No journal entries yet.", ru: "Записей журнала ещё нет." },
   "journal.unlinkedProject": { en: "Unlinked project", ru: "Непривязанный проект" },
   "journal.checkout": { en: "Checkout", ru: "Выход" },
 
