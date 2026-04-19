@@ -173,6 +173,25 @@ export default async function OverviewPage() {
   for (const task of data.tasks) {
     if (!task.deleted_at) {
       const project = task.project_id ? projectsById.get(task.project_id) : null;
+
+      // Assignment event — emitted whenever a task has an assigner + assignee.
+      // Without a full audit history we treat task.created_at as the assignment time.
+      if (task.assigned_to && task.assigned_by) {
+        const assigner = profilesById.get(task.assigned_by);
+        const assignee = profilesById.get(task.assigned_to);
+        feedEvents.push({
+          id: `task-assign-${task.id}`,
+          kind: "task_assigned",
+          actorName: assigner?.name ?? "Unknown",
+          actorId: task.assigned_by,
+          description: assignee ? `${task.title} → ${assignee.name}` : task.title,
+          projectName: project?.name ?? null,
+          projectId: task.project_id,
+          timestamp: task.created_at,
+          href: task.project_id ? `/projects/${task.project_id}` : null,
+        });
+      }
+
       if (task.status === "done" && task.completed_at) {
         const actor = task.completed_by ? profilesById.get(task.completed_by) : null;
         feedEvents.push({
