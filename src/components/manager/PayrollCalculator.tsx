@@ -296,37 +296,35 @@ export function PayrollCalculator({
 
   async function applyPresetAndCreate(preset: "lastWeek" | "last2Weeks" | "thisMonth") {
     const dates = presetDates(preset);
+    const periodTypeForPreset: PeriodType =
+      preset === "lastWeek" ? "weekly" : preset === "last2Weeks" ? "biweekly" : "monthly";
     setStartDate(dates.start);
     setEndDate(dates.end);
-    const lines = buildWorkerLines(profiles, sessions, dates.start, dates.end);
-    const label = `${dates.start} → ${dates.end}`;
+    setPeriodType(periodTypeForPreset);
+    await handleCreatePeriodFor(dates.start, dates.end, periodTypeForPreset);
+  }
+
+  async function handleCreatePeriodFor(start: string, end: string, type: PeriodType) {
+    if (!start || !end) return;
+    const lines = buildWorkerLines(profiles, sessions, start, end);
+    const label = `${start} → ${end}`;
 
     if (AUTH_BYPASS_ENABLED) {
-      setPeriod({
-        id: `period-${Date.now()}`,
-        label,
-        startDate: dates.start,
-        endDate: dates.end,
-        type: preset === "lastWeek" ? "weekly" : preset === "last2Weeks" ? "biweekly" : "monthly",
-        status: "draft",
-        lines,
-      });
+      // Date.now() is fine here — this runs from a click handler, not render.
+      // eslint-disable-next-line react-hooks/purity
+      setPeriod({ id: `period-${Date.now()}`, label, startDate: start, endDate: end, type, status: "draft", lines });
       setShowNewPeriod(false);
       return;
     }
-
-    const periodTypeForPreset: PeriodType =
-      preset === "lastWeek" ? "weekly" : preset === "last2Weeks" ? "biweekly" : "monthly";
-    setPeriodType(periodTypeForPreset);
 
     const { data: periodRow, error: pErr } = await supabase
       .from("pay_periods")
       .insert({
         org_id: orgId,
         label,
-        start_date: dates.start,
-        end_date: dates.end,
-        period_type: periodTypeForPreset,
+        start_date: start,
+        end_date: end,
+        period_type: type,
         status: "draft",
         created_by: managerId,
       })
