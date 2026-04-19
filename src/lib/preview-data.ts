@@ -285,6 +285,7 @@ const previewMedia: Media[] = [
       source: "fallback",
     },
     metadata: { preview: true },
+    deleted_at: null,
     created_at: isoOffsetMinutes(-45),
   },
   {
@@ -302,6 +303,7 @@ const previewMedia: Media[] = [
     time_event_id: "00000000-0000-0000-0000-000000000053",
     ai_analysis: null,
     metadata: { preview: true },
+    deleted_at: null,
     created_at: isoOffset(-5),
   },
 ];

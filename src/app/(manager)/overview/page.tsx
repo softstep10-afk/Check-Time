@@ -255,27 +255,37 @@ export default async function OverviewPage() {
         </p>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.onSite")}</div>
-          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{stats.onSiteCount}</div>
+          <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.onSiteCount}</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.crewCount} {t("overview.totalCrewProfiles")}</div>
         </div>
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.today")}</div>
-          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{stats.todayHours.toFixed(2)}h</div>
+          <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.todayHours.toFixed(2)}h</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.activeProjectCount} {t("overview.activeProjects")}</div>
         </div>
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.unpaid")}</div>
-          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">
+          <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
             {currency.format(stats.unpaidAmount)}
           </div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.unpaidHours.toFixed(2)}{t("payroll.hPendingPayroll")}</div>
         </div>
         <div className="surface-card p-4">
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("overview.materials")}</div>
+          <div
+            className="mt-2 font-mono text-[28px] font-bold"
+            style={{ color: "var(--brand-yellow)" }}
+          >
+            {currency.format(stats.receiptTotal)}
+          </div>
+          <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.materialsCaption")}</div>
+        </div>
+        <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.tasks")}</div>
-          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{stats.openTaskCount}</div>
+          <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.openTaskCount}</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.openFieldItems")}</div>
         </div>
       </section>

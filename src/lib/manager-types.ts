@@ -46,6 +46,7 @@ export interface ManagerProjectSummary extends Project {
   onSiteWorkerCount: number;
   openTaskCount: number;
   weekMinutes: number;
+  receiptTotal: number;
 }
 
 export interface ManagerProfileSummary extends Profile {

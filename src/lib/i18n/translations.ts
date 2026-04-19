@@ -178,6 +178,7 @@ export const translations = {
   "projects.saveChanges": { en: "Save Changes", ru: "Сохранить изменения" },
   "projects.archive": { en: "Archive", ru: "Архивировать" },
   "projects.archiving": { en: "Archiving...", ru: "Архивация..." },
+  "projects.materials": { en: "Materials", ru: "Материалы" },
 
   // ── Project Detail Page ──
   "projectDetail.backToProjects": { en: "Back to projects", ru: "Назад к проектам" },
@@ -402,6 +403,8 @@ export const translations = {
   "overview.calculator": { en: "Calculator", ru: "Калькулятор" },
   "overview.annualReport": { en: "Annual Report", ru: "Годовой отчёт" },
   "overview.processPayroll": { en: "Process Payroll", ru: "Начислить зарплату" },
+  "overview.materials": { en: "Materials", ru: "Материалы" },
+  "overview.materialsCaption": { en: "across all projects", ru: "по всем проектам" },
   "sound.mute": { en: "Mute sounds", ru: "Без звука" },
   "sound.unmute": { en: "Unmute sounds", ru: "Включить звук" },
 

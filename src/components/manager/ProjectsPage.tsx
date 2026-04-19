@@ -15,6 +15,12 @@ import {
 import type { ManagerProjectSummary } from "@/lib/manager-types";
 import type { ProjectStatus } from "@/types/database";
 
+const currencyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  maximumFractionDigits: 0,
+});
+
 function getProjectTone(status: ProjectStatus) {
   if (status === "paused" || status === "archived") {
     return "neutral";
@@ -351,8 +357,19 @@ export function ProjectsPage({
                       <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                         {t("common.week")}
                       </div>
-                      <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">
+                      <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
                         {formatDurationCompact(project.weekMinutes)}
+                      </div>
+                    </div>
+                    <div className="metric-panel rounded-[var(--radius-md)] p-3">
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                        {t("projects.materials")}
+                      </div>
+                      <div
+                        className="mt-1 font-mono text-sm font-bold"
+                        style={{ color: project.receiptTotal > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
+                      >
+                        {currencyFormatter.format(project.receiptTotal)}
                       </div>
                     </div>
                   </div>
