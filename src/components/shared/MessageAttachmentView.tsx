@@ -1,0 +1,101 @@
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import { FileText, X } from "lucide-react";
+import { useTranslation } from "@/lib/i18n";
+import type { MessageAttachment } from "@/lib/message-types";
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function MessageAttachmentView({
+  attachment,
+}: {
+  attachment: MessageAttachment;
+}) {
+  const { t } = useTranslation();
+  const [lightbox, setLightbox] = useState(false);
+
+  if (attachment.type === "image") {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setLightbox(true)}
+          className="mt-2 block overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-default)]"
+        >
+          <Image
+            src={attachment.url}
+            alt={attachment.filename}
+            width={240}
+            height={160}
+            unoptimized
+            className="h-auto max-h-[160px] w-full object-cover"
+          />
+        </button>
+        {lightbox ? (
+          <div
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4"
+            onClick={() => setLightbox(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setLightbox(false)}
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white"
+            >
+              <X size={18} />
+            </button>
+            <Image
+              src={attachment.url}
+              alt={attachment.filename}
+              width={1200}
+              height={800}
+              unoptimized
+              className="max-h-[85vh] max-w-[90vw] rounded-[var(--radius-lg)] object-contain"
+            />
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
+  if (attachment.type === "video") {
+    return (
+      <video
+        src={attachment.url}
+        controls
+        playsInline
+        preload="metadata"
+        className="mt-2 max-h-[200px] w-full rounded-[var(--radius-md)] border border-[var(--border-default)]"
+      />
+    );
+  }
+
+  // PDF
+  return (
+    <a
+      href={attachment.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2.5"
+      style={{ background: "var(--bg-primary)" }}
+    >
+      <FileText size={18} className="shrink-0 text-[var(--red)]" />
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
+          {attachment.filename}
+        </div>
+        <div className="text-[10px] text-[var(--text-muted)]">
+          PDF • {formatFileSize(attachment.size)}
+        </div>
+      </div>
+      <span className="shrink-0 text-[10px] font-semibold text-[var(--brand-yellow)]">
+        {t("messages.openFile")}
+      </span>
+    </a>
+  );
+}

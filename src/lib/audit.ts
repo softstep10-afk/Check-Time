@@ -1,0 +1,42 @@
+import { createClient } from "@/lib/supabase/client";
+import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
+
+export async function logAudit({
+  orgId,
+  actorId,
+  actorName,
+  actorRole,
+  action,
+  targetType,
+  targetId,
+  beforeData,
+  afterData,
+}: {
+  orgId: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  targetType?: string;
+  targetId?: string;
+  beforeData?: Record<string, unknown> | null;
+  afterData?: Record<string, unknown> | null;
+}) {
+  if (AUTH_BYPASS_ENABLED) {
+    console.log("[Audit]", action, targetType, targetId, { beforeData, afterData });
+    return;
+  }
+
+  const supabase = createClient();
+  await supabase.from("audit_log").insert({
+    org_id: orgId,
+    actor_id: actorId,
+    actor_name: actorName,
+    actor_role: actorRole,
+    action,
+    target_type: targetType ?? null,
+    target_id: targetId ?? null,
+    before_data: beforeData ?? null,
+    after_data: afterData ?? null,
+  });
+}

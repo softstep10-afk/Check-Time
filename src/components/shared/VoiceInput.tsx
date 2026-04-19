@@ -1,0 +1,187 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Mic, MicOff } from "lucide-react";
+import { useTranslation } from "@/lib/i18n";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+const SAFETY_TIMEOUT_MS = 30_000;
+
+function createRecognition(): any | null {
+  if (typeof window === "undefined") return null;
+  const SpeechRec =
+    (window as any).SpeechRecognition ||
+    (window as any).webkitSpeechRecognition;
+  if (!SpeechRec) return null;
+  return new SpeechRec();
+}
+
+function isSupported(): boolean {
+  if (typeof window === "undefined") return false;
+  return !!(
+    (window as any).SpeechRecognition ||
+    (window as any).webkitSpeechRecognition
+  );
+}
+
+export function VoiceInput({
+  onTranscript,
+}: {
+  onTranscript: (text: string) => void;
+}) {
+  const { locale } = useTranslation();
+  const [supported, setSupported] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onTranscriptRef = useRef(onTranscript);
+  onTranscriptRef.current = onTranscript;
+
+  useEffect(() => {
+    setSupported(isSupported());
+  }, []);
+
+  const stopRecognition = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
+    setListening(false);
+  }, []);
+
+  const toggle = useCallback(() => {
+    // Stop if already listening
+    if (listening) {
+      console.log("[VoiceInput] User stopped recognition");
+      stopRecognition();
+      return;
+    }
+
+    const recognition = createRecognition();
+    if (!recognition) {
+      console.error("[VoiceInput] SpeechRecognition not available");
+      return;
+    }
+
+    const lang = locale === "ru" ? "ru-RU" : "en-US";
+    recognition.lang = lang;
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    console.log("[VoiceInput] Configuring recognition, lang:", lang);
+
+    recognition.onresult = (event: any) => {
+      try {
+        const results = event.results;
+        let finalText = "";
+        for (let i = 0; i < results.length; i++) {
+          if (results[i].isFinal) {
+            finalText += results[i][0].transcript;
+          }
+        }
+        if (finalText.trim()) {
+          console.log("[VoiceInput] Final transcript:", finalText.trim());
+          onTranscriptRef.current(finalText.trim());
+        }
+      } catch (err) {
+        console.error("[VoiceInput] Error extracting transcript:", err);
+      }
+    };
+
+    recognition.onaudiostart = () => {
+      console.log("[VoiceInput] Audio capture started");
+    };
+
+    recognition.onspeechstart = () => {
+      console.log("[VoiceInput] Speech detected");
+    };
+
+    recognition.onend = () => {
+      console.log("[VoiceInput] Recognition ended");
+      // With continuous=true the browser may fire onend on its own
+      // (e.g. network hiccup). Clean up state so the button resets.
+      recognitionRef.current = null;
+      setListening(false);
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      const errorType = event?.error ?? "unknown";
+      console.error("[VoiceInput] Error:", errorType);
+      // "no-speech" is normal — user just didn't say anything yet, not a real error
+      if (errorType === "no-speech") return;
+      if (errorType === "not-allowed" || errorType === "service-not-allowed") {
+        alert(
+          locale === "ru"
+            ? "Доступ к микрофону заблокирован. Разрешите доступ в настройках браузера."
+            : "Microphone access blocked. Allow microphone access in browser settings.",
+        );
+      }
+      stopRecognition();
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setListening(true);
+      console.log("[VoiceInput] recognition.start() called");
+
+      // Safety timeout: auto-stop after 30 seconds
+      timeoutRef.current = setTimeout(() => {
+        console.log("[VoiceInput] Safety timeout reached, stopping");
+        stopRecognition();
+      }, SAFETY_TIMEOUT_MS);
+    } catch (err) {
+      console.error("[VoiceInput] Failed to start:", err);
+      recognitionRef.current = null;
+    }
+  }, [listening, locale, stopRecognition]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
+  if (!supported) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--radius-sm)] transition-colors"
+      style={{
+        background: listening ? "rgba(212, 81, 94, 0.22)" : "transparent",
+        color: listening ? "var(--red)" : "var(--text-muted)",
+      }}
+      aria-label={listening ? "Stop listening" : "Voice input"}
+    >
+      {listening ? (
+        <MicOff size={13} className="animate-pulse" />
+      ) : (
+        <Mic size={13} />
+      )}
+    </button>
+  );
+}

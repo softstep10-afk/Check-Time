@@ -1,0 +1,120 @@
+import { hash } from "@node-rs/argon2";
+import { NextRequest, NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireManagerContext } from "@/lib/manager-data";
+import { createClient } from "@/lib/supabase/server";
+import type { UserRole } from "@/types/database";
+
+const allowedRoles: UserRole[] = [
+  "worker",
+  "supervisor",
+  "driver",
+  "subcontractor",
+  "manager",
+  "admin",
+];
+
+function isUserRole(value: unknown): value is UserRole {
+  return typeof value === "string" && allowedRoles.includes(value as UserRole);
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { profile } = await requireManagerContext(supabase);
+    const adminClient = createAdminClient();
+
+    if (!adminClient) {
+      return NextResponse.json(
+        {
+          error:
+            "Creating team members needs SUPABASE_SERVICE_ROLE_KEY on the server.",
+        },
+        { status: 503 },
+      );
+    }
+
+    const body = (await request.json()) as Record<string, unknown>;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const pin = typeof body.pin === "string" ? body.pin.trim() : "";
+    const role = isUserRole(body.role) ? body.role : "worker";
+    const requireVideo = Boolean(body.requireVideo);
+    const hourlyRateRaw =
+      typeof body.hourlyRate === "string" ? body.hourlyRate.trim() : "";
+    const hourlyRate =
+      hourlyRateRaw.length > 0 ? Number.parseFloat(hourlyRateRaw) : null;
+
+    if (!name) {
+      return NextResponse.json({ error: "Name is required." }, { status: 400 });
+    }
+
+    // Auto-generate email from name if not provided
+    const email = rawEmail && rawEmail.includes("@")
+      ? rawEmail
+      : `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}@checktime.local`;
+
+    if (!/^\d{4,6}$/.test(pin)) {
+      return NextResponse.json(
+        { error: "PIN must be 4 to 6 digits." },
+        { status: 400 },
+      );
+    }
+
+    if (hourlyRate !== null && !Number.isFinite(hourlyRate)) {
+      return NextResponse.json(
+        { error: "Hourly rate must be a valid number." },
+        { status: 400 },
+      );
+    }
+
+    const password = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+    const pinHash = await hash(pin);
+    const { data: userResult, error: createUserError } =
+      await adminClient.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          name,
+        },
+      });
+
+    if (createUserError || !userResult.user) {
+      return NextResponse.json(
+        { error: createUserError?.message ?? "Could not create auth user." },
+        { status: 500 },
+      );
+    }
+
+    const { error: profileInsertError } = await adminClient.from("profiles").insert({
+      id: userResult.user.id,
+      org_id: profile.org_id,
+      name,
+      role,
+      pin_hash: pinHash,
+      require_video: requireVideo,
+      hourly_rate: hourlyRate,
+      is_active: true,
+      language: "en",
+      color: "#BFA234",
+      settings: {},
+    });
+
+    if (profileInsertError) {
+      await adminClient.auth.admin.deleteUser(userResult.user.id);
+
+      return NextResponse.json(
+        { error: profileInsertError.message },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({ ok: true, name, pin });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Internal server error";
+
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
