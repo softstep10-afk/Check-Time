@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import {
   LogIn,
   LogOut,
@@ -48,18 +49,24 @@ const KIND_CONFIG: Record<
   adjust: { translationKey: "feed.adjust", color: "var(--text-muted)", Icon: SlidersHorizontal },
 };
 
+function formatRelative(iso: string, now: number): string {
+  const diffMin = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
+  if (diffMin < 1) return "<1m";
+  if (diffMin < 60) return `${diffMin}m`;
+  if (diffMin < 1440) return `${Math.floor(diffMin / 60)}h`;
+  return `${Math.floor(diffMin / 1440)}d`;
+}
+
 function RelativeTime({ iso }: { iso: string }) {
-  const d = new Date(iso);
-  const now = Date.now();
-  const diffMin = Math.max(0, Math.floor((now - d.getTime()) / 60_000));
+  const [now, setNow] = useState<number | null>(null);
 
-  let label: string;
-  if (diffMin < 1) label = "<1m";
-  else if (diffMin < 60) label = `${diffMin}m`;
-  else if (diffMin < 1440) label = `${Math.floor(diffMin / 60)}h`;
-  else label = `${Math.floor(diffMin / 1440)}d`;
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
-  const absolute = d.toLocaleString(undefined, {
+  const absolute = new Date(iso).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -67,8 +74,12 @@ function RelativeTime({ iso }: { iso: string }) {
   });
 
   return (
-    <span className="whitespace-nowrap font-mono text-[10px] text-[var(--text-muted)]" title={absolute}>
-      {label}
+    <span
+      className="whitespace-nowrap font-mono text-[10px] text-[var(--text-muted)]"
+      title={absolute}
+      suppressHydrationWarning
+    >
+      {now === null ? "" : formatRelative(iso, now)}
     </span>
   );
 }
