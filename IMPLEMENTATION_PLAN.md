@@ -530,3 +530,142 @@ Pay models сразу после Worker essentials — это самая цен�
 - `OLD_APP_FINDINGS.md` → вычеркнуть (~~strikethrough~~) закрытые пункты
 
 Эти 3 файла — наша память между сессиями. При потере контекста (сжатие чата или новый чат) я читаю их и продолжаю.
+
+
+---
+
+# 🛡️ Security & Access Model (новые волны X1-X5)
+
+Обсуждено с Андреем 19.04.2026 после Волны 6. Цель — гибкая система доступов: каждому человеку свои права, анонимные репорты, приватность фото по проектам, отдельная роль для клиентов.
+
+**Ключевые требования:**
+1. Я (Owner) могу в любой момент менять галочки «кому что доступно» — флексибельно
+2. Анонимный репорт — UI нейтральный (не «донести»), даже сам инициатор не ощущает акт доноса
+3. Фото в проекте видят **все, кто назначен на этот проект** (не «только свои» — а «только своего проекта»)
+4. Работник видит все действующие проекты на карте + список поставщиков
+5. Клиенты — позже, отдельная роль с урезанным доступом к своему проекту
+
+**Подход:** `user_capabilities` таблица как layer ПОВЕРХ ролей. Роль задаёт дефолт, capabilities — override per-user.
+
+---
+
+## 🌊 Волна X1 — User Capabilities (гибкие права)
+
+**Миграция 00010** (пример):
+```sql
+create table public.user_capabilities (
+  user_id uuid references public.profiles(id) on delete cascade,
+  capability text not null,
+  granted boolean not null default true,
+  granted_by uuid references public.profiles(id),
+  granted_at timestamptz not null default now(),
+  primary key (user_id, capability)
+);
+
+-- capabilities are string keys matching the permissions matrix:
+-- 'view_payroll', 'see_all_projects', 'upload_receipts',
+-- 'view_supply_stores', 'send_messages', 'force_checkout', ...
+```
+
+**UI:** страница `/admin/users/[id]/permissions` с чекбоксами всех capabilities. Галка — capability granted: true. Снятая — granted: false. Отсутствие записи — fallback на роль.
+
+**Helper:** `has_capability(user, cap)` RLS-функция — возвращает `user_capabilities.granted` если есть, иначе дефолт по роли.
+
+**Риск:** высокий (меняем RLS). ~60 мин. Миграция 00010.
+
+---
+
+## 🌊 Волна X2 — Photo privacy по проекту
+
+**Что:** работник видит фото **только тех проектов где он в `project_assignments`**. Менеджер/Owner — всё.
+
+**RLS изменение:** политика `media.select` — проверка `project_assignments.worker_id = auth.uid() AND project_id = media.project_id` для worker role. Manager/Owner обходят.
+
+**Без новой таблицы.** ~30 мин. Миграция 00011 (только RLS, без schema).
+
+---
+
+## 🌊 Волна X3 — Anonymous reports (нейтральный репорт)
+
+**UI:** у каждого фото в ленте — кнопка **«🚩 Отметить для проверки»** (нейтральная). Работник нажимает → менеджер получает уведомление + флаг на фото. Другие работники флаг не видят. В БД инициатор записывается, но в UI всем видно только «помечено».
+
+**Таблица:**
+```sql
+create table public.media_flags (
+  media_id uuid references public.media(id) on delete cascade,
+  flagged_by uuid references public.profiles(id),
+  flagged_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  reviewed_by uuid references public.profiles(id),
+  primary key (media_id)
+);
+```
+
+**RLS:** только Owner/Manager читают `flagged_by`. Работники видят только агрегат «помечено: да/нет» (через view).
+
+**Риск:** средний. ~45 мин. Миграция 00012.
+
+---
+
+## 🌊 Волна X4 — Client role
+
+**Новая роль** в enum: `client`. Доступ:
+- Видит только свои проекты (через `project_assignments` с role=client)
+- Видит прогресс, фото, чеки, часы (aggregate)
+- **НЕ видит** зарплаты, других клиентов, внутренние сообщения
+
+**Invite flow:** менеджер создаёт клиент-профиль с email → Supabase отправляет magic link → клиент входит.
+
+**Риск:** высокий (новая роль, новый RLS контур). ~90 мин. Миграция 00013.
+
+**Зависимость:** требует X1 (user_capabilities) для гибкости — какому клиенту что показывать.
+
+---
+
+## 🌊 Волна X5 — Worker map + supply stores picker
+
+**UI-only.**
+
+1. **Global projects map** для работника — отдельный раздел «Все объекты». Видит маркеры всех действующих проектов компании на карте. Клик → детали проекта (read-only).
+
+2. **Supply stores picker** — работник в своём интерфейсе может посмотреть список поставщиков (Home Depot, Lowe's и т.д.), выбрать куда ехать. Использует существующую `supply_stores`.
+
+**Миграций нет.** ~40 мин.
+
+---
+
+## 📋 Обновлённый порядок волн
+
+**С учётом X-волн:**
+
+**Рекомендация:**
+```
+3.5 (сейчас) → 7 → 8 → X1 → X2 → X3 → X5 → 4 → X4 → 9
+```
+
+**Обоснование:**
+- **3.5 → 7 → 8** — сначала закрыть hardening и простые UI (messaging, offline)
+- **X1 → X2 → X3** — базовая security-model (гибкие права, приватность, репорты). X1 первый, потому что остальные опираются на capabilities
+- **X5** — работник-центричные фичи (карта, поставщики). Лёгкий перерыв перед тяжёлой X4
+- **4** — pay models после того как security стабильна (payroll RLS может зависеть от capabilities)
+- **X4** — клиенты последние, требуют всей инфраструктуры
+- **9** — real-device testing
+
+---
+
+## 📊 Итоговая таблица (обновлена)
+
+| # | Волна | Миграция | Размер | Риск |
+|---|-------|----------|--------|------|
+| 3.5 | Prod readiness (middleware+tests+CI+README) | нет | 40 мин | низкий |
+| 7 | Messaging polish | 00009 | 45 мин | низкий |
+| 8 | Reliability | нет | 55 мин | низкий |
+| X1 | User capabilities | 00010 | 60 мин | **высокий** — RLS |
+| X2 | Photo privacy by project | 00011 (RLS) | 30 мин | средний |
+| X3 | Anonymous media flags | 00012 | 45 мин | средний |
+| X5 | Worker map + stores picker | нет | 40 мин | низкий |
+| 4 | Pay models | 00007 | 60 мин | **высокий** — payroll |
+| X4 | Client role | 00013 | 90 мин | **высокий** — новая роль |
+| 9 | Real-device testing | нет | часы | реальный мир |
+
+**Всего после 3.5:** ~8 часов работы + 5 миграций.
