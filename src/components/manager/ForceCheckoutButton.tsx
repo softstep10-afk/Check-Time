@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { logAudit } from "@/lib/audit";
+import { closeOpenStoreVisits } from "@/lib/store-visits";
 
 function localDatetimeValue(): string {
   const d = new Date();
@@ -71,6 +72,11 @@ export function ForceCheckoutButton({
       .from("profiles")
       .update({ current_project: null })
       .eq("id", profileId);
+
+    // Close any open store_visit row for this worker so the auto-detection
+    // state machine doesn't treat them as still in a store after the manager
+    // ends their shift.
+    await closeOpenStoreVisits(supabase, profileId, timestamp);
 
     // Send notification message to worker
     const notifyText = reason.trim()
