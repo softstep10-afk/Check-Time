@@ -834,7 +834,7 @@ function MaterialsSection({
 
       <div className="mt-4 space-y-2">
         {loading ? (
-          <div className="text-sm text-[var(--text-secondary)]">Loading...</div>
+          <div className="text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
         ) : items.length === 0 ? (
           <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
             {t("materials.empty")}
@@ -1175,7 +1175,7 @@ function ReceiptsSection({
       {/* Receipt grid */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {loading ? (
-          <div className="text-sm text-[var(--text-secondary)]">Loading...</div>
+          <div className="text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
         ) : receipts.length === 0 ? (
           <div className="col-span-full rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-center text-sm text-[var(--text-secondary)]">
             {t("receipts.empty")}
@@ -1318,7 +1318,7 @@ function StoreVisitsSection({ projectId }: { projectId: string }) {
       <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("stores.visits")}</h2>
       <div className="mt-4 space-y-2">
         {loading ? (
-          <div className="text-sm text-[var(--text-secondary)]">Loading...</div>
+          <div className="text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
         ) : visits.length === 0 ? (
           <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
             {t("stores.noVisits")}

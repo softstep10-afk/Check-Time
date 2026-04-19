@@ -114,7 +114,7 @@ export default function LocationDataPage() {
             onChange={(e) => setSelectedWorker(e.target.value)}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           >
-            <option value="">{loading ? "Loading..." : t("timeline.allWorkers")}</option>
+            <option value="">{loading ? t("common.loading") : t("timeline.allWorkers")}</option>
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}

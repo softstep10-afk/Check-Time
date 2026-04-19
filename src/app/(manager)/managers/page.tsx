@@ -138,7 +138,7 @@ export default function ManagersPage() {
           <div className="mt-4 space-y-3">
             {loading ? (
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-                Loading...
+                {t("common.loading")}
               </div>
             ) : managers.length === 0 ? (
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">

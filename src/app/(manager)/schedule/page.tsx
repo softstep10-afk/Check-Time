@@ -171,7 +171,7 @@ export default function SchedulePage() {
         </div>
 
         {loading ? (
-          <div className="mt-4 text-sm text-[var(--text-secondary)]">Loading...</div>
+          <div className="mt-4 text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
         ) : (
           <div className="mt-4">
             {/* Weekday header */}

@@ -170,7 +170,7 @@ export default function TrashPage() {
         <div className="mt-4 space-y-3">
           {loading ? (
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-              Loading...
+              {t("common.loading")}
             </div>
           ) : items.length === 0 ? (
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-center text-sm text-[var(--text-secondary)]">

@@ -378,7 +378,7 @@ export default function AnnualReportPage() {
       </section>
 
       {loading ? (
-        <div className="text-sm text-[var(--text-secondary)]">Loading...</div>
+        <div className="text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
       ) : !hasData ? (
         <div className="surface-card p-8 text-center text-sm text-[var(--text-secondary)]">
           {t("report.emptyYear")}

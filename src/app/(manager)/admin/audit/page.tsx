@@ -196,7 +196,7 @@ export default function AuditLogPage() {
 
       <section className="surface-card overflow-x-auto p-4">
         {loading ? (
-          <div className="py-8 text-center text-sm text-[var(--text-secondary)]">Loading...</div>
+          <div className="py-8 text-center text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>

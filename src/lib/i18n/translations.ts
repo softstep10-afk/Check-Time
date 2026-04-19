@@ -20,6 +20,8 @@ export const translations = {
   "common.live": { en: "Live", ru: "На смене" },
   "common.off": { en: "Off", ru: "Нет" },
   "common.minShort": { en: "min", ru: "мин" },
+  "common.loading": { en: "Loading...", ru: "Загрузка..." },
+  "common.errorTryAgain": { en: "Error — try again", ru: "Ошибка — попробуйте снова" },
   "common.today": { en: "Today", ru: "Сегодня" },
   "common.thisWeek": { en: "This Week", ru: "За неделю" },
   "common.sessions": { en: "Sessions", ru: "Сессии" },
