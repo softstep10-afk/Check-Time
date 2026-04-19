@@ -87,7 +87,7 @@ export const translations = {
   "worker.flow": { en: "Worker Flow", ru: "Рабочий режим" },
   "worker.readyToStart": { en: "Ready to start the next shift", ru: "Готов начать следующую смену" },
   "worker.checkoutVideoNeeded": { en: "Checkout video still needs upload for", ru: "Видео при выходе ещё нужно загрузить для" },
-  "worker.navClock": { en: "Clock", ru: "Часы" },
+  "worker.navClock": { en: "Clock", ru: "Смена" },
   "worker.navJournal": { en: "Journal", ru: "Журнал" },
   "worker.navTasks": { en: "Tasks", ru: "Задачи" },
   "worker.navHours": { en: "Hours", ru: "Часы" },
