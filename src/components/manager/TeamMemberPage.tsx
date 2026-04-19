@@ -16,6 +16,7 @@ import { Camera, Store } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
+import { DayDetailModal } from "@/components/manager/DayDetailModal";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -59,6 +60,7 @@ export function TeamMemberPage({
   const [showAdjustForm, setShowAdjustForm] = useState(false);
   const [adjustSign, setAdjustSign] = useState<"+" | "-">("+");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
   const { t } = useTranslation();
 
   const unpaidMinutes = useMemo(() => {
@@ -749,30 +751,32 @@ export function TeamMemberPage({
                 {t("teamMember.noShifts")}
               </div>
             ) : (
-              sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link
-                        href={`/projects/${session.projectId}`}
-                        className="text-sm font-semibold text-[var(--text-primary)]"
-                      >
-                        {session.projectName}
-                      </Link>
-                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {formatDateTime(session.clockInTime)}
-                        {session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}
+              sessions.map((session) => {
+                const dayKey = session.clockInTime.slice(0, 10);
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => setDayDetailDate(dayKey)}
+                    className="block w-full rounded-[var(--radius-md)] border border-[var(--border-default)] p-3 text-left transition-colors hover:border-[var(--brand-yellow)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="text-sm font-semibold text-[var(--text-primary)]">
+                          {session.projectName}
+                        </span>
+                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {formatDateTime(session.clockInTime)}
+                          {session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}
+                        </div>
+                      </div>
+                      <div className="font-mono text-sm font-semibold text-[var(--text-primary)]">
+                        {formatDurationCompact(session.durationMinutes)}
                       </div>
                     </div>
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
-                      {formatDurationCompact(session.durationMinutes)}
-                    </div>
-                  </div>
-                </div>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
@@ -964,6 +968,16 @@ export function TeamMemberPage({
           )}
         </div>
       </section>
+
+      <DayDetailModal
+        open={dayDetailDate !== null}
+        date={dayDetailDate}
+        sessions={sessions}
+        tasks={tasks}
+        media={media}
+        adjustments={[]}
+        onClose={() => setDayDetailDate(null)}
+      />
     </div>
   );
 }
