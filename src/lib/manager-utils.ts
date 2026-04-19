@@ -45,6 +45,50 @@ export function isManagerRole(role: UserRole): boolean {
   return role === "manager" || role === "admin" || role === "owner";
 }
 
+export interface OvertimeBreakdown {
+  regularHours: number;
+  overtimeHours: number;
+  regularPay: number;
+  overtimePay: number;
+  grossPay: number;
+}
+
+/**
+ * Split a worker's hours/rate into regular + OT pay using a weekly
+ * threshold (default 40h) and OT multiplier (default 1.5×).
+ *
+ * Negative inputs and NaN are clamped to zero. All money values are
+ * rounded to two decimal places.
+ *
+ * Lives here so it can be unit-tested in isolation; PayrollCalculator
+ * has the same math inline in computeOt() — keep both in sync until
+ * the calculator is refactored to import this.
+ */
+export function computeOvertime(
+  hours: number,
+  rate: number,
+  options: { threshold?: number; multiplier?: number } = {},
+): OvertimeBreakdown {
+  const threshold = options.threshold ?? 40;
+  const multiplier = options.multiplier ?? 1.5;
+  const safeHours = Number.isFinite(hours) && hours > 0 ? hours : 0;
+  const safeRate = Number.isFinite(rate) && rate > 0 ? rate : 0;
+
+  const regularHours = Math.min(safeHours, threshold);
+  const overtimeHours = Math.max(0, safeHours - threshold);
+  const regularPay = roundCurrency(regularHours * safeRate);
+  const overtimePay = roundCurrency(overtimeHours * safeRate * multiplier);
+  const grossPay = roundCurrency(regularPay + overtimePay);
+
+  return {
+    regularHours: Math.round(regularHours * 100) / 100,
+    overtimeHours: Math.round(overtimeHours * 100) / 100,
+    regularPay,
+    overtimePay,
+    grossPay,
+  };
+}
+
 export function buildManagerSessions(data: ManagerWorkspaceData): ManagerSession[] {
   const profilesById = new Map(data.profiles.map((profile) => [profile.id, profile]));
   const projectsById = new Map(data.projects.map((project) => [project.id, project]));
