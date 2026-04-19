@@ -153,6 +153,7 @@ export function ProjectsPage({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [openProjectIds, setOpenProjectIds] = useState<Set<string>>(new Set());
+  const [copyConfirmId, setCopyConfirmId] = useState<string | null>(null);
 
   function toggleProject(projectId: string) {
     setOpenProjectIds((current) => {
@@ -275,6 +276,45 @@ export function ProjectsPage({
 
     setBusyKey(null);
     setMessage(t("projects.updated"));
+    router.refresh();
+  }
+
+  async function handleCopyProject(project: ManagerProjectSummary) {
+    setBusyKey(`copy-${project.id}`);
+    setMessage("");
+
+    const suffix = ` ${t("projects.copySuffix")}`;
+    const copyName = project.name.endsWith(suffix.trim())
+      ? project.name
+      : project.name + suffix;
+
+    const payload: Record<string, unknown> = {
+      org_id: orgId,
+      name: copyName,
+      address: project.address ?? null,
+      notes: project.notes ?? null,
+      rate: Number(project.rate ?? 0),
+      radius_m: project.radius_m ?? 200,
+      gps_radius_m:
+        (project as { gps_radius_m?: number | null }).gps_radius_m ?? GPS_RADIUS_DEFAULT,
+      status: "active",
+      settings: {},
+      site_point: project.site_point ?? null,
+      start_date: project.start_date ?? null,
+      end_date: project.end_date ?? null,
+    };
+
+    const { error } = await insertProjectTolerant(supabase, payload);
+
+    setBusyKey(null);
+    setCopyConfirmId(null);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage(t("projects.copySuccess"));
     router.refresh();
   }
 
@@ -634,6 +674,15 @@ export function ProjectsPage({
                       </button>
                       <button
                         type="button"
+                        onClick={() => setCopyConfirmId(project.id)}
+                        disabled={busyKey === `copy-${project.id}`}
+                        className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                        style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                      >
+                        {t("projects.copyProject")}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => void handleArchiveProject(project.id)}
                         disabled={busyKey === `archive-${project.id}`}
                         className="button-base button-danger-ghost"
@@ -641,6 +690,44 @@ export function ProjectsPage({
                         {busyKey === `archive-${project.id}` ? t("projects.archiving") : t("projects.archive")}
                       </button>
                     </div>
+                    {copyConfirmId === project.id ? (
+                      <div
+                        className="rounded-[var(--radius-md)] border p-3"
+                        style={{
+                          borderColor: "rgba(191, 162, 52, 0.3)",
+                          background: "rgba(191, 162, 52, 0.06)",
+                        }}
+                      >
+                        <div className="text-sm font-semibold text-[var(--text-primary)]">
+                          {t("projects.copyConfirmTitle")}
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {t("projects.copyConfirmBody")}
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyProject(project)}
+                            disabled={busyKey === `copy-${project.id}`}
+                            className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                            style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+                          >
+                            {busyKey === `copy-${project.id}`
+                              ? t("common.creating")
+                              : t("projects.copyProject")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCopyConfirmId(null)}
+                            disabled={busyKey === `copy-${project.id}`}
+                            className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                            style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                          >
+                            {t("common.cancel")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </form>
                 </div>
               </div>
