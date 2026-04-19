@@ -123,6 +123,50 @@ export function HoursPage() {
           )}
         </div>
       </section>
+
+      {shell.adjustments.length > 0 ? (
+        <section className="surface-card surface-card--muted p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-lg font-bold text-[var(--text-primary)]">
+              {t("hours.adjustments")}
+            </div>
+            <div className="text-xs text-[var(--text-muted)]">
+              {shell.adjustments.length} {t("hours.entries")}
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {shell.adjustments.map((adj) => {
+              const positive = adj.minutes >= 0;
+              const sign = positive ? "+" : "−";
+              const absMin = Math.abs(adj.minutes);
+              return (
+                <div
+                  key={adj.id}
+                  className="surface-panel flex items-start justify-between gap-3 p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                      {adj.projectName ?? t("common.general")}
+                    </div>
+                    <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+                      {formatDateTime(adj.eventTime)}
+                    </div>
+                    {adj.reason ? (
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">{adj.reason}</p>
+                    ) : null}
+                  </div>
+                  <span
+                    className="shrink-0 whitespace-nowrap font-mono text-sm font-bold"
+                    style={{ color: positive ? "var(--green)" : "var(--red)" }}
+                  >
+                    {sign}{formatDurationCompact(absMin)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

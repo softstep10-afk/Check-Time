@@ -218,6 +218,7 @@ export function TeamMemberPage({
     const hours = Number.parseFloat(formData.get("hours")?.toString() ?? "0");
     const projectId = formData.get("project_id")?.toString() ?? "";
     const reason = formData.get("reason")?.toString().trim() ?? "";
+    const showToWorker = formData.get("show_to_worker") === "on";
 
     if (!hours || !Number.isFinite(hours) || hours <= 0) return;
     if (!projectId) return;
@@ -242,6 +243,7 @@ export function TeamMemberPage({
         adjustedBy: managerId,
         adjustMinutes: signedMinutes,
         reason,
+        showToWorker,
       },
     });
 
@@ -551,6 +553,20 @@ export function TeamMemberPage({
                 placeholder={t("member.adjustReason")}
                 className="min-h-[80px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
+              <label className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)]">
+                <input
+                  type="checkbox"
+                  name="show_to_worker"
+                  defaultChecked
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand-yellow)]"
+                />
+                <span className="space-y-0.5">
+                  <span className="block font-semibold">{t("member.showToWorker")}</span>
+                  <span className="block text-xs text-[var(--text-muted)]">
+                    {t("member.showToWorkerHelp")}
+                  </span>
+                </span>
+              </label>
               <div className="flex gap-2">
                 <button
                   type="submit"

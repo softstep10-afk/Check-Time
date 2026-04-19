@@ -151,6 +151,27 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   const clockState = deriveClockState(sessions);
   const summary = deriveWorkerSummary(sessions);
 
+  // Adjustment events the manager flagged as visible to the worker.
+  // metadata.showToWorker is undefined on legacy rows → default to visible.
+  const adjustments = events
+    .filter((event) => {
+      if (event.event_type !== "adjust") return false;
+      const meta = event.metadata as Record<string, unknown>;
+      return meta?.showToWorker !== false;
+    })
+    .map((event) => {
+      const meta = event.metadata as Record<string, unknown>;
+      const minutes = Number(meta?.adjustMinutes ?? 0);
+      return {
+        id: event.id,
+        projectId: event.project_id,
+        projectName: projectsById.get(event.project_id)?.name ?? null,
+        eventTime: event.event_time,
+        minutes: Number.isFinite(minutes) ? minutes : 0,
+        reason: typeof meta?.reason === "string" ? meta.reason : "",
+      };
+    });
+
   return {
     profile,
     projects: workerProjects.sort((left, right) => left.name.localeCompare(right.name)),
@@ -159,5 +180,6 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     sessions,
     clockState,
     summary,
+    adjustments,
   };
 });

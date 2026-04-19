@@ -416,5 +416,6 @@ export function buildPreviewWorkerShellData(): WorkerShellData {
     sessions,
     clockState,
     summary,
+    adjustments: [],
   };
 }
