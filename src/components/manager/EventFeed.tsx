@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import {
   LogIn,
   LogOut,
@@ -14,6 +14,38 @@ import {
   Clock,
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+
+let cachedNow = 0;
+const tickListeners = new Set<() => void>();
+let tickIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function subscribeNowTick(callback: () => void): () => void {
+  if (tickListeners.size === 0) {
+    cachedNow = Date.now();
+    tickIntervalId = setInterval(() => {
+      cachedNow = Date.now();
+      for (const listener of tickListeners) listener();
+    }, 60_000);
+  }
+  tickListeners.add(callback);
+  // Initial sync — caller will pick up the freshly-cached value on first read.
+  callback();
+  return () => {
+    tickListeners.delete(callback);
+    if (tickListeners.size === 0 && tickIntervalId !== null) {
+      clearInterval(tickIntervalId);
+      tickIntervalId = null;
+    }
+  };
+}
+
+function getNowSnapshot(): number {
+  return cachedNow;
+}
+
+function getNowServerSnapshot(): number {
+  return 0;
+}
 
 export type FeedEvent = {
   id: string;
@@ -58,13 +90,11 @@ function formatRelative(iso: string, now: number): string {
 }
 
 function RelativeTime({ iso }: { iso: string }) {
-  const [now, setNow] = useState<number | null>(null);
-
-  useEffect(() => {
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useSyncExternalStore(
+    subscribeNowTick,
+    getNowSnapshot,
+    getNowServerSnapshot,
+  );
 
   const absolute = new Date(iso).toLocaleString(undefined, {
     month: "short",
@@ -79,7 +109,7 @@ function RelativeTime({ iso }: { iso: string }) {
       title={absolute}
       suppressHydrationWarning
     >
-      {now === null ? "" : formatRelative(iso, now)}
+      {now === 0 ? "" : formatRelative(iso, now)}
     </span>
   );
 }
