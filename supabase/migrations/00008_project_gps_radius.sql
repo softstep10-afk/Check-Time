@@ -1,0 +1,41 @@
+-- ============================================================================
+-- 00008 — projects.gps_radius_m (per-project geofence override)
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--
+-- Adds an integer column to public.projects letting an owner pick a
+-- custom check-in radius for each site. When the column is null, the
+-- in-app check-in flow falls back to app_settings.geofence_radius_meters
+-- (Wave 2, migration 00005), which itself falls back to a 75m default
+-- when that table is missing.
+--
+-- Range: 25..300m. The DB-level CHECK constraint enforces the same range
+-- the slider exposes in the UI so a malformed write can't bypass it.
+--
+-- Note: a separate radius_m column already exists from 00001_foundation —
+-- that one is used by the existing UI as a generic 'site radius' display
+-- value. This new gps_radius_m specifically governs the check-in fence
+-- and is the value the worker ClockPage / check-in math will read.
+--
+-- Rollback:
+--   alter table public.projects drop column if exists gps_radius_m;
+-- ============================================================================
+
+-- alter table public.projects
+--   add column if not exists gps_radius_m integer
+--   check (gps_radius_m is null or gps_radius_m between 25 and 300);
+--
+-- alter table public.projects
+--   alter column gps_radius_m set default 75;
+--
+-- update public.projects
+--   set gps_radius_m = 75
+--   where gps_radius_m is null;
+--
+-- alter table public.projects
+--   alter column gps_radius_m set not null;
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run from the Supabase SQL editor when you are ready to enable per-project
+-- geofence radii. The application code reads the column defensively and
+-- falls back to app_settings (or 75m) when the column is missing or null.
