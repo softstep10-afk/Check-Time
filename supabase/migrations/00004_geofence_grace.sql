@@ -1,0 +1,27 @@
+-- ============================================================================
+-- 00004 — store_visits.grace_started_at
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor (or `supabase db push` once
+--     reviewed). Do NOT auto-apply this in CI; the detect-store-visit edge
+--     function is written to tolerate the column being absent so we can ship
+--     the function first and run this migration on its own schedule.
+--
+-- What it does:
+--   • Adds a nullable timestamptz `grace_started_at` to public.store_visits.
+--   • Index on the column so the function's "find open visits with active
+--     grace timer" query stays cheap.
+--
+-- Rollback:
+--   alter table public.store_visits drop column if exists grace_started_at;
+-- ============================================================================
+
+-- alter table public.store_visits
+--   add column if not exists grace_started_at timestamptz;
+--
+-- create index if not exists idx_store_visits_open_grace
+--   on public.store_visits(worker_id, grace_started_at)
+--   where exited_at is null;
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run from the Supabase SQL editor when you are ready to enable the grace
+-- buffer in production.
