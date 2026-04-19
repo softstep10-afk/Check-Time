@@ -19,6 +19,9 @@ export const translations = {
   "common.done": { en: "Done", ru: "Готово" },
   "common.live": { en: "Live", ru: "На смене" },
   "common.off": { en: "Off", ru: "Нет" },
+  "common.minShort": { en: "min", ru: "мин" },
+  "common.loading": { en: "Loading...", ru: "Загрузка..." },
+  "common.errorTryAgain": { en: "Error — try again", ru: "Ошибка — попробуйте снова" },
   "common.today": { en: "Today", ru: "Сегодня" },
   "common.thisWeek": { en: "This Week", ru: "За неделю" },
   "common.sessions": { en: "Sessions", ru: "Сессии" },
@@ -178,6 +181,7 @@ export const translations = {
   "projects.saveChanges": { en: "Save Changes", ru: "Сохранить изменения" },
   "projects.archive": { en: "Archive", ru: "Архивировать" },
   "projects.archiving": { en: "Archiving...", ru: "Архивация..." },
+  "projects.materials": { en: "Materials", ru: "Материалы" },
 
   // ── Project Detail Page ──
   "projectDetail.backToProjects": { en: "Back to projects", ru: "Назад к проектам" },
@@ -402,6 +406,8 @@ export const translations = {
   "overview.calculator": { en: "Calculator", ru: "Калькулятор" },
   "overview.annualReport": { en: "Annual Report", ru: "Годовой отчёт" },
   "overview.processPayroll": { en: "Process Payroll", ru: "Начислить зарплату" },
+  "overview.materials": { en: "Materials", ru: "Материалы" },
+  "overview.materialsCaption": { en: "across all projects", ru: "по всем проектам" },
   "sound.mute": { en: "Mute sounds", ru: "Без звука" },
   "sound.unmute": { en: "Unmute sounds", ru: "Включить звук" },
 
@@ -426,7 +432,7 @@ export const translations = {
   // ── Trash Page ──
   "trash.title": { en: "Trash", ru: "Корзина" },
   "trash.subtitle": { en: "Deleted items", ru: "Удалённые элементы" },
-  "trash.description": { en: "Soft-deleted projects, profiles, and tasks land here. Restore or permanently remove them.", ru: "Удалённые проекты, профили и задачи попадают сюда. Восстановите или удалите навсегда." },
+  "trash.description": { en: "Soft-deleted projects, profiles, tasks, and receipts land here. Restore or permanently remove them.", ru: "Удалённые проекты, профили, задачи и чеки попадают сюда. Восстановите или удалите навсегда." },
   "trash.restore": { en: "Restore", ru: "Восстановить" },
   "trash.deletePermanently": { en: "Delete permanently", ru: "Удалить навсегда" },
   "trash.empty": { en: "Trash is empty", ru: "Корзина пуста" },
@@ -436,6 +442,7 @@ export const translations = {
   "trash.project": { en: "Project", ru: "Проект" },
   "trash.profile": { en: "Profile", ru: "Профиль" },
   "trash.task": { en: "Task", ru: "Задача" },
+  "trash.receipt": { en: "Receipt", ru: "Чек" },
   "trash.deletedOn": { en: "Deleted", ru: "Удалено" },
 
   // ── Adjust Hours ──
@@ -627,6 +634,11 @@ export const translations = {
   "report.materialCost": { en: "Material cost", ru: "Стоимость материалов" },
   "report.totalCost": { en: "Total cost", ru: "Общая стоимость" },
   "report.vsLastYear": { en: "vs last year", ru: "к прошлому году" },
+  "report.totalVisitMinutes": { en: "Total minutes in stores", ru: "Минут в магазинах всего" },
+  "report.topStores": { en: "Top stores", ru: "Популярные магазины" },
+  "report.topVisitors": { en: "Top visitors", ru: "Частые посетители" },
+  "report.byChain": { en: "By chain", ru: "По сетям" },
+  "report.visits": { en: "visits", ru: "посещений" },
 
   // ── Owner / Permissions ──
   "owner.title": { en: "Owner", ru: "Владелец" },
@@ -663,6 +675,16 @@ export const translations = {
   "team.people": { en: "people", ru: "чел." },
   "team.allCategories": { en: "All Categories", ru: "Все категории" },
   "team.add": { en: "Add", ru: "Добавить" },
+  "team.totalHours": { en: "Total hours", ru: "Часов всего" },
+  "team.totalEarned": { en: "Total earned", ru: "Заработано всего" },
+  "team.actionEdit": { en: "Edit", ru: "Изменить" },
+  "team.actionMessage": { en: "Msg", ru: "Сообщ." },
+  "team.actionRemove": { en: "Remove", ru: "Удалить" },
+  "team.confirmRemove": { en: "Remove this profile? It will move to Trash.", ru: "Удалить этот профиль? Будет перемещён в Корзину." },
+  "team.removed": { en: "Profile moved to Trash.", ru: "Профиль перемещён в Корзину." },
+  "sidebar.fullAccess": { en: "Full Access", ru: "Полный доступ" },
+  "sidebar.limitedAccess": { en: "Limited", ru: "Ограничен" },
+  "sidebar.signedInAs": { en: "Signed in as", ru: "Вы вошли как" },
   "projects.onSiteLabel": { en: "On Site", ru: "На объекте" },
   "projects.workersLabel": { en: "Workers", ru: "Рабочие" },
   "projects.hoursLabel": { en: "Hours", ru: "Часы" },
@@ -674,7 +696,9 @@ export const translations = {
   "projects.edit": { en: "Edit", ru: "Редактировать" },
   "projects.remove": { en: "Remove", ru: "Удалить" },
   "projects.copied": { en: "Copied", ru: "Скопировано" },
+  "projects.copyAddress": { en: "Copy", ru: "Копировать" },
   "projects.addProject": { en: "Add Project", ru: "Добавить проект" },
+  "projects.staleNoActivity": { en: "No activity 48h+", ru: "Нет активности более 48ч" },
   "tasks.assignTask": { en: "Assign Task", ru: "Назначить задачу" },
   "tasks.workerSelect": { en: "Select worker", ru: "Выберите рабочего" },
   "tasks.allTasks": { en: "All Tasks", ru: "Все задачи" },

@@ -4,8 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import {
   type Locale,
@@ -21,6 +20,8 @@ type I18nContextValue = {
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
+
+const LOCALE_CHANGE_EVENT = "locale-change";
 
 function readCookieLocale(): Locale {
   if (typeof document === "undefined") return defaultLocale;
@@ -40,24 +41,30 @@ function setCookie(locale: Locale) {
   document.cookie = `locale=${locale};path=/;max-age=31536000;SameSite=Lax`;
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  // Initialize from cookie so the first client render matches localStorage user preference.
-  // On the server, readCookieLocale returns defaultLocale (no document).
-  const [locale, setLocaleState] = useState<Locale>(readCookieLocale);
+function subscribeToLocale(callback: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+  window.addEventListener("storage", callback);
+  window.addEventListener(LOCALE_CHANGE_EVENT, callback);
+  return () => {
+    window.removeEventListener("storage", callback);
+    window.removeEventListener(LOCALE_CHANGE_EVENT, callback);
+  };
+}
 
-  useEffect(() => {
-    // Sync from localStorage on mount (covers case where cookie is stale)
-    const stored = readStoredLocale();
-    if (stored !== locale) {
-      setLocaleState(stored);
-      setCookie(stored);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+export function I18nProvider({ children }: { children: React.ReactNode }) {
+  // Source of truth lives in localStorage (with cookie fallback). useSyncExternalStore
+  // gives us SSR-safe hydration without setState-in-effect, and updates whenever the
+  // locale is changed in any tab.
+  const locale = useSyncExternalStore(
+    subscribeToLocale,
+    readStoredLocale,
+    () => defaultLocale,
+  );
 
   const setLocale = useCallback((next: Locale) => {
-    setLocaleState(next);
     localStorage.setItem("locale", next);
     setCookie(next);
+    window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
   }, []);
 
   const t = useCallback(

@@ -46,6 +46,8 @@ export interface ManagerProjectSummary extends Project {
   onSiteWorkerCount: number;
   openTaskCount: number;
   weekMinutes: number;
+  receiptTotal: number;
+  lastActivityTime: string | null;
 }
 
 export interface ManagerProfileSummary extends Profile {
@@ -56,6 +58,7 @@ export interface ManagerProfileSummary extends Profile {
   weekMinutes: number;
   isOnSite: boolean;
   currentSessionMinutes: number | null;
+  videoUploadedToday: boolean;
 }
 
 export interface ManagerTimelineItem extends TimeEvent {

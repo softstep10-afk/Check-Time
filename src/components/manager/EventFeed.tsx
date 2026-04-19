@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 import {
   LogIn,
   LogOut,
@@ -13,6 +14,38 @@ import {
   Clock,
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+
+let cachedNow = 0;
+const tickListeners = new Set<() => void>();
+let tickIntervalId: ReturnType<typeof setInterval> | null = null;
+
+function subscribeNowTick(callback: () => void): () => void {
+  if (tickListeners.size === 0) {
+    cachedNow = Date.now();
+    tickIntervalId = setInterval(() => {
+      cachedNow = Date.now();
+      for (const listener of tickListeners) listener();
+    }, 60_000);
+  }
+  tickListeners.add(callback);
+  // Initial sync — caller will pick up the freshly-cached value on first read.
+  callback();
+  return () => {
+    tickListeners.delete(callback);
+    if (tickListeners.size === 0 && tickIntervalId !== null) {
+      clearInterval(tickIntervalId);
+      tickIntervalId = null;
+    }
+  };
+}
+
+function getNowSnapshot(): number {
+  return cachedNow;
+}
+
+function getNowServerSnapshot(): number {
+  return 0;
+}
 
 export type FeedEvent = {
   id: string;
@@ -48,18 +81,22 @@ const KIND_CONFIG: Record<
   adjust: { translationKey: "feed.adjust", color: "var(--text-muted)", Icon: SlidersHorizontal },
 };
 
+function formatRelative(iso: string, now: number): string {
+  const diffMin = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
+  if (diffMin < 1) return "<1m";
+  if (diffMin < 60) return `${diffMin}m`;
+  if (diffMin < 1440) return `${Math.floor(diffMin / 60)}h`;
+  return `${Math.floor(diffMin / 1440)}d`;
+}
+
 function RelativeTime({ iso }: { iso: string }) {
-  const d = new Date(iso);
-  const now = Date.now();
-  const diffMin = Math.max(0, Math.floor((now - d.getTime()) / 60_000));
+  const now = useSyncExternalStore(
+    subscribeNowTick,
+    getNowSnapshot,
+    getNowServerSnapshot,
+  );
 
-  let label: string;
-  if (diffMin < 1) label = "<1m";
-  else if (diffMin < 60) label = `${diffMin}m`;
-  else if (diffMin < 1440) label = `${Math.floor(diffMin / 60)}h`;
-  else label = `${Math.floor(diffMin / 1440)}d`;
-
-  const absolute = d.toLocaleString(undefined, {
+  const absolute = new Date(iso).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -67,8 +104,12 @@ function RelativeTime({ iso }: { iso: string }) {
   });
 
   return (
-    <span className="whitespace-nowrap font-mono text-[10px] text-[var(--text-muted)]" title={absolute}>
-      {label}
+    <span
+      className="whitespace-nowrap font-mono text-[10px] text-[var(--text-muted)]"
+      title={absolute}
+      suppressHydrationWarning
+    >
+      {now === 0 ? "" : formatRelative(iso, now)}
     </span>
   );
 }

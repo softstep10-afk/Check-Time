@@ -123,6 +123,7 @@ export interface Media {
   time_event_id: string | null;
   ai_analysis: Record<string, unknown> | null;
   metadata: Record<string, unknown>;
+  deleted_at: string | null;
   created_at: string;
 }
 

@@ -570,7 +570,7 @@ export function TeamMemberPage({
       </section>
 
       {/* ── Send Message ── */}
-      <section>
+      <section id="message">
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
           <h2 className="mb-4 text-lg font-bold text-[var(--text-primary)]">{t("messages.send")}</h2>
           <SendMessageForm

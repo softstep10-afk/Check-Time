@@ -42,7 +42,7 @@ export function HoursPage() {
             <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
               {t("common.today")}
             </div>
-            <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">
+            <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
               {formatDurationCompact(shell.summary.todayMinutes)}
             </div>
           </div>
@@ -50,7 +50,7 @@ export function HoursPage() {
             <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
               {t("common.thisWeek")}
             </div>
-            <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">
+            <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
               {formatDurationCompact(shell.summary.weekMinutes)}
             </div>
           </div>
@@ -98,7 +98,7 @@ export function HoursPage() {
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-base font-bold text-[var(--text-primary)]">
+                          <div className="font-mono text-base font-bold text-[var(--text-primary)]">
                             {formatDurationCompact(session.durationMinutes)}
                           </div>
                           {session.checkoutStatus !== "not_required" ? (

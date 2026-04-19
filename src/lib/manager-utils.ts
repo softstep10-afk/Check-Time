@@ -142,6 +142,27 @@ export function buildProjectSummaries(
   const openTasksByProject = new Map<string, number>();
   const onSiteByProject = new Map<string, Set<string>>();
   const weekMinutesByProject = new Map<string, number>();
+  const receiptTotalByProject = new Map<string, number>();
+
+  for (const item of data.media) {
+    if (item.deleted_at || !item.project_id) continue;
+    const meta = item.metadata as Record<string, unknown>;
+    if (meta?.category !== "receipt") continue;
+    const amount = Number(meta.amount ?? 0);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    receiptTotalByProject.set(
+      item.project_id,
+      roundCurrency((receiptTotalByProject.get(item.project_id) ?? 0) + amount),
+    );
+  }
+
+  const lastActivityByProject = new Map<string, string>();
+  for (const event of data.timeEvents) {
+    const current = lastActivityByProject.get(event.project_id);
+    if (!current || event.event_time > current) {
+      lastActivityByProject.set(event.project_id, event.event_time);
+    }
+  }
 
   for (const assignment of data.assignments) {
     const ids = assignmentsByProject.get(assignment.project_id) ?? new Set<string>();
@@ -182,6 +203,8 @@ export function buildProjectSummaries(
       onSiteWorkerCount: onSiteByProject.get(project.id)?.size ?? 0,
       openTaskCount: openTasksByProject.get(project.id) ?? 0,
       weekMinutes: weekMinutesByProject.get(project.id) ?? 0,
+      receiptTotal: receiptTotalByProject.get(project.id) ?? 0,
+      lastActivityTime: lastActivityByProject.get(project.id) ?? null,
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
@@ -191,11 +214,21 @@ export function buildProfileSummaries(
   sessions: ManagerSession[],
 ): ManagerProfileSummary[] {
   const weekStart = startOfWeek();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
   const assignmentsByProfile = new Map<string, string[]>();
   const openTasksByProfile = new Map<string, number>();
   const weekMinutesByProfile = new Map<string, number>();
   const openSessionsByProfile = new Map<string, ManagerSession>();
   const projectsById = new Map(data.projects.map((project) => [project.id, project]));
+  const videoUploadedTodayByProfile = new Set<string>();
+
+  for (const item of data.media) {
+    if (item.deleted_at) continue;
+    if (!item.is_checkout || !item.uploaded_by) continue;
+    if (toDate(item.created_at).getTime() < todayStart.getTime()) continue;
+    videoUploadedTodayByProfile.add(item.uploaded_by);
+  }
 
   for (const assignment of data.assignments) {
     const ids = assignmentsByProfile.get(assignment.profile_id) ?? [];
@@ -245,6 +278,7 @@ export function buildProfileSummaries(
         weekMinutes: weekMinutesByProfile.get(profile.id) ?? 0,
         isOnSite: Boolean(currentSession),
         currentSessionMinutes: currentSession?.durationMinutes ?? null,
+        videoUploadedToday: videoUploadedTodayByProfile.has(profile.id),
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -288,6 +322,10 @@ export function getOverviewStats(
     return sum;
   }, 0);
 
+  const receiptTotal = roundCurrency(
+    projectSummaries.reduce((sum, project) => sum + project.receiptTotal, 0),
+  );
+
   return {
     onSiteCount: profileSummaries.filter((profile) => profile.isOnSite).length,
     activeProjectCount: projectSummaries.filter((project) => project.status === "active").length,
@@ -298,6 +336,7 @@ export function getOverviewStats(
     todayHours: roundCurrency(todayMinutes / 60),
     unpaidHours: unpaidPreview.totalHours,
     unpaidAmount: unpaidPreview.totalAmount,
+    receiptTotal,
   };
 }
 

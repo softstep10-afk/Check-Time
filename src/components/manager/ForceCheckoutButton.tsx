@@ -198,7 +198,7 @@ export function ForceCheckoutButton({
 
       {result === "error" ? (
         <div className="text-[10px] font-semibold" style={{ color: "var(--red)" }}>
-          Error — try again
+          {t("common.errorTryAgain")}
         </div>
       ) : null}
     </div>

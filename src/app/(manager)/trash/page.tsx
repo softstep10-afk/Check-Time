@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderKanban, User, ClipboardCheck } from "lucide-react";
+import { FolderKanban, User, ClipboardCheck, Receipt } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/worker-utils";
 
 type TrashItem = {
   id: string;
-  kind: "project" | "profile" | "task";
+  kind: "project" | "profile" | "task" | "receipt";
   name: string;
   deletedAt: string;
 };
@@ -26,10 +26,15 @@ export default function TrashPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function loadTrash() {
-    const [projectsRes, profilesRes, tasksRes] = await Promise.all([
+    const [projectsRes, profilesRes, tasksRes, receiptsRes] = await Promise.all([
       supabase.from("projects").select("id, name, deleted_at").not("deleted_at", "is", null),
       supabase.from("profiles").select("id, name, deleted_at").not("deleted_at", "is", null),
       supabase.from("tasks").select("id, title, deleted_at").not("deleted_at", "is", null),
+      supabase
+        .from("media")
+        .select("id, filename, deleted_at, metadata")
+        .eq("metadata->>category", "receipt")
+        .not("deleted_at", "is", null),
     ]);
 
     const all: TrashItem[] = [];
@@ -43,6 +48,13 @@ export default function TrashPage() {
     for (const row of tasksRes.data ?? []) {
       all.push({ id: row.id, kind: "task", name: row.title, deletedAt: row.deleted_at as string });
     }
+    for (const row of receiptsRes.data ?? []) {
+      const meta = (row.metadata ?? {}) as Record<string, unknown>;
+      const store = (meta.store_name as string) ?? "";
+      const amount = (meta.amount as number) ?? 0;
+      const label = store ? `${store} — $${amount.toFixed(2)}` : (row.filename ?? "Receipt");
+      all.push({ id: row.id, kind: "receipt", name: label, deletedAt: row.deleted_at as string });
+    }
 
     all.sort((a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime());
     setItems(all);
@@ -54,9 +66,10 @@ export default function TrashPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function tableName(kind: TrashItem["kind"]): "projects" | "profiles" | "tasks" {
+  function tableName(kind: TrashItem["kind"]): "projects" | "profiles" | "tasks" | "media" {
     if (kind === "project") return "projects";
     if (kind === "profile") return "profiles";
+    if (kind === "receipt") return "media";
     return "tasks";
   }
 
@@ -111,12 +124,14 @@ export default function TrashPage() {
   function kindLabel(kind: TrashItem["kind"]): string {
     if (kind === "project") return t("trash.project");
     if (kind === "profile") return t("trash.profile");
+    if (kind === "receipt") return t("trash.receipt");
     return t("trash.task");
   }
 
   function KindIcon({ kind }: { kind: TrashItem["kind"] }) {
     if (kind === "project") return <FolderKanban size={16} className="text-[var(--brand-yellow)]" />;
     if (kind === "profile") return <User size={16} className="text-[var(--blue)]" />;
+    if (kind === "receipt") return <Receipt size={16} className="text-[var(--brand-yellow)]" />;
     return <ClipboardCheck size={16} className="text-[var(--green)]" />;
   }
 
@@ -155,7 +170,7 @@ export default function TrashPage() {
         <div className="mt-4 space-y-3">
           {loading ? (
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-              Loading...
+              {t("common.loading")}
             </div>
           ) : items.length === 0 ? (
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-center text-sm text-[var(--text-secondary)]">

@@ -117,7 +117,7 @@ export default function StoresPage() {
           </div>
           <div className="mt-4 space-y-2">
             {loading ? (
-              <div className="text-sm text-[var(--text-secondary)]">Loading...</div>
+              <div className="text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
             ) : stores.length === 0 ? (
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
                 {t("stores.empty")}

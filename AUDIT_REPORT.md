@@ -3,6 +3,10 @@
 Generated: 2026-04-18
 Build commit: N/A (not a git repository)
 
+> **Wave 1 status (2026-04-18):** All [SAFE AUTO-FIX] items targeted by
+> the wave1/safe-fixes branch have been applied. Per-item commit hashes
+> are noted inline below.
+
 ---
 
 ## Summary
@@ -394,30 +398,30 @@ Columns referenced in code but **missing from migrations**:
     - Files: Multiple (layout.tsx, manager-utils.ts, etc.)
     - Risk: Low
     - Effort: S
-    - [SAFE AUTO-FIX]
+    - [SAFE AUTO-FIX] — **DONE** wave1 b49e416 (deleted dead module instead of wiring)
 
 ### Medium (12 items)
 
-12. Fix lint error: setState in effect in `src/lib/i18n/context.tsx` — Effort: S — [SAFE AUTO-FIX]
-13. Fix hydration mismatch in EventFeed RelativeTime — Effort: S — [SAFE AUTO-FIX]
-14. Roll receipt totals into project summary and Overview stats — Effort: M — [SAFE AUTO-FIX]
-15. Fix receipt soft-delete to use `deleted_at` instead of metadata flag — Effort: S — [SAFE AUTO-FIX]
+12. Fix lint error: setState in effect in `src/lib/i18n/context.tsx` — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 97c7617
+13. Fix hydration mismatch in EventFeed RelativeTime — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 bb4839f (refined a3ab070)
+14. Roll receipt totals into project summary and Overview stats — Effort: M — [SAFE AUTO-FIX] — **DONE** wave1 4bb19bb
+15. Fix receipt soft-delete to use `deleted_at` instead of metadata flag — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 e0b3dde
 16. Add PDF generation for paystubs and annual report — Effort: L — [NEEDS HUMAN REVIEW]
 17. Implement store auto-detection (geofence trigger) — Effort: L — [NEEDS HUMAN REVIEW]
 18. Add OT weekly bucketing consistency (calculator uses 40h/week, annual uses 2080h/year) — Effort: M — [NEEDS HUMAN REVIEW]
 19. Add owner-only RLS enforcement for payroll approval — Effort: M — [NEEDS HUMAN REVIEW]
-20. Add Projects page visual parity (traffic lights, address copy, border glow) — Effort: M — [SAFE AUTO-FIX]
-21. Add Team page VIDEO column and TOTAL footer row — Effort: M — [SAFE AUTO-FIX]
+20. Add Projects page visual parity (traffic lights, address copy, border glow) — Effort: M — [SAFE AUTO-FIX] — **DONE** wave1 a8d0c3d
+21. Add Team page VIDEO column and TOTAL footer row — Effort: M — [SAFE AUTO-FIX] — **DONE** wave1 4b43caa
 22. Add ownership transfer UI — Effort: M — [NEEDS HUMAN REVIEW]
-23. Connect store_visits to annual report store activity tab — Effort: S — [SAFE AUTO-FIX]
+23. Connect store_visits to annual report store activity tab — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 2d16a08
 
 ### Low (11 items)
 
-24. Remove unused translation key `overview.forceCheckoutNotify` or wire it — Effort: S — [SAFE AUTO-FIX]
-25. Translate remaining hardcoded "Loading..." strings — Effort: S — [SAFE AUTO-FIX]
-26. Add sidebar user footer (avatar + name + badge) — Effort: S — [SAFE AUTO-FIX]
-27. Apply mono font consistently to all numeric values — Effort: S — [SAFE AUTO-FIX]
-28. Add `task_assigned` event type to feed builder — Effort: S — [SAFE AUTO-FIX]
+24. Remove unused translation key `overview.forceCheckoutNotify` or wire it — Effort: S — [SAFE AUTO-FIX] — **DONE** verified already wired (no commit)
+25. Translate remaining hardcoded "Loading..." strings — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 09f3d82
+26. Add sidebar user footer (avatar + name + badge) — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 f4424c1
+27. Apply mono font consistently to all numeric values — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 ff5ce30
+28. Add `task_assigned` event type to feed builder — Effort: S — [SAFE AUTO-FIX] — **DONE** wave1 40c3d6f
 29. Add prior-year delta % to annual report summary cards — Effort: M — [SAFE AUTO-FIX]
 30. Add drill-down modals to annual report tables — Effort: M — [SAFE AUTO-FIX]
 31. Add payroll history page at `/payroll/history` — Effort: M — [SAFE AUTO-FIX]

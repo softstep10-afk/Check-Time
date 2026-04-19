@@ -850,7 +850,7 @@ export function WorkerShell({
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {t("common.today")}
                 </div>
-                <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
+                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
                   {formatDurationCompact(shell.summary.todayMinutes)}
                 </div>
               </div>
@@ -860,7 +860,7 @@ export function WorkerShell({
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {t("common.thisWeek")}
                 </div>
-                <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
+                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
                   {formatDurationCompact(shell.summary.weekMinutes)}
                 </div>
               </div>
@@ -870,7 +870,7 @@ export function WorkerShell({
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {t("common.sessions")}
                 </div>
-                <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
+                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
                   {shell.summary.totalSessions}
                 </div>
               </div>

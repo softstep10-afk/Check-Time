@@ -623,29 +623,29 @@ export function PayrollCalculator({
           <section className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.workers")}</div>
-              <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">{summary.workers}</div>
+              <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">{summary.workers}</div>
             </div>
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.regHours")}</div>
-              <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">{summary.regHours.toFixed(1)}h</div>
+              <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">{summary.regHours.toFixed(1)}h</div>
             </div>
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.otHours")}</div>
-              <div className="mt-1 text-xl font-bold" style={{ color: summary.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{summary.otHours.toFixed(1)}h</div>
+              <div className="mt-1 font-mono text-xl font-bold" style={{ color: summary.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{summary.otHours.toFixed(1)}h</div>
             </div>
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.grossPay")}</div>
-              <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">{currency.format(summary.grossTotal)}</div>
+              <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">{currency.format(summary.grossTotal)}</div>
             </div>
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.adjustments")}</div>
-              <div className="mt-1 text-xl font-bold" style={{ color: summary.adjustments !== 0 ? "var(--brand-yellow)" : "var(--text-primary)" }}>
+              <div className="mt-1 font-mono text-xl font-bold" style={{ color: summary.adjustments !== 0 ? "var(--brand-yellow)" : "var(--text-primary)" }}>
                 {summary.adjustments >= 0 ? "+" : ""}{currency.format(summary.adjustments)}
               </div>
             </div>
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.netPay")}</div>
-              <div className="mt-1 text-xl font-bold text-[var(--brand-yellow)]">{currency.format(summary.netTotal)}</div>
+              <div className="mt-1 font-mono text-xl font-bold text-[var(--brand-yellow)]">{currency.format(summary.netTotal)}</div>
             </div>
           </section>
 
@@ -701,10 +701,10 @@ export function PayrollCalculator({
                         {line.rate === 0 && line.hasHours ? <div className="mt-1 text-[10px] font-semibold" style={{ color: "#f59e0b" }}>{t("payroll.rateNotSet")}</div> : null}
                         {!line.hasHours ? <div className="mt-1 text-[10px] text-[var(--text-muted)]">{t("payroll.noHours")}</div> : null}
                       </td>
-                      <td className="py-3 pr-3 whitespace-nowrap text-[var(--text-primary)]">{line.regHours.toFixed(1)}h</td>
-                      <td className="py-3 pr-3 whitespace-nowrap" style={{ color: line.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{line.otHours.toFixed(1)}h</td>
-                      <td className="py-3 pr-3 whitespace-nowrap text-[var(--text-secondary)]">${line.rate.toFixed(2)}</td>
-                      <td className="py-3 pr-3 whitespace-nowrap font-semibold text-[var(--text-primary)]">{currency.format(line.grossTotal)}</td>
+                      <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-primary)]">{line.regHours.toFixed(1)}h</td>
+                      <td className="py-3 pr-3 whitespace-nowrap font-mono" style={{ color: line.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{line.otHours.toFixed(1)}h</td>
+                      <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-secondary)]">${line.rate.toFixed(2)}</td>
+                      <td className="py-3 pr-3 whitespace-nowrap font-mono font-semibold text-[var(--text-primary)]">{currency.format(line.grossTotal)}</td>
                       <td className="py-3 pr-3">
                         <div className="flex flex-wrap items-center gap-1">
                           {line.adjustments.map((adj) => (
@@ -720,7 +720,7 @@ export function PayrollCalculator({
                           ) : null}
                         </div>
                       </td>
-                      <td className="py-3 pr-3 whitespace-nowrap font-bold text-[var(--brand-yellow)]">{currency.format(line.netTotal)}</td>
+                      <td className="py-3 pr-3 whitespace-nowrap font-mono font-bold text-[var(--brand-yellow)]">{currency.format(line.netTotal)}</td>
                       <td className="py-3">
                         <span className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={{ background: `color-mix(in srgb, ${statusColor(line.status)} 16%, transparent)`, color: statusColor(line.status) }}>
                           {line.status}
@@ -739,9 +739,9 @@ export function PayrollCalculator({
                   <div key={p.name} className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] p-3">
                     <div>
                       <div className="text-sm font-semibold text-[var(--text-primary)]">{p.name}</div>
-                      <div className="mt-0.5 text-xs text-[var(--text-muted)]">{p.hours.toFixed(1)}h</div>
+                      <div className="mt-0.5 font-mono text-xs text-[var(--text-muted)]">{p.hours.toFixed(1)}h</div>
                     </div>
-                    <div className="text-sm font-bold text-[var(--brand-yellow)]">{currency.format(p.amount)}</div>
+                    <div className="font-mono text-sm font-bold text-[var(--brand-yellow)]">{currency.format(p.amount)}</div>
                   </div>
                 ))}
               </div>

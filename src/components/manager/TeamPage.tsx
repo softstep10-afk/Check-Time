@@ -3,12 +3,23 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Pencil, MessageSquare, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDurationCompact } from "@/lib/worker-utils";
 import type { ManagerProfileSummary } from "@/lib/manager-types";
 import type { UserRole } from "@/types/database";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+
+const currencyFmt = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+function earnedAmount(profile: ManagerProfileSummary): number {
+  const hours = profile.weekMinutes / 60;
+  return Math.round(hours * Number(profile.hourly_rate ?? 0) * 100) / 100;
+}
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -60,6 +71,16 @@ export function TeamPage({
     String(Math.floor(1000 + Math.random() * 9000)),
   );
   const { t } = useTranslation();
+
+  const totals = useMemo(() => {
+    let minutes = 0;
+    let earned = 0;
+    for (const p of initialProfiles) {
+      minutes += p.weekMinutes;
+      earned += earnedAmount(p);
+    }
+    return { minutes, earned: Math.round(earned * 100) / 100 };
+  }, [initialProfiles]);
 
   const visibleProfiles = useMemo(() => {
     let filtered = initialProfiles;
@@ -147,6 +168,31 @@ export function TeamPage({
     setPinValue("");
     setBusyKey(null);
     setMessage(`✓ ${result.name ?? name} created with PIN ${result.pin ?? pin}`);
+    setMessageType("success");
+    router.refresh();
+  }
+
+  async function handleRemoveProfile(profile: ManagerProfileSummary) {
+    if (profile.id === managerId) return;
+    if (typeof window !== "undefined" && !window.confirm(t("team.confirmRemove"))) return;
+
+    setBusyKey(`remove-${profile.id}`);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ deleted_at: new Date().toISOString(), is_active: false })
+      .eq("id", profile.id);
+
+    if (error) {
+      setMessage(error.message);
+      setMessageType("error");
+      setBusyKey(null);
+      return;
+    }
+
+    setBusyKey(null);
+    setMessage(t("team.removed"));
     setMessageType("success");
     router.refresh();
   }
@@ -288,6 +334,16 @@ export function TeamPage({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    {/* Video indicator */}
+                    <span
+                      title={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
+                      aria-label={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
+                      className="inline-block h-3 w-3 rounded-full border"
+                      style={{
+                        background: profile.videoUploadedToday ? "var(--green)" : "transparent",
+                        borderColor: profile.videoUploadedToday ? "var(--green)" : "var(--text-muted)",
+                      }}
+                    />
                     {/* Status pill */}
                     <span
                       className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-2.5 py-1 text-[10px] font-bold"
@@ -355,6 +411,22 @@ export function TeamPage({
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <Link
+                    href={`/team/${profile.id}`}
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                    style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                  >
+                    <Pencil size={12} />
+                    {t("team.actionEdit")}
+                  </Link>
+                  <Link
+                    href={`/team/${profile.id}#message`}
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                    style={{ borderColor: "rgba(59, 130, 246, 0.3)", color: "var(--blue)" }}
+                  >
+                    <MessageSquare size={12} />
+                    {t("team.actionMessage")}
+                  </Link>
                   <button
                     type="button"
                     onClick={() =>
@@ -392,9 +464,46 @@ export function TeamPage({
                   >
                     {profile.is_active ? t("team.pauseAccess") : t("team.reactivate")}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveProfile(profile)}
+                    disabled={busyKey === `remove-${profile.id}` || profile.id === managerId}
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                    style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                  >
+                    <Trash2 size={12} />
+                    {t("team.actionRemove")}
+                  </button>
                 </div>
               </article>
             ))}
+          </div>
+
+          <div
+            className="sticky bottom-0 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] px-3 py-3 text-xs"
+            style={{ boxShadow: "0 -4px 14px rgba(0,0,0,0.18)" }}
+          >
+            <div className="font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("team.totalPeople")} ({visibleProfiles.length} {t("team.people").toUpperCase()})
+            </div>
+            <div className="flex items-center gap-4">
+              <div>
+                <span className="mr-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("team.totalHours")}:
+                </span>
+                <span className="font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
+                  {formatDurationCompact(totals.minutes)}
+                </span>
+              </div>
+              <div>
+                <span className="mr-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("team.totalEarned")}:
+                </span>
+                <span className="font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
+                  {currencyFmt.format(totals.earned)}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
