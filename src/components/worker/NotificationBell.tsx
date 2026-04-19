@@ -7,7 +7,12 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { formatEventTime } from "@/lib/worker-utils";
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
-import type { AppMessage, MessagePriority } from "@/lib/message-types";
+import {
+  PRIORITY_COLOR,
+  PRIORITY_ORDER,
+  type AppMessage,
+  type MessagePriority,
+} from "@/lib/message-types";
 
 const PREVIEW_MESSAGES: AppMessage[] = [
   {
@@ -126,6 +131,15 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
 
   const unreadCount = messages.filter((m) => !m.read).length;
 
+  // Urgent first, then info/good/task; within each band newest first.
+  const sortedMessages = useMemo(() => {
+    return [...messages].sort((a, b) => {
+      const orderDelta = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+      if (orderDelta !== 0) return orderDelta;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [messages]);
+
   const markRead = useCallback(
     async (id: string) => {
       setMessages((prev) =>
@@ -192,49 +206,60 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
             {t("messages.notifications")}
           </div>
           <div className="max-h-[400px] overflow-y-auto">
-            {messages.length === 0 ? (
+            {sortedMessages.length === 0 ? (
               <div className="p-4 text-center text-sm text-[var(--text-secondary)]">
                 {t("messages.noNew")}
               </div>
             ) : (
-              messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className="border-b px-3 py-2.5"
-                  style={{
-                    borderColor: "var(--border-subtle)",
-                    background: msg.read ? "transparent" : `${msg.color}08`,
-                  }}
-                >
-                  <div className="flex items-start gap-2">
-                    <span
-                      className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: msg.color }}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm text-[var(--text-primary)]">{msg.text}</div>
-                      {msg.attachment ? (
-                        <MessageAttachmentView attachment={msg.attachment} />
-                      ) : null}
-                      <div className="mt-1 flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-[var(--text-muted)]">
-                          {msg.from_name ? `${msg.from_name} • ` : ""}{formatEventTime(msg.created_at)}
-                        </span>
-                        {!msg.read ? (
-                          <button
-                            type="button"
-                            onClick={() => void markRead(msg.id)}
-                            className="shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-semibold"
-                            style={{ background: `${msg.color}18`, color: msg.color }}
-                          >
-                            {t("messages.gotIt")}
-                          </button>
+              sortedMessages.map((msg) => {
+                const accent = PRIORITY_COLOR[msg.priority];
+                // Card tint: stronger for unread urgent, gentler for unread
+                // info/good/task, transparent once read.
+                const tint = msg.read
+                  ? "transparent"
+                  : msg.priority === "urgent"
+                    ? `${accent}1f`
+                    : `${accent}10`;
+                return (
+                  <div
+                    key={msg.id}
+                    className="border-b border-l-2 px-3 py-2.5"
+                    style={{
+                      borderColor: "var(--border-subtle)",
+                      borderLeftColor: accent,
+                      background: tint,
+                    }}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span
+                        className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: accent }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm text-[var(--text-primary)]">{msg.text}</div>
+                        {msg.attachment ? (
+                          <MessageAttachmentView attachment={msg.attachment} />
                         ) : null}
+                        <div className="mt-1 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-[var(--text-muted)]">
+                            {msg.from_name ? `${msg.from_name} • ` : ""}{formatEventTime(msg.created_at)}
+                          </span>
+                          {!msg.read ? (
+                            <button
+                              type="button"
+                              onClick={() => void markRead(msg.id)}
+                              className="shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-semibold"
+                              style={{ background: `${accent}1f`, color: accent }}
+                            >
+                              {t("messages.gotIt")}
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
