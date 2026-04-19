@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ExternalLink, Copy, Check, Plus } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -14,6 +14,71 @@ import {
 } from "@/lib/worker-utils";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
 import type { ProjectStatus } from "@/types/database";
+
+const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
+
+type ActivityState = "live" | "open" | "stale" | "inactive";
+
+function activityState(project: ManagerProjectSummary): ActivityState {
+  if (project.status !== "active") return "inactive";
+  if (project.onSiteWorkerCount > 0) return "live";
+  if (!project.lastActivityTime) return "stale";
+  const ageMs = Date.now() - new Date(project.lastActivityTime).getTime();
+  return ageMs > STALE_THRESHOLD_MS ? "stale" : "open";
+}
+
+function TrafficLights({ state }: { state: ActivityState }) {
+  const isLive = state === "live";
+  const isOpen = state === "open";
+  const isStale = state === "stale";
+  const dim = "color-mix(in srgb, currentColor 18%, transparent)";
+
+  return (
+    <div className="flex items-center gap-1" aria-hidden>
+      <span
+        className="inline-block h-2.5 w-2.5 rounded-full"
+        style={{ background: isLive ? "var(--green)" : dim, color: "var(--green)" }}
+      />
+      <span
+        className="inline-block h-2.5 w-2.5 rounded-full"
+        style={{ background: isOpen ? "#f59e0b" : dim, color: "#f59e0b" }}
+      />
+      <span
+        className="inline-block h-2.5 w-2.5 rounded-full"
+        style={{ background: isStale ? "var(--red)" : dim, color: "var(--red)" }}
+      />
+    </div>
+  );
+}
+
+function CopyAddressButton({ address }: { address: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        navigator.clipboard
+          .writeText(address)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => {});
+      }}
+      className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+      style={{
+        background: copied ? "rgba(15, 168, 120, 0.16)" : "rgba(191, 162, 52, 0.12)",
+        color: copied ? "var(--green)" : "var(--brand-yellow)",
+      }}
+    >
+      {copied ? <Check size={11} /> : <Copy size={11} />}
+      {copied ? t("projects.copied") : t("projects.copyAddress")}
+    </button>
+  );
+}
 
 const currencyFormatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -293,12 +358,50 @@ export function ProjectsPage({
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => {
+            const formEl = document.querySelector<HTMLInputElement>(
+              'form input[name="name"]',
+            );
+            formEl?.focus();
+            formEl?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }}
+          className="surface-card flex min-h-[180px] flex-col items-center justify-center gap-3 border-2 border-dashed p-4 text-center transition-colors hover:border-[var(--brand-yellow)]"
+          style={{ borderColor: "var(--border-default)" }}
+        >
+          <span
+            className="flex h-12 w-12 items-center justify-center rounded-full"
+            style={{ background: "rgba(191, 162, 52, 0.12)" }}
+          >
+            <Plus size={24} style={{ color: "var(--brand-yellow)" }} />
+          </span>
+          <span className="text-sm font-semibold" style={{ color: "var(--brand-yellow)" }}>
+            {t("projects.addProject")}
+          </span>
+        </button>
+
         {initialProjects.map((project) => {
           const site = parseGeoPoint(project.site_point);
           const isOpen = openProjectIds.has(project.id);
+          const state = activityState(project);
+          const cardBorder =
+            state === "live"
+              ? "2px solid var(--green)"
+              : state === "stale"
+                ? "1px solid var(--red)"
+                : "1px solid var(--border-default)";
+          const cardShadow =
+            state === "live"
+              ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
+              : undefined;
 
           return (
-            <article key={project.id} className="surface-card p-4">
+            <article
+              key={project.id}
+              className="surface-card p-4"
+              style={{ border: cardBorder, boxShadow: cardShadow }}
+            >
               <button
                 type="button"
                 onClick={() => toggleProject(project.id)}
@@ -306,12 +409,21 @@ export function ProjectsPage({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-base font-semibold text-[var(--text-primary)]">
-                      {project.name}
+                    <div className="flex items-center gap-2">
+                      <TrafficLights state={state} />
+                      <div className="text-base font-semibold text-[var(--text-primary)]">
+                        {project.name}
+                      </div>
                     </div>
-                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {project.address ?? t("common.noAddressSet")}
+                    <div className="mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                      <span className="truncate">{project.address ?? t("common.noAddressSet")}</span>
+                      {project.address ? <CopyAddressButton address={project.address} /> : null}
                     </div>
+                    {state === "stale" ? (
+                      <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--red)" }}>
+                        {t("projects.staleNoActivity")}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="status-pill" data-tone={getProjectTone(project.status)}>

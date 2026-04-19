@@ -156,6 +156,14 @@ export function buildProjectSummaries(
     );
   }
 
+  const lastActivityByProject = new Map<string, string>();
+  for (const event of data.timeEvents) {
+    const current = lastActivityByProject.get(event.project_id);
+    if (!current || event.event_time > current) {
+      lastActivityByProject.set(event.project_id, event.event_time);
+    }
+  }
+
   for (const assignment of data.assignments) {
     const ids = assignmentsByProject.get(assignment.project_id) ?? new Set<string>();
     ids.add(assignment.profile_id);
@@ -196,6 +204,7 @@ export function buildProjectSummaries(
       openTaskCount: openTasksByProject.get(project.id) ?? 0,
       weekMinutes: weekMinutesByProject.get(project.id) ?? 0,
       receiptTotal: receiptTotalByProject.get(project.id) ?? 0,
+      lastActivityTime: lastActivityByProject.get(project.id) ?? null,
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }

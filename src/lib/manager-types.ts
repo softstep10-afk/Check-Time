@@ -47,6 +47,7 @@ export interface ManagerProjectSummary extends Project {
   openTaskCount: number;
   weekMinutes: number;
   receiptTotal: number;
+  lastActivityTime: string | null;
 }
 
 export interface ManagerProfileSummary extends Profile {
