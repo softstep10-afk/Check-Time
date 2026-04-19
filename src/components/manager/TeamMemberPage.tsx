@@ -16,6 +16,7 @@ import { Camera, Store } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
+import { DayDetailModal } from "@/components/manager/DayDetailModal";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -58,7 +59,18 @@ export function TeamMemberPage({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showAdjustForm, setShowAdjustForm] = useState(false);
   const [adjustSign, setAdjustSign] = useState<"+" | "-">("+");
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
   const { t } = useTranslation();
+
+  const unpaidMinutes = useMemo(() => {
+    let total = 0;
+    for (const session of sessions) {
+      if (session.clockOutTime) total += session.durationMinutes;
+    }
+    return total;
+  }, [sessions]);
+  const unpaidHours = Math.round((unpaidMinutes / 60) * 100) / 100;
 
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
   const activeProjects = projects.filter((project) => project.status !== "archived");
@@ -211,6 +223,68 @@ export function TeamMemberPage({
     router.refresh();
   }
 
+  async function handleResetToZero() {
+    const minutesToZero = unpaidMinutes;
+    if (minutesToZero <= 0) {
+      setMessage(t("member.resetNothing"));
+      setMessageType("info");
+      setShowResetConfirm(false);
+      return;
+    }
+
+    // Use the worker's currently-assigned project, or first active project,
+    // or the first known project — adjustments need a project_id.
+    const projectId =
+      profile.current_project ??
+      activeProjects[0]?.id ??
+      projects[0]?.id ??
+      null;
+
+    if (!projectId) {
+      setMessage("No project found to attach the reset adjustment to.");
+      setMessageType("error");
+      setShowResetConfirm(false);
+      return;
+    }
+
+    setBusyKey("reset-zero");
+    setMessage("");
+
+    const reason = t("member.resetReason");
+    const { error } = await supabase.from("time_events").insert({
+      org_id: orgId,
+      profile_id: profile.id,
+      project_id: projectId,
+      event_type: "adjust" as const,
+      event_time: new Date().toISOString(),
+      gps_point: null,
+      gps_accuracy_m: null,
+      gps_source: null,
+      video_status: "not_required" as const,
+      metadata: {
+        adjustedBy: managerId,
+        adjustMinutes: -minutesToZero,
+        reason,
+        showToWorker: true,
+        kind: "reset_to_zero",
+      },
+    });
+
+    if (error) {
+      setMessage(error.message);
+      setMessageType("error");
+      setBusyKey(null);
+      setShowResetConfirm(false);
+      return;
+    }
+
+    setBusyKey(null);
+    setShowResetConfirm(false);
+    setMessage(t("member.resetSuccess"));
+    setMessageType("success");
+    router.refresh();
+  }
+
   async function handleAdjustHours(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -218,6 +292,7 @@ export function TeamMemberPage({
     const hours = Number.parseFloat(formData.get("hours")?.toString() ?? "0");
     const projectId = formData.get("project_id")?.toString() ?? "";
     const reason = formData.get("reason")?.toString().trim() ?? "";
+    const showToWorker = formData.get("show_to_worker") === "on";
 
     if (!hours || !Number.isFinite(hours) || hours <= 0) return;
     if (!projectId) return;
@@ -242,6 +317,7 @@ export function TeamMemberPage({
         adjustedBy: managerId,
         adjustMinutes: signedMinutes,
         reason,
+        showToWorker,
       },
     });
 
@@ -551,6 +627,20 @@ export function TeamMemberPage({
                 placeholder={t("member.adjustReason")}
                 className="min-h-[80px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
+              <label className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)]">
+                <input
+                  type="checkbox"
+                  name="show_to_worker"
+                  defaultChecked
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--brand-yellow)]"
+                />
+                <span className="space-y-0.5">
+                  <span className="block font-semibold">{t("member.showToWorker")}</span>
+                  <span className="block text-xs text-[var(--text-muted)]">
+                    {t("member.showToWorkerHelp")}
+                  </span>
+                </span>
+              </label>
               <div className="flex gap-2">
                 <button
                   type="submit"
@@ -577,6 +667,68 @@ export function TeamMemberPage({
         </div>
       </section>
 
+      {/* ── Reset Hours to Zero ── */}
+      <section>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("member.resetToZero")}
+              </h2>
+              <p className="mt-1 max-w-[60ch] text-sm text-[var(--text-secondary)]">
+                {t("member.resetToZeroDesc")}
+              </p>
+            </div>
+            <span className="font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
+              {unpaidHours.toFixed(2)}h
+            </span>
+          </div>
+          {!showResetConfirm ? (
+            <button
+              type="button"
+              onClick={() => setShowResetConfirm(true)}
+              disabled={unpaidMinutes <= 0 || busyKey === "reset-zero"}
+              className="mt-4 rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+            >
+              {t("member.resetToZero")}
+            </button>
+          ) : (
+            <div
+              className="mt-4 rounded-[var(--radius-md)] border p-3"
+              style={{ borderColor: "rgba(212, 81, 94, 0.3)", background: "rgba(212, 81, 94, 0.06)" }}
+            >
+              <div className="text-sm font-semibold text-[var(--text-primary)]">
+                {t("member.resetConfirmHeadline").replace("{name}", profile.name)}
+              </div>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                {t("member.resetConfirmBody").replace("{hours}", unpaidHours.toFixed(2))}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleResetToZero()}
+                  disabled={busyKey === "reset-zero"}
+                  className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold"
+                  style={{ background: "var(--red)", color: "white" }}
+                >
+                  {busyKey === "reset-zero" ? t("common.saving") : t("member.resetConfirmCta")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirm(false)}
+                  disabled={busyKey === "reset-zero"}
+                  className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold"
+                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* ── Send Message ── */}
       <section id="message">
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
@@ -599,30 +751,32 @@ export function TeamMemberPage({
                 {t("teamMember.noShifts")}
               </div>
             ) : (
-              sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Link
-                        href={`/projects/${session.projectId}`}
-                        className="text-sm font-semibold text-[var(--text-primary)]"
-                      >
-                        {session.projectName}
-                      </Link>
-                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {formatDateTime(session.clockInTime)}
-                        {session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}
+              sessions.map((session) => {
+                const dayKey = session.clockInTime.slice(0, 10);
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => setDayDetailDate(dayKey)}
+                    className="block w-full rounded-[var(--radius-md)] border border-[var(--border-default)] p-3 text-left transition-colors hover:border-[var(--brand-yellow)]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="text-sm font-semibold text-[var(--text-primary)]">
+                          {session.projectName}
+                        </span>
+                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {formatDateTime(session.clockInTime)}
+                          {session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}
+                        </div>
+                      </div>
+                      <div className="font-mono text-sm font-semibold text-[var(--text-primary)]">
+                        {formatDurationCompact(session.durationMinutes)}
                       </div>
                     </div>
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
-                      {formatDurationCompact(session.durationMinutes)}
-                    </div>
-                  </div>
-                </div>
-              ))
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
@@ -814,6 +968,16 @@ export function TeamMemberPage({
           )}
         </div>
       </section>
+
+      <DayDetailModal
+        open={dayDetailDate !== null}
+        date={dayDetailDate}
+        sessions={sessions}
+        tasks={tasks}
+        media={media}
+        adjustments={[]}
+        onClose={() => setDayDetailDate(null)}
+      />
     </div>
   );
 }

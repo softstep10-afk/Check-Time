@@ -60,6 +60,15 @@ export interface WorkerSummary {
   totalSessions: number;
 }
 
+export interface WorkerAdjustmentItem {
+  id: string;
+  projectId: string;
+  projectName: string | null;
+  eventTime: string;
+  minutes: number;
+  reason: string;
+}
+
 export interface WorkerShellData {
   profile: Profile;
   projects: WorkerProject[];
@@ -68,4 +77,5 @@ export interface WorkerShellData {
   sessions: WorkerSession[];
   clockState: WorkerClockState;
   summary: WorkerSummary;
+  adjustments: WorkerAdjustmentItem[];
 }
