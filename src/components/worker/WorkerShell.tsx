@@ -55,11 +55,13 @@ type WorkerShellContextValue = {
   busyAction: string | null;
   banner: BannerState;
   lastGpsCheck: WorkerGpsCheck | null;
+  muted: boolean;
   dismissBanner: () => void;
   clockIn: (projectId: string) => Promise<void>;
   clockOut: () => Promise<void>;
   uploadMedia: (files: FileList | File[], caption: string, mode: UploadMode) => Promise<void>;
   updateTaskStatus: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
+  toggleMute: () => void;
 };
 
 const WorkerShellContext = createContext<WorkerShellContextValue | null>(null);
@@ -181,21 +183,44 @@ export function WorkerShell({
   const { t } = useTranslation();
 
   // ── Sound mute state ──
-  const [muted, setMuted] = useState(true); // start true, read localStorage in effect
+  // Source of truth: profiles.notif_mode (Wave 7 migration 00009).
+  // Falls back to localStorage when the column is absent or hasn't been
+  // hydrated yet, so older deploys keep working.
+  const [muted, setMuted] = useState<boolean>(() => {
+    const fromProfile = (initialData.profile as { notif_mode?: string | null }).notif_mode;
+    if (fromProfile === "silent") return true;
+    if (fromProfile === "sound") return false;
+    return true; // optimistic default; effect below corrects from localStorage
+  });
   const audioUnlocked = useRef(false);
 
   useEffect(() => {
+    const fromProfile = (initialData.profile as { notif_mode?: string | null }).notif_mode;
+    if (fromProfile === "silent" || fromProfile === "sound") return;
     const stored = localStorage.getItem("check-time-muted");
     setMuted(stored === "true");
-  }, []);
+  }, [initialData.profile]);
 
   const toggleMute = useCallback(() => {
     setMuted((prev) => {
       const next = !prev;
       localStorage.setItem("check-time-muted", String(next));
+      // Persist to profiles.notif_mode best-effort. Tolerates the column
+      // being absent before migration 00009 is applied.
+      void (async () => {
+        const mode = next ? "silent" : "sound";
+        const result = await supabase
+          .from("profiles")
+          .update({ notif_mode: mode })
+          .eq("id", shell.profile.id);
+        if (result.error && /column .* notif_mode/i.test(result.error.message)) {
+          // Column doesn't exist yet — localStorage is the only durable
+          // store until 00009 runs.
+        }
+      })();
       return next;
     });
-  }, []);
+  }, [supabase, shell.profile.id]);
 
   // Unlock AudioContext on first user interaction (mobile requirement)
   useEffect(() => {
@@ -802,11 +827,13 @@ export function WorkerShell({
     busyAction,
     banner,
     lastGpsCheck,
+    muted,
     dismissBanner,
     clockIn,
     clockOut,
     uploadMedia,
     updateTaskStatus,
+    toggleMute,
   };
 
   return (
