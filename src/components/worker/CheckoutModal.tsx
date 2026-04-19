@@ -40,10 +40,24 @@ export function CheckoutModal({
   const checkingOut = busyAction === "clock-out";
   const disabled = !videoSatisfied || uploading || checkingOut;
 
+  function handleClose() {
+    setPickedAt(null);
+    onClose();
+  }
+
   useEffect(() => {
-    if (!open) {
-      setPickedAt(null);
+    if (!open) return;
+
+    // ESC keeps the worker checked in — closes the modal without touching
+    // sessions or media. Mirrors the Cancel button.
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        handleClose();
+      }
     }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   if (!open) return null;
@@ -58,14 +72,14 @@ export function CheckoutModal({
 
   async function handleCheckOut() {
     await clockOut();
-    onClose();
+    handleClose();
   }
 
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center"
       style={{ background: "rgba(0,0,0,0.55)" }}
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="w-full max-w-[460px] rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 sm:rounded-[var(--radius-lg)]"
@@ -82,8 +96,9 @@ export function CheckoutModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
-            aria-label={t("common.cancel")}
+            onClick={handleClose}
+            aria-label={t("clock.cancelStayCheckedIn")}
+            title={t("clock.cancelStayCheckedIn")}
             className="-m-2 inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)]"
           >
             <X size={16} />
@@ -137,8 +152,10 @@ export function CheckoutModal({
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-[var(--radius-sm)] border px-4 py-2.5 text-sm font-semibold"
+            onClick={handleClose}
+            disabled={checkingOut}
+            data-testid="checkout-cancel"
+            className="rounded-[var(--radius-sm)] border px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
             style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
           >
             {t("clock.cancelStayCheckedIn")}
