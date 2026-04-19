@@ -19,6 +19,7 @@ export const translations = {
   "common.done": { en: "Done", ru: "Готово" },
   "common.live": { en: "Live", ru: "На смене" },
   "common.off": { en: "Off", ru: "Нет" },
+  "common.minShort": { en: "min", ru: "мин" },
   "common.today": { en: "Today", ru: "Сегодня" },
   "common.thisWeek": { en: "This Week", ru: "За неделю" },
   "common.sessions": { en: "Sessions", ru: "Сессии" },
@@ -631,6 +632,11 @@ export const translations = {
   "report.materialCost": { en: "Material cost", ru: "Стоимость материалов" },
   "report.totalCost": { en: "Total cost", ru: "Общая стоимость" },
   "report.vsLastYear": { en: "vs last year", ru: "к прошлому году" },
+  "report.totalVisitMinutes": { en: "Total minutes in stores", ru: "Минут в магазинах всего" },
+  "report.topStores": { en: "Top stores", ru: "Популярные магазины" },
+  "report.topVisitors": { en: "Top visitors", ru: "Частые посетители" },
+  "report.byChain": { en: "By chain", ru: "По сетям" },
+  "report.visits": { en: "visits", ru: "посещений" },
 
   // ── Owner / Permissions ──
   "owner.title": { en: "Owner", ru: "Владелец" },

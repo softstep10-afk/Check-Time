@@ -5,6 +5,7 @@ import { Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import type { Profile, Project, TimeEvent, Media } from "@/types/database";
+import type { StoreVisit } from "@/lib/store-types";
 
 // ── Types ──
 
@@ -64,6 +65,7 @@ export default function AnnualReportPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [events, setEvents] = useState<TimeEvent[]>([]);
   const [receipts, setReceipts] = useState<Media[]>([]);
+  const [storeVisits, setStoreVisits] = useState<StoreVisit[]>([]);
   const [tab, setTab] = useState<"workers" | "projects" | "monthly" | "stores">("workers");
 
   useEffect(() => {
@@ -72,23 +74,34 @@ export default function AnnualReportPage() {
       const yearStart = `${year}-01-01T00:00:00`;
       const yearEnd = `${year}-12-31T23:59:59`;
 
-      const [profilesRes, projectsRes, eventsRes, receiptsRes] = await Promise.all([
+      const [profilesRes, projectsRes, eventsRes, receiptsRes, visitsRes] = await Promise.all([
         supabase.from("profiles").select("*"),
         supabase.from("projects").select("*"),
         supabase.from("time_events").select("*").gte("event_time", yearStart).lte("event_time", yearEnd),
-        supabase.from("media").select("*").eq("metadata->>category", "receipt").gte("created_at", yearStart).lte("created_at", yearEnd),
+        supabase.from("media").select("*").eq("metadata->>category", "receipt").is("deleted_at", null).gte("created_at", yearStart).lte("created_at", yearEnd),
+        // store_visits may not exist yet in every environment — tolerate the error.
+        supabase.from("store_visits").select("*").gte("entered_at", yearStart).lte("entered_at", yearEnd),
       ]);
 
       setProfiles((profilesRes.data as Profile[]) ?? []);
       setProjects((projectsRes.data as Project[]) ?? []);
       setEvents((eventsRes.data as TimeEvent[]) ?? []);
       setReceipts((receiptsRes.data as Media[]) ?? []);
+      setStoreVisits(visitsRes.error ? [] : ((visitsRes.data as StoreVisit[]) ?? []));
       setLoading(false);
     }
     void load();
   }, [supabase, year]);
 
   // ── Compute summaries ──
+
+  const visitsByWorker = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const v of storeVisits) {
+      map.set(v.worker_id, (map.get(v.worker_id) ?? 0) + 1);
+    }
+    return map;
+  }, [storeVisits]);
 
   const workerRows = useMemo((): WorkerRow[] => {
     const profileMap = new Map(profiles.map((p) => [p.id, p]));
@@ -141,13 +154,13 @@ export default function AnnualReportPage() {
         otHours: Math.round(ot * 100) / 100,
         grossPaid: gross,
         projectCount: data.projects.size,
-        storeVisits: 0, // Would come from store_visits table
+        storeVisits: visitsByWorker.get(workerId) ?? 0,
         firstShift: data.first,
         lastShift: data.last,
         avgHoursPerDay: avgPerDay,
       };
     }).sort((a, b) => b.totalHours - a.totalHours);
-  }, [profiles, events]);
+  }, [profiles, events, visitsByWorker]);
 
   const projectRows = useMemo((): ProjectRow[] => {
     const hoursByProject = new Map<string, { hours: number; cost: number; workers: Set<string> }>();
@@ -245,8 +258,64 @@ export default function AnnualReportPage() {
     const totalProjectsWorked = projectRows.length;
     const completedProjects = projectRows.filter((p) => p.status === "completed").length;
     const activeWorkers = workerRows.length;
-    return { totalHours, totalGross, totalMaterials, totalProjectsWorked, completedProjects, activeWorkers };
-  }, [workerRows, projectRows, receipts]);
+    const totalVisits = storeVisits.length;
+    const totalVisitMinutes = Math.round(
+      storeVisits.reduce((s, v) => s + (v.duration_seconds ?? 0), 0) / 60,
+    );
+    return {
+      totalHours,
+      totalGross,
+      totalMaterials,
+      totalProjectsWorked,
+      completedProjects,
+      activeWorkers,
+      totalVisits,
+      totalVisitMinutes,
+    };
+  }, [workerRows, projectRows, receipts, storeVisits]);
+
+  // ── Store breakdowns for the Stores tab ──
+  const storeBreakdown = useMemo(() => {
+    const byStore = new Map<string, { name: string; chain: string; visits: number; minutes: number }>();
+    const byChain = new Map<string, { visits: number; minutes: number }>();
+    const byWorker = new Map<string, { name: string; visits: number; minutes: number }>();
+
+    for (const v of storeVisits) {
+      const minutes = Math.round((v.duration_seconds ?? 0) / 60);
+
+      const storeKey = v.store_id ?? v.store_name ?? "unknown";
+      const store = byStore.get(storeKey) ?? {
+        name: v.store_name ?? "Unknown",
+        chain: v.store_chain ?? "",
+        visits: 0,
+        minutes: 0,
+      };
+      store.visits += 1;
+      store.minutes += minutes;
+      byStore.set(storeKey, store);
+
+      if (v.store_chain) {
+        const chain = byChain.get(v.store_chain) ?? { visits: 0, minutes: 0 };
+        chain.visits += 1;
+        chain.minutes += minutes;
+        byChain.set(v.store_chain, chain);
+      }
+
+      const workerKey = v.worker_id ?? v.worker_name ?? "unknown";
+      const worker = byWorker.get(workerKey) ?? { name: v.worker_name ?? "Unknown", visits: 0, minutes: 0 };
+      worker.visits += 1;
+      worker.minutes += minutes;
+      byWorker.set(workerKey, worker);
+    }
+
+    return {
+      stores: [...byStore.values()].sort((a, b) => b.visits - a.visits).slice(0, 10),
+      chains: [...byChain.entries()]
+        .map(([name, value]) => ({ name, ...value }))
+        .sort((a, b) => b.visits - a.visits),
+      workers: [...byWorker.values()].sort((a, b) => b.visits - a.visits).slice(0, 10),
+    };
+  }, [storeVisits]);
 
   // ── CSV export ──
   function exportWorkersCsv() {
@@ -345,7 +414,18 @@ export default function AnnualReportPage() {
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalVisits")}</div>
-              <div className="mt-2 text-base text-[var(--text-muted)]">{t("report.noData")}</div>
+              {summary.totalVisits > 0 ? (
+                <>
+                  <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">
+                    {summary.totalVisits.toLocaleString()}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    {summary.totalVisitMinutes.toLocaleString()} {t("common.minShort")}
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 text-base text-[var(--text-muted)]">{t("report.noData")}</div>
+              )}
             </div>
           </section>
 
@@ -475,9 +555,90 @@ export default function AnnualReportPage() {
           ) : (
             <section className="surface-card p-4">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("report.storeActivity")}</h2>
-              <div className="mt-4 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-center text-sm text-[var(--text-secondary)]">
-                {t("report.noData")}
-              </div>
+              {storeVisits.length === 0 ? (
+                <div className="mt-4 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-center text-sm text-[var(--text-secondary)]">
+                  {t("report.noData")}
+                </div>
+              ) : (
+                <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("report.topStores")}
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {storeBreakdown.stores.map((s) => (
+                        <div
+                          key={s.name}
+                          className="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2.5 py-2 text-sm"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold text-[var(--text-primary)]">{s.name}</div>
+                            {s.chain ? (
+                              <div className="truncate text-xs text-[var(--text-muted)]">{s.chain}</div>
+                            ) : null}
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="font-mono text-sm font-semibold text-[var(--brand-yellow)]">
+                              {s.visits}
+                            </div>
+                            <div className="font-mono text-[10px] text-[var(--text-muted)]">
+                              {s.minutes} {t("common.minShort")}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("report.topVisitors")}
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {storeBreakdown.workers.map((w) => (
+                        <div
+                          key={w.name}
+                          className="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2.5 py-2 text-sm"
+                        >
+                          <div className="truncate font-semibold text-[var(--text-primary)]">{w.name}</div>
+                          <div className="shrink-0 text-right">
+                            <div className="font-mono text-sm font-semibold text-[var(--brand-yellow)]">
+                              {w.visits}
+                            </div>
+                            <div className="font-mono text-[10px] text-[var(--text-muted)]">
+                              {w.minutes} {t("common.minShort")}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("report.byChain")}
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      {storeBreakdown.chains.map((c) => (
+                        <div
+                          key={c.name}
+                          className="flex items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2.5 py-2 text-sm"
+                        >
+                          <div className="truncate font-semibold text-[var(--text-primary)]">{c.name}</div>
+                          <div className="shrink-0 text-right">
+                            <div className="font-mono text-sm font-semibold text-[var(--brand-yellow)]">
+                              {c.visits} {t("report.visits")}
+                            </div>
+                            <div className="font-mono text-[10px] text-[var(--text-muted)]">
+                              {c.minutes} {t("common.minShort")}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </section>
           )}
         </>
