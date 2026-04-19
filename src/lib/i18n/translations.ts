@@ -426,7 +426,7 @@ export const translations = {
   // ── Trash Page ──
   "trash.title": { en: "Trash", ru: "Корзина" },
   "trash.subtitle": { en: "Deleted items", ru: "Удалённые элементы" },
-  "trash.description": { en: "Soft-deleted projects, profiles, and tasks land here. Restore or permanently remove them.", ru: "Удалённые проекты, профили и задачи попадают сюда. Восстановите или удалите навсегда." },
+  "trash.description": { en: "Soft-deleted projects, profiles, tasks, and receipts land here. Restore or permanently remove them.", ru: "Удалённые проекты, профили, задачи и чеки попадают сюда. Восстановите или удалите навсегда." },
   "trash.restore": { en: "Restore", ru: "Восстановить" },
   "trash.deletePermanently": { en: "Delete permanently", ru: "Удалить навсегда" },
   "trash.empty": { en: "Trash is empty", ru: "Корзина пуста" },
@@ -436,6 +436,7 @@ export const translations = {
   "trash.project": { en: "Project", ru: "Проект" },
   "trash.profile": { en: "Profile", ru: "Профиль" },
   "trash.task": { en: "Task", ru: "Задача" },
+  "trash.receipt": { en: "Receipt", ru: "Чек" },
   "trash.deletedOn": { en: "Deleted", ru: "Удалено" },
 
   // ── Adjust Hours ──

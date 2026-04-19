@@ -925,6 +925,7 @@ function ReceiptsSection({
         .select("*")
         .eq("project_id", projectId)
         .eq("metadata->>category", "receipt")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       const rows = (data ?? []) as Array<Media & { metadata: Record<string, unknown> }>;
@@ -1045,9 +1046,8 @@ function ReceiptsSection({
   async function handleDelete(receipt: ReceiptItem) {
     await supabase
       .from("media")
-      .update({ metadata: { category: "receipt", deleted: true } })
+      .update({ deleted_at: new Date().toISOString() })
       .eq("id", receipt.id);
-    // Soft delete: we filter it out of the UI but leave the row
     setReceipts((prev) => prev.filter((r) => r.id !== receipt.id));
     setMessage(t("receipts.deleted"));
     setTimeout(() => setMessage(""), 2000);
