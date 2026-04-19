@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ExternalLink, Copy, Check, Plus } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
@@ -154,6 +154,33 @@ export function ProjectsPage({
   const [message, setMessage] = useState("");
   const [openProjectIds, setOpenProjectIds] = useState<Set<string>>(new Set());
   const [copyConfirmId, setCopyConfirmId] = useState<string | null>(null);
+  const [pickingLocation, setPickingLocation] = useState(false);
+  const createLatRef = useRef<HTMLInputElement>(null);
+  const createLngRef = useRef<HTMLInputElement>(null);
+
+  function fillCurrentLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setMessage(t("projects.locationUnavailable"));
+      return;
+    }
+    setPickingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (createLatRef.current) {
+          createLatRef.current.value = position.coords.latitude.toFixed(6);
+        }
+        if (createLngRef.current) {
+          createLngRef.current.value = position.coords.longitude.toFixed(6);
+        }
+        setPickingLocation(false);
+      },
+      () => {
+        setMessage(t("projects.locationDenied"));
+        setPickingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
+    );
+  }
 
   function toggleProject(projectId: string) {
     setOpenProjectIds((current) => {
@@ -398,14 +425,29 @@ export function ProjectsPage({
           <div className="md:col-span-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3">
             <GpsRadiusSlider />
           </div>
+          <div className="flex items-stretch gap-2">
+            <input
+              ref={createLatRef}
+              name="lat"
+              type="number"
+              step="0.000001"
+              placeholder={t("projects.latitude")}
+              className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+            <button
+              type="button"
+              onClick={fillCurrentLocation}
+              disabled={pickingLocation}
+              title={t("projects.useCurrentLocation")}
+              aria-label={t("projects.useCurrentLocation")}
+              className="inline-flex shrink-0 items-center justify-center rounded-[var(--radius-md)] border px-3 text-base disabled:opacity-50"
+              style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+            >
+              {pickingLocation ? "…" : "📍"}
+            </button>
+          </div>
           <input
-            name="lat"
-            type="number"
-            step="0.000001"
-            placeholder={t("projects.latitude")}
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-          />
-          <input
+            ref={createLngRef}
             name="lng"
             type="number"
             step="0.000001"
