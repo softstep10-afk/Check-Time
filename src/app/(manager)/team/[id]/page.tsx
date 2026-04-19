@@ -28,6 +28,8 @@ export default async function TeamMemberRoutePage({
   const workerSessions = sessions.filter((session) => session.profileId === id).slice(0, 20);
 
   // Closed store visits in the last 7 days, newest first.
+  // Date.now() is fine here — server component, runs once per request.
+  // eslint-disable-next-line react-hooks/purity
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const workerStoreVisits = data.storeVisits
     .filter(
