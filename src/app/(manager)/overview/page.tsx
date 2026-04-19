@@ -593,52 +593,38 @@ export default async function OverviewPage() {
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <div className="surface-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("overview.projectLoad")}</h2>
-            <Link href="/projects" className="text-sm font-semibold text-[var(--brand-yellow)]">
-              {t("overview.openProjects")}
-            </Link>
-          </div>
-          <div className="mt-4 space-y-3">
-            {busiestProjects.map((project) => (
-              <Link
-                key={project.id}
-                href={`/projects/${project.id}`}
-                className="block rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</div>
-                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {project.address ?? t("common.noAddress")}
-                    </div>
-                  </div>
-                  <div className="text-right text-xs text-[var(--text-secondary)]">
-                    <div>{project.onSiteWorkerCount} {t("common.live").toLowerCase()}</div>
-                    <div>{project.assignedWorkerCount} {t("overview.assigned")}</div>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
-                  <span>{formatDurationCompact(project.weekMinutes)} {t("common.thisWeek").toLowerCase()}</span>
-                  <span>{project.openTaskCount} {t("overview.openTasks")}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+      <section className="surface-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("overview.projectLoad")}</h2>
+          <Link href="/projects" className="text-sm font-semibold text-[var(--brand-yellow)]">
+            {t("overview.openProjects")}
+          </Link>
         </div>
-
-        <div className="surface-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("feed.title")}</h2>
-            <Link href="/timeline" className="text-sm font-semibold text-[var(--brand-yellow)]">
-              {t("overview.fullTimeline")}
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {busiestProjects.map((project) => (
+            <Link
+              key={project.id}
+              href={`/projects/${project.id}`}
+              className="block rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    {project.address ?? t("common.noAddress")}
+                  </div>
+                </div>
+                <div className="text-right text-xs text-[var(--text-secondary)]">
+                  <div>{project.onSiteWorkerCount} {t("common.live").toLowerCase()}</div>
+                  <div>{project.assignedWorkerCount} {t("overview.assigned")}</div>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
+                <span className="font-mono">{formatDurationCompact(project.weekMinutes)} {t("common.thisWeek").toLowerCase()}</span>
+                <span className="font-mono">{project.openTaskCount} {t("overview.openTasks")}</span>
+              </div>
             </Link>
-          </div>
-          <div className="mt-4">
-            <EventFeed events={recentFeed.slice(0, 8)} />
-          </div>
+          ))}
         </div>
       </section>
     </div>
