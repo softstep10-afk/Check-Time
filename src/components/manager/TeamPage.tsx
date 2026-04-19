@@ -197,30 +197,6 @@ export function TeamPage({
     router.refresh();
   }
 
-  async function handleToggleProfile(
-    profileId: string,
-    patch: {
-      require_video?: boolean;
-      is_active?: boolean;
-    },
-    successMessage: string,
-  ) {
-    setBusyKey(profileId);
-    setMessage("");
-
-    const { error } = await supabase.from("profiles").update(patch).eq("id", profileId);
-
-    if (error) {
-      setMessage(error.message);
-      setBusyKey(null);
-      return;
-    }
-
-    setBusyKey(null);
-    setMessage(successMessage);
-    router.refresh();
-  }
-
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
@@ -300,53 +276,202 @@ export function TeamPage({
             </div>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {visibleProfiles.map((profile) => (
-              <article
-                key={profile.id}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+          {/* Desktop table */}
+          <div className="mt-4 hidden overflow-x-auto md:block">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr
+                  className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]"
+                  style={{ borderBottom: "1px solid var(--border-default)" }}
+                >
+                  <th className="pb-3 pr-3 font-semibold">{t("team.colName")}</th>
+                  <th className="pb-3 pr-3 font-semibold">{t("team.colCategory")}</th>
+                  <th className="pb-3 pr-3 font-semibold">{t("team.colStatus")}</th>
+                  <th className="pb-3 pr-3 text-right font-semibold">{t("team.colHours")}</th>
+                  <th className="pb-3 pr-3 text-right font-semibold">{t("team.colRate")}</th>
+                  <th className="pb-3 pr-3 text-right font-semibold">{t("team.colEarned")}</th>
+                  <th className="pb-3 pr-3 text-center font-semibold">{t("team.colVideo")}</th>
+                  <th className="pb-3 text-right font-semibold">{t("team.colActions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleProfiles.map((profile) => {
+                  const earned = earnedAmount(profile);
+                  const rate = Number(profile.hourly_rate ?? 0);
+                  return (
+                    <tr key={profile.id} className="border-b border-[var(--border-subtle)]">
+                      <td className="py-3 pr-3">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-black"
+                            style={{ background: avatarColor(profile.name) }}
+                          >
+                            {profile.name.charAt(0).toUpperCase()}
+                          </span>
+                          <div className="min-w-0">
+                            <Link
+                              href={`/team/${profile.id}`}
+                              className="block truncate font-semibold text-[var(--text-primary)]"
+                            >
+                              {profile.name}
+                            </Link>
+                            <span className="font-mono text-[10px] text-[var(--text-muted)]">PIN ****</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span
+                          className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[9px] font-bold uppercase"
+                          style={ROLE_TAG_COLORS[profile.role] ?? ROLE_TAG_COLORS.worker}
+                        >
+                          {profile.role}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3">
+                        <span
+                          className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-bold"
+                          style={{
+                            background: profile.isOnSite ? "rgba(34, 197, 94, 0.12)" : "rgba(107, 114, 128, 0.1)",
+                            color: profile.isOnSite ? "#22c55e" : "var(--text-muted)",
+                          }}
+                        >
+                          <span className="inline-block h-[5px] w-[5px] rounded-full" style={{ background: "currentColor" }} />
+                          {profile.isOnSite ? t("common.onSite") : t("team.offShift")}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-3 text-right font-mono text-[var(--text-primary)]">
+                        {formatDurationCompact(profile.weekMinutes)}
+                      </td>
+                      <td
+                        className="py-3 pr-3 text-right font-mono"
+                        style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
+                      >
+                        ${rate.toFixed(2)}
+                      </td>
+                      <td
+                        className="py-3 pr-3 text-right font-mono"
+                        style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}
+                      >
+                        {currencyFmt.format(earned)}
+                      </td>
+                      <td className="py-3 pr-3 text-center">
+                        <span
+                          title={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
+                          aria-label={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
+                          className="inline-block h-3 w-3 rounded-full border"
+                          style={{
+                            background: profile.videoUploadedToday ? "var(--green)" : "transparent",
+                            borderColor: profile.videoUploadedToday ? "var(--green)" : "var(--text-muted)",
+                          }}
+                        />
+                      </td>
+                      <td className="py-3 text-right">
+                        <div className="inline-flex items-center gap-1">
+                          <Link
+                            href={`/team/${profile.id}`}
+                            title={t("team.actionEdit")}
+                            aria-label={t("team.actionEdit")}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                            style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                          >
+                            <Pencil size={12} />
+                          </Link>
+                          <Link
+                            href={`/team/${profile.id}#message`}
+                            title={t("team.actionMessage")}
+                            aria-label={t("team.actionMessage")}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                            style={{ borderColor: "rgba(59, 130, 246, 0.3)", color: "var(--blue)" }}
+                          >
+                            <MessageSquare size={12} />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => void handleRemoveProfile(profile)}
+                            disabled={busyKey === `remove-${profile.id}` || profile.id === managerId}
+                            title={t("team.actionRemove")}
+                            aria-label={t("team.actionRemove")}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                            style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot
+                className="sticky bottom-0 z-10"
+                style={{
+                  background: "var(--bg-card)",
+                  boxShadow: "0 -4px 14px rgba(0,0,0,0.18)",
+                }}
               >
-                <div className="flex items-center gap-3">
-                  {/* Avatar */}
-                  <div
-                    className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-black"
-                    style={{ background: avatarColor(profile.name) }}
-                  >
-                    {profile.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={`/team/${profile.id}`}
-                        className="text-[13px] font-semibold text-[var(--text-primary)]"
-                      >
-                        {profile.name}
-                      </Link>
-                      <span
-                        className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[9px] font-bold uppercase"
-                        style={ROLE_TAG_COLORS[profile.role] ?? ROLE_TAG_COLORS.worker}
-                      >
-                        {profile.role}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 font-mono text-[10px] text-[var(--text-muted)]">
-                      PIN ****
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {/* Video indicator */}
+                <tr style={{ borderTop: "1px solid var(--border-default)" }}>
+                  <td className="py-3 pr-3 font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]" colSpan={3}>
+                    {t("team.totalPeople")} ({visibleProfiles.length} {t("team.people").toUpperCase()})
+                  </td>
+                  <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--brand-yellow)" }}>
+                    {formatDurationCompact(totals.minutes)}
+                  </td>
+                  <td className="py-3 pr-3" />
+                  <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--green)" }}>
+                    {currencyFmt.format(totals.earned)}
+                  </td>
+                  <td className="py-3 pr-3" colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Mobile stacked rows */}
+          <div className="mt-4 space-y-2 md:hidden">
+            {visibleProfiles.map((profile) => {
+              const earned = earnedAmount(profile);
+              const rate = Number(profile.hourly_rate ?? 0);
+              return (
+                <div
+                  key={profile.id}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                >
+                  <div className="flex items-center gap-2">
                     <span
-                      title={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
-                      aria-label={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
-                      className="inline-block h-3 w-3 rounded-full border"
-                      style={{
-                        background: profile.videoUploadedToday ? "var(--green)" : "transparent",
-                        borderColor: profile.videoUploadedToday ? "var(--green)" : "var(--text-muted)",
-                      }}
-                    />
-                    {/* Status pill */}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-black"
+                      style={{ background: avatarColor(profile.name) }}
+                    >
+                      {profile.name.charAt(0).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Link
+                          href={`/team/${profile.id}`}
+                          className="text-sm font-semibold text-[var(--text-primary)]"
+                        >
+                          {profile.name}
+                        </Link>
+                        <span
+                          className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                          style={ROLE_TAG_COLORS[profile.role] ?? ROLE_TAG_COLORS.worker}
+                        >
+                          {profile.role}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
+                        <span className="font-mono">PIN ****</span>
+                        <span
+                          title={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
+                          className="inline-block h-2.5 w-2.5 rounded-full border"
+                          style={{
+                            background: profile.videoUploadedToday ? "var(--green)" : "transparent",
+                            borderColor: profile.videoUploadedToday ? "var(--green)" : "var(--text-muted)",
+                          }}
+                        />
+                      </div>
+                    </div>
                     <span
-                      className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-2.5 py-1 text-[10px] font-bold"
+                      className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-bold"
                       style={{
                         background: profile.isOnSite ? "rgba(34, 197, 94, 0.12)" : "rgba(107, 114, 128, 0.1)",
                         color: profile.isOnSite ? "#22c55e" : "var(--text-muted)",
@@ -356,150 +481,63 @@ export function TeamPage({
                       {profile.isOnSite ? t("common.onSite") : t("team.offShift")}
                     </span>
                   </div>
-                </div>
 
-                <div className="mt-3 grid gap-2 sm:grid-cols-5">
-                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2.5">
-                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.week")}</div>
-                    <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                    <span className="font-mono text-[var(--text-primary)]">
                       {formatDurationCompact(profile.weekMinutes)}
-                    </div>
+                    </span>
+                    <span className="font-mono" style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}>
+                      ${rate.toFixed(2)}/h
+                    </span>
+                    <span className="font-mono font-semibold" style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}>
+                      {currencyFmt.format(earned)}
+                    </span>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2.5">
-                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.tasks")}</div>
-                    <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                      {profile.openTaskCount}
-                    </div>
-                  </div>
-                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2.5">
-                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.rate")}</div>
-                    <div className="mt-1 font-mono text-sm font-bold" style={{ color: Number(profile.hourly_rate ?? 0) > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}>
-                      ${Number(profile.hourly_rate ?? 0).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2.5">
-                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("team.earned")}</div>
-                    <div className="mt-1 font-mono text-sm font-bold" style={{ color: "#22c55e" }}>
-                      ${(Math.round(profile.weekMinutes / 60 * Number(profile.hourly_rate ?? 0) * 100) / 100).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2.5">
-                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.assigned")}</div>
-                    <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                      {profile.assignedProjectIds.length}
-                    </div>
+
+                  <div className="mt-3 flex items-center justify-end gap-1">
+                    <Link
+                      href={`/team/${profile.id}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border"
+                      style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                      aria-label={t("team.actionEdit")}
+                    >
+                      <Pencil size={13} />
+                    </Link>
+                    <Link
+                      href={`/team/${profile.id}#message`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border"
+                      style={{ borderColor: "rgba(59, 130, 246, 0.3)", color: "var(--blue)" }}
+                      aria-label={t("team.actionMessage")}
+                    >
+                      <MessageSquare size={13} />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoveProfile(profile)}
+                      disabled={busyKey === `remove-${profile.id}` || profile.id === managerId}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border"
+                      style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                      aria-label={t("team.actionRemove")}
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 </div>
+              );
+            })}
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {profile.assignedProjectNames.length === 0 ? (
-                    <span className="text-xs text-[var(--text-muted)]">{t("team.noActiveAssignments")}</span>
-                  ) : (
-                    profile.assignedProjectNames.map((projectName) => (
-                      <span
-                        key={projectName}
-                        className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                        style={{
-                          background: "rgba(191, 162, 52, 0.12)",
-                          color: "var(--brand-yellow)",
-                        }}
-                      >
-                        {projectName}
-                      </span>
-                    ))
-                  )}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    href={`/team/${profile.id}`}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                    style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-                  >
-                    <Pencil size={12} />
-                    {t("team.actionEdit")}
-                  </Link>
-                  <Link
-                    href={`/team/${profile.id}#message`}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                    style={{ borderColor: "rgba(59, 130, 246, 0.3)", color: "var(--blue)" }}
-                  >
-                    <MessageSquare size={12} />
-                    {t("team.actionMessage")}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void handleToggleProfile(
-                        profile.id,
-                        { require_video: !profile.require_video },
-                        profile.require_video
-                          ? t("team.videoDisabled")
-                          : t("team.videoEnabled"),
-                      )
-                    }
-                    disabled={busyKey === profile.id}
-                    className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                    style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-                  >
-                    {profile.require_video ? t("team.videoRequired") : t("team.videoOptional")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void handleToggleProfile(
-                        profile.id,
-                        { is_active: !profile.is_active },
-                        profile.is_active ? t("team.profilePaused") : t("team.profileReactivated"),
-                      )
-                    }
-                    disabled={busyKey === profile.id}
-                    className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                    style={{
-                      borderColor: profile.is_active
-                        ? "rgba(212, 81, 94, 0.3)"
-                        : "rgba(15, 168, 120, 0.3)",
-                      color: profile.is_active ? "var(--red)" : "var(--green)",
-                    }}
-                  >
-                    {profile.is_active ? t("team.pauseAccess") : t("team.reactivate")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleRemoveProfile(profile)}
-                    disabled={busyKey === `remove-${profile.id}` || profile.id === managerId}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                    style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
-                  >
-                    <Trash2 size={12} />
-                    {t("team.actionRemove")}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <div
-            className="sticky bottom-0 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] px-3 py-3 text-xs"
-            style={{ boxShadow: "0 -4px 14px rgba(0,0,0,0.18)" }}
-          >
-            <div className="font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-              {t("team.totalPeople")} ({visibleProfiles.length} {t("team.people").toUpperCase()})
-            </div>
-            <div className="flex items-center gap-4">
-              <div>
-                <span className="mr-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {t("team.totalHours")}:
-                </span>
-                <span className="font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
+            <div
+              className="sticky bottom-0 flex items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] px-3 py-3 text-[11px]"
+              style={{ boxShadow: "0 -4px 14px rgba(0,0,0,0.18)" }}
+            >
+              <span className="font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t("team.totalPeople")} ({visibleProfiles.length})
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="font-mono font-bold" style={{ color: "var(--brand-yellow)" }}>
                   {formatDurationCompact(totals.minutes)}
                 </span>
-              </div>
-              <div>
-                <span className="mr-1 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {t("team.totalEarned")}:
-                </span>
-                <span className="font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
+                <span className="font-mono font-bold" style={{ color: "var(--green)" }}>
                   {currencyFmt.format(totals.earned)}
                 </span>
               </div>

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ExternalLink, Copy, Check, Plus } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { DateField } from "@/components/shared/DateField";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
@@ -329,16 +330,14 @@ export function ProjectsPage({
             placeholder={t("projects.longitude")}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
-          <input
+          <DateField
             name="start_date"
-            type="date"
-            placeholder={t("projects.startDate")}
+            label={t("projects.startDate")}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
-          <input
+          <DateField
             name="end_date"
-            type="date"
-            placeholder={t("projects.endDate")}
+            label={t("projects.endDate")}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
           <TextInputWithVoice
@@ -558,15 +557,15 @@ export function ProjectsPage({
                       />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <input
+                      <DateField
                         name="start_date"
-                        type="date"
+                        label={t("projects.startDate")}
                         defaultValue={project.start_date ?? ""}
                         className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                       />
-                      <input
+                      <DateField
                         name="end_date"
-                        type="date"
+                        label={t("projects.endDate")}
                         defaultValue={project.end_date ?? ""}
                         className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                       />

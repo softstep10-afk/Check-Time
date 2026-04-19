@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DateField } from "@/components/shared/DateField";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { buildTimelineItems } from "@/lib/manager-utils";
 import { formatDateTime } from "@/lib/worker-utils";
@@ -96,9 +97,8 @@ export default async function TimelinePage({
             <option value="break_start">{t("timeline.breakStart")}</option>
             <option value="break_end">{t("timeline.breakEnd")}</option>
           </select>
-          <input
+          <DateField
             name="date"
-            type="date"
             defaultValue={date}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />

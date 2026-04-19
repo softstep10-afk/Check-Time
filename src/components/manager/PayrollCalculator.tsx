@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Plus, X } from "lucide-react";
+import { Calculator, Download, Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
+import { DateField } from "@/components/shared/DateField";
 import { logAudit } from "@/lib/audit";
 import type { Profile } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
@@ -293,6 +294,78 @@ export function PayrollCalculator({
     setEndDate(dates.end);
   }
 
+  async function applyPresetAndCreate(preset: "lastWeek" | "last2Weeks" | "thisMonth") {
+    const dates = presetDates(preset);
+    const periodTypeForPreset: PeriodType =
+      preset === "lastWeek" ? "weekly" : preset === "last2Weeks" ? "biweekly" : "monthly";
+    setStartDate(dates.start);
+    setEndDate(dates.end);
+    setPeriodType(periodTypeForPreset);
+    await handleCreatePeriodFor(dates.start, dates.end, periodTypeForPreset);
+  }
+
+  async function handleCreatePeriodFor(start: string, end: string, type: PeriodType) {
+    if (!start || !end) return;
+    const lines = buildWorkerLines(profiles, sessions, start, end);
+    const label = `${start} → ${end}`;
+
+    if (AUTH_BYPASS_ENABLED) {
+      // Date.now() is fine here — this runs from a click handler, not render.
+      // eslint-disable-next-line react-hooks/purity
+      setPeriod({ id: `period-${Date.now()}`, label, startDate: start, endDate: end, type, status: "draft", lines });
+      setShowNewPeriod(false);
+      return;
+    }
+
+    const { data: periodRow, error: pErr } = await supabase
+      .from("pay_periods")
+      .insert({
+        org_id: orgId,
+        label,
+        start_date: start,
+        end_date: end,
+        period_type: type,
+        status: "draft",
+        created_by: managerId,
+      })
+      .select("id")
+      .single();
+
+    if (pErr || !periodRow) {
+      setError(pErr?.message ?? "Failed to create period");
+      return;
+    }
+
+    const periodId = (periodRow as { id: string }).id;
+    const itemRows = lines.filter((l) => l.hasHours).map((l) => ({
+      pay_period_id: periodId,
+      worker_id: l.workerId,
+      rate: l.rate,
+      regular_hours: l.regHours,
+      overtime_hours: l.otHours,
+      overtime_multiplier: OT_MULTIPLIER,
+      gross_regular: l.grossRegular,
+      gross_overtime: l.grossOt,
+      gross_total: l.grossTotal,
+      net_total: l.netTotal,
+      adjustments_json: [],
+      status: "pending",
+    }));
+
+    if (itemRows.length > 0) {
+      const { error: iErr } = await supabase.from("pay_period_items").insert(itemRows);
+      if (iErr) {
+        setError(iErr.message);
+        return;
+      }
+    }
+
+    await loadPeriod(periodId);
+    setSavedPeriods((prev) => [{ id: periodId, label, status: "draft" }, ...prev]);
+    setShowNewPeriod(false);
+    setError("");
+  }
+
   async function handleCreatePeriod() {
     if (!startDate || !endDate) return;
     const lines = buildWorkerLines(profiles, sessions, startDate, endDate);
@@ -579,6 +652,50 @@ export function PayrollCalculator({
           </div>
         </div>
 
+        {/* Empty state with quick-pick presets */}
+        {!period && !showNewPeriod ? (
+          <div className="mt-6 flex flex-col items-center gap-4 py-6 text-center">
+            <span
+              className="flex h-14 w-14 items-center justify-center rounded-full"
+              style={{ background: "rgba(191, 162, 52, 0.12)" }}
+            >
+              <Calculator size={26} style={{ color: "var(--brand-yellow)" }} />
+            </span>
+            <div className="space-y-1">
+              <div className="text-base font-bold text-[var(--text-primary)]">
+                {t("payroll.emptyHeadline")}
+              </div>
+              <p className="mx-auto max-w-[48ch] text-sm text-[var(--text-secondary)]">
+                {t("payroll.emptyHelp")}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {(["lastWeek", "last2Weeks", "thisMonth"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => void applyPresetAndCreate(p)}
+                  className="rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold"
+                  style={{
+                    background: "rgba(191, 162, 52, 0.12)",
+                    color: "var(--brand-yellow)",
+                  }}
+                >
+                  {t(`payroll.${p}` as Parameters<typeof t>[0])}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setShowNewPeriod(true)}
+                className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                {t("payroll.newCustom")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {showNewPeriod ? (
           <div className="mt-4 space-y-3 rounded-[var(--radius-md)] border border-[var(--border-default)] p-4">
             <div className="flex flex-wrap gap-2">
@@ -595,8 +712,8 @@ export function PayrollCalculator({
               ))}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
+              <DateField label={t("payroll.startDate")} value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
+              <DateField label={t("payroll.endDate")} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
               <select value={periodType} onChange={(e) => setPeriodType(e.target.value as PeriodType)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none">
                 <option value="weekly">{t("payroll.weekly")}</option>
                 <option value="biweekly">{t("payroll.biweekly")}</option>

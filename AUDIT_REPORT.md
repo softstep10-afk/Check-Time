@@ -445,4 +445,21 @@ Columns referenced in code but **missing from migrations**:
 
 ---
 
+## Wave 1.5 — post-deploy fixes (2026-04-18)
+
+Issues discovered during a manual UI audit of the running app
+(localhost:3000 as Owner, AUTH_BYPASS=true) after Wave 1 shipped.
+All landed on `wave1.5/ui-polish`.
+
+| # | Issue | Resolution | Commit |
+|---|-------|-----------|--------|
+| 1 | `/overview` rendered the EventFeed twice — once in the unified-feed section and again as the right column of the bottom grid, both using `t("feed.title")`. | Drop the duplicate; let the Project load section span the full width with a 2-column inner grid on md+. | `d348b0d` |
+| 2 | Native `<input type="date">` always shows browser locale (mm/dd/yyyy in en-US), ignoring the app locale. | Add `src/components/shared/DateField.tsx` wrapper that keeps the native picker but renders an uppercase label above and a localized `дд.мм.гггг` / `dd.mm.yyyy` hint below. Adopt across project create/edit, payroll period picker, project task due date, receipt purchase date, AI report date, location-data, and timeline filters. | `f9ec00d` |
+| 3 | `/payroll` with no active period showed only the page header and a tiny "New Period" button. | Add a centered empty-state block (calculator icon, headline, helper text) plus three one-click preset chips (Last week / Last 2 weeks / This month) that immediately create the period (writes to `pay_periods` + `pay_period_items` when AUTH_BYPASS is off, in-memory otherwise) so the full calculator UI renders without an extra step. Custom button still opens the date+type picker. | `e93d717` |
+| 4 | `/team` rendered each worker as a card; the reference uses a Name / Category / Status / Total Hours / Rate / Earned / Video / Actions table with a TOTAL footer. | Convert to a real `<table>` on md+ with sticky `<tfoot>` totals row. Mobile falls back to compact stacked rows (not cards) with a sticky bottom totals bar. Wave 1 Edit / Msg / Remove actions become 7×7 icon buttons; the per-member video/pause toggles live on the detail page. | `413efee` |
+
+**Verification:** `tsc --noEmit` clean. Lint problems unchanged at 15 / 5 errors (one new lint suppressed inline with justification). Routes `/overview`, `/projects`, `/team`, `/tasks`, `/payroll`, `/timeline`, `/reports/annual`, `/admin/audit`, `/trash` all return HTTP 200. RU + EN copy verified by inspecting rendered HTML.
+
+---
+
 *End of report.*
