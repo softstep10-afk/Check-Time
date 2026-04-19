@@ -238,6 +238,26 @@ export default async function OverviewPage() {
     });
   }
 
+  // Store visits → only kept (closed) ones with real duration.
+  for (const v of data.storeVisits) {
+    if (!v.exited_at || !v.duration_seconds) continue;
+    const actor = profilesById.get(v.worker_id);
+    const minutes = Math.max(1, Math.round(v.duration_seconds / 60));
+    const chain = v.store_chain || "store";
+    const store = v.store_name || chain;
+    feedEvents.push({
+      id: `store-visit-${v.id}`,
+      kind: "store_visit",
+      actorName: actor?.name ?? v.worker_name ?? "Unknown",
+      actorId: v.worker_id,
+      description: `${chain} (${store}) — ${minutes} min`,
+      projectName: v.source_project_name ?? null,
+      projectId: v.source_project_id,
+      timestamp: v.exited_at,
+      href: v.source_project_id ? `/projects/${v.source_project_id}` : null,
+    });
+  }
+
   feedEvents.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   const recentFeed = feedEvents.slice(0, 15);
 

@@ -18,6 +18,7 @@ import type {
   Task,
   TimeEvent,
 } from "@/types/database";
+import type { StoreVisit } from "@/lib/store-types";
 
 type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -102,6 +103,7 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
     mediaResult,
     payrollRunsResult,
     closuresResult,
+    storeVisitsResult,
   ] = await Promise.all([
     supabase
       .from("profiles")
@@ -148,6 +150,13 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
       .order("closed_through", { ascending: false })
       .range(0, 999)
       .returns<PayrollClosure[]>(),
+    // store_visits is optional — table may not exist yet in older envs.
+    supabase
+      .from("store_visits")
+      .select("*")
+      .order("entered_at", { ascending: false })
+      .range(0, 199)
+      .returns<StoreVisit[]>(),
   ]);
 
   assertNoError(profilesResult.error, "Profiles query failed");
@@ -170,5 +179,6 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
     media: mediaResult.data ?? [],
     payrollRuns: payrollRunsResult.data ?? [],
     payrollClosures: closuresResult.data ?? [],
+    storeVisits: storeVisitsResult.error ? [] : storeVisitsResult.data ?? [],
   };
 });

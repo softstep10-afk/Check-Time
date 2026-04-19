@@ -511,6 +511,7 @@ export const translations = {
   "feed.taskCompleted": { en: "completed task", ru: "завершил задачу" },
   "feed.mediaUploaded": { en: "uploaded", ru: "загрузил" },
   "feed.adjust": { en: "hours adjusted", ru: "часы скорректированы" },
+  "feed.storeVisit": { en: "visited", ru: "посетил" },
 
   // ── Receipts ──
   "receipts.title": { en: "Receipts", ru: "Чеки" },

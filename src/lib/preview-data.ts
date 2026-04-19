@@ -355,6 +355,7 @@ export function buildPreviewManagerWorkspaceData(): ManagerWorkspaceData {
     media: previewMedia,
     payrollRuns: previewPayrollRuns,
     payrollClosures: previewPayrollClosures,
+    storeVisits: [],
   };
 }
 

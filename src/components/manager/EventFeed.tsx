@@ -12,6 +12,7 @@ import {
   Camera,
   SlidersHorizontal,
   Clock,
+  Store,
 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 
@@ -57,7 +58,8 @@ export type FeedEvent = {
     | "task_started"
     | "task_completed"
     | "media_uploaded"
-    | "adjust";
+    | "adjust"
+    | "store_visit";
   actorName: string;
   actorId: string;
   description: string;
@@ -79,6 +81,7 @@ const KIND_CONFIG: Record<
   task_completed: { translationKey: "feed.taskCompleted", color: "var(--green)", Icon: CheckCircle2 },
   media_uploaded: { translationKey: "feed.mediaUploaded", color: "var(--brand-yellow)", Icon: Camera },
   adjust: { translationKey: "feed.adjust", color: "var(--text-muted)", Icon: SlidersHorizontal },
+  store_visit: { translationKey: "feed.storeVisit", color: "#f97316", Icon: Store },
 };
 
 function formatRelative(iso: string, now: number): string {

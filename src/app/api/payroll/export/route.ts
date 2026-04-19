@@ -54,6 +54,7 @@ async function loadPreview(periodEnd?: string) {
     media: [],
     payrollRuns: [],
     payrollClosures: closuresResult.data ?? [],
+    storeVisits: [],
   };
 
   const sessions = buildManagerSessions(workspace);
