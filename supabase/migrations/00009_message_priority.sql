@@ -1,0 +1,43 @@
+-- ============================================================================
+-- 00009 — message priority + worker notif_mode
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--
+-- Wave 7 messaging polish requires two bits of schema:
+--
+--   1. messages.priority (enum) — drives the 4-radio compose UI
+--      (🔴 Urgent / 🟡 Info / 🟢 Good / 🔵 Task) and the worker-side
+--      inbox sort (urgent first) + per-card tint.
+--   2. profiles.notif_mode (text) — flips the worker's clock-in /
+--      clock-out / new-message sound effects between 'sound' and
+--      'silent'. Controlled from the worker profile toggle.
+--
+-- Both columns are read defensively in the app: if neither has been
+-- applied yet, priority defaults to 'info' and notif_mode defaults
+-- to 'sound', so the UI keeps working.
+--
+-- Rollback:
+--   alter table public.messages drop column if exists priority;
+--   drop type if exists public.message_priority;
+--   alter table public.profiles drop column if exists notif_mode;
+-- ============================================================================
+
+-- do $$ begin
+--   create type public.message_priority as enum ('urgent', 'info', 'good', 'task');
+-- exception when duplicate_object then null;
+-- end $$;
+--
+-- alter table public.messages
+--   add column if not exists priority public.message_priority not null default 'info';
+--
+-- create index if not exists idx_messages_priority_created
+--   on public.messages(recipient_id, priority, created_at desc);
+--
+-- alter table public.profiles
+--   add column if not exists notif_mode text not null default 'sound'
+--   check (notif_mode in ('sound', 'silent'));
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run from the Supabase SQL editor when you are ready to enable priority
+-- routing in the inbox + per-worker silent mode. The application code
+-- tolerates either column being absent.
