@@ -56,6 +56,14 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       .order("created_at", { ascending: false })
       .limit(60)
       .returns<Task[]>(),
+    // Worker journal feed: only the worker's own uploads.
+    //
+    // Wave X2 (00011_media_project_privacy.sql) tightens the media SELECT
+    // RLS so workers also can't peek at media they did NOT upload for
+    // projects they are NOT assigned to. This query is already narrower
+    // than that policy (uploaded_by = self), so no code change is needed
+    // here. RLS will continue to filter automatically through the SSR
+    // client.
     supabase
       .from("media")
       .select("*")
