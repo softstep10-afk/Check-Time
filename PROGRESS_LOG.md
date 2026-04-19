@@ -10,63 +10,79 @@
 
 ## ✅ Сделано и смёржено в main
 
-### Фундамент БД
-- **Миграция 00003** — 8 таблиц (messages, supply_stores, store_visits, worker_live_locations, worker_location_consents, audit_log, pay_periods, pay_period_items) + роль `owner` + `start_date`/`end_date` на projects
-- **Миграция 00004** — `store_visits.grace_started_at` (60-секундный буфер для геозон)
-- **Миграция 00005** — `app_settings` singleton со значением по умолчанию `{"geofence_radius_meters": 75}` + 2 RLS-полиси
-- **Миграция 00006** — `profiles.require_video` (для Before You Leave); идемпотентна
+### Фундамент БД (все миграции применены)
+- **00001** — foundation (профили, проекты, часы, чеки, фото, задачи)
+- **00002** — RLS политики, хелперы `is_owner()`/`is_manager()`
+- **00003** — 8 таблиц (messages, supply_stores, store_visits, worker_live_locations, worker_location_consents, audit_log, pay_periods, pay_period_items) + роль `owner`
+- **00004** — `store_visits.grace_started_at` (60-сек буфер для геозон)
+- **00005** — `app_settings` singleton с `{"geofence_radius_meters": 75}`
+- **00006** — `profiles.require_video` (идемпотентна)
+- **00007** — 🔒 зарезервирован под Волну 4 (pay models)
+- **00008** — `projects.gps_radius_m` int 25..300, default 75 ✅ ПРИМЕНЕНА 19.04.2026
 
-### Код и UI (в main, git history → `.git/logs/HEAD`)
+### Код и UI (в main)
 
 | Волна | Что сделано | Коммитов |
 |-------|-------------|----------|
-| **1** (safe-fixes) | 13 безопасных авто-фиксов из AUDIT_REPORT.md: dead code, hydration, Projects traffic-lights, Team VIDEO/TOTAL/Actions, receipt rollup, i18n Loading, annual Store Activity | 13 |
-| **1.5** (ui-polish) | 4 пост-деплой фикса: dedupe EventFeed, localized DateField, payroll empty-state с пресетами, Team cards→table | 4 |
-| **2** (geofence-function) | Edge function detect-store-visit, /admin/settings со слайдером радиуса, closeOpenStoreVisits на clock-out, store_visit events в EventFeed, worker profile «визиты за неделю», webhook doc в README | 8 |
-| **2.5** (regression-fixes) | Менеджерский /tasks (worker→/my-tasks), фикс дубля «Часы» в worker bottom-nav | 3 |
-| **3** (worker-essentials) | Before You Leave video gate, Journal с группировкой по дням, browse other projects в смене, Cancel stay checked in | 4 |
-| **5** (hours-admin) | Adjust Hours «показать работнику» чекбокс, Reset Hours to Zero панель, Bulk Payroll чекбоксы + «Process selected», DayDetailModal drill-down | 4 |
+| **1** (safe-fixes) | 13 безопасных авто-фиксов из AUDIT_REPORT.md | 13 |
+| **1.5** (ui-polish) | 4 пост-деплой фикса: dedupe EventFeed, localized DateField, payroll empty-state, Team cards→table | 4 |
+| **2** (geofence-function) | Edge function detect-store-visit, /admin/settings со слайдером радиуса, closeOpenStoreVisits на clock-out, store_visit events в EventFeed, worker profile «визиты за неделю» | 8 |
+| **2.5** (regression-fixes) | Менеджерский /tasks, фикс дубля «Часы» в worker bottom-nav | 3 |
+| **3** (worker-essentials) | Before You Leave video gate, Journal по дням, browse other projects, Cancel stay checked in | 4 |
+| **5** (hours-admin) | Adjust Hours show-to-worker, Reset Hours to Zero, Bulk Payroll, DayDetailModal | 4 |
+| **6** (project-enrichments) | Per-project GPS radius slider, Copy Project, Use my location, check-in reads gps_radius_m with fallbacks | 5 |
 
 **Всё смёржено в main через `--no-ff`.** tsc чистый, lint baseline 15 problems.
 
-⚠️ *Волна 5 готова на ветке `wave5/hours-admin`, ожидает merge команды коту.*
-
-## ✅ Ручные шаги — закрыты 19.04.2026
-
-### 1. Edge function deploy — ✅ DONE
-Задеплоено через **Supabase Dashboard Web UI** (не CLI — CLI у Андрея не установлен).
+### Edge Function + Webhook — ✅ ПРОДАКШН
 - **Function URL:** `https://vlrajjwbaxikbwvqdpft.supabase.co/functions/v1/detect-store-visit`
-- **Deployed:** 19.04.2026
-- **Verify JWT:** on (default — webhook передаёт service_role JWT автоматически)
+- **Deployed:** 19.04.2026 через Supabase Dashboard Web UI (CLI у Андрея не установлен)
+- **Webhook:** `detect_store_visit_on_location` на `worker_live_locations` INSERT → Supabase Edge Function `detect-store-visit` (POST, JWT авто)
+- **Test:** выполнен через Dashboard → Functions → Test с payload (0,0) → ответ 200 `{"ok":true,"action":"noop","detail":"outside-all"}`
 
-### 2. Database webhook — ✅ DONE
-Создан через Supabase Dashboard → Database Webhooks.
-- **Name:** `detect_store_visit_on_location`
-- **Table:** `public.worker_live_locations`
-- **Events:** INSERT
-- **Type:** Supabase Edge Functions
-- **Target:** `detect-store-visit` (POST)
-- **Headers:** `Content-type: application/json`, `Authorization: Bearer <service_role JWT>` (автоматически)
-- **Timeout:** 5000ms
+## ⏸️ В процессе
 
-**Волна 2 полностью закрыта.** Автодетект визитов в супплай-магазины работает.
+### Волна 3.5 — Production readiness
+Ветка `wave3.5/prod-readiness`. Кот пишет:
+- `src/middleware.ts` — Supabase SSR session refresh
+- `vitest` + юнит-тесты для `manager-utils.ts` payroll и `geofence.ts` haversine
+- `.github/workflows/ci.yml` — tsc + lint + vitest на push/PR
+- `README.md` — реальная документация вместо дефолтной create-next-app
 
-### 3. Consent-форма — ⬜ TODO (ДО первого боевого чекина)
-Файл `GPS_CONSENT_FORM.md` готов на EN+RU. Распечатать, подписать, подшить. Версия 1.
-Тексты формы должны совпадать с текстом модалки в `src/components/worker/GpsConsentModal.tsx`.
+**Без миграций, без новых фич. Hardening only.** ~40 мин.
+
+## 📋 Ручные шаги впереди
+
+### 1. Consent-форма — ⬜ TODO (ДО первого боевого чекина)
+Файл `GPS_CONSENT_FORM.md` готов на EN+RU. Распечатать, подписать, подшить.
+
+### 2. RBAC уточнение — под вопросом
+6-уровневая иерархия ролей (Owner/Admin/Manager/Supervisor/Driver/Worker) + матрица 30+ действий уже спроектированы в `docs/permissions.md`. RLS использует `is_owner()`/`is_manager()`. Но UI для смены ролей и все RLS по матрице — не полностью реализованы. Обсудить с Андреем какой сценарий (A/B/C) нужен — см. чат.
 
 ## 📋 Дальше по плану
 
-**Рекомендованный порядок Волн:** ~~5~~ → **6** → 7 → 8 → 4 → 9 (Волна 4 pay-models предпоследняя — самая рискованная).
+**Рекомендованный порядок:** ~~5~~ → ~~6~~ → **3.5** (сейчас) → 7 → 8 → 4 → 9.
 
-Детали и готовые промпты — в `IMPLEMENTATION_PLAN.md`.
+### Волна 7 — Messaging polish
+- 4 цвета сообщений (urgent/info/good/task), priority enum
+- «Прочту позже» кнопка в инбоксе
+- notif_mode (sound/silent) в профиле работника
+- Миграция 00009
 
-### Следующая — Волна 6 (Project enrichments)
-- GPS Radius per-project (миграция 00008)
-- Copy Project button (клон проекта без смен/задач/медиа)
-- «Use my current location» кнопка в форме создания проекта
-- Form parity check с OLD_APP_FINDINGS §20
-- **Миграция 00008** — применяется через Chrome + SQL Editor. Низкий риск.
+### Волна 8 — Reliability
+- Offline upload queue
+- STORAGE_LIMITS_MB клиентская валидация
+- Пресеты диапазонов дат
+- Media type filter (Photos/Videos/PDFs)
+- Voice input audit
+- Без миграций
+
+### Волна 4 — Pay models 🔥 РИСКОВАЯ
+- 3 модели оплаты: hourly / fixed_amount / fixed_per_project
+- Миграция 00007 (зарезервирован номер)
+- Трогает payroll — поэтому предпоследняя, после hardening и тестов
+
+### Волна 9 — Real-device testing + consent rollout
 
 ## 🗂️ Ключевые файлы-артефакты
 
@@ -76,10 +92,7 @@
 - `OLD_APP_FINDINGS.md` — 20 фич из старого HTML, сырьё для Волн 4-8
 - `GPS_CONSENT_FORM.md` — двуязычный шаблон согласия
 - `HANDOFF.md` — накопленное tribal knowledge (читать ОБЯЗАТЕЛЬНО при старте новой сессии)
-- `ABOUT_ANDREW.md` — про стиль Андрея (читать после HANDOFF.md при старте)
-- `supabase/migrations/00003_schema_gap.sql` — применена
-- `supabase/migrations/00004_geofence_grace.sql` — применена
-- `supabase/migrations/00005_app_settings.sql` — применена
-- `supabase/migrations/00006_worker_require_video.sql` — применена
+- `ABOUT_ANDREW.md` — про стиль Андрея (читать после HANDOFF.md)
+- `docs/permissions.md` — RBAC матрица 30+ действий × 6 ролей
+- `supabase/migrations/00001-00006, 00008` — все применены
 - `supabase/functions/detect-store-visit/index.ts` — ✅ задеплоена через Web UI
-- `supabase/README.md` — инструкции по deploy + webhook
