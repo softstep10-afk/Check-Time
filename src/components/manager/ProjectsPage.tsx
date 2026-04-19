@@ -5,6 +5,12 @@ import Link from "next/link";
 import { ChevronDown, ExternalLink, Copy, Check, Plus } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
+import {
+  GpsRadiusSlider,
+  GPS_RADIUS_DEFAULT,
+  clampRadius,
+} from "@/components/manager/GpsRadiusSlider";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
@@ -87,6 +93,41 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
+// 00008_project_gps_radius.sql may not be applied yet — strip the column
+// from the payload and retry once if Postgres rejects it.
+function isMissingColumn(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "PGRST204" || error.code === "42703") return true;
+  return /column .* gps_radius_m/i.test(error.message ?? "");
+}
+
+async function insertProjectTolerant(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+) {
+  const first = await supabase.from("projects").insert(payload);
+  if (first.error && isMissingColumn(first.error)) {
+    const { gps_radius_m: _omit, ...rest } = payload;
+    void _omit;
+    return supabase.from("projects").insert(rest);
+  }
+  return first;
+}
+
+async function updateProjectTolerant(
+  supabase: SupabaseClient,
+  projectId: string,
+  payload: Record<string, unknown>,
+) {
+  const first = await supabase.from("projects").update(payload).eq("id", projectId);
+  if (first.error && isMissingColumn(first.error)) {
+    const { gps_radius_m: _omit, ...rest } = payload;
+    void _omit;
+    return supabase.from("projects").update(rest).eq("id", projectId);
+  }
+  return first;
+}
+
 function getProjectTone(status: ProjectStatus) {
   if (status === "paused" || status === "archived") {
     return "neutral";
@@ -134,6 +175,9 @@ export function ProjectsPage({
     const notes = formData.get("notes")?.toString().trim() ?? "";
     const rate = Number.parseFloat(formData.get("rate")?.toString() ?? "0");
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? "200", 10);
+    const gpsRadius = clampRadius(
+      Number.parseInt(formData.get("gps_radius_m")?.toString() ?? `${GPS_RADIUS_DEFAULT}`, 10),
+    );
     const lat = Number.parseFloat(formData.get("lat")?.toString() ?? "");
     const lng = Number.parseFloat(formData.get("lng")?.toString() ?? "");
     const startDate = formData.get("start_date")?.toString() ?? "";
@@ -147,13 +191,14 @@ export function ProjectsPage({
     setBusyKey("create");
     setMessage("");
 
-    const { error } = await supabase.from("projects").insert({
+    const { error } = await insertProjectTolerant(supabase, {
       org_id: orgId,
       name,
       address: address || null,
       notes: notes || null,
       rate: Number.isFinite(rate) ? rate : 25,
       radius_m: Number.isFinite(radius) ? radius : 200,
+      gps_radius_m: gpsRadius,
       site_point:
         Number.isFinite(lat) && Number.isFinite(lng)
           ? toSupabasePoint({ lat, lng })
@@ -187,6 +232,9 @@ export function ProjectsPage({
     const notes = formData.get("notes")?.toString().trim() ?? "";
     const rate = Number.parseFloat(formData.get("rate")?.toString() ?? "0");
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? "200", 10);
+    const gpsRadius = clampRadius(
+      Number.parseInt(formData.get("gps_radius_m")?.toString() ?? `${GPS_RADIUS_DEFAULT}`, 10),
+    );
     const status = (formData.get("status")?.toString() ?? "active") as ProjectStatus;
     const lat = Number.parseFloat(formData.get("lat")?.toString() ?? "");
     const lng = Number.parseFloat(formData.get("lng")?.toString() ?? "");
@@ -201,22 +249,13 @@ export function ProjectsPage({
     setBusyKey(`update-${projectId}`);
     setMessage("");
 
-    const payload: {
-      name: string;
-      address: string | null;
-      notes: string | null;
-      rate: number;
-      radius_m: number;
-      status: ProjectStatus;
-      site_point?: string;
-      start_date?: string | null;
-      end_date?: string | null;
-    } = {
+    const payload: Record<string, unknown> = {
       name,
       address: address || null,
       notes: notes || null,
       rate: Number.isFinite(rate) ? rate : 25,
       radius_m: Number.isFinite(radius) ? radius : 200,
+      gps_radius_m: gpsRadius,
       status,
       start_date: startDate || null,
       end_date: endDate || null,
@@ -226,7 +265,7 @@ export function ProjectsPage({
       payload.site_point = toSupabasePoint({ lat, lng });
     }
 
-    const { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+    const { error } = await updateProjectTolerant(supabase, projectId, payload);
 
     if (error) {
       setMessage(error.message);
@@ -316,6 +355,9 @@ export function ProjectsPage({
             defaultValue="200"
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
+          <div className="md:col-span-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3">
+            <GpsRadiusSlider />
+          </div>
           <input
             name="lat"
             type="number"
@@ -537,6 +579,11 @@ export function ProjectsPage({
                         <option value="completed">{t("common.completed")}</option>
                         <option value="archived">{t("common.archived")}</option>
                       </select>
+                    </div>
+                    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3">
+                      <GpsRadiusSlider
+                        defaultValue={(project as { gps_radius_m?: number | null }).gps_radius_m ?? GPS_RADIUS_DEFAULT}
+                      />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <input
