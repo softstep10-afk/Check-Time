@@ -34,6 +34,10 @@ export function ClockPage() {
       shell.projects.find((project) => project.id === shell.clockState.currentProjectId) ?? null,
     [shell.clockState.currentProjectId, shell.projects],
   );
+  const otherProjects = useMemo(
+    () => shell.projects.filter((project) => project.id !== shell.clockState.currentProjectId),
+    [shell.projects, shell.clockState.currentProjectId],
+  );
   const lastClosedSession =
     shell.sessions.find((session) => session.clockOutTime !== null) ?? null;
   const showGpsCheck = lastGpsCheck?.action === "clock_in";
@@ -115,11 +119,26 @@ export function ClockPage() {
         </div>
 
         {shell.clockState.isClockedIn && activeProject ? (
-          <div className="surface-panel mt-4 p-3">
+          <div
+            id="active-project"
+            className="surface-panel mt-4 p-3"
+            style={{
+              borderColor: "var(--green)",
+              boxShadow: "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 14px rgba(15, 168, 120, 0.16)",
+            }}
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-sm font-semibold text-[var(--text-primary)]">
-                  {activeProject.name}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-[var(--text-primary)]">
+                    {activeProject.name}
+                  </span>
+                  <span
+                    className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                    style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
+                  >
+                    {t("clock.activeProjectBadge")}
+                  </span>
                 </div>
                 <div className="mt-1 text-xs text-[var(--text-secondary)]">
                   {activeProject.address ?? t("clock.currentSite")}
@@ -206,6 +225,52 @@ export function ClockPage() {
           </p>
         ) : null}
       </section>
+
+      {/* Other projects (read-only browse while clocked in) */}
+      {shell.clockState.isClockedIn && otherProjects.length > 0 ? (
+        <section className="surface-card p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                {t("clock.otherProjects")}
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                {t("clock.readOnlyHint")}
+              </p>
+            </div>
+            <a
+              href="#active-project"
+              className="rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[11px] font-semibold"
+              style={{ borderColor: "rgba(15, 168, 120, 0.3)", color: "var(--green)" }}
+            >
+              {t("clock.backToMyProject")}
+            </a>
+          </div>
+          <div className="mt-3 space-y-2">
+            {otherProjects.map((project) => (
+              <div
+                key={project.id}
+                className="surface-panel p-3"
+                style={{ background: "var(--bg-primary)", opacity: 0.85 }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                      {project.name}
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {project.address ?? t("clock.assignedSite")}
+                    </div>
+                  </div>
+                  <div className="text-right text-[11px] text-[var(--text-muted)]">
+                    {project.site ? `${project.radius_m}${t("clock.radiusM")}` : t("clock.openSite")}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* Driver receipt shortcut */}
       {shell.profile.role === "driver" && shell.clockState.isClockedIn && shell.clockState.currentProjectId ? (
