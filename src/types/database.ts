@@ -37,6 +37,10 @@ export interface Profile {
   settings: Record<string, unknown>;
   last_clock_in: string | null;
   current_project: string | null;
+  // Migration 00009 introduces the notif_mode column. Older environments
+  // may not have it yet; the worker shell reads it defensively and falls
+  // back to localStorage for the silent-mode toggle.
+  notif_mode?: "sound" | "silent" | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;

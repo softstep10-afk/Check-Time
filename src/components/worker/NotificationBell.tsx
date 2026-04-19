@@ -67,19 +67,18 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
-  const [deferredIds, setDeferredIds] = useState<Set<string>>(new Set());
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Hydrate deferred set from localStorage on mount.
-  useEffect(() => {
-    if (typeof window === "undefined" || !profileId) return;
+  // Lazy-init from localStorage so the load is one-shot at mount and
+  // doesn't trigger the react-hooks/set-state-in-effect lint.
+  const [deferredIds, setDeferredIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined" || !profileId) return new Set<string>();
     try {
       const raw = window.localStorage.getItem(`check-time-defer-${profileId}`);
-      if (raw) setDeferredIds(new Set(JSON.parse(raw) as string[]));
+      return raw ? new Set(JSON.parse(raw) as string[]) : new Set<string>();
     } catch {
-      // Ignore — start with an empty set.
+      return new Set<string>();
     }
-  }, [profileId]);
+  });
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   function deferMessage(id: string) {
     setDeferredIds((prev) => {

@@ -9,7 +9,7 @@ import {
 import { useTranslation } from "@/lib/i18n";
 
 export function HoursPage() {
-  const { shell } = useWorkerShell();
+  const { shell, muted, toggleMute } = useWorkerShell();
   const { t } = useTranslation();
   const groupedSessions = shell.sessions.reduce<Map<string, typeof shell.sessions>>(
     (groups, session) => {
@@ -34,6 +34,34 @@ export function HoursPage() {
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
           {t("hours.description")}
         </p>
+      </section>
+
+      <section className="surface-card p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+              <span aria-hidden>{muted ? "🔇" : "🔊"}</span>
+              <span>{t("messages.silentMode")}</span>
+            </div>
+            <p className="mt-1 max-w-[42ch] text-xs text-[var(--text-secondary)]">
+              {t("messages.silentModeHelp")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={toggleMute}
+            role="switch"
+            aria-checked={muted}
+            aria-label={t("messages.silentMode")}
+            className="relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors"
+            style={{ background: muted ? "var(--brand-yellow)" : "var(--border-default)" }}
+          >
+            <span
+              className="inline-block h-5 w-5 rounded-full bg-white shadow transition-transform"
+              style={{ transform: muted ? "translateX(22px)" : "translateX(4px)" }}
+            />
+          </button>
+        </div>
       </section>
 
       <section className="surface-card p-4">
