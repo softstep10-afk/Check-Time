@@ -7,7 +7,7 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { formatEventTime } from "@/lib/worker-utils";
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
-import type { AppMessage } from "@/lib/message-types";
+import type { AppMessage, MessagePriority } from "@/lib/message-types";
 
 const PREVIEW_MESSAGES: AppMessage[] = [
   {
@@ -17,6 +17,7 @@ const PREVIEW_MESSAGES: AppMessage[] = [
     to_id: "00000000-0000-0000-0000-000000000011",
     text: "Wear hard hats on level 3 today — crane overhead",
     color: "#ef4444",
+    priority: "urgent",
     read: false,
     created_at: new Date(Date.now() - 15 * 60_000).toISOString(),
     attachment: {
@@ -33,10 +34,27 @@ const PREVIEW_MESSAGES: AppMessage[] = [
     to_id: "00000000-0000-0000-0000-000000000011",
     text: "Glass delivery confirmed for 2 PM, keep staging area clear",
     color: "#3b82f6",
+    priority: "task",
     read: false,
     created_at: new Date(Date.now() - 45 * 60_000).toISOString(),
   },
 ];
+
+function inferPriority(row: { priority?: string | null; color?: string | null; metadata?: Record<string, unknown> | null }): MessagePriority {
+  const fromColumn = row.priority;
+  if (fromColumn === "urgent" || fromColumn === "info" || fromColumn === "good" || fromColumn === "task") {
+    return fromColumn;
+  }
+  const fromMeta = (row.metadata as Record<string, unknown> | null)?.priority;
+  if (fromMeta === "urgent" || fromMeta === "info" || fromMeta === "good" || fromMeta === "task") {
+    return fromMeta;
+  }
+  // Legacy color-based fallback for rows written before Wave 7.
+  if (row.color === "#ef4444") return "urgent";
+  if (row.color === "#22c55e") return "good";
+  if (row.color === "#3b82f6") return "task";
+  return "info";
+}
 
 export function NotificationBell({ profileId }: { profileId?: string }) {
   const { t } = useTranslation();
@@ -69,8 +87,10 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
           recipient_id: string;
           text: string;
           color: string;
+          priority?: string | null;
           read: boolean;
           attachment: Record<string, unknown> | null;
+          metadata?: Record<string, unknown> | null;
           created_at: string;
         }>;
         setMessages(
@@ -81,6 +101,7 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
             to_id: r.recipient_id,
             text: r.text,
             color: r.color as AppMessage["color"],
+            priority: inferPriority(r),
             read: r.read,
             created_at: r.created_at,
             attachment: r.attachment

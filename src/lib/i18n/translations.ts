@@ -551,6 +551,15 @@ export const translations = {
   "messages.uploading": { en: "Uploading...", ru: "Загрузка..." },
   "messages.uploadFailed": { en: "Upload failed", ru: "Ошибка загрузки" },
   "messages.openFile": { en: "Open", ru: "Открыть" },
+  "messages.priority": { en: "Priority", ru: "Приоритет" },
+  "messages.priorityUrgent": { en: "Urgent", ru: "Срочное" },
+  "messages.priorityInfo": { en: "Info", ru: "Информация" },
+  "messages.priorityGood": { en: "Good", ru: "Хорошее" },
+  "messages.priorityTask": { en: "Task", ru: "Задача" },
+  "messages.readLater": { en: "Read later", ru: "Прочту позже" },
+  "messages.readLaterTip": { en: "Keeps the message in your inbox.", ru: "Сообщение останется в инбоксе." },
+  "messages.silentMode": { en: "Silent mode", ru: "Беззвучный режим" },
+  "messages.silentModeHelp": { en: "Mutes clock-in, clock-out, and new-message sounds.", ru: "Отключает звуки начала смены, конца смены и новых сообщений." },
 
   // ── Event Feed ──
   "feed.title": { en: "Recent Events", ru: "Последние события" },

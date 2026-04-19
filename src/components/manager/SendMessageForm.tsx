@@ -7,15 +7,14 @@ import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
-import type { MessageAttachment, MessageColor } from "@/lib/message-types";
+import {
+  PRIORITY_COLOR,
+  PRIORITY_EMOJI,
+  type MessageAttachment,
+  type MessagePriority,
+} from "@/lib/message-types";
 
-const COLOR_OPTIONS: MessageColor[] = [
-  "#22c55e",
-  "#3b82f6",
-  "#f59e0b",
-  "#ef4444",
-  "#a855f7",
-];
+const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
 
 const ACCEPT = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,application/pdf";
 const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
@@ -42,7 +41,8 @@ export function SendMessageForm({
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [text, setText] = useState("");
-  const [color, setColor] = useState<MessageColor>("#3b82f6");
+  const [priority, setPriority] = useState<MessagePriority>("info");
+  const color = PRIORITY_COLOR[priority];
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -128,15 +128,20 @@ export function SendMessageForm({
       void attachment;
       await new Promise((resolve) => setTimeout(resolve, 300));
     } else {
-      const { error: insertErr } = await supabase.from("messages").insert({
+      const basePayload = {
         org_id: orgId,
         sender_id: senderId,
         recipient_id: recipientId,
         text: text.trim(),
         color,
         attachment: attachment ? JSON.parse(JSON.stringify(attachment)) : null,
-        metadata: {},
-      });
+        metadata: { priority },
+      };
+      // Try with the priority column first; fall back if 00009 hasn't run.
+      let insertErr = (await supabase.from("messages").insert({ ...basePayload, priority })).error;
+      if (insertErr && /column .* priority/i.test(insertErr.message)) {
+        insertErr = (await supabase.from("messages").insert(basePayload)).error;
+      }
       if (insertErr) {
         setError(insertErr.message);
         setSending(false);
@@ -160,23 +165,48 @@ export function SendMessageForm({
         {t("messages.send")} → <span className="font-semibold text-[var(--text-primary)]">{recipientName}</span>
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-[var(--text-muted)]">{t("messages.color")}</span>
-        {COLOR_OPTIONS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => setColor(c)}
-            className="h-5 w-5 rounded-full transition-transform"
-            style={{
-              background: c,
-              transform: color === c ? "scale(1.3)" : "scale(1)",
-              boxShadow: color === c ? `0 0 0 2px var(--bg-card), 0 0 0 3px ${c}` : "none",
-            }}
-            aria-label={c}
-          />
-        ))}
-      </div>
+      <fieldset className="space-y-1.5">
+        <legend className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+          {t("messages.priority")}
+        </legend>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {PRIORITY_OPTIONS.map((p) => {
+            const accent = PRIORITY_COLOR[p];
+            const selected = priority === p;
+            const labelKey = (
+              p === "urgent"
+                ? "messages.priorityUrgent"
+                : p === "info"
+                  ? "messages.priorityInfo"
+                  : p === "good"
+                    ? "messages.priorityGood"
+                    : "messages.priorityTask"
+            ) as Parameters<typeof t>[0];
+            return (
+              <label
+                key={p}
+                className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-sm)] border px-2.5 py-2 text-xs font-semibold"
+                style={{
+                  borderColor: selected ? accent : "var(--border-default)",
+                  background: selected ? `${accent}1f` : "transparent",
+                  color: selected ? accent : "var(--text-secondary)",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="priority"
+                  value={p}
+                  checked={selected}
+                  onChange={() => setPriority(p)}
+                  className="sr-only"
+                />
+                <span aria-hidden>{PRIORITY_EMOJI[p]}</span>
+                <span>{t(labelKey)}</span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
 
       {/* Attachment preview */}
       {pendingFile ? (
