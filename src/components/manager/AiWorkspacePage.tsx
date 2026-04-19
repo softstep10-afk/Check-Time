@@ -7,6 +7,7 @@ import { formatDateTime } from "@/lib/worker-utils";
 import { useVoice } from "@/lib/hooks/useVoice";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { DateField } from "@/components/shared/DateField";
 import type {
   AiMediaCard,
   AiReportCard,
@@ -269,8 +270,7 @@ export function AiWorkspacePage({
                 </option>
               ))}
             </select>
-            <input
-              type="date"
+            <DateField
               value={reportDate}
               onChange={(event) => setReportDate(event.target.value)}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"

@@ -22,6 +22,8 @@ export const translations = {
   "common.minShort": { en: "min", ru: "мин" },
   "common.loading": { en: "Loading...", ru: "Загрузка..." },
   "common.errorTryAgain": { en: "Error — try again", ru: "Ошибка — попробуйте снова" },
+  "common.from": { en: "From", ru: "С" },
+  "common.to": { en: "To", ru: "По" },
   "common.today": { en: "Today", ru: "Сегодня" },
   "common.thisWeek": { en: "This Week", ru: "За неделю" },
   "common.sessions": { en: "Sessions", ru: "Сессии" },

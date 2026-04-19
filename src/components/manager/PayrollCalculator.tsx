@@ -5,6 +5,7 @@ import { Download, Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
+import { DateField } from "@/components/shared/DateField";
 import { logAudit } from "@/lib/audit";
 import type { Profile } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
@@ -595,8 +596,8 @@ export function PayrollCalculator({
               ))}
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
+              <DateField label={t("payroll.startDate")} value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
+              <DateField label={t("payroll.endDate")} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
               <select value={periodType} onChange={(e) => setPeriodType(e.target.value as PeriodType)} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none">
                 <option value="weekly">{t("payroll.weekly")}</option>
                 <option value="biweekly">{t("payroll.biweekly")}</option>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { DateField } from "@/components/shared/DateField";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
@@ -529,9 +530,8 @@ export function ProjectDetailPage({
                 <option value="high">{t("projectDetail.high")}</option>
                 <option value="urgent">{t("projectDetail.urgent")}</option>
               </select>
-              <input
+              <DateField
                 name="due_date"
-                type="date"
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
             </div>
@@ -1146,9 +1146,8 @@ function ReceiptsSection({
         ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <input
+          <DateField
             name="purchase_date"
-            type="date"
             defaultValue={new Date().toISOString().slice(0, 10)}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
           />

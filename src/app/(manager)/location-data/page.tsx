@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
+import { DateField } from "@/components/shared/DateField";
 import type { Profile } from "@/types/database";
 
 export default function LocationDataPage() {
@@ -119,18 +120,16 @@ export default function LocationDataPage() {
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
-          <input
-            type="date"
+          <DateField
+            label={t("common.from")}
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
-            placeholder="From"
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
-          <input
-            type="date"
+          <DateField
+            label={t("common.to")}
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
-            placeholder="To"
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
           <button
