@@ -32,6 +32,7 @@ import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
+import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import type { AppMessage } from "@/lib/message-types";
 
 const navItems = [
@@ -379,9 +380,13 @@ export function WorkerShell({
       const gps = await getCurrentPosition();
       const timestamp = new Date().toISOString();
 
+      // Resolve check-in radius: per-project gps_radius_m → app_settings → 75m.
+      const appRadius = await getAppGeofenceRadiusM(supabase);
+      const effectiveRadius = resolveProjectRadiusM(project, appRadius);
+
       if (project.site) {
         const distanceMeters = haversineMeters(project.site, gps);
-        const allowedDistance = project.radius_m + Math.max(gps.accuracy, 25);
+        const allowedDistance = effectiveRadius + Math.max(gps.accuracy, 25);
 
         setLastGpsCheck({
           action: "clock_in",
@@ -389,7 +394,7 @@ export function WorkerShell({
           projectName: project.name,
           position: { lat: gps.lat, lng: gps.lng },
           site: project.site,
-          radiusMeters: project.radius_m,
+          radiusMeters: effectiveRadius,
           distanceMeters: Math.round(distanceMeters),
           accuracy: gps.accuracy,
           withinFence: distanceMeters <= allowedDistance,
@@ -411,7 +416,7 @@ export function WorkerShell({
           projectName: project.name,
           position: { lat: gps.lat, lng: gps.lng },
           site: null,
-          radiusMeters: project.radius_m,
+          radiusMeters: effectiveRadius,
           distanceMeters: null,
           accuracy: gps.accuracy,
           withinFence: null,

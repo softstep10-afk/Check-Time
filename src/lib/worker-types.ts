@@ -21,6 +21,7 @@ export interface WorkerGpsCheck {
 export interface WorkerProject extends Project {
   assignedAt: string | null;
   site: WorkerGeoPoint | null;
+  gps_radius_m?: number | null;
 }
 
 export interface WorkerTaskItem extends Task {
