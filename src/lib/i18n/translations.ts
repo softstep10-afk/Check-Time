@@ -512,6 +512,9 @@ export const translations = {
   "feed.mediaUploaded": { en: "uploaded", ru: "загрузил" },
   "feed.adjust": { en: "hours adjusted", ru: "часы скорректированы" },
   "feed.storeVisit": { en: "visited", ru: "посетил" },
+  "teamMember.storeVisitsThisWeek": { en: "Store visits this week", ru: "Посещения магазинов на неделе" },
+  "teamMember.noStoreVisits": { en: "No store visits in the last 7 days.", ru: "За последние 7 дней посещений нет." },
+  "teamMember.storeVisitMin": { en: "min", ru: "мин" },
 
   // ── Receipts ──
   "receipts.title": { en: "Receipts", ru: "Чеки" },
