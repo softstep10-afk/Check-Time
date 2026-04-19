@@ -480,4 +480,18 @@ Server-side store-visit auto-detection. All landed on `wave2/geofence-function`.
 
 ---
 
+## Wave 2.5 — regression fixes (2026-04-19)
+
+Two regressions caught during a manual UI sweep after Wave 2 shipped.
+Both landed on `wave2.5/regression-fixes`.
+
+| # | Issue | Resolution | Commit |
+|---|-------|-----------|--------|
+| 1 | Navigating to `/tasks` rendered the WorkerShell (Preview Worker header, timer, "Отметить готовым", bottom tab bar) instead of a manager view, because only `app/(worker)/tasks/page.tsx` claimed that URL. | Rename `app/(worker)/tasks/` → `app/(worker)/my-tasks/` (worker bottom-nav href updated). Add `app/(manager)/tasks/page.tsx` + new `ManagerTasksPage` component with the spec layout: left "Assign Task" form (title, project, worker, priority, due date, description) and right "All Tasks" list filterable by project + status, with inline status select + soft-delete trash button. Sidebar gets a new Tasks (ClipboardCheck) entry under the Work section. | `08207fe` |
+| 2 | Worker bottom tab bar showed Часы / Журнал / Задачи / Часы — the leftmost and rightmost labels were both "Часы" because `worker.navClock` and `worker.navHours` both translated to that word. | Change `worker.navClock` Russian to "Смена" (shift) — that matches what the `/clock` screen actually does. `/hours` stays "Часы". English labels (Clock vs Hours) were already distinct. | `b98cfac` |
+
+**Verification:** `tsc --noEmit` clean. ESLint problems unchanged at 15 / 5 errors. Routes `/tasks` (manager view, RU "Назначить задачу" + "Все задачи" verified) and `/my-tasks` (worker view) both return HTTP 200. Worker `/clock` HTML now renders 4 distinct nav labels in RU (Смена / Журнал / Задачи / Часы — one of each).
+
+---
+
 *End of report.*
