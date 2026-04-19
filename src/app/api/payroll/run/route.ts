@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       media: [],
       payrollRuns: [],
       payrollClosures: closuresResult.data ?? [],
+      storeVisits: [],
     };
 
     const sessions = buildManagerSessions(workspace);

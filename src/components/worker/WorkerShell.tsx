@@ -31,6 +31,7 @@ import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
+import { closeOpenStoreVisits } from "@/lib/store-visits";
 import type { AppMessage } from "@/lib/message-types";
 
 const navItems = [
@@ -552,6 +553,10 @@ export function WorkerShell({
       if (profileError) {
         console.warn("Profile sync failed after clock-out:", profileError.message);
       }
+
+      // Close any open store_visit rows so the worker isn't permanently
+      // "inside" a store after their shift ends.
+      await closeOpenStoreVisits(supabase, shell.profile.id, timestamp);
 
       const nextSessions = shell.sessions.map((session) => {
         if (session.clockOutTime || session.clockInEventId !== shell.clockState.openEventId) {

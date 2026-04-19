@@ -10,6 +10,7 @@ import type {
   TimeEvent,
   UserRole,
 } from "@/types/database";
+import type { StoreVisit } from "@/lib/store-types";
 
 export interface ManagerWorkspaceData {
   manager: Profile;
@@ -22,6 +23,7 @@ export interface ManagerWorkspaceData {
   media: Media[];
   payrollRuns: PayrollRun[];
   payrollClosures: PayrollClosure[];
+  storeVisits: StoreVisit[];
 }
 
 export interface ManagerSession {

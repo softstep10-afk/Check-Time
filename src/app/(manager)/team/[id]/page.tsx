@@ -27,6 +27,19 @@ export default async function TeamMemberRoutePage({
   const tasks = data.tasks.filter((task) => task.assigned_to === id && !task.deleted_at).slice(0, 20);
   const workerSessions = sessions.filter((session) => session.profileId === id).slice(0, 20);
 
+  // Closed store visits in the last 7 days, newest first.
+  // Date.now() is fine here — server component, runs once per request.
+  // eslint-disable-next-line react-hooks/purity
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const workerStoreVisits = data.storeVisits
+    .filter(
+      (visit) =>
+        visit.worker_id === id &&
+        Boolean(visit.exited_at) &&
+        new Date(visit.entered_at).getTime() >= sevenDaysAgo,
+    )
+    .slice(0, 20);
+
   return (
     <TeamMemberPage
       orgId={data.manager.org_id}
@@ -36,6 +49,7 @@ export default async function TeamMemberRoutePage({
       assignments={assignments}
       tasks={tasks}
       sessions={workerSessions}
+      storeVisits={workerStoreVisits}
     />
   );
 }

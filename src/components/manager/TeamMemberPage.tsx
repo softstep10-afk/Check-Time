@@ -11,6 +11,8 @@ import type {
   ManagerSession,
 } from "@/lib/manager-types";
 import type { ProjectAssignment, Task, UserRole } from "@/types/database";
+import type { StoreVisit } from "@/lib/store-types";
+import { Store } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
@@ -32,6 +34,7 @@ export function TeamMemberPage({
   assignments,
   tasks,
   sessions,
+  storeVisits,
 }: {
   orgId: string;
   managerId: string;
@@ -40,6 +43,7 @@ export function TeamMemberPage({
   assignments: ProjectAssignment[];
   tasks: Task[];
   sessions: ManagerSession[];
+  storeVisits: StoreVisit[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -656,6 +660,53 @@ export function TeamMemberPage({
                   ) : null}
                 </div>
               ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+          <div className="flex items-center gap-2">
+            <Store size={16} style={{ color: "#f97316" }} />
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("teamMember.storeVisitsThisWeek")}
+            </h2>
+          </div>
+          <div className="mt-4 space-y-2">
+            {storeVisits.length === 0 ? (
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+                {t("teamMember.noStoreVisits")}
+              </div>
+            ) : (
+              storeVisits.map((visit) => {
+                const minutes = Math.max(1, Math.round((visit.duration_seconds ?? 0) / 60));
+                return (
+                  <div
+                    key={visit.id}
+                    className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-[var(--text-primary)]">
+                        {visit.store_chain || "Store"}
+                        <span className="ml-1 font-normal text-[var(--text-secondary)]">
+                          ({visit.store_name})
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-[var(--text-muted)]">
+                        {formatDateTime(visit.entered_at)}
+                        {visit.source_project_name ? ` · ${visit.source_project_name}` : ""}
+                      </div>
+                    </div>
+                    <span
+                      className="shrink-0 whitespace-nowrap font-mono text-sm font-semibold"
+                      style={{ color: "var(--brand-yellow)" }}
+                    >
+                      {minutes} {t("teamMember.storeVisitMin")}
+                    </span>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>

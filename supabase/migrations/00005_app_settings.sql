@@ -1,0 +1,60 @@
+-- ============================================================================
+-- 00005 — public.app_settings (singleton row)
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--
+-- Stores org-wide configuration that does not warrant its own table.
+-- Today: geofence_radius_meters (50–150). Future keys go in the same jsonb.
+--
+-- Read path:
+--   • Edge function detect-store-visit reads .settings->>geofence_radius_meters
+--     (cached 60s in-memory).
+--   • UI at /admin/settings reads/writes via service role from a server
+--     component (or via the supabase-js client when the requester is owner).
+--
+-- RLS:
+--   • Owners can read + update.
+--   • Everyone else: read-only (so the radius value can be displayed in the
+--     worker GPS consent screen).
+-- ============================================================================
+
+-- create table if not exists public.app_settings (
+--   id          smallint primary key default 1,
+--   settings    jsonb not null default '{"geofence_radius_meters": 75}',
+--   updated_at  timestamptz not null default now(),
+--   updated_by  uuid references public.profiles(id) on delete set null,
+--   constraint app_settings_singleton check (id = 1)
+-- );
+--
+-- insert into public.app_settings (id, settings)
+-- values (1, '{"geofence_radius_meters": 75}')
+-- on conflict (id) do nothing;
+--
+-- alter table public.app_settings enable row level security;
+--
+-- drop policy if exists app_settings_select_all on public.app_settings;
+-- create policy app_settings_select_all
+--   on public.app_settings
+--   for select
+--   using (true);
+--
+-- drop policy if exists app_settings_update_owner on public.app_settings;
+-- create policy app_settings_update_owner
+--   on public.app_settings
+--   for update
+--   using (
+--     exists (
+--       select 1 from public.profiles p
+--       where p.id = auth.uid() and p.role in ('owner', 'admin')
+--     )
+--   )
+--   with check (
+--     exists (
+--       select 1 from public.profiles p
+--       where p.id = auth.uid() and p.role in ('owner', 'admin')
+--     )
+--   );
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run from the Supabase SQL editor when you are ready to expose the
+-- owner-adjustable geofence radius UI.

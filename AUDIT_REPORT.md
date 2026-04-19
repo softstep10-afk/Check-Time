@@ -462,4 +462,22 @@ All landed on `wave1.5/ui-polish`.
 
 ---
 
+## Wave 2 — Geofence edge function (2026-04-19)
+
+Server-side store-visit auto-detection. All landed on `wave2/geofence-function`.
+
+| # | Item | Resolution | Commit |
+|---|------|-----------|--------|
+| 1 | Edge function `detect-store-visit` for the geofence state machine | New `supabase/functions/detect-store-visit/index.ts` (Deno). Loads active stores + radius (cached), runs haversine, walks open/inside/switch/grace/close transitions, deletes drive-bys (< 3 min), best-effort writes `audit_log`. Service-role auth, INSERT-only payloads, tolerates 00004/00005 absent. Excluded `supabase/functions` from Next tsconfig. | `1ece6f8` |
+| 2 | Migration stubs (NOT applied) | `00004_geofence_grace.sql` adds `store_visits.grace_started_at` + partial index; `00005_app_settings.sql` creates the singleton config table with owner/admin RLS. Both files are commented with a "RUN MANUALLY via Supabase SQL editor" header. | `82bc386` |
+| 3 | Close open `store_visits` on clock-out | New `src/lib/store-visits.ts → closeOpenStoreVisits()` mirrors the function's close logic (drive-by delete, otherwise stamp exited_at + duration). Wired into `WorkerShell.clockOut()` and `ForceCheckoutButton.handleConfirm()`. Errors are swallowed so the actual clock-out cannot be blocked. | `a7e11e0` |
+| 4 | Owner-only `/admin/settings` with geofence radius slider | New server route + `AdminSettingsPage` client component. Range slider 50–150m (step 5, default 75) reads/writes `app_settings.id=1`. Friendly banner when migration 00005 hasn't been run. Sidebar gets an owner-only "Admin Settings" entry (Sliders icon). | `a66a837` |
+| 5 | `store_visit` events in Overview EventFeed | Extended `FeedEvent` kind, added `feed.storeVisit` translation, pulled `storeVisits` into `ManagerWorkspaceData` (best-effort load), and emit one feed entry per closed visit formatted as `{chain} ({store}) — {N} min`. Backfilled `storeVisits=[]` in preview data and the two payroll API routes. | `815fefc` |
+| 6 | Worker profile shows store visits this week | `team/[id]` route filters `data.storeVisits` by worker + last 7 days + closed; `TeamMemberPage` accepts a new `storeVisits` prop and renders a Store-iconed section above the danger zone. Empty state for environments without geofence data. | `f644fa6` |
+| 7 | `supabase/README.md` covering the function + webhook setup | New README walks through repo layout, local dev (`supabase functions serve`), deploy, the one-time **Database → Webhooks** UI step (table, event, URL, headers, body), a copy-paste curl smoke test with expected per-branch responses, and the graceful-degradation behaviour when 00004/00005 aren't applied yet. | `87fc6f0` |
+
+**Verification:** `tsc --noEmit` clean. ESLint 15 / 5 errors — same as wave1.5 baseline (one new Date.now flag in the team route was suppressed inline with a comment explaining it runs once per server-side request). All target routes return HTTP 200; `/admin/settings` renders the radius slider, `/team/[worker-id]` renders the new "Store visits this week" panel (Russian "Посещения магазинов на неделе" verified). Edge function not yet deployed and webhook not yet wired — see `supabase/README.md` for the operator runbook.
+
+---
+
 *End of report.*
