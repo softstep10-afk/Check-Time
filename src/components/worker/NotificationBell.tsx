@@ -67,7 +67,37 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
+  const [deferredIds, setDeferredIds] = useState<Set<string>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Hydrate deferred set from localStorage on mount.
+  useEffect(() => {
+    if (typeof window === "undefined" || !profileId) return;
+    try {
+      const raw = window.localStorage.getItem(`check-time-defer-${profileId}`);
+      if (raw) setDeferredIds(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      // Ignore — start with an empty set.
+    }
+  }, [profileId]);
+
+  function deferMessage(id: string) {
+    setDeferredIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      if (typeof window !== "undefined" && profileId) {
+        try {
+          window.localStorage.setItem(
+            `check-time-defer-${profileId}`,
+            JSON.stringify([...next]),
+          );
+        } catch {
+          // Ignore quota errors.
+        }
+      }
+      return next;
+    });
+  }
 
   // Load messages
   useEffect(() => {
@@ -213,13 +243,17 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
             ) : (
               sortedMessages.map((msg) => {
                 const accent = PRIORITY_COLOR[msg.priority];
-                // Card tint: stronger for unread urgent, gentler for unread
-                // info/good/task, transparent once read.
+                const deferred = deferredIds.has(msg.id);
+                // Card tint: full strength for unread urgent, lighter for
+                // other unread, faintly muted for deferred-but-still-unread,
+                // transparent once truly read.
                 const tint = msg.read
                   ? "transparent"
-                  : msg.priority === "urgent"
-                    ? `${accent}1f`
-                    : `${accent}10`;
+                  : deferred
+                    ? `${accent}08`
+                    : msg.priority === "urgent"
+                      ? `${accent}1f`
+                      : `${accent}10`;
                 return (
                   <div
                     key={msg.id}
@@ -228,31 +262,51 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
                       borderColor: "var(--border-subtle)",
                       borderLeftColor: accent,
                       background: tint,
+                      opacity: deferred && !msg.read ? 0.7 : 1,
                     }}
                   >
                     <div className="flex items-start gap-2">
                       <span
                         className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
-                        style={{ background: accent }}
+                        style={{
+                          background: accent,
+                          opacity: deferred && !msg.read ? 0.5 : 1,
+                        }}
                       />
                       <div className="min-w-0 flex-1">
                         <div className="text-sm text-[var(--text-primary)]">{msg.text}</div>
                         {msg.attachment ? (
                           <MessageAttachmentView attachment={msg.attachment} />
                         ) : null}
-                        <div className="mt-1 flex items-center justify-between gap-2">
+                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-[10px] text-[var(--text-muted)]">
                             {msg.from_name ? `${msg.from_name} • ` : ""}{formatEventTime(msg.created_at)}
                           </span>
                           {!msg.read ? (
-                            <button
-                              type="button"
-                              onClick={() => void markRead(msg.id)}
-                              className="shrink-0 rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-semibold"
-                              style={{ background: `${accent}1f`, color: accent }}
-                            >
-                              {t("messages.gotIt")}
-                            </button>
+                            <div className="flex shrink-0 items-center gap-1.5">
+                              {!deferred ? (
+                                <button
+                                  type="button"
+                                  onClick={() => deferMessage(msg.id)}
+                                  title={t("messages.readLaterTip")}
+                                  className="rounded-[var(--radius-sm)] border px-2 py-0.5 text-[10px] font-semibold"
+                                  style={{
+                                    borderColor: "var(--border-default)",
+                                    color: "var(--text-secondary)",
+                                  }}
+                                >
+                                  📖 {t("messages.readLater")}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => void markRead(msg.id)}
+                                className="rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-semibold"
+                                style={{ background: `${accent}1f`, color: accent }}
+                              >
+                                {t("messages.gotIt")}
+                              </button>
+                            </div>
                           ) : null}
                         </div>
                       </div>
