@@ -1,10 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ExternalLink, Copy, Check, Plus } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
+import {
+  GpsRadiusSlider,
+  GPS_RADIUS_DEFAULT,
+  clampRadius,
+} from "@/components/manager/GpsRadiusSlider";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
@@ -87,6 +93,41 @@ const currencyFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
+// 00008_project_gps_radius.sql may not be applied yet — strip the column
+// from the payload and retry once if Postgres rejects it.
+function isMissingColumn(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false;
+  if (error.code === "PGRST204" || error.code === "42703") return true;
+  return /column .* gps_radius_m/i.test(error.message ?? "");
+}
+
+async function insertProjectTolerant(
+  supabase: SupabaseClient,
+  payload: Record<string, unknown>,
+) {
+  const first = await supabase.from("projects").insert(payload);
+  if (first.error && isMissingColumn(first.error)) {
+    const { gps_radius_m: _omit, ...rest } = payload;
+    void _omit;
+    return supabase.from("projects").insert(rest);
+  }
+  return first;
+}
+
+async function updateProjectTolerant(
+  supabase: SupabaseClient,
+  projectId: string,
+  payload: Record<string, unknown>,
+) {
+  const first = await supabase.from("projects").update(payload).eq("id", projectId);
+  if (first.error && isMissingColumn(first.error)) {
+    const { gps_radius_m: _omit, ...rest } = payload;
+    void _omit;
+    return supabase.from("projects").update(rest).eq("id", projectId);
+  }
+  return first;
+}
+
 function getProjectTone(status: ProjectStatus) {
   if (status === "paused" || status === "archived") {
     return "neutral";
@@ -112,6 +153,34 @@ export function ProjectsPage({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [openProjectIds, setOpenProjectIds] = useState<Set<string>>(new Set());
+  const [copyConfirmId, setCopyConfirmId] = useState<string | null>(null);
+  const [pickingLocation, setPickingLocation] = useState(false);
+  const createLatRef = useRef<HTMLInputElement>(null);
+  const createLngRef = useRef<HTMLInputElement>(null);
+
+  function fillCurrentLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setMessage(t("projects.locationUnavailable"));
+      return;
+    }
+    setPickingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (createLatRef.current) {
+          createLatRef.current.value = position.coords.latitude.toFixed(6);
+        }
+        if (createLngRef.current) {
+          createLngRef.current.value = position.coords.longitude.toFixed(6);
+        }
+        setPickingLocation(false);
+      },
+      () => {
+        setMessage(t("projects.locationDenied"));
+        setPickingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
+    );
+  }
 
   function toggleProject(projectId: string) {
     setOpenProjectIds((current) => {
@@ -134,6 +203,9 @@ export function ProjectsPage({
     const notes = formData.get("notes")?.toString().trim() ?? "";
     const rate = Number.parseFloat(formData.get("rate")?.toString() ?? "0");
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? "200", 10);
+    const gpsRadius = clampRadius(
+      Number.parseInt(formData.get("gps_radius_m")?.toString() ?? `${GPS_RADIUS_DEFAULT}`, 10),
+    );
     const lat = Number.parseFloat(formData.get("lat")?.toString() ?? "");
     const lng = Number.parseFloat(formData.get("lng")?.toString() ?? "");
     const startDate = formData.get("start_date")?.toString() ?? "";
@@ -147,13 +219,14 @@ export function ProjectsPage({
     setBusyKey("create");
     setMessage("");
 
-    const { error } = await supabase.from("projects").insert({
+    const { error } = await insertProjectTolerant(supabase, {
       org_id: orgId,
       name,
       address: address || null,
       notes: notes || null,
       rate: Number.isFinite(rate) ? rate : 25,
       radius_m: Number.isFinite(radius) ? radius : 200,
+      gps_radius_m: gpsRadius,
       site_point:
         Number.isFinite(lat) && Number.isFinite(lng)
           ? toSupabasePoint({ lat, lng })
@@ -187,6 +260,9 @@ export function ProjectsPage({
     const notes = formData.get("notes")?.toString().trim() ?? "";
     const rate = Number.parseFloat(formData.get("rate")?.toString() ?? "0");
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? "200", 10);
+    const gpsRadius = clampRadius(
+      Number.parseInt(formData.get("gps_radius_m")?.toString() ?? `${GPS_RADIUS_DEFAULT}`, 10),
+    );
     const status = (formData.get("status")?.toString() ?? "active") as ProjectStatus;
     const lat = Number.parseFloat(formData.get("lat")?.toString() ?? "");
     const lng = Number.parseFloat(formData.get("lng")?.toString() ?? "");
@@ -201,22 +277,13 @@ export function ProjectsPage({
     setBusyKey(`update-${projectId}`);
     setMessage("");
 
-    const payload: {
-      name: string;
-      address: string | null;
-      notes: string | null;
-      rate: number;
-      radius_m: number;
-      status: ProjectStatus;
-      site_point?: string;
-      start_date?: string | null;
-      end_date?: string | null;
-    } = {
+    const payload: Record<string, unknown> = {
       name,
       address: address || null,
       notes: notes || null,
       rate: Number.isFinite(rate) ? rate : 25,
       radius_m: Number.isFinite(radius) ? radius : 200,
+      gps_radius_m: gpsRadius,
       status,
       start_date: startDate || null,
       end_date: endDate || null,
@@ -226,7 +293,7 @@ export function ProjectsPage({
       payload.site_point = toSupabasePoint({ lat, lng });
     }
 
-    const { error } = await supabase.from("projects").update(payload).eq("id", projectId);
+    const { error } = await updateProjectTolerant(supabase, projectId, payload);
 
     if (error) {
       setMessage(error.message);
@@ -236,6 +303,45 @@ export function ProjectsPage({
 
     setBusyKey(null);
     setMessage(t("projects.updated"));
+    router.refresh();
+  }
+
+  async function handleCopyProject(project: ManagerProjectSummary) {
+    setBusyKey(`copy-${project.id}`);
+    setMessage("");
+
+    const suffix = ` ${t("projects.copySuffix")}`;
+    const copyName = project.name.endsWith(suffix.trim())
+      ? project.name
+      : project.name + suffix;
+
+    const payload: Record<string, unknown> = {
+      org_id: orgId,
+      name: copyName,
+      address: project.address ?? null,
+      notes: project.notes ?? null,
+      rate: Number(project.rate ?? 0),
+      radius_m: project.radius_m ?? 200,
+      gps_radius_m:
+        (project as { gps_radius_m?: number | null }).gps_radius_m ?? GPS_RADIUS_DEFAULT,
+      status: "active",
+      settings: {},
+      site_point: project.site_point ?? null,
+      start_date: project.start_date ?? null,
+      end_date: project.end_date ?? null,
+    };
+
+    const { error } = await insertProjectTolerant(supabase, payload);
+
+    setBusyKey(null);
+    setCopyConfirmId(null);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage(t("projects.copySuccess"));
     router.refresh();
   }
 
@@ -316,14 +422,32 @@ export function ProjectsPage({
             defaultValue="200"
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
+          <div className="md:col-span-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3">
+            <GpsRadiusSlider />
+          </div>
+          <div className="flex items-stretch gap-2">
+            <input
+              ref={createLatRef}
+              name="lat"
+              type="number"
+              step="0.000001"
+              placeholder={t("projects.latitude")}
+              className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+            <button
+              type="button"
+              onClick={fillCurrentLocation}
+              disabled={pickingLocation}
+              title={t("projects.useCurrentLocation")}
+              aria-label={t("projects.useCurrentLocation")}
+              className="inline-flex shrink-0 items-center justify-center rounded-[var(--radius-md)] border px-3 text-base disabled:opacity-50"
+              style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+            >
+              {pickingLocation ? "…" : "📍"}
+            </button>
+          </div>
           <input
-            name="lat"
-            type="number"
-            step="0.000001"
-            placeholder={t("projects.latitude")}
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-          />
-          <input
+            ref={createLngRef}
             name="lng"
             type="number"
             step="0.000001"
@@ -538,6 +662,11 @@ export function ProjectsPage({
                         <option value="archived">{t("common.archived")}</option>
                       </select>
                     </div>
+                    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3">
+                      <GpsRadiusSlider
+                        defaultValue={(project as { gps_radius_m?: number | null }).gps_radius_m ?? GPS_RADIUS_DEFAULT}
+                      />
+                    </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <input
                         name="lat"
@@ -587,6 +716,15 @@ export function ProjectsPage({
                       </button>
                       <button
                         type="button"
+                        onClick={() => setCopyConfirmId(project.id)}
+                        disabled={busyKey === `copy-${project.id}`}
+                        className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                        style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                      >
+                        {t("projects.copyProject")}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => void handleArchiveProject(project.id)}
                         disabled={busyKey === `archive-${project.id}`}
                         className="button-base button-danger-ghost"
@@ -594,6 +732,44 @@ export function ProjectsPage({
                         {busyKey === `archive-${project.id}` ? t("projects.archiving") : t("projects.archive")}
                       </button>
                     </div>
+                    {copyConfirmId === project.id ? (
+                      <div
+                        className="rounded-[var(--radius-md)] border p-3"
+                        style={{
+                          borderColor: "rgba(191, 162, 52, 0.3)",
+                          background: "rgba(191, 162, 52, 0.06)",
+                        }}
+                      >
+                        <div className="text-sm font-semibold text-[var(--text-primary)]">
+                          {t("projects.copyConfirmTitle")}
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {t("projects.copyConfirmBody")}
+                        </p>
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handleCopyProject(project)}
+                            disabled={busyKey === `copy-${project.id}`}
+                            className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                            style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+                          >
+                            {busyKey === `copy-${project.id}`
+                              ? t("common.creating")
+                              : t("projects.copyProject")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCopyConfirmId(null)}
+                            disabled={busyKey === `copy-${project.id}`}
+                            className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                            style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                          >
+                            {t("common.cancel")}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                   </form>
                 </div>
               </div>

@@ -25,42 +25,48 @@
 | **2** (geofence-function) | Edge function detect-store-visit, /admin/settings со слайдером радиуса, closeOpenStoreVisits на clock-out, store_visit events в EventFeed, worker profile «визиты за неделю», webhook doc в README | 8 |
 | **2.5** (regression-fixes) | Менеджерский /tasks (worker→/my-tasks), фикс дубля «Часы» в worker bottom-nav | 3 |
 | **3** (worker-essentials) | Before You Leave video gate, Journal с группировкой по дням, browse other projects в смене, Cancel stay checked in | 4 |
+| **5** (hours-admin) | Adjust Hours «показать работнику» чекбокс, Reset Hours to Zero панель, Bulk Payroll чекбоксы + «Process selected», DayDetailModal drill-down | 4 |
 
 **Всё смёржено в main через `--no-ff`.** tsc чистый, lint baseline 15 problems.
 
-## 🔓 Ручные шаги, которые ещё впереди
+⚠️ *Волна 5 готова на ветке `wave5/hours-admin`, ожидает merge команды коту.*
 
-### 1. Edge function deploy (1 команда)
-```
-supabase functions deploy detect-store-visit
-```
-После этого нужен Supabase CLI (у Андрея уже установлен? проверить через `supabase --version`).
+## ✅ Ручные шаги — закрыты 19.04.2026
 
-### 2. Database webhook в Supabase Dashboard (1 минута в UI)
-Dashboard → Database → Webhooks → Create:
-- Source: `worker_live_locations`
-- Event: INSERT
-- HTTP: POST на URL задеплоенной edge function
-- Body: record payload
+### 1. Edge function deploy — ✅ DONE
+Задеплоено через **Supabase Dashboard Web UI** (не CLI — CLI у Андрея не установлен).
+- **Function URL:** `https://vlrajjwbaxikbwvqdpft.supabase.co/functions/v1/detect-store-visit`
+- **Deployed:** 19.04.2026
+- **Verify JWT:** on (default — webhook передаёт service_role JWT автоматически)
 
-Без этого edge function не срабатывает на новые GPS-точки — визиты в магазины не детектируются.
+### 2. Database webhook — ✅ DONE
+Создан через Supabase Dashboard → Database Webhooks.
+- **Name:** `detect_store_visit_on_location`
+- **Table:** `public.worker_live_locations`
+- **Events:** INSERT
+- **Type:** Supabase Edge Functions
+- **Target:** `detect-store-visit` (POST)
+- **Headers:** `Content-type: application/json`, `Authorization: Bearer <service_role JWT>` (автоматически)
+- **Timeout:** 5000ms
 
-### 3. Consent-форма подписать с работниками (до первого боевого чекина)
+**Волна 2 полностью закрыта.** Автодетект визитов в супплай-магазины работает.
+
+### 3. Consent-форма — ⬜ TODO (ДО первого боевого чекина)
 Файл `GPS_CONSENT_FORM.md` готов на EN+RU. Распечатать, подписать, подшить. Версия 1.
 Тексты формы должны совпадать с текстом модалки в `src/components/worker/GpsConsentModal.tsx`.
 
 ## 📋 Дальше по плану
 
-**Рекомендованный порядок Волн:** 5 → 6 → 7 → 8 → 4 → 9 (Волна 4 pay-models предпоследняя — самая рискованная).
+**Рекомендованный порядок Волн:** ~~5~~ → **6** → 7 → 8 → 4 → 9 (Волна 4 pay-models предпоследняя — самая рискованная).
 
 Детали и готовые промпты — в `IMPLEMENTATION_PLAN.md`.
 
-### Следующая — Волна 5 (Hours admin)
-- Adjust Hours: чекбокс «Показать работнику»
-- Reset Hours to Zero: отдельная кнопка с подтверждением
-- Bulk Payroll: чекбоксы + «Выбрать всех» + «Обработать выбранных»
-- Day Detail drill-down: клик на день → попап с breakdown
-- **Миграций нет.** Низкий риск.
+### Следующая — Волна 6 (Project enrichments)
+- GPS Radius per-project (миграция 00008)
+- Copy Project button (клон проекта без смен/задач/медиа)
+- «Use my current location» кнопка в форме создания проекта
+- Form parity check с OLD_APP_FINDINGS §20
+- **Миграция 00008** — применяется через Chrome + SQL Editor. Низкий риск.
 
 ## 🗂️ Ключевые файлы-артефакты
 
@@ -70,9 +76,10 @@ Dashboard → Database → Webhooks → Create:
 - `OLD_APP_FINDINGS.md` — 20 фич из старого HTML, сырьё для Волн 4-8
 - `GPS_CONSENT_FORM.md` — двуязычный шаблон согласия
 - `HANDOFF.md` — накопленное tribal knowledge (читать ОБЯЗАТЕЛЬНО при старте новой сессии)
+- `ABOUT_ANDREW.md` — про стиль Андрея (читать после HANDOFF.md при старте)
 - `supabase/migrations/00003_schema_gap.sql` — применена
 - `supabase/migrations/00004_geofence_grace.sql` — применена
 - `supabase/migrations/00005_app_settings.sql` — применена
 - `supabase/migrations/00006_worker_require_video.sql` — применена
-- `supabase/functions/detect-store-visit/index.ts` — код edge function, не задеплоен
+- `supabase/functions/detect-store-visit/index.ts` — ✅ задеплоена через Web UI
 - `supabase/README.md` — инструкции по deploy + webhook
