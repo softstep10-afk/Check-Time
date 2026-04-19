@@ -388,8 +388,18 @@ export function buildPreviewWorkerShellData(): WorkerShellData {
   const rawProjects = previewProjects.filter((project) => project.id === projectOneId);
   const assignedAtByProjectId = new Map<string, string | null>([[projectOneId, isoOffset(-24 * 6)]]);
   const projects = enrichProjects(rawProjects, assignedAtByProjectId);
+  // Wave X2 (00011) cosmetic mirror: in AUTH_BYPASS demo mode, the worker
+  // shell only surfaces media they uploaded themselves OR media attached
+  // to one of their assigned projects. Reproduces the role-aware RLS
+  // SELECT rule so the demo doesn't leak photos from sites the worker
+  // never set foot on.
+  const assignedProjectIds = new Set(rawProjects.map((project) => project.id));
   const mediaEntries = previewMedia
-    .filter((item) => item.uploaded_by === workerId)
+    .filter(
+      (item) =>
+        item.uploaded_by === workerId ||
+        (item.project_id && assignedProjectIds.has(item.project_id)),
+    )
     .map((entry) => ({
       ...entry,
       projectName: projects.find((project) => project.id === entry.project_id)?.name ?? null,
