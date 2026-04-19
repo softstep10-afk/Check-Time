@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, MapPin, Navigation, ShieldCheck } from "lucide-react";
 import { WorkerGpsCheckMap } from "@/components/maps/WorkerGpsCheckMap";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
+import { CheckoutModal } from "@/components/worker/CheckoutModal";
 import {
   formatDateTime,
   formatDurationCompact,
@@ -19,9 +20,9 @@ export function ClockPage() {
     activeSeconds,
     busyAction,
     clockIn,
-    clockOut,
     lastGpsCheck,
   } = useWorkerShell();
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [manualProjectId, setManualProjectId] = useState<string>(
     shell.projects[0]?.id ?? "",
   );
@@ -190,13 +191,14 @@ export function ClockPage() {
           </button>
           <button
             type="button"
-            onClick={() => void clockOut()}
+            onClick={() => setCheckoutOpen(true)}
             disabled={!shell.clockState.isClockedIn || busyAction === "clock-out"}
             className="button-base button-danger w-full"
           >
             {busyAction === "clock-out" ? t("clock.closingShift") : t("clock.clockOut")}
           </button>
         </div>
+        <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
 
         {shell.profile.require_video ? (
           <p className="mt-3 text-xs text-[var(--text-secondary)]">

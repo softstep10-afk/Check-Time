@@ -106,3 +106,37 @@
 2. **Применить мини-миграции** (grace_started_at + app_settings) через Supabase SQL Editor — я сам через Chrome
 3. **Настроить webhook** detect-store-visit в Supabase Dashboard — ручная 1 минута
 4. Перейти к OLD_APP_FINDINGS.md
+
+
+---
+
+## ✅ Обновление: мерж в main 19.04.2026
+
+Все 4 ветки смёржены в main через `--no-ff`:
+- wave1/safe-fixes
+- wave1.5/ui-polish
+- wave2/geofence-function
+- wave2.5/regression-fixes
+
+**Текущая main содержит:**
+- Всю схему БД (миграции 00003, 00004, 00005 применены)
+- Edge function detect-store-visit (код написан, НЕ задеплоен)
+- Все UI-правки 4 волн
+- tsc чистый, lint baseline
+
+**Файлы-артефакты в корне:**
+- `AUDIT_REPORT.md` — обновлён по всем 4 волнам
+- `PROGRESS_LOG.md` — этот файл
+- `OLD_APP_FINDINGS.md` — 20 фич из старого HTML
+- `IMPLEMENTATION_PLAN.md` — план Волн 3-9
+- `GPS_CONSENT_FORM.md` — двуязычная форма согласия для печати
+
+## 📋 Точка входа для следующего чата
+
+**Готово к:**
+1. Деплой edge function: `supabase functions deploy detect-store-visit` (ручная команда)
+2. Настройка webhook в Supabase Dashboard на worker_live_locations INSERT (ручной шаг в UI)
+3. **Волна 3** — Worker essentials (видеочекаут + Journal + Browse + Cancel). Промпт готов в `IMPLEMENTATION_PLAN.md`. Создаёт миграцию 00006_worker_require_video.sql (не применяет — это моя работа через Supabase SQL Editor в Chrome).
+
+**Рекомендованный порядок волн:** 3 → 5 → 6 → 7 → 8 → 4 → 9
+Pay models (Волна 4) идут предпоследними — они самые рискованные (трогают payroll).

@@ -1,0 +1,28 @@
+-- ============================================================================
+-- 00006 — workers.require_video (Before You Leave video gate)
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--
+-- The column already exists on public.profiles (added in 00001_foundation),
+-- so this migration is intentionally idempotent. It is checked in mainly to
+-- document the contract that the Before-You-Leave checkout video gate
+-- depends on, and to seed the column on any environment that may have
+-- skipped it.
+--
+-- Behavior:
+--   profiles.require_video = true  → on Check Out, the worker must record
+--                                    or upload a video before the clock-out
+--                                    event is written.
+--   profiles.require_video = false → Check Out proceeds with the standard
+--                                    cancel/confirm modal only.
+--
+-- Rollback:
+--   alter table public.profiles drop column if exists require_video;
+-- ============================================================================
+
+-- alter table public.profiles
+--   add column if not exists require_video boolean not null default false;
+
+-- The statement above is intentionally commented. Uncomment, review, and
+-- run from the Supabase SQL editor only if your environment is missing the
+-- column (for example, an older fork of 00001_foundation.sql).
