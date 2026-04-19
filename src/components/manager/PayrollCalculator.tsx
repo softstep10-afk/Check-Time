@@ -211,6 +211,7 @@ export function PayrollCalculator({
   const [savedPeriods, setSavedPeriods] = useState<Array<{ id: string; label: string; status: string }>>([]);
   const [tab, setTab] = useState<"workers" | "projects">("workers");
   const [error, setError] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Adjustment modal
   const [adjWorker, setAdjWorker] = useState<string | null>(null);
@@ -557,6 +558,66 @@ export function PayrollCalculator({
     });
   }
 
+  function toggleSelect(workerId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(workerId)) next.delete(workerId);
+      else next.add(workerId);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(eligible: WorkerLine[]) {
+    setSelectedIds((current) => {
+      if (current.size >= eligible.length) return new Set();
+      return new Set(eligible.map((l) => l.workerId));
+    });
+  }
+
+  async function processSelected() {
+    if (!period) return;
+    if (selectedIds.size === 0) return;
+
+    const ids = [...selectedIds];
+    const nextStatus: PeriodStatus = period.status === "draft" ? "approved" : "paid";
+
+    if (!AUTH_BYPASS_ENABLED) {
+      const { error: itemErr } = await supabase
+        .from("pay_period_items")
+        .update({ status: nextStatus })
+        .eq("pay_period_id", period.id)
+        .in("worker_id", ids);
+      if (itemErr) {
+        setError(itemErr.message);
+        return;
+      }
+    }
+
+    setPeriod((prev) =>
+      prev
+        ? {
+            ...prev,
+            lines: prev.lines.map((line) =>
+              selectedIds.has(line.workerId) ? { ...line, status: nextStatus } : line,
+            ),
+          }
+        : prev,
+    );
+    setSelectedIds(new Set());
+
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: nextStatus === "paid" ? "payroll_paid" : "payroll_approved",
+      targetType: "pay_period_items",
+      targetId: period.id,
+      beforeData: { count: ids.length, status: period.status },
+      afterData: { count: ids.length, status: nextStatus, workerIds: ids },
+    });
+  }
+
   function exportCsv() {
     if (!period) return;
     const csv = generateCsv(period);
@@ -570,6 +631,11 @@ export function PayrollCalculator({
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+
+  const eligibleSelectableLines = useMemo(() => {
+    if (!period) return [] as WorkerLine[];
+    return period.lines.filter((line) => line.hasHours && line.status !== "paid");
+  }, [period]);
 
   const summary = useMemo(() => {
     if (!period) return null;
@@ -767,7 +833,7 @@ export function PayrollCalculator({
           </section>
 
           {/* Bulk actions */}
-          <section className="flex flex-wrap gap-2">
+          <section className="flex flex-wrap items-center gap-2">
             {period.status === "draft" ? (
               <button type="button" onClick={() => void approveAll()} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "rgba(191, 162, 52, 0.3)", color: "var(--brand-yellow)" }}>
                 {t("payroll.approveAll")}
@@ -776,6 +842,21 @@ export function PayrollCalculator({
             {period.status === "approved" ? (
               <button type="button" onClick={() => void markAllPaid()} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "rgba(15, 168, 120, 0.3)", color: "var(--green)" }}>
                 {t("payroll.markAllPaid")}
+              </button>
+            ) : null}
+            {period.status !== "paid" ? (
+              <button
+                type="button"
+                onClick={() => void processSelected()}
+                disabled={selectedIds.size === 0}
+                className="rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{
+                  background: selectedIds.size === 0 ? "var(--border-default)" : "var(--brand-yellow)",
+                  color: selectedIds.size === 0 ? "var(--text-muted)" : "var(--text-inverse)",
+                }}
+              >
+                {t("payroll.processSelected")}
+                {selectedIds.size > 0 ? ` · ${selectedIds.size}` : ""}
               </button>
             ) : null}
             <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}>
@@ -799,6 +880,25 @@ export function PayrollCalculator({
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
+                    <th className="pb-3 pr-2 font-semibold">
+                      <input
+                        type="checkbox"
+                        aria-label={t("payroll.selectAll")}
+                        checked={
+                          eligibleSelectableLines.length > 0 &&
+                          selectedIds.size === eligibleSelectableLines.length
+                        }
+                        ref={(el) => {
+                          if (!el) return;
+                          el.indeterminate =
+                            selectedIds.size > 0 &&
+                            selectedIds.size < eligibleSelectableLines.length;
+                        }}
+                        onChange={() => toggleSelectAll(eligibleSelectableLines)}
+                        disabled={eligibleSelectableLines.length === 0}
+                        className="h-4 w-4 accent-[var(--brand-yellow)]"
+                      />
+                    </th>
                     <th className="pb-3 pr-3 font-semibold">{t("overview.colName")}</th>
                     <th className="pb-3 pr-3 font-semibold">{t("payroll.regHours")}</th>
                     <th className="pb-3 pr-3 font-semibold">{t("payroll.otHours")}</th>
@@ -812,6 +912,16 @@ export function PayrollCalculator({
                 <tbody>
                   {period.lines.map((line) => (
                     <tr key={line.workerId} className="border-b border-[var(--border-subtle)]" style={{ opacity: line.hasHours ? 1 : 0.4 }}>
+                      <td className="py-3 pr-2">
+                        <input
+                          type="checkbox"
+                          aria-label={line.workerName}
+                          checked={selectedIds.has(line.workerId)}
+                          onChange={() => toggleSelect(line.workerId)}
+                          disabled={!line.hasHours || line.status === "paid"}
+                          className="h-4 w-4 accent-[var(--brand-yellow)]"
+                        />
+                      </td>
                       <td className="py-3 pr-3">
                         <div className="font-semibold text-[var(--text-primary)]">{line.workerName}</div>
                         <span className="mt-0.5 inline-block rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ background: "rgba(191, 162, 52, 0.12)", color: "var(--brand-yellow)" }}>{line.workerRole}</span>
