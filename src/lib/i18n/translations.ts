@@ -560,6 +560,13 @@ export const translations = {
   "messages.readLaterTip": { en: "Keeps the message in your inbox.", ru: "Сообщение останется в инбоксе." },
   "messages.silentMode": { en: "Silent mode", ru: "Беззвучный режим" },
   "messages.silentModeHelp": { en: "Mutes clock-in, clock-out, and new-message sounds.", ru: "Отключает звуки начала смены, конца смены и новых сообщений." },
+  "permissions.title": { en: "Permissions", ru: "Разрешения" },
+  "permissions.subtitle": { en: "Per-user capabilities", ru: "Индивидуальные разрешения" },
+  "permissions.description": { en: "Toggle additive grants on top of this worker's role. Roles still gate everything they always did.", ru: "Включайте дополнительные разрешения поверх роли. Роль продолжает действовать как и прежде." },
+  "permissions.role": { en: "Role", ru: "Роль" },
+  "permissions.saved": { en: "Saved.", ru: "Сохранено." },
+  "permissions.tableMissing": { en: "user_capabilities table not found — run migration 00010 first.", ru: "Таблица user_capabilities не найдена — сначала примените миграцию 00010." },
+  "permissions.saveFailed": { en: "Couldn't save — try again.", ru: "Не удалось сохранить — попробуйте ещё раз." },
 
   // ── Event Feed ──
   "feed.title": { en: "Recent Events", ru: "Последние события" },

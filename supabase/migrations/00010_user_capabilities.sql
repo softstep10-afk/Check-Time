@@ -1,0 +1,112 @@
+-- ============================================================================
+-- 00010 — user_capabilities (per-user flex permissions on top of roles)
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--
+-- Wave X1 introduces a sparse permissions table that lets an owner grant
+-- (or revoke) individual capabilities on top of the worker's role. Roles
+-- still gate everything they always have; this table is purely additive.
+--
+-- Capability keys live in src/lib/capabilities.ts. Today the four keys
+-- shipped are upload_receipts, view_all_projects_map, view_supply_stores,
+-- and flag_media. New keys can be added in the TS array without a schema
+-- change — the column is plain text.
+--
+-- has_capability(cap text) is the public read surface: returns the granted
+-- bool for the current auth.uid(), defaulting to FALSE when no row exists.
+-- Future waves (X2/X3) will call it from RLS policies and route gates.
+-- Keeping it SECURITY DEFINER + STABLE so it can be invoked from any
+-- policy without a permissions check on the table itself.
+--
+-- Rollback:
+--   drop function if exists public.has_capability(text);
+--   drop table  if exists public.user_capabilities;
+-- ============================================================================
+
+-- create table if not exists public.user_capabilities (
+--   user_id     uuid not null references public.profiles(id) on delete cascade,
+--   capability  text not null,
+--   granted     boolean not null default true,
+--   granted_by  uuid references public.profiles(id) on delete set null,
+--   granted_at  timestamptz not null default now(),
+--   note        text,
+--   primary key (user_id, capability)
+-- );
+--
+-- create index if not exists idx_user_capabilities_capability
+--   on public.user_capabilities(capability)
+--   where granted = true;
+--
+-- alter table public.user_capabilities enable row level security;
+--
+-- -- Helper: 'is the current auth user a manager/admin/owner in this user's org?'
+-- -- Lives inline because is_manager() in 00002 doesn't take a target user id.
+-- -- This avoids changing existing RLS surfaces.
+--
+-- drop policy if exists user_capabilities_select_same_org on public.user_capabilities;
+-- create policy user_capabilities_select_same_org
+--   on public.user_capabilities
+--   for select
+--   using (
+--     -- The capability owner can read their own grants...
+--     user_id = auth.uid()
+--     -- ...or any same-org manager/admin/owner can read it.
+--     or exists (
+--       select 1
+--       from public.profiles target, public.profiles actor
+--       where target.id  = user_capabilities.user_id
+--         and actor.id   = auth.uid()
+--         and actor.role in ('manager', 'admin', 'owner')
+--         and actor.org_id = target.org_id
+--     )
+--   );
+--
+-- drop policy if exists user_capabilities_write_same_org on public.user_capabilities;
+-- create policy user_capabilities_write_same_org
+--   on public.user_capabilities
+--   for all
+--   using (
+--     exists (
+--       select 1
+--       from public.profiles target, public.profiles actor
+--       where target.id  = user_capabilities.user_id
+--         and actor.id   = auth.uid()
+--         and actor.role in ('manager', 'admin', 'owner')
+--         and actor.org_id = target.org_id
+--     )
+--   )
+--   with check (
+--     exists (
+--       select 1
+--       from public.profiles target, public.profiles actor
+--       where target.id  = user_capabilities.user_id
+--         and actor.id   = auth.uid()
+--         and actor.role in ('manager', 'admin', 'owner')
+--         and actor.org_id = target.org_id
+--     )
+--   );
+--
+-- create or replace function public.has_capability(cap text)
+-- returns boolean
+-- language sql
+-- stable
+-- security definer
+-- set search_path = public
+-- as $$
+--   select coalesce(
+--     (select granted
+--        from public.user_capabilities
+--       where user_id    = auth.uid()
+--         and capability = cap
+--      limit 1),
+--     false
+--   );
+-- $$;
+--
+-- grant execute on function public.has_capability(text) to anon, authenticated;
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run from the Supabase SQL editor when you are ready to enable per-user
+-- capability grants. No existing RLS is touched — this migration is purely
+-- additive. Future waves (X2/X3) will start consuming has_capability() from
+-- policies on other tables.
