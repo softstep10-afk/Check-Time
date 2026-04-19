@@ -214,11 +214,21 @@ export function buildProfileSummaries(
   sessions: ManagerSession[],
 ): ManagerProfileSummary[] {
   const weekStart = startOfWeek();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
   const assignmentsByProfile = new Map<string, string[]>();
   const openTasksByProfile = new Map<string, number>();
   const weekMinutesByProfile = new Map<string, number>();
   const openSessionsByProfile = new Map<string, ManagerSession>();
   const projectsById = new Map(data.projects.map((project) => [project.id, project]));
+  const videoUploadedTodayByProfile = new Set<string>();
+
+  for (const item of data.media) {
+    if (item.deleted_at) continue;
+    if (!item.is_checkout || !item.uploaded_by) continue;
+    if (toDate(item.created_at).getTime() < todayStart.getTime()) continue;
+    videoUploadedTodayByProfile.add(item.uploaded_by);
+  }
 
   for (const assignment of data.assignments) {
     const ids = assignmentsByProfile.get(assignment.profile_id) ?? [];
@@ -268,6 +278,7 @@ export function buildProfileSummaries(
         weekMinutes: weekMinutesByProfile.get(profile.id) ?? 0,
         isOnSite: Boolean(currentSession),
         currentSessionMinutes: currentSession?.durationMinutes ?? null,
+        videoUploadedToday: videoUploadedTodayByProfile.has(profile.id),
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));

@@ -58,6 +58,7 @@ export interface ManagerProfileSummary extends Profile {
   weekMinutes: number;
   isOnSite: boolean;
   currentSessionMinutes: number | null;
+  videoUploadedToday: boolean;
 }
 
 export interface ManagerTimelineItem extends TimeEvent {
