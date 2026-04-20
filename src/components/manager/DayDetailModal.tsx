@@ -141,7 +141,7 @@ export function DayDetailModal({
 
   if (!open || !date) return null;
 
-  const headline = new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
+  const headline = new Date(`${date}T12:00:00`).toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",

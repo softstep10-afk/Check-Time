@@ -389,7 +389,7 @@ export default function AnnualReportPage() {
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalHours")}</div>
-              <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">{Math.round(summary.totalHours).toLocaleString()}h</div>
+              <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">{Math.round(summary.totalHours).toLocaleString("en-US")}h</div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("report.totalPayroll")}</div>
@@ -417,10 +417,10 @@ export default function AnnualReportPage() {
               {summary.totalVisits > 0 ? (
                 <>
                   <div className="mt-2 font-mono text-[24px] font-bold text-[var(--text-primary)]">
-                    {summary.totalVisits.toLocaleString()}
+                    {summary.totalVisits.toLocaleString("en-US")}
                   </div>
                   <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                    {summary.totalVisitMinutes.toLocaleString()} {t("common.minShort")}
+                    {summary.totalVisitMinutes.toLocaleString("en-US")} {t("common.minShort")}
                   </div>
                 </>
               ) : (

@@ -99,7 +99,7 @@ function RelativeTime({ iso }: { iso: string }) {
     getNowServerSnapshot,
   );
 
-  const absolute = new Date(iso).toLocaleString(undefined, {
+  const absolute = new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",

@@ -94,7 +94,7 @@ export default function LocationDataPage() {
       <section className="grid gap-3 sm:grid-cols-3">
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("gps.totalRows")}</div>
-          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{stats.totalRows.toLocaleString()}</div>
+          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{stats.totalRows.toLocaleString("en-US")}</div>
         </div>
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("gps.oldestRecord")}</div>
