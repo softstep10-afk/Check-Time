@@ -1,0 +1,181 @@
+-- ============================================================================
+-- seed_dev.sql — minimum viable demo seed
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--      Idempotent: every INSERT uses ON CONFLICT DO NOTHING so re-running
+--      is safe.
+--
+-- Drops onto a fresh schema (post-wash, post-00001..00010 migrations) and
+-- gives the app:
+--   • 1 organization  ("Andrew's Crew")
+--   • 1 auth user + linked profile  (owner@example.com, role=owner)
+--   • 1 project        ("Test Site", Seattle-ish coords)
+--   • 1 project_assignment linking the owner to that project
+--
+-- The owner's UUID is hardcoded so src/lib/auth-bypass.ts can mock
+-- auth.uid() consistently — see PREVIEW_OWNER_ID. Keep both in sync.
+--
+-- Password: "ownerdemo!" (bcrypt-hashed below). Change before sharing the
+-- DB with anyone who shouldn't have full owner access.
+--
+-- Cleanup:
+--   delete from public.project_assignments where org_id = (
+--     select id from public.organizations where slug = 'andrews-crew');
+--   delete from public.projects where org_id = (
+--     select id from public.organizations where slug = 'andrews-crew');
+--   delete from public.profiles where id = '00000000-0000-0000-0000-000000000001';
+--   delete from auth.users  where id = '00000000-0000-0000-0000-000000000001';
+--   delete from public.organizations where slug = 'andrews-crew';
+-- ============================================================================
+
+-- begin;
+--
+-- -- 1. Organization ----------------------------------------------------------
+-- insert into public.organizations (id, name, slug, settings)
+-- values (
+--   '00000000-0000-0000-0000-0000000000aa',
+--   'Andrew''s Crew',
+--   'andrews-crew',
+--   '{"seeded": true}'
+-- )
+-- on conflict (slug) do nothing;
+--
+-- -- 2. Auth user -------------------------------------------------------------
+-- -- Standard Supabase seed pattern. crypt() comes from pgcrypto, which the
+-- -- auth schema enables by default. instance_id matches the default Supabase
+-- -- project instance.
+-- insert into auth.users (
+--   id,
+--   instance_id,
+--   aud,
+--   role,
+--   email,
+--   encrypted_password,
+--   email_confirmed_at,
+--   raw_app_meta_data,
+--   raw_user_meta_data,
+--   created_at,
+--   updated_at,
+--   confirmation_token,
+--   email_change,
+--   email_change_token_new,
+--   recovery_token
+-- )
+-- values (
+--   '00000000-0000-0000-0000-000000000001',
+--   '00000000-0000-0000-0000-000000000000',
+--   'authenticated',
+--   'authenticated',
+--   'owner@example.com',
+--   crypt('ownerdemo!', gen_salt('bf')),
+--   now(),
+--   '{"provider":"email","providers":["email"]}',
+--   '{"name":"Andrew"}',
+--   now(),
+--   now(),
+--   '',
+--   '',
+--   '',
+--   ''
+-- )
+-- on conflict (id) do nothing;
+--
+-- -- Identity row so /auth/v1/login by email/password works.
+-- insert into auth.identities (
+--   id,
+--   user_id,
+--   identity_data,
+--   provider,
+--   provider_id,
+--   last_sign_in_at,
+--   created_at,
+--   updated_at
+-- )
+-- values (
+--   gen_random_uuid(),
+--   '00000000-0000-0000-0000-000000000001',
+--   jsonb_build_object('sub', '00000000-0000-0000-0000-000000000001', 'email', 'owner@example.com'),
+--   'email',
+--   '00000000-0000-0000-0000-000000000001',
+--   now(),
+--   now(),
+--   now()
+-- )
+-- on conflict (provider, provider_id) do nothing;
+--
+-- -- 3. Profile ---------------------------------------------------------------
+-- -- profiles.role = 'owner' requires the 'owner' enum value, added in
+-- -- migration 00003. Confirm the wash ran 00001..00010 before this seed.
+-- insert into public.profiles (
+--   id,
+--   org_id,
+--   name,
+--   role,
+--   color,
+--   is_active,
+--   require_video,
+--   hourly_rate,
+--   language
+-- )
+-- values (
+--   '00000000-0000-0000-0000-000000000001',
+--   '00000000-0000-0000-0000-0000000000aa',
+--   'Andrew',
+--   'owner',
+--   '#f59e0b',
+--   true,
+--   false,
+--   55.00,
+--   'en'
+-- )
+-- on conflict (id) do nothing;
+--
+-- -- 4. Project ---------------------------------------------------------------
+-- -- gps_radius_m is added by migration 00008 — drop the column from this
+-- -- INSERT if your wash didn't include it.
+-- insert into public.projects (
+--   id,
+--   org_id,
+--   name,
+--   address,
+--   status,
+--   rate,
+--   site_point,
+--   radius_m,
+--   gps_radius_m,
+--   start_date,
+--   notes
+-- )
+-- values (
+--   '00000000-0000-0000-0000-0000000000bb',
+--   '00000000-0000-0000-0000-0000000000aa',
+--   'Test Site',
+--   '123 Main St',
+--   'active',
+--   35.00,
+--   st_setsrid(st_makepoint(-122.3, 47.3), 4326)::geography,
+--   75,
+--   75,
+--   current_date,
+--   'Seeded test project. Safe to delete.'
+-- )
+-- on conflict (id) do nothing;
+--
+-- -- 5. Assignment ------------------------------------------------------------
+-- insert into public.project_assignments (
+--   org_id,
+--   project_id,
+--   profile_id
+-- )
+-- values (
+--   '00000000-0000-0000-0000-0000000000aa',
+--   '00000000-0000-0000-0000-0000000000bb',
+--   '00000000-0000-0000-0000-000000000001'
+-- )
+-- on conflict (project_id, profile_id) do nothing;
+--
+-- commit;
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run in the Supabase SQL editor after migrations 00001..00010 have been
+-- applied. Change the password ("ownerdemo!") before sharing.
