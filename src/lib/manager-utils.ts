@@ -42,7 +42,7 @@ function minutesBetween(start: Date, end: Date): number {
 }
 
 export function isManagerRole(role: UserRole): boolean {
-  return role === "manager" || role === "admin" || role === "owner";
+  return role === "owner" || role === "admin" || role === "manager" || role === "supervisor";
 }
 
 export interface OvertimeBreakdown {
