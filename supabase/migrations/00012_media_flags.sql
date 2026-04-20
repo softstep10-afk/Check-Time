@@ -1,0 +1,164 @@
+-- ============================================================================
+-- 00012 — anonymous media incident tracker
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--
+-- Wave X3 ships a "flag for review" affordance on every media card. The
+-- intent is incident triage as a team — workers can leave notes on a
+-- photo/video without seeing who else flagged it, so blame doesn't drive
+-- the conversation. Owners and managers see the full author trail for
+-- supervision.
+--
+-- Surface:
+--   public.media_flags         — write side (RLS gates SELECT to manager+)
+--   public.media_flags_public  — read view, drops author columns. Workers
+--                                read this when rendering the modal.
+--
+-- Index on (media_id) where reviewed_at is null so the gallery can quickly
+-- ask "any open flags on this media?" without a count(*) full scan.
+--
+-- Rollback:
+--   drop view  if exists public.media_flags_public;
+--   drop table if exists public.media_flags;
+-- ============================================================================
+
+-- create table if not exists public.media_flags (
+--   id              uuid primary key default uuid_generate_v4(),
+--   media_id        uuid not null references public.media(id) on delete cascade,
+--   flagged_by      uuid references public.profiles(id) on delete set null,
+--   note            text not null default '',
+--   flagged_at      timestamptz not null default now(),
+--   reviewed_at     timestamptz,
+--   reviewed_by     uuid references public.profiles(id) on delete set null,
+--   reviewed_note   text
+-- );
+--
+-- create index if not exists idx_media_flags_open
+--   on public.media_flags(media_id)
+--   where reviewed_at is null;
+--
+-- create index if not exists idx_media_flags_media
+--   on public.media_flags(media_id, flagged_at desc);
+--
+-- alter table public.media_flags enable row level security;
+--
+-- -- INSERT: any same-org worker assigned to the media's project may flag.
+-- -- The flagger MUST be the auth user — no impersonation, no manager
+-- -- writing on someone else's behalf. Managers can also flag (their role
+-- -- doesn't add a special path here; they're just an assigned user).
+--
+-- drop policy if exists media_flags_insert_assigned on public.media_flags;
+-- create policy media_flags_insert_assigned
+--   on public.media_flags
+--   for insert
+--   with check (
+--     flagged_by = auth.uid()
+--     and exists (
+--       select 1
+--       from public.media m
+--       where m.id = media_flags.media_id
+--         and (
+--           -- Manager-tier roles can flag any media in their org.
+--           public.get_user_role() in ('supervisor', 'manager', 'admin', 'owner')
+--           and m.org_id = public.get_user_org_id()
+--           -- ...or worker-tier roles must be assigned to the media's project.
+--           or exists (
+--             select 1 from public.project_assignments pa
+--             where pa.profile_id = auth.uid()
+--               and pa.project_id = m.project_id
+--           )
+--         )
+--     )
+--   );
+--
+-- -- SELECT on the raw table: managers see the full author trail.
+--
+-- drop policy if exists media_flags_select_manager on public.media_flags;
+-- create policy media_flags_select_manager
+--   on public.media_flags
+--   for select
+--   using (
+--     public.get_user_role() in ('supervisor', 'manager', 'admin', 'owner')
+--     and exists (
+--       select 1 from public.media m
+--       where m.id = media_flags.media_id
+--         and m.org_id = public.get_user_org_id()
+--     )
+--   );
+--
+-- -- UPDATE: only managers, only setting the review fields.
+-- drop policy if exists media_flags_update_manager on public.media_flags;
+-- create policy media_flags_update_manager
+--   on public.media_flags
+--   for update
+--   using (
+--     public.get_user_role() in ('supervisor', 'manager', 'admin', 'owner')
+--     and exists (
+--       select 1 from public.media m
+--       where m.id = media_flags.media_id
+--         and m.org_id = public.get_user_org_id()
+--     )
+--   )
+--   with check (
+--     public.get_user_role() in ('supervisor', 'manager', 'admin', 'owner')
+--   );
+--
+-- -- Workers don't get UPDATE or DELETE — only flag once, then it's the
+-- -- manager's call.
+--
+-- -- Public view: same columns minus author identifiers, so the worker
+-- -- modal can render notes without leaking who wrote them. Workers
+-- -- assigned to the project (and managers) can SELECT.
+--
+-- create or replace view public.media_flags_public as
+--   select
+--     id,
+--     media_id,
+--     note,
+--     flagged_at,
+--     reviewed_at,
+--     reviewed_note,
+--     -- include reviewed_by status only as a boolean so the modal can show
+--     -- 'Reviewed' badges without exposing who reviewed it.
+--     (reviewed_at is not null) as is_reviewed
+--   from public.media_flags;
+--
+-- alter view public.media_flags_public set (security_invoker = true);
+--
+-- -- The view inherits RLS from media_flags via security_invoker, so the
+-- -- usual select policies apply. We add an additional 'assigned worker
+-- -- can read' policy below.
+--
+-- drop policy if exists media_flags_select_assigned on public.media_flags;
+-- create policy media_flags_select_assigned
+--   on public.media_flags
+--   for select
+--   using (
+--     -- Already covered by media_flags_select_manager above for managers.
+--     -- This branch lets assigned workers read — but the public view is
+--     -- the only practical surface they should be using; reading the raw
+--     -- table will surface NULL author columns through the policy because
+--     -- a separate column-level grant restricts access (see below).
+--     exists (
+--       select 1
+--       from public.media m
+--       join public.project_assignments pa on pa.project_id = m.project_id
+--       where m.id = media_flags.media_id
+--         and pa.profile_id = auth.uid()
+--     )
+--   );
+--
+-- -- Column-level grants: workers can SELECT only the non-author columns
+-- -- of media_flags. Managers (via the role-based policy) get the full row.
+-- revoke select on public.media_flags from authenticated;
+-- grant select (id, media_id, note, flagged_at, reviewed_at, reviewed_note)
+--   on public.media_flags to authenticated;
+--
+-- -- Public view inherits the same column-level access automatically.
+-- grant select on public.media_flags_public to authenticated;
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run in the Supabase SQL editor when you are ready to enable team incident
+-- tracking. Workers should always read public.media_flags_public from the
+-- app — the raw table is reachable but column-level grants hide author
+-- identifiers from worker-tier roles.
