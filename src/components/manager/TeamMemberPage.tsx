@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatDateTime, formatDurationCompact } from "@/lib/worker-utils";
@@ -17,6 +17,8 @@ import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
 import { DayDetailModal } from "@/components/manager/DayDetailModal";
+import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
+import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -61,7 +63,27 @@ export function TeamMemberPage({
   const [adjustSign, setAdjustSign] = useState<"+" | "-">("+");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
+  const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
+  const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const { t } = useTranslation();
+
+  const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const ids = await fetchOpenFlagMediaIds(supabase, mediaIds);
+      if (!cancelled) setOpenFlagIds(ids);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, mediaIds]);
+
+  async function refreshOpenFlags() {
+    const ids = await fetchOpenFlagMediaIds(supabase, mediaIds);
+    setOpenFlagIds(ids);
+  }
 
   const unpaidMinutes = useMemo(() => {
     let total = 0;
@@ -898,20 +920,37 @@ export function TeamMemberPage({
                         {entry.projectName ?? t("common.general")} · {formatDateTime(entry.created_at)}
                       </div>
                     </div>
-                    <span
-                      className="shrink-0 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
-                      style={
-                        entry.is_checkout
-                          ? { background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }
-                          : { background: "rgba(191, 162, 52, 0.12)", color: "var(--brand-yellow)" }
-                      }
-                    >
-                      {entry.is_checkout ? t("journal.checkout") : entry.media_type}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <MediaFlagButton
+                        mediaId={entry.id}
+                        hasOpenFlag={openFlagIds.has(entry.id)}
+                        onClick={() => setFlagModalMediaId(entry.id)}
+                      />
+                      <span
+                        className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                        style={
+                          entry.is_checkout
+                            ? { background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }
+                            : { background: "rgba(191, 162, 52, 0.12)", color: "var(--brand-yellow)" }
+                        }
+                      >
+                        {entry.is_checkout ? t("journal.checkout") : entry.media_type}
+                      </span>
+                    </div>
                   </div>
                   {entry.caption ? (
                     <p className="mt-2 text-xs text-[var(--text-secondary)]">{entry.caption}</p>
                   ) : null}
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setFlagModalMediaId(entry.id)}
+                      className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                      style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                    >
+                      🚩 {t("flags.flagForReview")}
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -977,6 +1016,15 @@ export function TeamMemberPage({
         media={media}
         adjustments={[]}
         onClose={() => setDayDetailDate(null)}
+      />
+
+      <MediaFlagModal
+        open={flagModalMediaId !== null}
+        mediaId={flagModalMediaId}
+        viewerRole="manager"
+        viewerId={managerId}
+        onClose={() => setFlagModalMediaId(null)}
+        onMutate={() => void refreshOpenFlags()}
       />
     </div>
   );
