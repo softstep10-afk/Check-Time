@@ -79,9 +79,18 @@ type WorkerShellContextValue = {
 
 const WorkerShellContext = createContext<WorkerShellContextValue | null>(null);
 
+type GpsErrorKind = "denied" | "unavailable" | "unsupported";
+
+class GpsError extends Error {
+  constructor(public readonly kind: GpsErrorKind) {
+    super(`gps_${kind}`);
+    this.name = "GpsError";
+  }
+}
+
 async function getCurrentPosition(): Promise<WorkerGeoPoint & { accuracy: number }> {
   if (!navigator.geolocation) {
-    throw new Error("This device does not support GPS.");
+    throw new GpsError("unsupported");
   }
 
   return new Promise((resolve, reject) => {
@@ -93,7 +102,16 @@ async function getCurrentPosition(): Promise<WorkerGeoPoint & { accuracy: number
           accuracy: position.coords.accuracy,
         });
       },
-      () => reject(new Error("Location access is required to record this shift.")),
+      (err: GeolocationPositionError) => {
+        // Only code 1 (PERMISSION_DENIED) is an actual consent issue.
+        // code 2 (POSITION_UNAVAILABLE) and code 3 (TIMEOUT) are transient
+        // hardware/network failures and must not surface as "access denied".
+        if (err.code === err.PERMISSION_DENIED) {
+          reject(new GpsError("denied"));
+        } else {
+          reject(new GpsError("unavailable"));
+        }
+      },
       {
         enableHighAccuracy: true,
         maximumAge: 15_000,
@@ -166,6 +184,19 @@ function playErrorSound() {
 
 function normaliseFiles(files: FileList | File[]): File[] {
   return Array.from(files);
+}
+
+// Maps a GPS failure kind to the banner tone + translation key.
+// - "denied"      → real consent/permission issue, red error banner
+// - "unavailable" → transient timeout / POSITION_UNAVAILABLE, neutral info
+// - "unsupported" → device has no geolocation at all, red error banner
+function gpsBanner(kind: GpsErrorKind): {
+  tone: "error" | "info";
+  key: Parameters<ReturnType<typeof useTranslation>["t"]>[0];
+} {
+  if (kind === "denied") return { tone: "error", key: "gps.permissionDenied" };
+  if (kind === "unsupported") return { tone: "error", key: "gps.unsupported" };
+  return { tone: "info", key: "gps.locationUnavailable" };
 }
 
 export function useWorkerShell() {
@@ -587,6 +618,12 @@ export function WorkerShell({
 
       router.refresh();
     } catch (error) {
+      if (error instanceof GpsError) {
+        const { tone, key } = gpsBanner(error.kind);
+        setBanner({ tone, text: t(key) });
+        playSound("error");
+        return;
+      }
       const message = error instanceof Error ? error.message : "Clock-in failed.";
       setBanner({ tone: "error", text: message });
       playSound("error");
@@ -694,6 +731,12 @@ export function WorkerShell({
       playSound("clock-out");
       router.refresh();
     } catch (error) {
+      if (error instanceof GpsError) {
+        const { tone, key } = gpsBanner(error.kind);
+        setBanner({ tone, text: t(key) });
+        playSound("error");
+        return;
+      }
       const message = error instanceof Error ? error.message : "Clock-out failed.";
       setBanner({ tone: "error", text: message });
       playSound("error");

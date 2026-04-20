@@ -647,6 +647,8 @@ export const translations = {
   "gps.sharingActive": { en: "Sharing location — shift active", ru: "Передача геолокации — смена активна" },
   "gps.iosTip": { en: "Keep the app open or add to home screen for accurate tracking.", ru: "Держите приложение открытым или добавьте на экран для точного отслеживания." },
   "gps.permissionDenied": { en: "Location permission denied. Tap to retry.", ru: "Доступ к геолокации запрещён. Нажмите для повтора." },
+  "gps.locationUnavailable": { en: "Couldn't read your location — try again in a moment.", ru: "Не удалось получить геолокацию — попробуй ещё раз." },
+  "gps.unsupported": { en: "This device doesn't support GPS.", ru: "Это устройство не поддерживает GPS." },
   "gps.signalLost": { en: "Signal lost", ru: "Сигнал потерян" },
   "gps.optedOut": { en: "Location sharing declined", ru: "Передача геолокации отклонена" },
   "gps.workerLocations": { en: "Live crew positions", ru: "Позиции бригады" },
