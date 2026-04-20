@@ -30,7 +30,6 @@ import { NotificationBell } from "@/components/worker/NotificationBell";
 import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
-import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { validateUploadFile } from "@/lib/upload-limits";
@@ -303,15 +302,15 @@ export function WorkerShell({
 
   // Check consent from DB on mount (localStorage is cache, DB is source of truth)
   useEffect(() => {
-    if (AUTH_BYPASS_ENABLED || consentChecked) return;
+    if (consentChecked) return;
     async function checkConsent() {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("worker_location_consents")
         .select("consented")
         .eq("worker_id", shell.profile.id)
         .order("signed_at", { ascending: false })
         .limit(1);
-      if (data && data.length > 0) {
+      if (!error && data && data.length > 0) {
         const consented = (data[0] as { consented: boolean }).consented;
         setGpsConsented(consented);
         localStorage.setItem("check-time-gps-consent", String(consented));
@@ -325,17 +324,24 @@ export function WorkerShell({
 
   const handleGpsPosition = useCallback(
     (pos: { lat: number; lng: number; accuracy: number; heading: number | null; speed: number | null }) => {
-      if (AUTH_BYPASS_ENABLED) return; // No GPS posting in demo mode
-      void supabase.from("worker_live_locations").insert({
-        org_id: shell.profile.org_id,
-        worker_id: shell.profile.id,
-        shift_id: shell.clockState.openEventId ?? null,
-        lat: pos.lat,
-        lng: pos.lng,
-        accuracy: pos.accuracy,
-        heading: pos.heading,
-        speed: pos.speed,
-      });
+      // Fire-and-forget: a single dropped ping is harmless (next one is 20s
+      // away). Errors are intentionally swallowed so the worker UI never
+      // crashes on a transient network or RLS hiccup.
+      void supabase
+        .from("worker_live_locations")
+        .insert({
+          org_id: shell.profile.org_id,
+          worker_id: shell.profile.id,
+          shift_id: shell.clockState.openEventId ?? null,
+          lat: pos.lat,
+          lng: pos.lng,
+          accuracy: pos.accuracy,
+          heading: pos.heading,
+          speed: pos.speed,
+        })
+        .then(({ error }) => {
+          if (error) console.warn("worker_live_locations insert failed:", error.message);
+        });
     },
     [supabase, shell.profile.org_id, shell.profile.id, shell.clockState.openEventId],
   );
@@ -357,35 +363,38 @@ export function WorkerShell({
   }, [gpsTrackingEnabled, iosTipShown]);
 
   function handleGpsConsent(signedName: string) {
-    // Persist to DB
-    if (!AUTH_BYPASS_ENABLED) {
-      void supabase.from("worker_location_consents").insert({
+    void supabase
+      .from("worker_location_consents")
+      .insert({
         org_id: shell.profile.org_id,
         worker_id: shell.profile.id,
         signed_name: signedName,
         consented: true,
         consent_version: 1,
         user_agent: navigator.userAgent,
+      })
+      .then(({ error }) => {
+        if (error) console.warn("worker_location_consents insert failed:", error.message);
       });
-    }
-    // Cache in localStorage
     localStorage.setItem("check-time-gps-consent", "true");
     setGpsConsented(true);
     setShowConsentModal(false);
   }
 
   function handleGpsDecline() {
-    // Persist to DB
-    if (!AUTH_BYPASS_ENABLED) {
-      void supabase.from("worker_location_consents").insert({
+    void supabase
+      .from("worker_location_consents")
+      .insert({
         org_id: shell.profile.org_id,
         worker_id: shell.profile.id,
         signed_name: shell.profile.name,
         consented: false,
         consent_version: 1,
         user_agent: navigator.userAgent,
+      })
+      .then(({ error }) => {
+        if (error) console.warn("worker_location_consents insert failed:", error.message);
       });
-    }
     localStorage.setItem("check-time-gps-consent", "false");
     setGpsConsented(false);
     setShowConsentModal(false);

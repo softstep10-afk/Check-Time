@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Marker, Polyline } from "@react-google-maps/api";
 import { createClient } from "@/lib/supabase/client";
-import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 
 type LivePosition = {
@@ -36,19 +35,6 @@ function makeWorkerIcon(color: string, stale: boolean) {
   };
 }
 
-const PREVIEW_POSITIONS: LivePosition[] = [
-  {
-    worker_id: "00000000-0000-0000-0000-000000000011",
-    worker_name: "Preview Worker",
-    worker_role: "worker",
-    project_name: "5th Ave Tower",
-    lat: 37.7889,
-    lng: -122.4013,
-    recorded_at: new Date().toISOString(),
-    consented: true,
-  },
-];
-
 export function LiveWorkerMarkers() {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -59,21 +45,9 @@ export function LiveWorkerMarkers() {
     let cancelled = false;
 
     async function poll() {
-      if (AUTH_BYPASS_ENABLED) {
-        // Preview mode: slight jitter to simulate movement
-        const mock = PREVIEW_POSITIONS.map((p) => ({
-          ...p,
-          lat: p.lat + (Math.random() - 0.5) * 0.001,
-          lng: p.lng + (Math.random() - 0.5) * 0.001,
-          recorded_at: new Date().toISOString(),
-        }));
-        if (!cancelled) updatePositions(mock);
-        return;
-      }
-
-      // Real DB: get latest position per currently-clocked-in worker
-      // We query profiles with current_project set (= clocked in), then
-      // join their latest worker_live_locations row.
+      // Latest position per currently-clocked-in worker.
+      // profiles.current_project != null === clocked in. Join to
+      // worker_live_locations for their last ping.
       const { data: clockedIn } = await supabase
         .from("profiles")
         .select("id, name, role, current_project")
