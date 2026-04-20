@@ -23,6 +23,32 @@ export function parseGeoPoint(value: unknown): WorkerGeoPoint | null {
       }
     }
 
+    // PostGIS hex-encoded WKB (EWKB) — what supabase-js returns for
+    // a `geography(POINT, 4326)` column by default. 50 hex chars
+    // (25 bytes): 1 byte endian, 4 bytes type, 4 bytes SRID, 8 bytes
+    // X (lng), 8 bytes Y (lat), all little-endian.
+    if (/^[0-9a-fA-F]+$/.test(value) && value.length >= 50) {
+      const hex = value;
+      try {
+        const bytes = new Uint8Array(25);
+        for (let i = 0; i < 25; i += 1) {
+          bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+        }
+        const view = new DataView(bytes.buffer);
+        const littleEndian = bytes[0] === 1;
+        const lng = view.getFloat64(9, littleEndian);
+        const lat = view.getFloat64(17, littleEndian);
+        if (
+          Number.isFinite(lat) && Number.isFinite(lng) &&
+          lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
+        ) {
+          return { lat, lng };
+        }
+      } catch {
+        // fall through
+      }
+    }
+
     return null;
   }
 
