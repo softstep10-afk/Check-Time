@@ -525,10 +525,17 @@ export function ProjectsPage({
               className="surface-card p-4"
               style={{ border: cardBorder, boxShadow: cardShadow }}
             >
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleProject(project.id)}
-                className="w-full text-left"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    toggleProject(project.id);
+                  }
+                }}
+                className="w-full text-left cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -559,7 +566,7 @@ export function ProjectsPage({
                     />
                   </div>
                 </div>
-              </button>
+              </div>
 
               <div className="collapsible-body mt-4" data-open={isOpen}>
                 <div className="collapsible-inner space-y-4">
