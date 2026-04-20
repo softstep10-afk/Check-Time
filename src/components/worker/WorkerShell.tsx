@@ -192,10 +192,17 @@ export function WorkerShell({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState>(null);
   const [lastGpsCheck, setLastGpsCheck] = useState<WorkerGpsCheck | null>(null);
-  // Time ticker. Init null on both server and client first render so SSR
-  // and hydration match; the effect below sets a real value post-mount.
-  const [now, setNow] = useState<number | null>(null);
+  // Time ticker. `mounted` gates every client-only rendering of the
+  // elapsed timer so SSR and the first client render produce identical
+  // HTML. `now` is seeded with a stable zero and replaced with Date.now()
+  // only after mount.
+  const [mounted, setMounted] = useState(false);
+  const [now, setNow] = useState<number>(0);
   const { t } = useTranslation();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // ── Sound mute state ──
   // Source of truth: profiles.notif_mode (Wave 7 migration 00009).
@@ -406,6 +413,7 @@ export function WorkerShell({
   }, [initialData]);
 
   useEffect(() => {
+    if (!mounted) return;
     if (!shell.clockState.isClockedIn || !shell.clockState.clockInTime) {
       return;
     }
@@ -418,10 +426,10 @@ export function WorkerShell({
     return () => {
       window.clearInterval(timer);
     };
-  }, [shell.clockState.clockInTime, shell.clockState.isClockedIn]);
+  }, [mounted, shell.clockState.clockInTime, shell.clockState.isClockedIn]);
 
   const activeSeconds =
-    shell.clockState.isClockedIn && shell.clockState.clockInTime && now !== null
+    mounted && shell.clockState.isClockedIn && shell.clockState.clockInTime
       ? Math.max(
           0,
           Math.floor((now - new Date(shell.clockState.clockInTime).getTime()) / 1_000),
@@ -1031,7 +1039,9 @@ export function WorkerShell({
                 </h1>
                 <p className="mt-1 text-sm text-[var(--text-secondary)]">
                   {shell.clockState.isClockedIn && shell.clockState.currentProjectName
-                    ? `${shell.clockState.currentProjectName} • ${formatElapsedSeconds(activeSeconds)}`
+                    ? mounted
+                      ? `${shell.clockState.currentProjectName} • ${formatElapsedSeconds(activeSeconds)}`
+                      : shell.clockState.currentProjectName
                     : t("worker.readyToStart")}
                 </p>
               </div>
