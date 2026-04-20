@@ -56,6 +56,12 @@ export async function POST(request: NextRequest) {
     });
 
     let persisted = false;
+    // Wave X2 (00011_media_project_privacy.sql) note: this route uses
+    // the admin client to persist ai_analysis back, which bypasses RLS.
+    // That's safe here because requireManagerContext() above already
+    // gated the request to manager / admin / owner — workers cannot
+    // call this endpoint and trigger an analyze on a foreign-project
+    // media row.
     const adminClient = createAdminClient();
 
     if (adminClient) {

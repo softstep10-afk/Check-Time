@@ -74,3 +74,42 @@ $$ LANGUAGE sql SECURITY DEFINER STABLE;
 - Requires: typed confirmation of recipient name + initiator PIN.
 - Logged in `audit_log` with before/after snapshots.
 - Guard: system always has >= 1 owner.
+
+## Photo / Media Visibility (Wave X2)
+
+Once `00011_media_project_privacy.sql` has been applied, the `media`
+table SELECT policy is split by role. The change is purely additive at
+the schema level (existing `INSERT` / `UPDATE` / `DELETE` policies are
+untouched):
+
+| Role | Can SELECT |
+|------|-----------|
+| `worker`, `driver`, `subcontractor` | • Media for projects they are currently in `project_assignments` for.<br>• Plus any media they uploaded themselves (own journal, regardless of current assignment status). |
+| `supervisor`, `manager`, `admin`, `owner` | All non-deleted media in their org (existing org-wide visibility preserved — supervisors keep it because they're rotated across crews). |
+
+### Implementation notes
+
+- **RLS handles the filter automatically** through the SSR Supabase
+  client. The worker shell (`src/lib/worker-data.ts`) only fetches
+  `media WHERE uploaded_by = self`, which is strictly narrower than
+  the policy, so no app-level change is needed there.
+- **The admin client bypasses RLS.** The only worker-relevant route
+  that uses it is `src/app/api/ai/photo-analysis/route.ts`, which is
+  already gated by `requireManagerContext()` — workers can't trigger
+  it. Comments at both call sites point this out for future
+  reviewers.
+- **Storage bucket policies are out of scope** for the SQL migration
+  in 00011. The signed URLs returned by
+  `storage.from('media').getPublicUrl(...)` are public — anyone with
+  the URL can fetch the file. Tightening that requires a separate
+  Supabase Storage policy pass and is tracked separately.
+- **AUTH_BYPASS demo mode mirrors the rule** in
+  `src/lib/preview-data.ts → buildPreviewWorkerShellData()` so the
+  demo doesn't leak photos from sites the preview worker isn't
+  assigned to.
+
+### Storage path convention
+
+`media/{orgId}/{projectId}/{date}/{filename}` — the project segment
+in the path matches `media.project_id`, so a future bucket policy
+can reuse the same `project_assignments` check.

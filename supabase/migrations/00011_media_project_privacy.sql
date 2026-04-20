@@ -1,0 +1,62 @@
+-- ============================================================================
+-- 00011 — media RLS: photo privacy by project
+--
+-- ⚠️  RUN MANUALLY via the Supabase SQL editor. Do NOT auto-apply.
+--
+-- Replaces the existing media SELECT policy ('Users can view media in
+-- their org') with a stricter rule that splits behaviour by role:
+--
+--   • worker / driver / subcontractor → can SELECT only media rows
+--     belonging to a project they are currently assigned to in
+--     project_assignments. They cannot browse photos or videos for
+--     projects they were never assigned to, even within the same org.
+--
+--   • supervisor / manager / admin / owner → can SELECT any media row in
+--     the same org (existing behaviour). Supervisors keep full visibility
+--     because they're frequently moved across crews and need to spot-check.
+--
+-- INSERT, UPDATE, and DELETE policies are NOT changed:
+--   • Workers can still upload media to their org (existing policy
+--     'Users can upload media') — but they can only SEE rows for
+--     assigned projects after this migration runs.
+--   • Manager-owned upload paths still work via 'Managers can upload
+--     media for anyone'.
+--   • Soft-delete and metadata edits via service-role / manager UI are
+--     unchanged.
+--
+-- Rollback (restores the org-wide SELECT):
+--   drop policy if exists media_select_role_aware on public.media;
+--   create policy "Users can view media in their org"
+--     on public.media for select
+--     using (org_id = public.get_user_org_id() and deleted_at is null);
+-- ============================================================================
+
+-- drop policy if exists "Users can view media in their org" on public.media;
+-- drop policy if exists media_select_role_aware on public.media;
+--
+-- create policy media_select_role_aware
+--   on public.media
+--   for select
+--   using (
+--     org_id = public.get_user_org_id()
+--     and deleted_at is null
+--     and (
+--       -- Manager-tier roles see everything in the org.
+--       public.get_user_role() in ('supervisor', 'manager', 'admin', 'owner')
+--       -- Workers see media for projects they're currently assigned to.
+--       or exists (
+--         select 1
+--         from public.project_assignments pa
+--         where pa.profile_id = auth.uid()
+--           and pa.project_id = media.project_id
+--       )
+--       -- Workers always see media they uploaded themselves (their own
+--       -- journal entries) regardless of current assignment status.
+--       or media.uploaded_by = auth.uid()
+--     )
+--   );
+
+-- The statements above are intentionally commented. Uncomment, review, and
+-- run from the Supabase SQL editor when you are ready to enforce per-project
+-- worker visibility. INSERT / UPDATE / DELETE policies on public.media are
+-- intentionally untouched — only SELECT changes.
