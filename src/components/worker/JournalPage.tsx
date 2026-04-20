@@ -1,12 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileVideo2, ImagePlus, Trash2, UploadCloud } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { formatDateTime } from "@/lib/worker-utils";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
+import { createClient } from "@/lib/supabase/client";
+import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 
 type PendingUpload = {
   id: string;
@@ -48,6 +51,30 @@ export function JournalPage() {
   const [checkoutFiles, setCheckoutFiles] = useState<PendingUpload[]>([]);
   const [journalCaption, setJournalCaption] = useState("");
   const [checkoutCaption, setCheckoutCaption] = useState("");
+  const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
+  const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
+  const supabase = useMemo(() => createClient(), []);
+
+  const recentMediaIds = useMemo(
+    () => shell.media.map((m) => m.id),
+    [shell.media],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const ids = await fetchOpenFlagMediaIds(supabase, recentMediaIds);
+      if (!cancelled) setOpenFlagIds(ids);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, recentMediaIds]);
+
+  async function refreshOpenFlags() {
+    const ids = await fetchOpenFlagMediaIds(supabase, recentMediaIds);
+    setOpenFlagIds(ids);
+  }
 
   useEffect(() => {
     return () => {
@@ -332,16 +359,33 @@ export function JournalPage() {
                             {entry.projectName ?? t("journal.unlinkedProject")} • {formatDateTime(entry.created_at)}
                           </div>
                         </div>
-                        <div
-                          className="status-pill"
-                          data-tone={entry.is_checkout ? "neutral" : "warning"}
-                        >
-                          {entry.is_checkout ? t("journal.checkout") : entry.media_type}
+                        <div className="flex items-center gap-2">
+                          <MediaFlagButton
+                            mediaId={entry.id}
+                            hasOpenFlag={openFlagIds.has(entry.id)}
+                            onClick={() => setFlagModalMediaId(entry.id)}
+                          />
+                          <div
+                            className="status-pill"
+                            data-tone={entry.is_checkout ? "neutral" : "warning"}
+                          >
+                            {entry.is_checkout ? t("journal.checkout") : entry.media_type}
+                          </div>
                         </div>
                       </div>
                       {entry.caption ? (
                         <p className="mt-3 text-sm text-[var(--text-secondary)]">{entry.caption}</p>
                       ) : null}
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setFlagModalMediaId(entry.id)}
+                          className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                          style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                        >
+                          🚩 {t("flags.flagForReview")}
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -350,6 +394,15 @@ export function JournalPage() {
           )}
         </div>
       </section>
+
+      <MediaFlagModal
+        open={flagModalMediaId !== null}
+        mediaId={flagModalMediaId}
+        viewerRole="worker"
+        viewerId={shell.profile.id}
+        onClose={() => setFlagModalMediaId(null)}
+        onMutate={() => void refreshOpenFlags()}
+      />
     </div>
   );
 }
