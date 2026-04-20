@@ -88,8 +88,27 @@ class GpsError extends Error {
   }
 }
 
+// Temporary diagnostic — emits origin + error details to the console on
+// any geolocation failure, so remote-debugging a phone via
+// `chrome://inspect#devices` can distinguish "insecure-origin block" from
+// "OS-level permission denied". Remove once mobile GPS is confirmed working.
+function logGpsFailure(label: string, err?: GeolocationPositionError) {
+  if (typeof window === "undefined") return;
+  const ctx = {
+    label,
+    isSecureContext: window.isSecureContext,
+    protocol: window.location.protocol,
+    hostname: window.location.hostname,
+    href: window.location.href,
+    errorCode: err?.code,
+    errorMessage: err?.message,
+  };
+  console.error("[GPS diagnostic]", ctx);
+}
+
 async function getCurrentPosition(): Promise<WorkerGeoPoint & { accuracy: number }> {
   if (!navigator.geolocation) {
+    logGpsFailure("navigator.geolocation missing");
     throw new GpsError("unsupported");
   }
 
@@ -103,6 +122,7 @@ async function getCurrentPosition(): Promise<WorkerGeoPoint & { accuracy: number
         });
       },
       (err: GeolocationPositionError) => {
+        logGpsFailure("getCurrentPosition error", err);
         // Only code 1 (PERMISSION_DENIED) is an actual consent issue.
         // code 2 (POSITION_UNAVAILABLE) and code 3 (TIMEOUT) are transient
         // hardware/network failures and must not surface as "access denied".
