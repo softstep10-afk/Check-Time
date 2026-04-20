@@ -7,6 +7,7 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
+import { validateUploadFile } from "@/lib/upload-limits";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
@@ -1018,6 +1019,26 @@ function ReceiptsSection({
     const note = fd.get("note")?.toString().trim() ?? "";
 
     if (!finalStore || !amount) return;
+
+    // Wave 8 client validation against STORAGE_LIMITS_MB.
+    for (const file of Array.from(files)) {
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        const error = validation.error;
+        if (error.reason === "too_large") {
+          const key =
+            error.kind === "photo"
+              ? "uploads.tooLargePhoto"
+              : error.kind === "video"
+                ? "uploads.tooLargeVideo"
+                : "uploads.tooLargePdf";
+          setMessage(t(key));
+        } else {
+          setMessage(t("uploads.unsupportedType").replace("{kind}", error.mime));
+        }
+        return;
+      }
+    }
 
     setUploading(true);
     setMessage("");

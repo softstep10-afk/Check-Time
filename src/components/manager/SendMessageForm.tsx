@@ -13,11 +13,9 @@ import {
   type MessageAttachment,
   type MessagePriority,
 } from "@/lib/message-types";
+import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
 
 const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
-
-const ACCEPT = "image/jpeg,image/png,image/webp,video/mp4,video/quicktime,application/pdf";
-const MAX_SIZE = 50 * 1024 * 1024; // 50 MB
 
 function classifyFile(file: File): "image" | "video" | "pdf" {
   if (file.type.startsWith("image/")) return "image";
@@ -57,8 +55,20 @@ export function SendMessageForm({
     const file = files?.[0];
     if (!file) return;
 
-    if (file.size > MAX_SIZE) {
-      setError(`File too large (max 50 MB)`);
+    const validation = validateUploadFile(file);
+    if (!validation.ok) {
+      const error = validation.error;
+      if (error.reason === "too_large") {
+        const key =
+          error.kind === "photo"
+            ? "uploads.tooLargePhoto"
+            : error.kind === "video"
+              ? "uploads.tooLargeVideo"
+              : "uploads.tooLargePdf";
+        setError(t(key));
+      } else {
+        setError(t("uploads.unsupportedType").replace("{kind}", error.mime));
+      }
       return;
     }
 
@@ -258,7 +268,7 @@ export function SendMessageForm({
         <input
           ref={fileRef}
           type="file"
-          accept={ACCEPT}
+          accept={ACCEPT_ALL_UPLOADS}
           onChange={(e) => handleFileSelect(e.target.files)}
           className="hidden"
         />

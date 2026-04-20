@@ -33,6 +33,7 @@ import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
+import { validateUploadFile } from "@/lib/upload-limits";
 import type { AppMessage } from "@/lib/message-types";
 
 const navItems = [
@@ -650,6 +651,31 @@ export function WorkerShell({
     if (selectedFiles.length === 0) {
       setBanner({ tone: "error", text: "Choose a file before uploading." });
       return;
+    }
+
+    // Wave 8 client validation: friendly per-kind size + MIME error before
+    // we hit Supabase Storage.
+    for (const file of selectedFiles) {
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        const error = validation.error;
+        if (error.reason === "too_large") {
+          const key =
+            error.kind === "photo"
+              ? "uploads.tooLargePhoto"
+              : error.kind === "video"
+                ? "uploads.tooLargeVideo"
+                : "uploads.tooLargePdf";
+          setBanner({ tone: "error", text: t(key) });
+        } else {
+          setBanner({
+            tone: "error",
+            text: t("uploads.unsupportedType").replace("{kind}", error.mime),
+          });
+        }
+        playSound("error");
+        return;
+      }
     }
 
     const targetProjectId =
