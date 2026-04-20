@@ -191,28 +191,44 @@ export default function Page() {
 
           <div className="login-numpad">
             {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((n) => (
-              <button key={n} type="button" onClick={() => addDigit(n)}>
+              <button
+                key={n}
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  addDigit(n);
+                }}
+              >
                 {n}
               </button>
             ))}
             <button
               type="button"
               className="fn-key"
-              onClick={clear}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                clear();
+              }}
             >
               {t("login.clr")}
             </button>
             <button
               type="button"
               className="zero-key"
-              onClick={() => addDigit("0")}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                addDigit("0");
+              }}
             >
               0
             </button>
             <button
               type="button"
               className="fn-key"
-              onClick={backspace}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                backspace();
+              }}
             >
               <svg viewBox="0 0 24 24">
                 <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z" />
@@ -226,7 +242,10 @@ export default function Page() {
             type="button"
             className={signInClass()}
             disabled={phase === "loading" || pin.length < PIN_LENGTH}
-            onClick={submit}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              submit();
+            }}
           >
             {phase === "loading" ? "\u00B7 \u00B7 \u00B7" : t("login.signIn")}
           </button>
@@ -476,7 +495,9 @@ const loginStyles = /* css */ `
     transition: all 0.12s ease;
     position: relative;
     overflow: hidden;
+    touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
     user-select: none;
     box-shadow:
       0 3px 6px -1px rgba(0, 0, 0, 0.4),
@@ -542,6 +563,10 @@ const loginStyles = /* css */ `
     border: 1px solid var(--border-default);
     border-radius: 8px;
     cursor: not-allowed;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
     box-shadow:
       0 2px 4px rgba(0, 0, 0, 0.3),
       inset 0 1px 0 rgba(255, 255, 255, 0.04);
