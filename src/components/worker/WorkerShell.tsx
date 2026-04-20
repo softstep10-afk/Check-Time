@@ -192,7 +192,9 @@ export function WorkerShell({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState>(null);
   const [lastGpsCheck, setLastGpsCheck] = useState<WorkerGpsCheck | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  // Time ticker. Init null on both server and client first render so SSR
+  // and hydration match; the effect below sets a real value post-mount.
+  const [now, setNow] = useState<number | null>(null);
   const { t } = useTranslation();
 
   // ── Sound mute state ──
@@ -237,10 +239,9 @@ export function WorkerShell({
 
   // ── Offline queue (Wave 8) ─────────────────────────────────────────────
   const [offlineQueue, setOfflineQueue] = useState<OfflineUpload[]>([]);
-  const [isOnline, setIsOnline] = useState<boolean>(() => {
-    if (typeof window === "undefined") return true;
-    return window.navigator.onLine;
-  });
+  // Optimistic default `true`; effect below syncs from navigator.onLine
+  // after mount so SSR and hydration agree on the same starting value.
+  const [isOnline, setIsOnline] = useState<boolean>(true);
   const [draining, setDraining] = useState(false);
 
   // Hydrate queue once on mount.
@@ -251,6 +252,7 @@ export function WorkerShell({
   // ── Online/offline listeners ─────────────────────────────────────────
   useEffect(() => {
     if (typeof window === "undefined") return;
+    setIsOnline(window.navigator.onLine);
     function handleOnline() {
       setIsOnline(true);
     }
@@ -293,13 +295,22 @@ export function WorkerShell({
   );
 
   // ── GPS live tracking ──
-  const [gpsConsented, setGpsConsented] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("check-time-gps-consent") === "true";
-  });
+  // Init `false` on both server and client first render so SSR and hydration
+  // match. The effect below seeds from localStorage cache, then the DB-check
+  // effect below that confirms against the source of truth.
+  const [gpsConsented, setGpsConsented] = useState<boolean>(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [iosTipShown, setIosTipShown] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
+
+  // Seed from localStorage cache once mounted (fast first paint before the
+  // DB round-trip below resolves).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cached = localStorage.getItem("check-time-gps-consent");
+    if (cached === "true") setGpsConsented(true);
+    else if (cached === "false") setGpsConsented(false);
+  }, []);
 
   // DB is source of truth, localStorage is cache. "unknown" leaves the
   // existing boolean state alone (no UI block — modal opens lazily on
@@ -399,6 +410,7 @@ export function WorkerShell({
       return;
     }
 
+    setNow(Date.now()); // first sync post-mount
     const timer = window.setInterval(() => {
       setNow(Date.now());
     }, 1_000);
@@ -409,7 +421,7 @@ export function WorkerShell({
   }, [shell.clockState.clockInTime, shell.clockState.isClockedIn]);
 
   const activeSeconds =
-    shell.clockState.isClockedIn && shell.clockState.clockInTime
+    shell.clockState.isClockedIn && shell.clockState.clockInTime && now !== null
       ? Math.max(
           0,
           Math.floor((now - new Date(shell.clockState.clockInTime).getTime()) / 1_000),
