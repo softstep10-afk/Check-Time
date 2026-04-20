@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { formatEventTime } from "@/lib/worker-utils";
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
@@ -13,37 +12,6 @@ import {
   type AppMessage,
   type MessagePriority,
 } from "@/lib/message-types";
-
-const PREVIEW_MESSAGES: AppMessage[] = [
-  {
-    id: "msg-001",
-    from_id: "00000000-0000-0000-0000-000000000010",
-    from_name: "Preview Manager",
-    to_id: "00000000-0000-0000-0000-000000000011",
-    text: "Wear hard hats on level 3 today — crane overhead",
-    color: "#ef4444",
-    priority: "urgent",
-    read: false,
-    created_at: new Date(Date.now() - 15 * 60_000).toISOString(),
-    attachment: {
-      url: "/icon-192.png",
-      filename: "safety-notice.png",
-      type: "image",
-      size: 48_000,
-    },
-  },
-  {
-    id: "msg-002",
-    from_id: "00000000-0000-0000-0000-000000000010",
-    from_name: "Preview Manager",
-    to_id: "00000000-0000-0000-0000-000000000011",
-    text: "Glass delivery confirmed for 2 PM, keep staging area clear",
-    color: "#3b82f6",
-    priority: "task",
-    read: false,
-    created_at: new Date(Date.now() - 45 * 60_000).toISOString(),
-  },
-];
 
 function inferPriority(row: { priority?: string | null; color?: string | null; metadata?: Record<string, unknown> | null }): MessagePriority {
   const fromColumn = row.priority;
@@ -100,8 +68,8 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
 
   // Load messages
   useEffect(() => {
-    if (AUTH_BYPASS_ENABLED || !profileId) {
-      setMessages(PREVIEW_MESSAGES);
+    if (!profileId) {
+      setMessages([]);
       setLoaded(true);
       return;
     }
@@ -174,9 +142,7 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
       setMessages((prev) =>
         prev.map((m) => (m.id === id ? { ...m, read: true } : m)),
       );
-      if (!AUTH_BYPASS_ENABLED) {
-        await supabase.from("messages").update({ read: true }).eq("id", id);
-      }
+      await supabase.from("messages").update({ read: true }).eq("id", id);
     },
     [supabase],
   );

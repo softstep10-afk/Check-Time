@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import { FileText, Paperclip, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import {
@@ -133,30 +132,31 @@ export function SendMessageForm({
       }
     }
 
-    if (AUTH_BYPASS_ENABLED || !orgId || !senderId) {
-      // Preview mode — simulate send
-      void attachment;
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    } else {
-      const basePayload = {
-        org_id: orgId,
-        sender_id: senderId,
-        recipient_id: recipientId,
-        text: text.trim(),
-        color,
-        attachment: attachment ? JSON.parse(JSON.stringify(attachment)) : null,
-        metadata: { priority },
-      };
-      // Try with the priority column first; fall back if 00009 hasn't run.
-      let insertErr = (await supabase.from("messages").insert({ ...basePayload, priority })).error;
-      if (insertErr && /column .* priority/i.test(insertErr.message)) {
-        insertErr = (await supabase.from("messages").insert(basePayload)).error;
-      }
-      if (insertErr) {
-        setError(insertErr.message);
-        setSending(false);
-        return;
-      }
+    if (!orgId || !senderId) {
+      setError(t("messages.sendFailed"));
+      setSending(false);
+      return;
+    }
+
+    const basePayload = {
+      org_id: orgId,
+      sender_id: senderId,
+      recipient_id: recipientId,
+      text: text.trim(),
+      color,
+      attachment: attachment ? JSON.parse(JSON.stringify(attachment)) : null,
+      metadata: { priority },
+    };
+    // priority column was added in migration 00014. Retry without it on the
+    // off chance an older DB hasn't run the migration yet — cheap insurance.
+    let insertErr = (await supabase.from("messages").insert({ ...basePayload, priority })).error;
+    if (insertErr && /column .* priority/i.test(insertErr.message)) {
+      insertErr = (await supabase.from("messages").insert(basePayload)).error;
+    }
+    if (insertErr) {
+      setError(insertErr.message);
+      setSending(false);
+      return;
     }
 
     setSending(false);
