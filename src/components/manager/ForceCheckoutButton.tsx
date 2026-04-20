@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { logAudit } from "@/lib/audit";
+import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 
 function localDatetimeValue(): string {
@@ -173,12 +174,11 @@ export function ForceCheckoutButton({
         <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
           {t("overview.forceCheckoutReason")}
         </span>
-        <input
-          type="text"
+        <TextInputWithVoice
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder={t("overview.forceCheckoutReason")}
-          className="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+          className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs text-[var(--text-primary)] outline-none"
         />
       </label>
 

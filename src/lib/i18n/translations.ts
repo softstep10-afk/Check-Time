@@ -712,6 +712,7 @@ export const translations = {
   "payroll.reimbursement": { en: "Reimbursement", ru: "Возмещение" },
   "payroll.deduction": { en: "Deduction", ru: "Вычет" },
   "payroll.addAdjustment": { en: "Add adjustment", ru: "Добавить корр." },
+  "payroll.adjustmentNotePlaceholder": { en: "Note", ru: "Комментарий" },
   "payroll.approveAll": { en: "Approve All", ru: "Утвердить все" },
   "payroll.markAllPaid": { en: "Mark All Paid", ru: "Отметить оплату" },
   "payroll.exportCsv": { en: "Export CSV", ru: "Экспорт CSV" },
