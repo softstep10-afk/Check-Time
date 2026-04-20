@@ -80,6 +80,11 @@ export function MediaFlagModal({
     if (!open || !mediaId) return;
 
     let cancelled = false;
+    // Reset-then-load is the canonical fetch-on-open pattern. The
+    // resets happen once per modal open (open + mediaId both change
+    // together), not on every render — react-hooks/set-state-in-effect
+    // fires here but is the wrong fit.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError(null);
     setTableMissing(false);

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
+import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
+import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
@@ -52,6 +54,26 @@ export function ProjectDetailPage({
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
+  const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
+
+  const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const ids = await fetchOpenFlagMediaIds(supabase, mediaIds);
+      if (!cancelled) setOpenFlagIds(ids);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, mediaIds]);
+
+  async function refreshOpenFlags() {
+    const ids = await fetchOpenFlagMediaIds(supabase, mediaIds);
+    setOpenFlagIds(ids);
+  }
   const [message, setMessage] = useState("");
   const site = parseGeoPoint(project.site_point);
   const { t } = useTranslation();
@@ -627,15 +649,34 @@ export function ProjectDetailPage({
                     key={item.id}
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
                   >
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
-                      {item.filename ?? item.media_type}
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {formatDateTime(item.created_at)} • {item.media_type}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-[var(--text-primary)]">
+                          {item.filename ?? item.media_type}
+                        </div>
+                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {formatDateTime(item.created_at)} • {item.media_type}
+                        </div>
+                      </div>
+                      <MediaFlagButton
+                        mediaId={item.id}
+                        hasOpenFlag={openFlagIds.has(item.id)}
+                        onClick={() => setFlagModalMediaId(item.id)}
+                      />
                     </div>
                     {item.caption ? (
                       <p className="mt-3 text-sm text-[var(--text-secondary)]">{item.caption}</p>
                     ) : null}
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setFlagModalMediaId(item.id)}
+                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                      >
+                        🚩 {t("flags.flagForReview")}
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -681,6 +722,15 @@ export function ProjectDetailPage({
       <ReceiptsSection orgId={orgId} projectId={project.id} managerId={managerId} />
       {/* ── Store Visits ── */}
       <StoreVisitsSection projectId={project.id} />
+
+      <MediaFlagModal
+        open={flagModalMediaId !== null}
+        mediaId={flagModalMediaId}
+        viewerRole="manager"
+        viewerId={managerId}
+        onClose={() => setFlagModalMediaId(null)}
+        onMutate={() => void refreshOpenFlags()}
+      />
     </div>
   );
 }
