@@ -34,6 +34,14 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { validateUploadFile } from "@/lib/upload-limits";
+import {
+  loadOfflineQueue,
+  offlineUploadToFile,
+  queueOfflineUpload,
+  removeOfflineUpload,
+  type OfflineUpload,
+  type OfflineUploadMode,
+} from "@/lib/offline-uploads";
 import type { AppMessage } from "@/lib/message-types";
 
 const navItems = [
@@ -57,12 +65,16 @@ type WorkerShellContextValue = {
   banner: BannerState;
   lastGpsCheck: WorkerGpsCheck | null;
   muted: boolean;
+  offlineQueueLength: number;
+  isOnline: boolean;
+  draining: boolean;
   dismissBanner: () => void;
   clockIn: (projectId: string) => Promise<void>;
   clockOut: () => Promise<void>;
   uploadMedia: (files: FileList | File[], caption: string, mode: UploadMode) => Promise<void>;
   updateTaskStatus: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
   toggleMute: () => void;
+  drainOfflineQueue: () => Promise<void>;
 };
 
 const WorkerShellContext = createContext<WorkerShellContextValue | null>(null);
@@ -222,6 +234,36 @@ export function WorkerShell({
       return next;
     });
   }, [supabase, shell.profile.id]);
+
+  // ── Offline queue (Wave 8) ─────────────────────────────────────────────
+  const [offlineQueue, setOfflineQueue] = useState<OfflineUpload[]>([]);
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.navigator.onLine;
+  });
+  const [draining, setDraining] = useState(false);
+
+  // Hydrate queue once on mount.
+  useEffect(() => {
+    setOfflineQueue(loadOfflineQueue());
+  }, []);
+
+  // ── Online/offline listeners ─────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function handleOnline() {
+      setIsOnline(true);
+    }
+    function handleOffline() {
+      setIsOnline(false);
+    }
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Unlock AudioContext on first user interaction (mobile requirement)
   useEffect(() => {
@@ -694,6 +736,40 @@ export function WorkerShell({
       return;
     }
 
+    // Wave 8 offline queue: when the browser reports we're offline,
+    // serialize the files into localStorage instead of hitting Storage.
+    // The window 'online' listener below will drain the queue.
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      let degradedAny = false;
+      for (const file of selectedFiles) {
+        const result = await queueOfflineUpload({
+          file,
+          mode: mode as OfflineUploadMode,
+          projectId: targetProjectId,
+          profileId: shell.profile.id,
+          orgId: shell.profile.org_id,
+          caption,
+        });
+        if (!result.ok) {
+          setBanner({
+            tone: "error",
+            text:
+              result.reason === "storage_full"
+                ? "Offline storage full — connect to upload."
+                : "Couldn't queue file offline.",
+          });
+          return;
+        }
+        if (result.degraded) degradedAny = true;
+        setOfflineQueue(result.queue);
+      }
+      setBanner({
+        tone: "info",
+        text: degradedAny ? t("uploads.queuedTooLarge") : t("uploads.queued"),
+      });
+      return;
+    }
+
     setBusyAction(
       mode === "checkout"
         ? "checkout-video"
@@ -847,6 +923,62 @@ export function WorkerShell({
     }
   }
 
+  // Drain the offline queue: best-effort, item-by-item. Skips thumb-only
+  // entries (worker must re-pick the file). Removes each item from
+  // localStorage on a successful Storage upload.
+  const drainOfflineQueue = useCallback(async () => {
+    const items = loadOfflineQueue();
+    if (items.length === 0) return;
+    setDraining(true);
+    try {
+      for (const item of items) {
+        const file = offlineUploadToFile(item);
+        if (!file) continue; // thumb-only, needs re-pick
+        const today = new Date().toISOString().slice(0, 10);
+        const safeName = slugifyFilename(file.name || `${item.mode}-${Date.now()}`);
+        const storagePath = `${item.orgId}/${item.projectId}/${today}/${Date.now()}-${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("media")
+          .upload(storagePath, file, { upsert: false, cacheControl: "3600" });
+        if (uploadError) continue;
+
+        const { error: insertError } = await supabase.from("media").insert({
+          org_id: item.orgId,
+          project_id: item.projectId,
+          uploaded_by: item.profileId,
+          media_type: guessMediaType(file),
+          storage_path: storagePath,
+          filename: file.name,
+          file_size: file.size,
+          mime_type: file.type,
+          caption: item.caption || null,
+          is_checkout: item.mode === "checkout" || item.mode === "before_leave",
+          time_event_id: null,
+          metadata: {
+            uploadedBy: "worker-shell",
+            offlineQueued: true,
+            ...(item.mode === "before_leave" ? { kind: "before_leave" } : {}),
+          },
+        });
+        if (insertError) continue;
+
+        const remaining = removeOfflineUpload(item.id);
+        setOfflineQueue(remaining);
+      }
+      router.refresh();
+    } finally {
+      setDraining(false);
+    }
+  }, [router, supabase]);
+
+  // Auto-drain when the browser flips back online.
+  useEffect(() => {
+    if (!isOnline) return;
+    if (offlineQueue.length === 0) return;
+    void drainOfflineQueue();
+  }, [isOnline, offlineQueue.length, drainOfflineQueue]);
+
   const value: WorkerShellContextValue = {
     shell,
     activeSeconds,
@@ -854,12 +986,16 @@ export function WorkerShell({
     banner,
     lastGpsCheck,
     muted,
+    offlineQueueLength: offlineQueue.length,
+    isOnline,
+    draining,
     dismissBanner,
     clockIn,
     clockOut,
     uploadMedia,
     updateTaskStatus,
     toggleMute,
+    drainOfflineQueue,
   };
 
   return (
@@ -916,6 +1052,24 @@ export function WorkerShell({
                 </button>
               </div>
             </div>
+
+            {offlineQueue.length > 0 ? (
+              <div
+                className="mt-3 inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1.5 text-[11px] font-semibold"
+                style={{
+                  background: isOnline
+                    ? "rgba(15, 168, 120, 0.14)"
+                    : "rgba(245, 158, 11, 0.14)",
+                  color: isOnline ? "var(--green)" : "#f59e0b",
+                }}
+              >
+                <span aria-hidden>{isOnline ? "↻" : "⚠"}</span>
+                {(isOnline && draining
+                  ? t("uploads.retrying")
+                  : t("uploads.offlineBanner")
+                ).replace("{count}", String(offlineQueue.length))}
+              </div>
+            ) : null}
 
             <div className="mt-4 grid grid-cols-3 gap-2">
               <div
