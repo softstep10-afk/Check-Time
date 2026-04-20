@@ -30,6 +30,7 @@ import { NotificationBell } from "@/components/worker/NotificationBell";
 import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
+import { readLatestConsent, writeConsent } from "@/lib/gps-consent";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { validateUploadFile } from "@/lib/upload-limits";
@@ -300,20 +301,17 @@ export function WorkerShell({
   const [iosTipShown, setIosTipShown] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
 
-  // Check consent from DB on mount (localStorage is cache, DB is source of truth)
+  // DB is source of truth, localStorage is cache. "unknown" leaves the
+  // existing boolean state alone (no UI block — modal opens lazily on
+  // the first GPS-requiring action, same as before).
   useEffect(() => {
     if (consentChecked) return;
     async function checkConsent() {
-      const { data, error } = await supabase
-        .from("worker_location_consents")
-        .select("consented")
-        .eq("worker_id", shell.profile.id)
-        .order("signed_at", { ascending: false })
-        .limit(1);
-      if (!error && data && data.length > 0) {
-        const consented = (data[0] as { consented: boolean }).consented;
-        setGpsConsented(consented);
-        localStorage.setItem("check-time-gps-consent", String(consented));
+      const state = await readLatestConsent(supabase, shell.profile.id);
+      if (state !== "unknown") {
+        const granted = state === "granted";
+        setGpsConsented(granted);
+        localStorage.setItem("check-time-gps-consent", String(granted));
       }
       setConsentChecked(true);
     }
@@ -363,38 +361,30 @@ export function WorkerShell({
   }, [gpsTrackingEnabled, iosTipShown]);
 
   function handleGpsConsent(signedName: string) {
-    void supabase
-      .from("worker_location_consents")
-      .insert({
-        org_id: shell.profile.org_id,
-        worker_id: shell.profile.id,
-        signed_name: signedName,
-        consented: true,
-        consent_version: 1,
-        user_agent: navigator.userAgent,
-      })
-      .then(({ error }) => {
-        if (error) console.warn("worker_location_consents insert failed:", error.message);
-      });
+    void writeConsent(supabase, {
+      orgId: shell.profile.org_id,
+      workerId: shell.profile.id,
+      signedName,
+      granted: true,
+      userAgent: navigator.userAgent,
+    }).then((res) => {
+      if (!res.ok) console.warn("consent grant failed:", res.error);
+    });
     localStorage.setItem("check-time-gps-consent", "true");
     setGpsConsented(true);
     setShowConsentModal(false);
   }
 
   function handleGpsDecline() {
-    void supabase
-      .from("worker_location_consents")
-      .insert({
-        org_id: shell.profile.org_id,
-        worker_id: shell.profile.id,
-        signed_name: shell.profile.name,
-        consented: false,
-        consent_version: 1,
-        user_agent: navigator.userAgent,
-      })
-      .then(({ error }) => {
-        if (error) console.warn("worker_location_consents insert failed:", error.message);
-      });
+    void writeConsent(supabase, {
+      orgId: shell.profile.org_id,
+      workerId: shell.profile.id,
+      signedName: shell.profile.name,
+      granted: false,
+      userAgent: navigator.userAgent,
+    }).then((res) => {
+      if (!res.ok) console.warn("consent decline failed:", res.error);
+    });
     localStorage.setItem("check-time-gps-consent", "false");
     setGpsConsented(false);
     setShowConsentModal(false);
