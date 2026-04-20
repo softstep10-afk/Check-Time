@@ -23,7 +23,7 @@ export default function ManagersPage() {
     const { data } = await supabase
       .from("profiles")
       .select("*")
-      .in("role", ["manager", "admin"])
+      .in("role", ["owner", "admin", "manager", "supervisor"])
       .is("deleted_at", null)
       .order("created_at", { ascending: true });
     setManagers((data as Profile[]) ?? []);

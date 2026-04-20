@@ -50,7 +50,7 @@ export interface MediaFlagModalProps {
   open: boolean;
   mediaId: string | null;
   /** Manager-tier viewer sees author column + Reviewed action. */
-  viewerRole: "worker" | "manager";
+  viewerRole: "worker" | "supervisor" | "manager" | "admin" | "owner";
   /** Auth.uid() of the current viewer; used as flagged_by / reviewed_by. */
   viewerId: string;
   onClose: () => void;
@@ -93,7 +93,7 @@ export function MediaFlagModal({
 
     void (async () => {
       const data =
-        viewerRole === "manager"
+        viewerRole !== "worker"
           ? await fetchMediaFlagsFull(supabase, mediaId)
           : await fetchMediaFlagsAnon(supabase, mediaId);
       if (!cancelled) {
@@ -137,7 +137,7 @@ export function MediaFlagModal({
     // Refresh in viewer-appropriate shape so the new note picks up the
     // author column for managers.
     const refreshed =
-      viewerRole === "manager"
+      viewerRole !== "worker"
         ? await fetchMediaFlagsFull(supabase, mediaId)
         : await fetchMediaFlagsAnon(supabase, mediaId);
     setFlags(refreshed);
@@ -227,7 +227,7 @@ export function MediaFlagModal({
           ) : (
             flags.map((flag) => {
               const fullFlag = flag as MediaFlagFull;
-              const isManagerView = viewerRole === "manager";
+              const isManagerView = viewerRole !== "worker";
               const reviewing = reviewBusyId === flag.id;
               return (
                 <div

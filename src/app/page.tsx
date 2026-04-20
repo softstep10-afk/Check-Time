@@ -21,7 +21,16 @@ export default async function RootPage() {
     .eq("id", user.id)
     .single();
 
-  if (profile?.role === "manager" || profile?.role === "admin") {
+  // Manager-tier roles land on the dashboard; worker-tier roles go
+  // straight to the clock screen. Keep this list aligned with the
+  // user_role enum (see supabase/migrations/00001_foundation.sql +
+  // 00003_schema_gap.sql which adds 'owner').
+  if (
+    profile?.role === "owner" ||
+    profile?.role === "admin" ||
+    profile?.role === "manager" ||
+    profile?.role === "supervisor"
+  ) {
     redirect("/overview");
   }
 
