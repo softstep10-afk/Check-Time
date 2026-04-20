@@ -23,6 +23,7 @@ type InputProps = CommonProps & {
 
 type TextareaProps = CommonProps & {
   multiline: true;
+  rows?: number;
 };
 
 type Props = InputProps | TextareaProps;

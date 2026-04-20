@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Flag, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
+import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { formatDateTime } from "@/lib/worker-utils";
 import {
   fetchMediaFlagsAnon,
@@ -281,13 +282,14 @@ export function MediaFlagModal({
         </div>
 
         <div className="space-y-2 border-t border-[var(--border-default)] p-4">
-          <textarea
+          <TextInputWithVoice
+            multiline
+            rows={2}
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder={t("flags.notePlaceholder")}
             disabled={submitting || tableMissing}
-            rows={2}
-            className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none disabled:opacity-50"
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none disabled:opacity-50"
           />
           {error ? (
             <div className="text-xs font-semibold" style={{ color: "var(--red)" }}>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DateField } from "@/components/shared/DateField";
+import { DateRangePresets } from "@/components/shared/DateRangePresets";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { buildTimelineItems } from "@/lib/manager-utils";
 import { formatDateTime } from "@/lib/worker-utils";
@@ -7,6 +7,14 @@ import { getServerLocale, serverT } from "@/lib/i18n/server";
 
 function readParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function endOfDayPlusOne(isoDate: string): string {
+  // Treat 'end' as inclusive — bump to the start of the next day so the
+  // string compare against ISO timestamps catches everything on that day.
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
 }
 
 export default async function TimelinePage({
@@ -20,7 +28,10 @@ export default async function TimelinePage({
   const worker = readParam(params.worker);
   const project = readParam(params.project);
   const type = readParam(params.type);
-  const date = readParam(params.date);
+  const start = readParam(params.start);
+  const end = readParam(params.end);
+  const range = readParam(params.range);
+  const endExclusive = end ? endOfDayPlusOne(end) : "";
   const data = await getManagerWorkspaceData();
   const timeline = buildTimelineItems(data).filter((item) => {
     if (worker && item.profile_id !== worker) {
@@ -35,7 +46,11 @@ export default async function TimelinePage({
       return false;
     }
 
-    if (date && !item.event_time.startsWith(date)) {
+    if (start && item.event_time < start) {
+      return false;
+    }
+
+    if (endExclusive && item.event_time >= endExclusive) {
       return false;
     }
 
@@ -56,8 +71,14 @@ export default async function TimelinePage({
         </p>
       </section>
 
-      <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
-        <form className="grid gap-3 md:grid-cols-4 xl:grid-cols-5" method="GET">
+      <section className="space-y-3 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+        <DateRangePresets defaultPreset="week" />
+        <form className="grid gap-3 md:grid-cols-3 xl:grid-cols-4" method="GET">
+          {/* Preserve the date range across worker/project/type filter
+              submits — the form replaces all params on submit otherwise. */}
+          {start ? <input type="hidden" name="start" value={start} /> : null}
+          {end ? <input type="hidden" name="end" value={end} /> : null}
+          {range ? <input type="hidden" name="range" value={range} /> : null}
           <select
             name="worker"
             defaultValue={worker}
@@ -97,11 +118,6 @@ export default async function TimelinePage({
             <option value="break_start">{t("timeline.breakStart")}</option>
             <option value="break_end">{t("timeline.breakEnd")}</option>
           </select>
-          <DateField
-            name="date"
-            defaultValue={date}
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-          />
           <button
             type="submit"
             className="rounded-[var(--radius-sm)] px-4 py-3 text-sm font-semibold"

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { DateField } from "@/components/shared/DateField";
+import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { logAudit } from "@/lib/audit";
 import type { Profile } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
@@ -993,7 +994,7 @@ export function PayrollCalculator({
                 <option value="deduction">{t("payroll.deduction")}</option>
               </select>
               <input type="number" step="0.01" value={adjAmount} onChange={(e) => setAdjAmount(e.target.value)} placeholder="$0.00" className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
-              <input type="text" value={adjNote} onChange={(e) => setAdjNote(e.target.value)} placeholder="Note" className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
+              <TextInputWithVoice value={adjNote} onChange={(e) => setAdjNote(e.target.value)} placeholder={t("payroll.adjustmentNotePlaceholder")} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none" />
               <div className="flex gap-2">
                 <button type="button" onClick={() => void addAdjustment()} className="flex-1 rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold" style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}>
                   {t("payroll.addAdjustment")}

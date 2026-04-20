@@ -7,6 +7,7 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
+import { validateUploadFile } from "@/lib/upload-limits";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
@@ -56,6 +57,29 @@ export function ProjectDetailPage({
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
+  const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
+
+  const filteredMedia = useMemo(() => {
+    if (mediaFilter === "all") return media;
+    if (mediaFilter === "pdf") {
+      // Bucket the legacy 'document' type with PDFs — they're the same UX
+      // category from the manager's POV.
+      return media.filter((m) => m.media_type === "pdf" || m.media_type === "document");
+    }
+    return media.filter((m) => m.media_type === mediaFilter);
+  }, [media, mediaFilter]);
+
+  const mediaCounts = useMemo(() => {
+    let photo = 0;
+    let video = 0;
+    let pdf = 0;
+    for (const m of media) {
+      if (m.media_type === "photo") photo += 1;
+      else if (m.media_type === "video") video += 1;
+      else if (m.media_type === "pdf" || m.media_type === "document") pdf += 1;
+    }
+    return { photo, video, pdf, all: media.length };
+  }, [media]);
 
   const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
 
@@ -638,13 +662,48 @@ export function ProjectDetailPage({
         <div className="space-y-5">
           <div className="surface-card p-4">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
+            {media.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {(
+                  [
+                    { key: "all", label: t("projectDetail.mediaFilterAll"), icon: "", count: mediaCounts.all },
+                    { key: "photo", label: t("projectDetail.mediaFilterPhoto"), icon: "📷", count: mediaCounts.photo },
+                    { key: "video", label: t("projectDetail.mediaFilterVideo"), icon: "🎥", count: mediaCounts.video },
+                    { key: "pdf", label: t("projectDetail.mediaFilterPdf"), icon: "📄", count: mediaCounts.pdf },
+                  ] as const
+                ).map((tab) => {
+                  const selected = mediaFilter === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setMediaFilter(tab.key)}
+                      aria-pressed={selected}
+                      className="rounded-[var(--radius-sm)] border px-2.5 py-1 text-xs font-semibold transition-colors"
+                      style={{
+                        borderColor: selected ? "var(--brand-yellow)" : "var(--border-default)",
+                        background: selected ? "rgba(191, 162, 52, 0.14)" : "transparent",
+                        color: selected ? "var(--brand-yellow)" : "var(--text-secondary)",
+                      }}
+                    >
+                      {tab.icon ? `${tab.icon} ` : ""}{tab.label}
+                      <span className="ml-1 opacity-60">{tab.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <div className="mt-4 space-y-3">
               {media.length === 0 ? (
                 <div className="surface-panel p-3 text-sm text-[var(--text-secondary)]">
                   {t("projectDetail.noMedia")}
                 </div>
+              ) : filteredMedia.length === 0 ? (
+                <div className="surface-panel p-3 text-sm text-[var(--text-secondary)]">
+                  {t("projectDetail.noMediaForFilter")}
+                </div>
               ) : (
-                media.map((item) => (
+                filteredMedia.map((item) => (
                   <div
                     key={item.id}
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
@@ -1018,6 +1077,26 @@ function ReceiptsSection({
     const note = fd.get("note")?.toString().trim() ?? "";
 
     if (!finalStore || !amount) return;
+
+    // Wave 8 client validation against STORAGE_LIMITS_MB.
+    for (const file of Array.from(files)) {
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        const error = validation.error;
+        if (error.reason === "too_large") {
+          const key =
+            error.kind === "photo"
+              ? "uploads.tooLargePhoto"
+              : error.kind === "video"
+                ? "uploads.tooLargeVideo"
+                : "uploads.tooLargePdf";
+          setMessage(t(key));
+        } else {
+          setMessage(t("uploads.unsupportedType").replace("{kind}", error.mime));
+        }
+        return;
+      }
+    }
 
     setUploading(true);
     setMessage("");
