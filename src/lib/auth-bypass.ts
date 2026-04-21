@@ -1,6 +1,17 @@
-// Temporary preview mode so the app can be browsed without a live session.
-// Flip this back to false when you want normal auth gating again.
-export const AUTH_BYPASS_ENABLED = true;
+// Preview mode so the app can be browsed without a live session.
+//
+// Controlled by NEXT_PUBLIC_AUTH_BYPASS. Defaults to FALSE — i.e. real
+// auth is required unless the env var is explicitly the string "true".
+// Must use the NEXT_PUBLIC_ prefix because several client components
+// branch on this constant; Next.js only inlines NEXT_PUBLIC_* into the
+// browser bundle at build time.
+//
+// Local dev:        add `NEXT_PUBLIC_AUTH_BYPASS=true` to .env.local
+//                   (gitignored) to keep current auto-login UX.
+// Staging / prod:   omit the var (or set it to anything other than
+//                   "true") so PIN login is enforced.
+export const AUTH_BYPASS_ENABLED =
+  process.env.NEXT_PUBLIC_AUTH_BYPASS === "true";
 
 /**
  * Hardcoded auth.users / profiles UUID for the seeded demo owner.

@@ -22,39 +22,31 @@ Worker, clipboard — all require HTTPS or `localhost`).
 
 ---
 
-## ⚠️ Pre-deploy CRITICAL — AUTH_BYPASS
+## AUTH_BYPASS is env-driven
 
-`src/lib/auth-bypass.ts` is currently:
+`src/lib/auth-bypass.ts` reads:
 
 ```ts
-export const AUTH_BYPASS_ENABLED = true;
+export const AUTH_BYPASS_ENABLED =
+  process.env.NEXT_PUBLIC_AUTH_BYPASS === "true";
 ```
 
-This is a **code constant**, not an env var. Any deploy made today will
-auto-log every visitor in as the seeded Owner with full access. Two
-mitigations — pick one before first deploy:
+- **Default = false** → PIN login is enforced everywhere the env var
+  isn't explicitly set to `"true"`.
+- **Local dev** keeps the auto-login experience because `.env.local`
+  has `NEXT_PUBLIC_AUTH_BYPASS=true` (file is gitignored).
+- **Vercel staging** simply omits the variable — bypass stays off, real
+  auth is required. The PIN-login route uses `SUPABASE_SERVICE_ROLE_KEY`
+  so make sure that env var is also set (see the table below).
 
-**Mitigation A (recommended) — Vercel Deployment Protection ON**
+Recommended belt-and-braces: leave Vercel's Deployment Protection ON
+(default for new Hobby projects) so even before PIN login the URL is
+gated by Vercel SSO. Once you're confident PIN login works, you can
+turn Deployment Protection off if you need to share the URL with
+testers who aren't on your Vercel team.
 
-Vercel turns Deployment Protection on by default for new Hobby projects.
-Every visit to the staging URL bounces through Vercel SSO first; only
-your Vercel account can see anything. Once inside, AUTH_BYPASS auto-logs
-you in as Owner, which is fine since *only you* can get past the SSO.
-
-Confirm it's on after the first deploy:
-> Vercel dashboard → project → Settings → Deployment Protection →
-> "Vercel Authentication" should be **Enabled** for "Standard
-> Protection".
-
-**Mitigation B — flip the flag, use real auth**
-
-If Deployment Protection is off (e.g. you want to share the URL with
-someone who isn't on your Vercel team), edit `src/lib/auth-bypass.ts`
-to `false` BEFORE deploying. Workers will need real PIN logins. The
-seeded owner (PIN 9999) still works.
-
-If you ever want both modes selectable without editing code, ask for the
-env-var-driven version — it's a one-line change.
+> Confirm Deployment Protection: Vercel dashboard → project → Settings
+> → Deployment Protection → "Vercel Authentication" = Enabled / Standard.
 
 ---
 
@@ -69,6 +61,7 @@ in the Vercel dashboard before first deploy** so the build picks them up.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Same value as `.env.local`. RLS gates everything; the anon key is meant to be public. |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | Same value as `.env.local`. **Server-side only** — never inline this anywhere with `NEXT_PUBLIC_` prefix. PIN-login (`/api/auth/pin-login`) and admin user provisioning need it. Without it, login fails with a 503. |
 | `NEXT_PUBLIC_GOOGLE_MAPS_KEY` | yes | Same value as `.env.local`. The manager map and live-positions panel will refuse to load without it. |
+| `NEXT_PUBLIC_AUTH_BYPASS` | **do not set** | Omit on Vercel so real PIN auth is enforced. Setting it to `"true"` re-enables auto-login as the seeded Owner. |
 | `ANTHROPIC_API_KEY` | optional | AI assistant + photo analysis routes. Empty string is fine if you're not testing AI features yet. |
 | `ANTHROPIC_MODEL` | optional | e.g. `claude-sonnet-4-6`. Required only if `ANTHROPIC_API_KEY` is set. |
 
@@ -230,7 +223,7 @@ A clean run answers "is this URL ready as the main test environment?"
 |---------|--------------------------------|----------------|
 | HTTPS | no — GPS is denied on phone | yes — full Geolocation API |
 | Cert trust | n/a | trusted public CA, no warnings |
-| AUTH_BYPASS | true (you're auto-Owner) | true unless you flip it; Deployment Protection still gates the URL |
+| AUTH_BYPASS | true (`.env.local` has the var) | false — real PIN required (omit `NEXT_PUBLIC_AUTH_BYPASS` on Vercel) |
 | Cookies | `Lax` on `localhost` | `SameSite=Lax; Secure` on https — Supabase session cookie behaves like prod |
 | Cold start | always warm | first request after idle takes ~500-1500ms (serverless) |
 | Logs | `npm run dev` console | Vercel dashboard → Deployments → Functions → Logs |
