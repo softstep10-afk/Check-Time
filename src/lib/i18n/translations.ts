@@ -914,7 +914,9 @@ export const translations = {
   "tasks.due": { en: "Due", ru: "Срок:" },
   "tasks.deleted": { en: "Task moved to trash.", ru: "Задача в корзине." },
   "tasks.subtitle": { en: "Org-wide task board", ru: "Доска задач организации" },
-  "tasks.descriptionLong": { en: "Assign work across projects, filter by project or status, and track progress without leaving this page.", ru: "Назначайте задачи по проектам, фильтруйте по проекту или статусу и отслеживайте прогресс." },
+  "tasks.descriptionLong": { en: "All tasks across the organization. Create new tasks from a project page.", ru: "Все задачи организации. Создавайте новые задачи со страницы проекта." },
+  "tasks.preferProjectPage": { en: "💡 Tip: create tasks inside a project to keep them in context.", ru: "💡 Совет: создавайте задачи внутри проекта, чтобы сохранить контекст." },
+  "tasks.openProjects": { en: "Open projects →", ru: "Открыть проекты →" },
 
   // ── Materials ──
   "materials.title": { en: "Materials & Deliveries", ru: "Материалы и поставки" },

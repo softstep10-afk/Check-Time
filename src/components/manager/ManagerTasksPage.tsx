@@ -295,6 +295,13 @@ export function ManagerTasksPage({
         </div>
       ) : null}
 
+      <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-secondary)]">
+        {t("tasks.preferProjectPage")}
+        <Link href="/projects" className="ml-2 font-semibold text-[var(--brand-yellow)]">
+          {t("tasks.openProjects")}
+        </Link>
+      </div>
+
       <section className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         {/* ── Assign Task ── */}
         <div className="surface-card p-4">
