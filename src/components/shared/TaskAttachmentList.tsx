@@ -22,6 +22,12 @@ export function TaskAttachmentList({
 
   function open(item: TaskAttachmentRef) {
     const { data } = supabase.storage.from("media").getPublicUrl(item.storage_path);
+    console.log("[task-attach] open attachment", {
+      id: item.id,
+      filename: item.filename,
+      storage_path: item.storage_path,
+      publicUrl: data?.publicUrl,
+    });
     if (typeof window !== "undefined" && data?.publicUrl) {
       window.open(data.publicUrl, "_blank", "noopener,noreferrer");
     }

@@ -26,13 +26,25 @@ export async function uploadTaskAttachment(
   supabase: SupabaseClient,
   { orgId, projectId, uploadedBy, file }: UploadAttachmentParams,
 ): Promise<UploadAttachmentResult> {
+  console.log("[task-attach] upload start", {
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    orgId,
+    projectId,
+    uploadedBy,
+  });
+
   const validation = validateUploadFile(file);
   if (!validation.ok) {
-    return { ok: false, error: validation.error.reason };
+    console.error("[task-attach] validation failed", validation.error);
+    return { ok: false, error: `validation: ${validation.error.reason}` };
   }
+  console.log("[task-attach] validation ok", { kind: validation.kind });
 
   const safeName = slugifyFilename(file.name || `attachment-${Date.now()}`);
   const storagePath = `${orgId}/${projectId}/tasks/${Date.now()}-${safeName}`;
+  console.log("[task-attach] storage upload begin", { storagePath });
 
   const { error: uploadErr } = await supabase.storage
     .from("media")
@@ -41,7 +53,11 @@ export async function uploadTaskAttachment(
       cacheControl: "3600",
       contentType: file.type || "application/octet-stream",
     });
-  if (uploadErr) return { ok: false, error: uploadErr.message };
+  if (uploadErr) {
+    console.error("[task-attach] storage upload FAIL", uploadErr);
+    return { ok: false, error: `storage: ${uploadErr.message}` };
+  }
+  console.log("[task-attach] storage upload ok");
 
   const { data, error: insertErr } = await supabase
     .from("media")
@@ -63,8 +79,10 @@ export async function uploadTaskAttachment(
     .single<{ id: string }>();
 
   if (insertErr || !data) {
-    return { ok: false, error: insertErr?.message ?? "Insert failed" };
+    console.error("[task-attach] media insert FAIL", insertErr);
+    return { ok: false, error: `media-insert: ${insertErr?.message ?? "no data"}` };
   }
+  console.log("[task-attach] media insert ok", { mediaId: data.id });
   return { ok: true, mediaId: data.id };
 }
 
@@ -81,17 +99,24 @@ export async function linkMediaToTask(
   mediaIds: string[],
 ): Promise<void> {
   if (mediaIds.length === 0) return;
-  const { data: rows } = await supabase
+  console.log("[task-attach] linkMediaToTask start", { taskId, count: mediaIds.length });
+  const { data: rows, error: selErr } = await supabase
     .from("media")
     .select("id, metadata")
     .in("id", mediaIds);
+  if (selErr) {
+    console.error("[task-attach] linkMediaToTask select FAIL", selErr);
+    return;
+  }
   for (const row of (rows ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>) {
     const meta = row.metadata ?? {};
-    await supabase
+    const { error: updErr } = await supabase
       .from("media")
       .update({ metadata: { ...meta, task_id: taskId } })
       .eq("id", row.id);
+    if (updErr) console.error("[task-attach] linkMediaToTask update FAIL", { id: row.id, err: updErr });
   }
+  console.log("[task-attach] linkMediaToTask done");
 }
 
 export type TaskAttachmentRef = {

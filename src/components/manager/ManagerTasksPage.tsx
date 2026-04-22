@@ -133,11 +133,14 @@ export function ManagerTasksPage({
       return;
     }
 
+    console.log("[task-attach] ManagerTasksPage create: file count", attachmentFiles.length);
+
     const uploadedMediaIds: string[] = [];
     for (const file of attachmentFiles) {
       const validation = validateUploadFile(file);
       if (!validation.ok) {
-        setMessage(t("messages.uploadFailed"));
+        console.error("[task-attach] ManagerTasksPage validation FAIL", validation.error);
+        setMessage(`upload validation: ${validation.error.reason}`);
         setMessageTone("error");
         setBusyKey(null);
         return;
@@ -149,7 +152,8 @@ export function ManagerTasksPage({
         file,
       });
       if (!result.ok) {
-        setMessage(t("messages.uploadFailed"));
+        console.error("[task-attach] ManagerTasksPage upload FAIL", result.error);
+        setMessage(`upload: ${result.error}`);
         setMessageTone("error");
         setBusyKey(null);
         return;
@@ -157,6 +161,9 @@ export function ManagerTasksPage({
       uploadedMediaIds.push(result.mediaId);
     }
 
+    console.log("[task-attach] ManagerTasksPage task insert begin", {
+      hasAttachments: uploadedMediaIds.length > 0,
+    });
     const { data, error } = await supabase
       .from("tasks")
       .insert({
@@ -179,10 +186,12 @@ export function ManagerTasksPage({
     setBusyKey(null);
 
     if (error || !data) {
-      setMessage(error?.message ?? "Failed to create task");
+      console.error("[task-attach] ManagerTasksPage task insert FAIL", error);
+      setMessage(`task-insert: ${error?.message ?? "no data"}`);
       setMessageTone("error");
       return;
     }
+    console.log("[task-attach] ManagerTasksPage task insert ok", { taskId: data.id });
 
     if (uploadedMediaIds.length > 0) {
       void linkMediaToTask(supabase, data.id, uploadedMediaIds);
