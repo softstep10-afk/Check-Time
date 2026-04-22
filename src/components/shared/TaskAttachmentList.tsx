@@ -20,17 +20,28 @@ export function TaskAttachmentList({
   const supabase = useMemo(() => createClient(), []);
   if (items.length === 0) return null;
 
-  function open(item: TaskAttachmentRef) {
-    const { data } = supabase.storage.from("media").getPublicUrl(item.storage_path);
+  async function open(item: TaskAttachmentRef) {
+    if (typeof window === "undefined") return;
+    // The "media" bucket is Private (default + per migration spec), so
+    // getPublicUrl() returns a URL that 404s. createSignedUrl() returns
+    // a short-TTL URL that actually works for private buckets and is
+    // also fine for public ones — safe to switch unconditionally.
+    const { data, error } = await supabase.storage
+      .from("media")
+      .createSignedUrl(item.storage_path, 3600);
     console.log("[task-attach] open attachment", {
       id: item.id,
       filename: item.filename,
       storage_path: item.storage_path,
-      publicUrl: data?.publicUrl,
+      signedUrl: data?.signedUrl,
+      error: error?.message,
     });
-    if (typeof window !== "undefined" && data?.publicUrl) {
-      window.open(data.publicUrl, "_blank", "noopener,noreferrer");
+    if (error || !data?.signedUrl) {
+      console.error("[task-attach] failed to sign URL", error);
+      return;
     }
+    const popup = window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    if (!popup) console.warn("[task-attach] popup blocked");
   }
 
   return (
@@ -42,7 +53,7 @@ export function TaskAttachmentList({
           <button
             key={item.id}
             type="button"
-            onClick={() => open(item)}
+            onClick={() => void open(item)}
             className="inline-flex max-w-[220px] items-center gap-1.5 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-medium"
             style={{
               borderColor: "var(--border-default)",
