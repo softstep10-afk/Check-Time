@@ -79,27 +79,45 @@ export function ProjectDetailPage({
   const videoMediaInputRef = useRef<HTMLInputElement | null>(null);
   const pdfMediaInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Strict separation: the Project Media panel must show only rows the
+  // 3-button upload created (metadata.kind === "project_media").
+  // Receipts (metadata.category === "receipt"), task attachments
+  // (metadata.kind === "task_attachment"), worker journal entries, and
+  // checkout videos are intentionally excluded so each section's count
+  // matches the user's mental model. The full `media` array is still
+  // consulted by mediaById (so task attachment lookups resolve) and by
+  // mediaIds (so flag indicators cover every project media row).
+  const projectMediaItems = useMemo(
+    () => media.filter((m) => {
+      const meta = m.metadata as Record<string, unknown> | null;
+      return meta?.kind === "project_media";
+    }),
+    [media],
+  );
+
   const filteredMedia = useMemo(() => {
-    if (mediaFilter === "all") return media;
+    if (mediaFilter === "all") return projectMediaItems;
     if (mediaFilter === "pdf") {
       // Bucket the legacy 'document' type with PDFs — they're the same UX
       // category from the manager's POV.
-      return media.filter((m) => m.media_type === "pdf" || m.media_type === "document");
+      return projectMediaItems.filter(
+        (m) => m.media_type === "pdf" || m.media_type === "document",
+      );
     }
-    return media.filter((m) => m.media_type === mediaFilter);
-  }, [media, mediaFilter]);
+    return projectMediaItems.filter((m) => m.media_type === mediaFilter);
+  }, [projectMediaItems, mediaFilter]);
 
   const mediaCounts = useMemo(() => {
     let photo = 0;
     let video = 0;
     let pdf = 0;
-    for (const m of media) {
+    for (const m of projectMediaItems) {
       if (m.media_type === "photo") photo += 1;
       else if (m.media_type === "video") video += 1;
       else if (m.media_type === "pdf" || m.media_type === "document") pdf += 1;
     }
-    return { photo, video, pdf, all: media.length };
-  }, [media]);
+    return { photo, video, pdf, all: projectMediaItems.length };
+  }, [projectMediaItems]);
 
   const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
 
@@ -897,7 +915,7 @@ export function ProjectDetailPage({
               {t("projectDetail.mediaUploadHint")}
             </div>
 
-            {media.length > 0 ? (
+            {projectMediaItems.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {(
                   [
@@ -929,7 +947,7 @@ export function ProjectDetailPage({
               </div>
             ) : null}
             <div className="mt-4 space-y-3">
-              {media.length === 0 ? (
+              {projectMediaItems.length === 0 ? (
                 <div className="surface-panel p-3 text-sm text-[var(--text-secondary)]">
                   {t("projectDetail.noMedia")}
                 </div>
