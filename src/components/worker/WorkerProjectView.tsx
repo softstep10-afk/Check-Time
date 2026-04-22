@@ -50,9 +50,17 @@ export function WorkerProjectView({
       </section>
 
       <section className="surface-card p-4">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">
-          {t("workerProject.tasksTitle")}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">
+            {t("workerProject.tasksTitle")}
+          </h2>
+          <span className="rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+            {t("workerProject.tasksScopeChip")}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-[var(--text-muted)]">
+          {t("workerProject.tasksForThisProjectSubtitle")}
+        </p>
         {tasks.length === 0 ? (
           <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
             {t("workerProject.tasksEmpty")}

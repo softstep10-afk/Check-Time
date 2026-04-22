@@ -917,6 +917,16 @@ export const translations = {
   "tasks.descriptionLong": { en: "All tasks across the organization. Create new tasks from a project page.", ru: "Все задачи организации. Создавайте новые задачи со страницы проекта." },
   "tasks.preferProjectPage": { en: "💡 Tip: create tasks inside a project to keep them in context.", ru: "💡 Совет: создавайте задачи внутри проекта, чтобы сохранить контекст." },
   "tasks.openProjects": { en: "Open projects →", ru: "Открыть проекты →" },
+  "tasks.allYourTasksAcrossProjects": {
+    en: "All your tasks across all projects.",
+    ru: "Все твои задачи по всем проектам.",
+  },
+  "tasks.scopeGlobalChip": { en: "🌐 All projects", ru: "🌐 Все проекты" },
+  "workerProject.tasksScopeChip": { en: "📁 This project only", ru: "📁 Только этот проект" },
+  "workerProject.tasksForThisProjectSubtitle": {
+    en: "Tasks for this project. To see all your tasks, open My tasks.",
+    ru: "Задачи этого проекта. Чтобы увидеть все свои задачи, открой раздел Задачи.",
+  },
 
   // ── Materials ──
   "materials.title": { en: "Materials & Deliveries", ru: "Материалы и поставки" },
