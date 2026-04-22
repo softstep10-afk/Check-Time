@@ -341,57 +341,69 @@ export function ProjectDetailPage({
     router.refresh();
   }
 
-  async function handleProjectMediaUpload(file: File, kind: "photo" | "video" | "pdf") {
-    const validation = validateUploadFile(file);
-    if (!validation.ok) {
-      setMessage(t("projectDetail.mediaUploadFailed"));
-      return;
-    }
-    if (validation.kind !== kind) {
-      setMessage(t("projectDetail.mediaWrongKind"));
-      return;
+  async function handleProjectMediaUpload(
+    files: FileList | File[] | null,
+    kind: "photo" | "video" | "pdf",
+  ) {
+    const list = files ? Array.from(files) : [];
+    if (list.length === 0) return;
+
+    // Pre-validate all files before any upload starts so a single bad
+    // file in a multi-select doesn't leave half the batch in storage.
+    for (const file of list) {
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        setMessage(t("projectDetail.mediaUploadFailed"));
+        return;
+      }
+      if (validation.kind !== kind) {
+        setMessage(t("projectDetail.mediaWrongKind"));
+        return;
+      }
     }
 
     setBusyKey("project-media");
     setMessage("");
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const path = `${orgId}/${project.id}/project-media/${Date.now()}-${safeName}`;
-    const contentType =
-      file.type ||
-      (kind === "pdf" ? "application/pdf" : kind === "photo" ? "image/jpeg" : "video/mp4");
+    for (const file of list) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${orgId}/${project.id}/project-media/${Date.now()}-${safeName}`;
+      const contentType =
+        file.type ||
+        (kind === "pdf" ? "application/pdf" : kind === "photo" ? "image/jpeg" : "video/mp4");
 
-    const { error: uploadErr } = await supabase.storage
-      .from("media")
-      .upload(path, file, { upsert: false, cacheControl: "3600", contentType });
-    if (uploadErr) {
-      setMessage(t("projectDetail.mediaUploadFailed"));
-      setBusyKey(null);
-      return;
-    }
+      const { error: uploadErr } = await supabase.storage
+        .from("media")
+        .upload(path, file, { upsert: false, cacheControl: "3600", contentType });
+      if (uploadErr) {
+        setMessage(t("projectDetail.mediaUploadFailed"));
+        setBusyKey(null);
+        return;
+      }
 
-    const metadata = { kind: "project_media" as const };
-    if (metadata.kind !== "project_media") {
-      console.warn("[upload-guard] expected metadata.kind=project_media, got:", metadata);
-    }
-    const { error: insertErr } = await supabase.from("media").insert({
-      org_id: orgId,
-      project_id: project.id,
-      uploaded_by: managerId,
-      media_type: kind,
-      storage_path: path,
-      filename: file.name,
-      file_size: file.size,
-      mime_type: contentType,
-      caption: null,
-      is_checkout: false,
-      time_event_id: null,
-      metadata,
-    });
-    if (insertErr) {
-      setMessage(t("projectDetail.mediaUploadFailed"));
-      setBusyKey(null);
-      return;
+      const metadata = { kind: "project_media" as const };
+      if (metadata.kind !== "project_media") {
+        console.warn("[upload-guard] expected metadata.kind=project_media, got:", metadata);
+      }
+      const { error: insertErr } = await supabase.from("media").insert({
+        org_id: orgId,
+        project_id: project.id,
+        uploaded_by: managerId,
+        media_type: kind,
+        storage_path: path,
+        filename: file.name,
+        file_size: file.size,
+        mime_type: contentType,
+        caption: null,
+        is_checkout: false,
+        time_event_id: null,
+        metadata,
+      });
+      if (insertErr) {
+        setMessage(t("projectDetail.mediaUploadFailed"));
+        setBusyKey(null);
+        return;
+      }
     }
 
     setBusyKey(null);
@@ -861,10 +873,10 @@ export function ProjectDetailPage({
                 ref={photoMediaInputRef}
                 type="file"
                 accept="image/*"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void handleProjectMediaUpload(f, "photo");
+                  void handleProjectMediaUpload(e.target.files, "photo");
                   e.target.value = "";
                 }}
               />
@@ -872,10 +884,10 @@ export function ProjectDetailPage({
                 ref={videoMediaInputRef}
                 type="file"
                 accept="video/*"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void handleProjectMediaUpload(f, "video");
+                  void handleProjectMediaUpload(e.target.files, "video");
                   e.target.value = "";
                 }}
               />
@@ -883,10 +895,10 @@ export function ProjectDetailPage({
                 ref={pdfMediaInputRef}
                 type="file"
                 accept="application/pdf"
+                multiple
                 className="hidden"
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void handleProjectMediaUpload(f, "pdf");
+                  void handleProjectMediaUpload(e.target.files, "pdf");
                   e.target.value = "";
                 }}
               />
