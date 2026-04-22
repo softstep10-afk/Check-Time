@@ -609,6 +609,7 @@ export const translations = {
   "messages.uploadFailed": { en: "Upload failed", ru: "Ошибка загрузки" },
   "messages.sendFailed": { en: "Send failed — try again", ru: "Не удалось отправить — попробуй ещё раз" },
   "tasks.attachmentsCount": { en: "file(s) attached", ru: "файл(а/ов) прикреплено" },
+  "tasks.filesShort": { en: "files", ru: "файла(ов)" },
   "tasks.attachmentNeedsProject": { en: "Pick a project before attaching files.", ru: "Выберите проект перед прикреплением файлов." },
   "tasks.attachmentCloudFallback": {
     en: "This file cannot be uploaded directly from cloud storage. Please download it to your device and upload again.",

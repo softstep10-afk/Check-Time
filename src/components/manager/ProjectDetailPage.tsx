@@ -855,7 +855,15 @@ export function ProjectDetailPage({
                       media_type: m.media_type,
                       storage_path: m.storage_path,
                     }));
-                  return refs.length > 0 ? <TaskAttachmentList items={refs} /> : null;
+                  if (refs.length === 0) return null;
+                  return (
+                    <>
+                      <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                        📎 {refs.length} {t("tasks.filesShort")}
+                      </div>
+                      <TaskAttachmentList items={refs} />
+                    </>
+                  );
                 })()}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {task.status !== "in_progress" ? (
@@ -897,7 +905,12 @@ export function ProjectDetailPage({
 
         <div className="contents">
           <div className="surface-card p-4 order-1">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
+              <div className="text-xs font-mono text-[var(--text-secondary)] tabular-nums">
+                📷 {mediaCounts.photo}{"  "}🎥 {mediaCounts.video}{"  "}📄 {mediaCounts.pdf}
+              </div>
+            </div>
             <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.projectMediaSubtitle")}</p>
 
             {/* 3-button upload triggers — photo / video / pdf. Local-device only. */}

@@ -72,7 +72,12 @@ export function WorkerProjectView({
                   <p className="mt-2 text-sm text-[var(--text-secondary)]">{task.description}</p>
                 ) : null}
                 {task.attachments && task.attachments.length > 0 ? (
-                  <TaskAttachmentList items={task.attachments} />
+                  <>
+                    <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                      📎 {task.attachments.length} {t("tasks.filesShort")}
+                    </div>
+                    <TaskAttachmentList items={task.attachments} />
+                  </>
                 ) : null}
               </div>
             ))}

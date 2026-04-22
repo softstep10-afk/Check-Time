@@ -497,7 +497,15 @@ export function ManagerTasksPage({
                           const refs = getAttachmentMediaIds(task)
                             .map((id) => attachmentById.get(id))
                             .filter((m): m is TaskAttachmentRef => Boolean(m));
-                          return refs.length > 0 ? <TaskAttachmentList items={refs} /> : null;
+                          if (refs.length === 0) return null;
+                          return (
+                            <>
+                              <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                                📎 {refs.length} {t("tasks.filesShort")}
+                              </div>
+                              <TaskAttachmentList items={refs} />
+                            </>
+                          );
                         })()}
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">

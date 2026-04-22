@@ -102,7 +102,12 @@ export function TasksPage() {
                   ) : null}
 
                   {task.attachments && task.attachments.length > 0 ? (
-                    <TaskAttachmentList items={task.attachments} />
+                    <>
+                      <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+                        📎 {task.attachments.length} {t("tasks.filesShort")}
+                      </div>
+                      <TaskAttachmentList items={task.attachments} />
+                    </>
                   ) : null}
 
                   {task.project_id ? (
