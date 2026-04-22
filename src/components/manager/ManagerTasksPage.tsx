@@ -137,10 +137,22 @@ export function ManagerTasksPage({
 
     const uploadedMediaIds: string[] = [];
     for (const file of attachmentFiles) {
+      // Cloud-picker guard: see ProjectDetailPage.handleCreateTask.
+      if (!file || file.size === 0 || !file.name) {
+        console.error("[task-attach] invalid File detected (likely cloud picker)", {
+          name: file?.name,
+          size: file?.size,
+          type: file?.type,
+        });
+        setMessage(t("tasks.attachmentCloudFallback"));
+        setMessageTone("error");
+        setBusyKey(null);
+        return;
+      }
       const validation = validateUploadFile(file);
       if (!validation.ok) {
         console.error("[task-attach] ManagerTasksPage validation FAIL", validation.error);
-        setMessage(`upload validation: ${validation.error.reason}`);
+        setMessage(t("tasks.attachmentCloudFallback"));
         setMessageTone("error");
         setBusyKey(null);
         return;
@@ -153,7 +165,7 @@ export function ManagerTasksPage({
       });
       if (!result.ok) {
         console.error("[task-attach] ManagerTasksPage upload FAIL", result.error);
-        setMessage(`upload: ${result.error}`);
+        setMessage(t("tasks.attachmentCloudFallback"));
         setMessageTone("error");
         setBusyKey(null);
         return;

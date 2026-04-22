@@ -561,6 +561,10 @@ export const translations = {
   "messages.sendFailed": { en: "Send failed — try again", ru: "Не удалось отправить — попробуй ещё раз" },
   "tasks.attachmentsCount": { en: "file(s) attached", ru: "файл(а/ов) прикреплено" },
   "tasks.attachmentNeedsProject": { en: "Pick a project before attaching files.", ru: "Выберите проект перед прикреплением файлов." },
+  "tasks.attachmentCloudFallback": {
+    en: "This file cannot be uploaded directly from cloud storage. Please download it to your device and upload again.",
+    ru: "Этот файл нельзя загрузить напрямую из облачного хранилища. Скачайте его на устройство и загрузите снова.",
+  },
   "messages.openFile": { en: "Open", ru: "Открыть" },
   "messages.priority": { en: "Priority", ru: "Приоритет" },
   "messages.priorityUrgent": { en: "Urgent", ru: "Срочное" },

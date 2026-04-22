@@ -236,10 +236,24 @@ export function ProjectDetailPage({
     // creating the task so we don't end up with orphan task rows.
     const uploadedMediaIds: string[] = [];
     for (const file of taskAttachmentFiles) {
+      // Cloud-picker guard: zero-byte or nameless File usually means the
+      // browser handed back a streaming reference (Google Drive, iCloud)
+      // it can't materialize. Surface the user-facing fallback rather
+      // than letting the validator/storage emit a cryptic error.
+      if (!file || file.size === 0 || !file.name) {
+        console.error("[task-attach] invalid File detected (likely cloud picker)", {
+          name: file?.name,
+          size: file?.size,
+          type: file?.type,
+        });
+        setMessage(t("tasks.attachmentCloudFallback"));
+        setBusyKey(null);
+        return;
+      }
       const validation = validateUploadFile(file);
       if (!validation.ok) {
         console.error("[task-attach] handleCreateTask validation FAIL", validation.error);
-        setMessage(`upload validation: ${validation.error.reason}`);
+        setMessage(t("tasks.attachmentCloudFallback"));
         setBusyKey(null);
         return;
       }
@@ -251,7 +265,7 @@ export function ProjectDetailPage({
       });
       if (!result.ok) {
         console.error("[task-attach] handleCreateTask upload FAIL", result.error);
-        setMessage(`upload: ${result.error}`);
+        setMessage(t("tasks.attachmentCloudFallback"));
         setBusyKey(null);
         return;
       }
