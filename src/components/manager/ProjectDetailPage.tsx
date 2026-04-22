@@ -71,6 +71,14 @@ export function ProjectDetailPage({
     [media],
   );
 
+  // 3-button project media upload (photo / video / pdf). Separate from
+  // receipts (no store/amount metadata) and from task attachments
+  // (no task linkage). Lands in the same media table + bucket so the
+  // existing Recent Media panel + tab counts pick it up automatically.
+  const photoMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const videoMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const pdfMediaInputRef = useRef<HTMLInputElement | null>(null);
+
   const filteredMedia = useMemo(() => {
     if (mediaFilter === "all") return media;
     if (mediaFilter === "pdf") {
@@ -312,6 +320,60 @@ export function ProjectDetailPage({
     if (taskAttachmentInputRef.current) taskAttachmentInputRef.current.value = "";
     setBusyKey(null);
     setMessage(t("projectDetail.taskCreated"));
+    router.refresh();
+  }
+
+  async function handleProjectMediaUpload(file: File, kind: "photo" | "video" | "pdf") {
+    const validation = validateUploadFile(file);
+    if (!validation.ok) {
+      setMessage(t("projectDetail.mediaUploadFailed"));
+      return;
+    }
+    if (validation.kind !== kind) {
+      setMessage(t("projectDetail.mediaWrongKind"));
+      return;
+    }
+
+    setBusyKey("project-media");
+    setMessage("");
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${orgId}/${project.id}/project-media/${Date.now()}-${safeName}`;
+    const contentType =
+      file.type ||
+      (kind === "pdf" ? "application/pdf" : kind === "photo" ? "image/jpeg" : "video/mp4");
+
+    const { error: uploadErr } = await supabase.storage
+      .from("media")
+      .upload(path, file, { upsert: false, cacheControl: "3600", contentType });
+    if (uploadErr) {
+      setMessage(t("projectDetail.mediaUploadFailed"));
+      setBusyKey(null);
+      return;
+    }
+
+    const { error: insertErr } = await supabase.from("media").insert({
+      org_id: orgId,
+      project_id: project.id,
+      uploaded_by: managerId,
+      media_type: kind,
+      storage_path: path,
+      filename: file.name,
+      file_size: file.size,
+      mime_type: contentType,
+      caption: null,
+      is_checkout: false,
+      time_event_id: null,
+      metadata: { kind: "project_media" },
+    });
+    if (insertErr) {
+      setMessage(t("projectDetail.mediaUploadFailed"));
+      setBusyKey(null);
+      return;
+    }
+
+    setBusyKey(null);
+    setMessage(t("projectDetail.mediaUploaded"));
     router.refresh();
   }
 
@@ -765,6 +827,74 @@ export function ProjectDetailPage({
         <div className="space-y-5">
           <div className="surface-card p-4">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
+
+            {/* 3-button upload triggers — photo / video / pdf. Local-device only. */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                ref={photoMediaInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleProjectMediaUpload(f, "photo");
+                  e.target.value = "";
+                }}
+              />
+              <input
+                ref={videoMediaInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleProjectMediaUpload(f, "video");
+                  e.target.value = "";
+                }}
+              />
+              <input
+                ref={pdfMediaInputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleProjectMediaUpload(f, "pdf");
+                  e.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => photoMediaInputRef.current?.click()}
+                disabled={busyKey === "project-media"}
+                className="rounded-[var(--radius-sm)] border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                📷 {t("projectDetail.addPhoto")}
+              </button>
+              <button
+                type="button"
+                onClick={() => videoMediaInputRef.current?.click()}
+                disabled={busyKey === "project-media"}
+                className="rounded-[var(--radius-sm)] border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                🎥 {t("projectDetail.addVideo")}
+              </button>
+              <button
+                type="button"
+                onClick={() => pdfMediaInputRef.current?.click()}
+                disabled={busyKey === "project-media"}
+                className="rounded-[var(--radius-sm)] border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                📄 {t("projectDetail.addPdf")}
+              </button>
+            </div>
+            <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+              {t("projectDetail.mediaUploadHint")}
+            </div>
+
             {media.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {(
