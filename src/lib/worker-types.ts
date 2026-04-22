@@ -1,4 +1,5 @@
 import type { Media, Profile, Project, Task } from "@/types/database";
+import type { TaskAttachmentRef } from "@/lib/task-attachments";
 
 export interface WorkerGeoPoint {
   lat: number;
@@ -26,6 +27,7 @@ export interface WorkerProject extends Project {
 
 export interface WorkerTaskItem extends Task {
   projectName: string | null;
+  attachments?: TaskAttachmentRef[];
 }
 
 export interface WorkerMediaItem extends Media {

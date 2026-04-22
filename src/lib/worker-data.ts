@@ -6,6 +6,10 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { buildPreviewWorkerShellData } from "@/lib/preview-data";
 import { createClient } from "@/lib/supabase/server";
 import { buildWorkerSessions, deriveClockState, deriveWorkerSummary, enrichProjects } from "@/lib/worker-utils";
+import {
+  fetchTaskAttachments,
+  getAttachmentMediaIds,
+} from "@/lib/task-attachments";
 import type { WorkerMediaItem, WorkerShellData, WorkerTaskItem } from "@/lib/worker-types";
 import type { Media, Profile, Project, Task, TimeEvent } from "@/types/database";
 
@@ -98,18 +102,45 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
 
   const assignments = assignmentsResult.data ?? [];
   const events = eventsResult.data ?? [];
-  const tasks = tasksResult.data ?? [];
+  const personalTasks = tasksResult.data ?? [];
   const media = mediaResult.data ?? [];
 
   const projectIds = new Set<string>();
+  const assignedProjectIds = new Set<string>();
   const assignedAtByProjectId = new Map<string, string | null>();
 
   for (const assignment of assignments) {
     if (assignment.project_id) {
       projectIds.add(assignment.project_id);
+      assignedProjectIds.add(assignment.project_id);
       assignedAtByProjectId.set(assignment.project_id, assignment.assigned_at ?? null);
     }
   }
+
+  // Project-level tasks (assigned_to is null, project the worker is on).
+  // Visible to every worker assigned to that project — manager creates one
+  // task without a specific assignee and the whole crew sees it.
+  let projectLevelTasks: Task[] = [];
+  if (assignedProjectIds.size > 0) {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .is("assigned_to", null)
+      .in("project_id", [...assignedProjectIds])
+      .order("created_at", { ascending: false })
+      .limit(60)
+      .returns<Task[]>();
+    assertNoError(error, "Project-level tasks query failed");
+    projectLevelTasks = data ?? [];
+  }
+
+  // Merge personal + project-level, dedupe by id (covers the edge case of
+  // a project-level task that was later assigned to this worker explicitly).
+  const seenIds = new Set(personalTasks.map((t) => t.id));
+  const tasks: Task[] = [
+    ...personalTasks,
+    ...projectLevelTasks.filter((t) => !seenIds.has(t.id)),
+  ];
 
   for (const event of events) {
     projectIds.add(event.project_id);
@@ -146,10 +177,24 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   const workerProjects = enrichProjects(projects, assignedAtByProjectId);
   const projectsById = new Map(workerProjects.map((project) => [project.id, project]));
 
-  const taskItems: WorkerTaskItem[] = tasks.map((task) => ({
-    ...task,
-    projectName: task.project_id ? projectsById.get(task.project_id)?.name ?? null : null,
-  }));
+  // Eager-fetch attachment media rows referenced by any task.metadata.
+  // One round-trip; existing media RLS scopes results to this worker.
+  const allAttachmentIds = Array.from(
+    new Set(tasks.flatMap((task) => getAttachmentMediaIds(task))),
+  );
+  const attachmentMap = await fetchTaskAttachments(supabase, allAttachmentIds);
+
+  const taskItems: WorkerTaskItem[] = tasks.map((task) => {
+    const ids = getAttachmentMediaIds(task);
+    const resolved = ids
+      .map((id) => attachmentMap.get(id))
+      .filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
+    return {
+      ...task,
+      projectName: task.project_id ? projectsById.get(task.project_id)?.name ?? null : null,
+      attachments: resolved.length > 0 ? resolved : undefined,
+    };
+  });
   const mediaItems: WorkerMediaItem[] = media.map((entry) => ({
     ...entry,
     projectName: entry.project_id ? projectsById.get(entry.project_id)?.name ?? null : null,
