@@ -340,6 +340,16 @@ export function guessMediaType(file: File): Media["media_type"] {
     return "pdf";
   }
 
+  // Cloud pickers (Google Drive, iCloud, OneDrive) often hand back a File
+  // with file.type === "". Fall back to the filename extension so the
+  // media row's media_type is still classified correctly.
+  if (file.type === "") {
+    const lower = file.name.toLowerCase();
+    if (/\.(jpe?g|png|webp|heic|heif|gif)$/.test(lower)) return "photo";
+    if (/\.(mp4|mov|webm)$/.test(lower)) return "video";
+    if (lower.endsWith(".pdf")) return "pdf";
+  }
+
   return "document";
 }
 
