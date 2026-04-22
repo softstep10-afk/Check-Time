@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, Play } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
@@ -102,6 +103,17 @@ export function TasksPage() {
 
                   {task.attachments && task.attachments.length > 0 ? (
                     <TaskAttachmentList items={task.attachments} />
+                  ) : null}
+
+                  {task.project_id ? (
+                    <div className="mt-3">
+                      <Link
+                        href={`/project/${task.project_id}`}
+                        className="inline-block text-xs font-semibold text-[var(--brand-yellow)]"
+                      >
+                        {t("workerProject.openProject")} →
+                      </Link>
+                    </div>
                   ) : null}
 
                   <div className="mt-4 flex gap-2">
