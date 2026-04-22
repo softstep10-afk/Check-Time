@@ -252,8 +252,12 @@ export const translations = {
     ru: "Назначайте задачи и прикрепляйте файлы. Прикреплённые файлы привязаны к конкретной задаче.",
   },
   "projectDetail.projectMediaSubtitle": {
-    en: "Photos, videos and PDFs for this project. Receipts and worker uploads also appear here for visibility.",
-    ru: "Фото, видео и PDF проекта. Чеки и загрузки рабочих тоже видны здесь для общего обзора.",
+    en: "General project files — photos, videos and PDFs added for the whole project. Task-specific files live inside each task; receipts have their own section below.",
+    ru: "Общие файлы проекта — фото, видео и PDF для всего проекта. Файлы конкретной задачи хранятся внутри неё; чеки — в отдельной секции ниже.",
+  },
+  "projectDetail.mediaOpenFailed": {
+    en: "Couldn't open file. Try again.",
+    ru: "Не удалось открыть файл. Попробуй снова.",
   },
   "projectDetail.receiptsSubtitle": {
     en: "Expense receipts only. Each one tracks store, amount, and purchase date.",

@@ -341,6 +341,33 @@ export function ProjectDetailPage({
     router.refresh();
   }
 
+  // Inline click-to-open for the Project Media list. The list is rendered
+  // as bespoke JSX (not via TaskAttachmentList), so it doesn't inherit
+  // the shared component's signed-URL open handler — we replicate it
+  // here. Same pattern, same TTL, same private-bucket support.
+  async function openProjectMediaItem(item: { id: string; storage_path: string }) {
+    if (typeof window === "undefined") return;
+    const { data, error } = await supabase.storage
+      .from("media")
+      .createSignedUrl(item.storage_path, 3600);
+    console.log("[project-media] open", {
+      id: item.id,
+      storage_path: item.storage_path,
+      signedUrl: data?.signedUrl,
+      error: error?.message,
+    });
+    if (error || !data?.signedUrl) {
+      console.error("[project-media] failed to sign URL", error);
+      setMessage(t("projectDetail.mediaOpenFailed"));
+      return;
+    }
+    const popup = window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      console.warn("[project-media] popup blocked");
+      setMessage(t("projectDetail.mediaOpenFailed"));
+    }
+  }
+
   async function handleProjectMediaUpload(
     files: FileList | File[] | null,
     kind: "photo" | "video" | "pdf",
@@ -985,9 +1012,13 @@ export function ProjectDetailPage({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-[var(--text-primary)]">
+                        <button
+                          type="button"
+                          onClick={() => void openProjectMediaItem(item)}
+                          className="text-left text-sm font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline focus:underline"
+                        >
                           {item.filename ?? item.media_type}
-                        </div>
+                        </button>
                         <div className="mt-1 text-xs text-[var(--text-secondary)]">
                           {formatDateTime(item.created_at)} • {item.media_type}
                         </div>
@@ -1001,7 +1032,15 @@ export function ProjectDetailPage({
                     {item.caption ? (
                       <p className="mt-3 text-sm text-[var(--text-secondary)]">{item.caption}</p>
                     ) : null}
-                    <div className="mt-3 flex justify-end">
+                    <div className="mt-3 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void openProjectMediaItem(item)}
+                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
+                      >
+                        ↗ {t("messages.openFile")}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setFlagModalMediaId(item.id)}
