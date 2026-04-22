@@ -384,17 +384,37 @@ export function ProjectDetailPage({
     kind: "photo" | "video" | "pdf",
   ) {
     const list = files ? Array.from(files) : [];
+    console.log("[project-media] start", { kind, fileCount: list.length });
     if (list.length === 0) return;
 
     // Pre-validate all files before any upload starts so a single bad
     // file in a multi-select doesn't leave half the batch in storage.
     for (const file of list) {
+      console.log("[project-media] file metadata", {
+        kind,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        lastModified: file.lastModified,
+        mimeEmpty: file.type === "",
+        hasExtension: /\.[A-Za-z0-9]{2,5}$/.test(file.name),
+      });
       const validation = validateUploadFile(file);
       if (!validation.ok) {
-        setMessage(t("projectDetail.mediaUploadFailed"));
+        const attempted = "mime" in validation.error ? validation.error.mime : null;
+        console.error("[project-media] validation REJECTED", {
+          reason: validation.error.reason,
+          attempted,
+        });
+        setMessage(`validation: ${validation.error.reason}${attempted ? ` (${attempted})` : ""}`);
         return;
       }
+      console.log("[project-media] validation ok", { fileKind: validation.kind });
       if (validation.kind !== kind) {
+        console.error("[project-media] kind mismatch", {
+          expectedKind: kind,
+          fileKind: validation.kind,
+        });
         setMessage(t("projectDetail.mediaWrongKind"));
         return;
       }
@@ -410,19 +430,24 @@ export function ProjectDetailPage({
         file.type ||
         (kind === "pdf" ? "application/pdf" : kind === "photo" ? "image/jpeg" : "video/mp4");
 
+      console.log("[project-media] storage upload begin", {
+        path,
+        contentType,
+        size: file.size,
+      });
+
       const { error: uploadErr } = await supabase.storage
         .from("media")
         .upload(path, file, { upsert: false, cacheControl: "3600", contentType });
       if (uploadErr) {
-        setMessage(t("projectDetail.mediaUploadFailed"));
+        console.error("[project-media] storage upload FAIL", uploadErr);
+        setMessage(`storage: ${uploadErr.message}`);
         setBusyKey(null);
         return;
       }
+      console.log("[project-media] storage upload ok");
 
       const metadata = { kind: "project_media" as const };
-      if (metadata.kind !== "project_media") {
-        console.warn("[upload-guard] expected metadata.kind=project_media, got:", metadata);
-      }
       const { error: insertErr } = await supabase.from("media").insert({
         org_id: orgId,
         project_id: project.id,
@@ -438,10 +463,12 @@ export function ProjectDetailPage({
         metadata,
       });
       if (insertErr) {
-        setMessage(t("projectDetail.mediaUploadFailed"));
+        console.error("[project-media] media insert FAIL", insertErr);
+        setMessage(`media-insert: ${insertErr.message}`);
         setBusyKey(null);
         return;
       }
+      console.log("[project-media] media insert ok");
     }
 
     setBusyKey(null);
