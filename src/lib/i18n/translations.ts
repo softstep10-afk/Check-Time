@@ -241,11 +241,23 @@ export const translations = {
   "projectDetail.high": { en: "High", ru: "Высокий" },
   "projectDetail.urgent": { en: "Urgent", ru: "Срочный" },
   "projectDetail.createTask": { en: "Create Task", ru: "Создать задачу" },
-  "projectDetail.recentMedia": { en: "Recent Media", ru: "Последние медиа" },
+  "projectDetail.recentMedia": { en: "Project Media", ru: "Медиа проекта" },
   "projectDetail.noMedia": { en: "No media yet.", ru: "Медиа пока нет." },
   "projectDetail.noMediaForFilter": {
     en: "No media of this type yet.",
     ru: "Нет медиа этого типа.",
+  },
+  "projectDetail.tasksSubtitle": {
+    en: "Assign tasks and attach files. Attached files are linked to a specific task.",
+    ru: "Назначайте задачи и прикрепляйте файлы. Прикреплённые файлы привязаны к конкретной задаче.",
+  },
+  "projectDetail.projectMediaSubtitle": {
+    en: "Photos, videos and PDFs for this project. Receipts and worker uploads also appear here for visibility.",
+    ru: "Фото, видео и PDF проекта. Чеки и загрузки рабочих тоже видны здесь для общего обзора.",
+  },
+  "projectDetail.receiptsSubtitle": {
+    en: "Expense receipts only. Each one tracks store, amount, and purchase date.",
+    ru: "Только чеки расходов. Для каждого учитывается магазин, сумма и дата покупки.",
   },
   "projectDetail.mediaFilterAll": { en: "All", ru: "Все" },
   "projectDetail.mediaFilterPhoto": { en: "Photo", ru: "Фото" },

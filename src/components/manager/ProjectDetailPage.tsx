@@ -675,6 +675,7 @@ export function ProjectDetailPage({
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="surface-card p-4">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("common.tasks")}</h2>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.tasksSubtitle")}</p>
           <form className="mt-4 grid gap-3" onSubmit={handleCreateTask}>
             <TextInputWithVoice
               name="title"
@@ -827,6 +828,7 @@ export function ProjectDetailPage({
         <div className="space-y-5">
           <div className="surface-card p-4">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.projectMediaSubtitle")}</p>
 
             {/* 3-button upload triggers — photo / video / pdf. Local-device only. */}
             <div className="mt-3 flex flex-wrap gap-2">
@@ -1429,6 +1431,7 @@ function ReceiptsSection({
           </div>
         ) : null}
       </div>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.receiptsSubtitle")}</p>
 
       {message ? (
         <div className="mt-3 text-xs font-semibold" style={{ color: "var(--green)" }}>{message}</div>
