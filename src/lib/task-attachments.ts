@@ -26,10 +26,22 @@ export async function uploadTaskAttachment(
   supabase: SupabaseClient,
   { orgId, projectId, uploadedBy, file }: UploadAttachmentParams,
 ): Promise<UploadAttachmentResult> {
+  // Heuristics that hint at local-picker vs cloud-picker (Google Drive,
+  // OneDrive, iCloud, etc). The JS File API does not expose source,
+  // but cloud-backed pickers usually leave file.type empty and may
+  // strip the extension off file.name.
+  const hasExtension = /\.[A-Za-z0-9]{2,5}$/.test(file.name);
+  const ctor = (file as { constructor?: { name?: string } }).constructor?.name;
   console.log("[task-attach] upload start", {
     name: file.name,
     type: file.type,
     size: file.size,
+    lastModified: file.lastModified,
+    isFile: file instanceof File,
+    isBlob: file instanceof Blob,
+    constructor: ctor,
+    hasExtension,
+    mimeEmpty: file.type === "",
     orgId,
     projectId,
     uploadedBy,
@@ -37,7 +49,14 @@ export async function uploadTaskAttachment(
 
   const validation = validateUploadFile(file);
   if (!validation.ok) {
-    console.error("[task-attach] validation failed", validation.error);
+    console.error("[task-attach] validation REJECTED", {
+      reason: validation.error.reason,
+      // For unsupported_type, .mime holds whatever validateUploadFile
+      // tried (file.type if non-empty, else file.name as fallback).
+      attempted: "mime" in validation.error ? validation.error.mime : null,
+      fileNameSeen: file.name,
+      fileTypeSeen: file.type,
+    });
     return { ok: false, error: `validation: ${validation.error.reason}` };
   }
   console.log("[task-attach] validation ok", { kind: validation.kind });
