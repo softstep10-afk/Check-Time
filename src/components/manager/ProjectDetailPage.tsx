@@ -8,7 +8,12 @@ import { DateField } from "@/components/shared/DateField";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
-import { linkMediaToTask, uploadTaskAttachment } from "@/lib/task-attachments";
+import {
+  getAttachmentMediaIds,
+  linkMediaToTask,
+  uploadTaskAttachment,
+} from "@/lib/task-attachments";
+import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
@@ -61,6 +66,10 @@ export function ProjectDetailPage({
   const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
   const [taskAttachmentFiles, setTaskAttachmentFiles] = useState<File[]>([]);
   const taskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaById = useMemo(
+    () => new Map(media.map((m) => [m.id, m])),
+    [media],
+  );
 
   const filteredMedia = useMemo(() => {
     if (mediaFilter === "all") return media;
@@ -678,6 +687,19 @@ export function ProjectDetailPage({
                 {task.description ? (
                   <p className="mt-3 text-sm text-[var(--text-secondary)]">{task.description}</p>
                 ) : null}
+                {(() => {
+                  const refs = getAttachmentMediaIds(task)
+                    .map((id) => mediaById.get(id))
+                    .filter((m): m is NonNullable<typeof m> => Boolean(m))
+                    .map((m) => ({
+                      id: m.id,
+                      filename: m.filename,
+                      mime_type: m.mime_type,
+                      media_type: m.media_type,
+                      storage_path: m.storage_path,
+                    }));
+                  return refs.length > 0 ? <TaskAttachmentList items={refs} /> : null;
+                })()}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {task.status !== "in_progress" ? (
                     <button

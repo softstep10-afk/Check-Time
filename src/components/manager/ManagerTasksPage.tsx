@@ -9,7 +9,13 @@ import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
-import { linkMediaToTask, uploadTaskAttachment } from "@/lib/task-attachments";
+import {
+  getAttachmentMediaIds,
+  linkMediaToTask,
+  type TaskAttachmentRef,
+  uploadTaskAttachment,
+} from "@/lib/task-attachments";
+import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import type {
   ProjectStatus,
   Task,
@@ -45,12 +51,14 @@ export function ManagerTasksPage({
   projects,
   workers,
   initialTasks,
+  attachmentMedia = [],
 }: {
   orgId: string;
   managerId: string;
   projects: ProjectOption[];
   workers: WorkerOption[];
   initialTasks: TaskRow[];
+  attachmentMedia?: TaskAttachmentRef[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -69,6 +77,10 @@ export function ManagerTasksPage({
 
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers]);
+  const attachmentById = useMemo(
+    () => new Map(attachmentMedia.map((m) => [m.id, m])),
+    [attachmentMedia],
+  );
 
   const visibleTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -460,6 +472,12 @@ export function ManagerTasksPage({
                             {task.description}
                           </p>
                         ) : null}
+                        {(() => {
+                          const refs = getAttachmentMediaIds(task)
+                            .map((id) => attachmentById.get(id))
+                            .filter((m): m is TaskAttachmentRef => Boolean(m));
+                          return refs.length > 0 ? <TaskAttachmentList items={refs} /> : null;
+                        })()}
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
                         <select

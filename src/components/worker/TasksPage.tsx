@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CheckCircle2, Play } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
+import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 
 export function TasksPage() {
   const { shell, busyAction, updateTaskStatus } = useWorkerShell();
@@ -97,6 +98,10 @@ export function TasksPage() {
 
                   {task.description ? (
                     <p className="mt-3 text-sm text-[var(--text-secondary)]">{task.description}</p>
+                  ) : null}
+
+                  {task.attachments && task.attachments.length > 0 ? (
+                    <TaskAttachmentList items={task.attachments} />
                   ) : null}
 
                   <div className="mt-4 flex gap-2">
