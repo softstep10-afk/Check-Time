@@ -226,7 +226,7 @@ export function JournalPage() {
         <input
           ref={journalInputRef}
           type="file"
-          accept="image/*,video/*"
+          accept="image/*,video/*,application/pdf"
           capture="environment"
           multiple
           onChange={(event) => replaceJournalFiles(event.target.files)}
