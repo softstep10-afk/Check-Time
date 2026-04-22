@@ -917,6 +917,7 @@ export const translations = {
   "tasks.descriptionLong": { en: "All tasks across the organization. Create new tasks from a project page.", ru: "Все задачи организации. Создавайте новые задачи со страницы проекта." },
   "tasks.preferProjectPage": { en: "💡 Tip: create tasks inside a project to keep them in context.", ru: "💡 Совет: создавайте задачи внутри проекта, чтобы сохранить контекст." },
   "tasks.openProjects": { en: "Open projects →", ru: "Открыть проекты →" },
+  "tasks.createInsideProject": { en: "Tasks are created inside projects.", ru: "Задачи создаются внутри проектов." },
   "tasks.allYourTasksAcrossProjects": {
     en: "All your tasks across all projects.",
     ru: "Все твои задачи по всем проектам.",

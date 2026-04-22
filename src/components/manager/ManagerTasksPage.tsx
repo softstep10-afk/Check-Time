@@ -317,94 +317,15 @@ export function ManagerTasksPage({
             </h2>
           </div>
 
-          <form className="mt-4 grid gap-3" onSubmit={handleCreate}>
-            <TextInputWithVoice
-              name="title"
-              placeholder={t("tasks.titlePlaceholder")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <select
-                name="project_id"
-                defaultValue=""
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="">{t("tasks.projectSelect")}</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                name="assigned_to"
-                defaultValue=""
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="">{t("tasks.workerSelect")}</option>
-                {workers.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.name} · {worker.role}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <select
-                name="priority"
-                defaultValue="medium"
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                {PRIORITY_OPTIONS.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {priorityLabel(priority)}
-                  </option>
-                ))}
-              </select>
-
-              <DateField
-                name="due_date"
-                label={t("tasks.dueDate")}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
-            </div>
-
-            <TextInputWithVoice
-              multiline
-              name="description"
-              placeholder={t("tasks.descriptionPlaceholder")}
-              className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-
-            <div className="space-y-2">
-              <input
-                ref={attachmentInputRef}
-                type="file"
-                multiple
-                accept={ACCEPT_ALL_UPLOADS}
-                onChange={(e) =>
-                  setAttachmentFiles(e.target.files ? Array.from(e.target.files) : [])
-                }
-                className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
-              />
-              {attachmentFiles.length > 0 ? (
-                <div className="text-[10px] text-[var(--text-muted)]">
-                  {attachmentFiles.length} {t("tasks.attachmentsCount")}
-                </div>
-              ) : null}
-            </div>
-
-            <button
-              type="submit"
-              disabled={busyKey === "create"}
-              className="button-base button-primary"
-            >
-              {busyKey === "create" ? t("common.creating") : t("tasks.assignTask")}
-            </button>
-          </form>
+          <p className="mt-4 text-sm text-[var(--text-secondary)]">
+            {t("tasks.createInsideProject")}
+          </p>
+          <Link
+            href="/projects"
+            className="button-base button-primary mt-4 inline-flex"
+          >
+            {t("tasks.openProjects")}
+          </Link>
         </div>
 
         {/* ── All Tasks ── */}
