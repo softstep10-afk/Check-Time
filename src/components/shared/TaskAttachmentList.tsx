@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { FileText, Film, Image as ImageIcon, Paperclip } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import type { TaskAttachmentRef } from "@/lib/task-attachments";
+import { normalizeStoragePath, type TaskAttachmentRef } from "@/lib/task-attachments";
 
 function iconFor(mediaType: string) {
   if (mediaType === "photo") return ImageIcon;
@@ -22,19 +22,20 @@ export function TaskAttachmentList({
 
   async function open(item: TaskAttachmentRef) {
     if (typeof window === "undefined") return;
-    // The "media" bucket is Private (default + per migration spec), so
-    // getPublicUrl() returns a URL that 404s. createSignedUrl() returns
-    // a short-TTL URL that actually works for private buckets and is
-    // also fine for public ones — safe to switch unconditionally.
+    const normalized = normalizeStoragePath(item.storage_path);
     const { data, error } = await supabase.storage
       .from("media")
-      .createSignedUrl(item.storage_path, 3600);
+      .createSignedUrl(normalized, 3600);
     console.log("[task-attach] open attachment", {
       id: item.id,
       filename: item.filename,
-      storage_path: item.storage_path,
+      bucket: "media",
+      storage_path_raw: item.storage_path,
+      storage_path_normalized: normalized,
+      pathHadLeadingSlash: item.storage_path.startsWith("/"),
+      pathHadBucketPrefix: item.storage_path.startsWith("media/") || item.storage_path.startsWith("/media/"),
       signedUrl: data?.signedUrl,
-      error: error?.message,
+      error: error ? { message: error.message, name: error.name } : null,
     });
     if (error || !data?.signedUrl) {
       console.error("[task-attach] failed to sign URL", error);

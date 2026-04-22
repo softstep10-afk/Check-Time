@@ -11,6 +11,7 @@ import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
 import {
   getAttachmentMediaIds,
   linkMediaToTask,
+  normalizeStoragePath,
   uploadTaskAttachment,
 } from "@/lib/task-attachments";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
@@ -347,14 +348,19 @@ export function ProjectDetailPage({
   // here. Same pattern, same TTL, same private-bucket support.
   async function openProjectMediaItem(item: { id: string; storage_path: string }) {
     if (typeof window === "undefined") return;
+    const normalized = normalizeStoragePath(item.storage_path);
     const { data, error } = await supabase.storage
       .from("media")
-      .createSignedUrl(item.storage_path, 3600);
+      .createSignedUrl(normalized, 3600);
     console.log("[project-media] open", {
       id: item.id,
-      storage_path: item.storage_path,
+      bucket: "media",
+      storage_path_raw: item.storage_path,
+      storage_path_normalized: normalized,
+      pathHadLeadingSlash: item.storage_path.startsWith("/"),
+      pathHadBucketPrefix: item.storage_path.startsWith("media/") || item.storage_path.startsWith("/media/"),
       signedUrl: data?.signedUrl,
-      error: error?.message,
+      error: error ? { message: error.message, name: error.name } : null,
     });
     if (error || !data?.signedUrl) {
       console.error("[project-media] failed to sign URL", error);

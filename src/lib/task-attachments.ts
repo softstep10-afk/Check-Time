@@ -198,3 +198,24 @@ export function getAttachmentMediaIds(task: { metadata?: unknown }): string[] {
   if (!Array.isArray(ids)) return [];
   return ids.filter((id): id is string => typeof id === "string");
 }
+
+/**
+ * Some media rows in the wild have a leading slash or even a "media/"
+ * bucket-name prefix baked into storage_path (artifact of an earlier
+ * upload code path or hand-edited rows). Supabase Storage rejects
+ * those with `{"statusCode":"404","error":"Bucket not found"}` — its
+ * router treats the leading slash / bucket name as a second bucket
+ * lookup that fails.
+ *
+ * Normalize before passing to .from("media").createSignedUrl(...):
+ *   "/orgid/...."          -> "orgid/...."
+ *   "media/orgid/...."     -> "orgid/...."
+ *   "/media/orgid/...."    -> "orgid/...."
+ *   "orgid/...."           -> unchanged
+ */
+export function normalizeStoragePath(raw: string): string {
+  let p = raw.trim();
+  if (p.startsWith("/")) p = p.slice(1);
+  if (p.startsWith("media/")) p = p.slice("media/".length);
+  return p;
+}
