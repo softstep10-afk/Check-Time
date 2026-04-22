@@ -1440,7 +1440,10 @@ function ReceiptsSection({
     const purchaseDate = fd.get("purchase_date")?.toString() ?? new Date().toISOString().slice(0, 10);
     const note = fd.get("note")?.toString().trim() ?? "";
 
-    if (!finalStore || !amount) return;
+    // Receipt photo + amount remain mandatory. Store became optional —
+    // many small purchases don't have a clean store identity (street
+    // vendor, multi-stop trip, etc.). Empty store is stored as null.
+    if (!amount) return;
 
     // Wave 8 client validation against STORAGE_LIMITS_MB.
     for (const file of Array.from(files)) {
@@ -1485,7 +1488,7 @@ function ReceiptsSection({
       const metadata = {
         kind: "receipt" as const,
         category: "receipt" as const,
-        store_name: finalStore,
+        store_name: finalStore || null,
         amount,
         purchase_date: purchaseDate,
         uploader_name: "Manager",
@@ -1628,12 +1631,11 @@ function ReceiptsSection({
         <div className="grid gap-3 sm:grid-cols-2">
           <select
             name="store"
-            required
             defaultValue=""
             onChange={(e) => setShowOther(e.target.value === "__other")}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
           >
-            <option value="" disabled>{t("receipts.store")}</option>
+            <option value="">{t("receipts.store")}</option>
             {STORES.map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
