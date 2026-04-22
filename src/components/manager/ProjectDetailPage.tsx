@@ -706,8 +706,8 @@ export function ProjectDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        <div className="surface-card p-4">
+      <section className="flex flex-col gap-5">
+        <div className="surface-card p-4 order-2">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("common.tasks")}</h2>
           <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.tasksSubtitle")}</p>
           <form className="mt-4 grid gap-3" onSubmit={handleCreateTask}>
@@ -862,8 +862,8 @@ export function ProjectDetailPage({
           </div>
         </div>
 
-        <div className="space-y-5">
-          <div className="surface-card p-4">
+        <div className="contents">
+          <div className="surface-card p-4 order-1">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
             <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.projectMediaSubtitle")}</p>
 
@@ -1017,7 +1017,7 @@ export function ProjectDetailPage({
             </div>
           </div>
 
-          <div className="surface-card p-4">
+          <div className="surface-card p-4 order-3">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentShifts")}</h2>
             <div className="mt-4 space-y-3">
               {sessions.length === 0 ? (
