@@ -259,6 +259,18 @@ export const translations = {
     en: "Expense receipts only. Each one tracks store, amount, and purchase date.",
     ru: "Только чеки расходов. Для каждого учитывается магазин, сумма и дата покупки.",
   },
+  "projectDetail.projectMediaInlineLabel": {
+    en: "Visible to all project members",
+    ru: "Видно всем участникам проекта",
+  },
+  "tasks.attachmentInlineLabel": {
+    en: "Attached only to this task",
+    ru: "Прикрепляется только к этой задаче",
+  },
+  "receipts.inlineLabel": {
+    en: "Expense records only",
+    ru: "Только записи о расходах",
+  },
   "projectDetail.mediaFilterAll": { en: "All", ru: "Все" },
   "projectDetail.mediaFilterPhoto": { en: "Photo", ru: "Фото" },
   "projectDetail.mediaFilterVideo": { en: "Video", ru: "Видео" },

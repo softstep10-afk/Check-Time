@@ -102,6 +102,10 @@ export async function uploadTaskAttachment(
   }
   console.log("[task-attach] storage upload ok");
 
+  const metadata = { kind: "task_attachment" as const };
+  if (metadata.kind !== "task_attachment") {
+    console.warn("[upload-guard] expected metadata.kind=task_attachment, got:", metadata);
+  }
   const { data, error: insertErr } = await supabase
     .from("media")
     .insert({
@@ -116,7 +120,7 @@ export async function uploadTaskAttachment(
       caption: null,
       is_checkout: false,
       time_event_id: null,
-      metadata: { kind: "task_attachment" },
+      metadata,
     })
     .select("id")
     .single<{ id: string }>();

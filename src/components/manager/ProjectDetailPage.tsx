@@ -370,6 +370,10 @@ export function ProjectDetailPage({
       return;
     }
 
+    const metadata = { kind: "project_media" as const };
+    if (metadata.kind !== "project_media") {
+      console.warn("[upload-guard] expected metadata.kind=project_media, got:", metadata);
+    }
     const { error: insertErr } = await supabase.from("media").insert({
       org_id: orgId,
       project_id: project.id,
@@ -382,7 +386,7 @@ export function ProjectDetailPage({
       caption: null,
       is_checkout: false,
       time_event_id: null,
-      metadata: { kind: "project_media" },
+      metadata,
     });
     if (insertErr) {
       setMessage(t("projectDetail.mediaUploadFailed"));
@@ -750,6 +754,9 @@ export function ProjectDetailPage({
                   {taskAttachmentFiles.length} {t("tasks.attachmentsCount")}
                 </div>
               ) : null}
+              <div className="text-[10px] font-semibold text-[var(--text-muted)]">
+                {t("tasks.attachmentInlineLabel")}
+              </div>
             </div>
 
             <button
@@ -913,6 +920,9 @@ export function ProjectDetailPage({
             </div>
             <div className="mt-1 text-[10px] text-[var(--text-muted)]">
               {t("projectDetail.mediaUploadHint")}
+            </div>
+            <div className="mt-0.5 text-[10px] font-semibold text-[var(--text-muted)]">
+              {t("projectDetail.projectMediaInlineLabel")}
             </div>
 
             {projectMediaItems.length > 0 ? (
@@ -1371,6 +1381,17 @@ function ReceiptsSection({
       const mimeType = file.type || "application/octet-stream";
       const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
 
+      const metadata = {
+        kind: "receipt" as const,
+        category: "receipt" as const,
+        store_name: finalStore,
+        amount,
+        purchase_date: purchaseDate,
+        uploader_name: "Manager",
+      };
+      if (metadata.kind !== "receipt") {
+        console.warn("[upload-guard] expected metadata.kind=receipt, got:", metadata);
+      }
       const { data: row, error: insertErr } = await supabase
         .from("media")
         .insert({
@@ -1385,13 +1406,7 @@ function ReceiptsSection({
           caption: note || null,
           is_checkout: false,
           time_event_id: null,
-          metadata: {
-            category: "receipt",
-            store_name: finalStore,
-            amount,
-            purchase_date: purchaseDate,
-            uploader_name: "Manager",
-          },
+          metadata,
         })
         .select("id")
         .single();
@@ -1483,6 +1498,9 @@ function ReceiptsSection({
           />
           <div className="text-sm text-[var(--text-secondary)]">{t("receipts.selectFiles")}</div>
           <div className="mt-1 text-[10px] text-[var(--text-muted)]">JPG, PNG, HEIC, PDF</div>
+          <div className="mt-0.5 text-[10px] font-semibold text-[var(--text-muted)]">
+            {t("receipts.inlineLabel")}
+          </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
