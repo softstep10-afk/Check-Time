@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
+import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
+import { linkMediaToTask, uploadTaskAttachment } from "@/lib/task-attachments";
 import type {
   ProjectStatus,
   Task,
@@ -62,6 +64,9 @@ export function ManagerTasksPage({
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
+
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers]);
 
@@ -108,6 +113,38 @@ export function ManagerTasksPage({
     setBusyKey("create");
     setMessage("");
 
+    // Attachments require a project (storage path includes projectId).
+    if (attachmentFiles.length > 0 && !projectId) {
+      setMessage(t("tasks.attachmentNeedsProject"));
+      setMessageTone("error");
+      setBusyKey(null);
+      return;
+    }
+
+    const uploadedMediaIds: string[] = [];
+    for (const file of attachmentFiles) {
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        setMessage(t("messages.uploadFailed"));
+        setMessageTone("error");
+        setBusyKey(null);
+        return;
+      }
+      const result = await uploadTaskAttachment(supabase, {
+        orgId,
+        projectId: projectId!,
+        uploadedBy: managerId,
+        file,
+      });
+      if (!result.ok) {
+        setMessage(t("messages.uploadFailed"));
+        setMessageTone("error");
+        setBusyKey(null);
+        return;
+      }
+      uploadedMediaIds.push(result.mediaId);
+    }
+
     const { data, error } = await supabase
       .from("tasks")
       .insert({
@@ -120,7 +157,9 @@ export function ManagerTasksPage({
         priority,
         status: "pending",
         due_date: dueDate,
-        metadata: {},
+        metadata: uploadedMediaIds.length > 0
+          ? { attachment_media_ids: uploadedMediaIds }
+          : {},
       })
       .select("*")
       .single<Task>();
@@ -133,6 +172,10 @@ export function ManagerTasksPage({
       return;
     }
 
+    if (uploadedMediaIds.length > 0) {
+      void linkMediaToTask(supabase, data.id, uploadedMediaIds);
+    }
+
     setTasks((prev) => [
       {
         ...data,
@@ -142,6 +185,8 @@ export function ManagerTasksPage({
       ...prev,
     ]);
     form.reset();
+    setAttachmentFiles([]);
+    if (attachmentInputRef.current) attachmentInputRef.current.value = "";
     setMessage(t("tasks.created"));
     setMessageTone("success");
     router.refresh();
@@ -293,6 +338,24 @@ export function ManagerTasksPage({
               placeholder={t("tasks.descriptionPlaceholder")}
               className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
+
+            <div className="space-y-2">
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                accept={ACCEPT_ALL_UPLOADS}
+                onChange={(e) =>
+                  setAttachmentFiles(e.target.files ? Array.from(e.target.files) : [])
+                }
+                className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+              />
+              {attachmentFiles.length > 0 ? (
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {attachmentFiles.length} {t("tasks.attachmentsCount")}
+                </div>
+              ) : null}
+            </div>
 
             <button
               type="submit"

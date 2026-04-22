@@ -559,6 +559,8 @@ export const translations = {
   "messages.uploading": { en: "Uploading...", ru: "Загрузка..." },
   "messages.uploadFailed": { en: "Upload failed", ru: "Ошибка загрузки" },
   "messages.sendFailed": { en: "Send failed — try again", ru: "Не удалось отправить — попробуй ещё раз" },
+  "tasks.attachmentsCount": { en: "file(s) attached", ru: "файл(а/ов) прикреплено" },
+  "tasks.attachmentNeedsProject": { en: "Pick a project before attaching files.", ru: "Выберите проект перед прикреплением файлов." },
   "messages.openFile": { en: "Open", ru: "Открыть" },
   "messages.priority": { en: "Priority", ru: "Приоритет" },
   "messages.priorityUrgent": { en: "Urgent", ru: "Срочное" },

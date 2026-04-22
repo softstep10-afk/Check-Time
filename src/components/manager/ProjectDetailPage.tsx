@@ -7,7 +7,8 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
-import { validateUploadFile } from "@/lib/upload-limits";
+import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
+import { linkMediaToTask, uploadTaskAttachment } from "@/lib/task-attachments";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
@@ -58,6 +59,8 @@ export function ProjectDetailPage({
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
+  const [taskAttachmentFiles, setTaskAttachmentFiles] = useState<File[]>([]);
+  const taskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredMedia = useMemo(() => {
     if (mediaFilter === "all") return media;
@@ -218,26 +221,62 @@ export function ProjectDetailPage({
     setBusyKey("create-task");
     setMessage("");
 
-    const { error } = await supabase.from("tasks").insert({
-      org_id: orgId,
-      project_id: project.id,
-      assigned_to: assignedTo || null,
-      assigned_by: managerId,
-      title,
-      description: description || null,
-      priority,
-      status: "pending",
-      due_date: dueDate || null,
-      metadata: {},
-    });
+    // Upload any attachments first; if any one fails, abort before
+    // creating the task so we don't end up with orphan task rows.
+    const uploadedMediaIds: string[] = [];
+    for (const file of taskAttachmentFiles) {
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        setMessage(t("messages.uploadFailed"));
+        setBusyKey(null);
+        return;
+      }
+      const result = await uploadTaskAttachment(supabase, {
+        orgId,
+        projectId: project.id,
+        uploadedBy: managerId,
+        file,
+      });
+      if (!result.ok) {
+        setMessage(t("messages.uploadFailed"));
+        setBusyKey(null);
+        return;
+      }
+      uploadedMediaIds.push(result.mediaId);
+    }
 
-    if (error) {
-      setMessage(error.message);
+    const { data: insertedTask, error } = await supabase
+      .from("tasks")
+      .insert({
+        org_id: orgId,
+        project_id: project.id,
+        assigned_to: assignedTo || null,
+        assigned_by: managerId,
+        title,
+        description: description || null,
+        priority,
+        status: "pending",
+        due_date: dueDate || null,
+        metadata: uploadedMediaIds.length > 0
+          ? { attachment_media_ids: uploadedMediaIds }
+          : {},
+      })
+      .select("id")
+      .single<{ id: string }>();
+
+    if (error || !insertedTask) {
+      setMessage(error?.message ?? "Insert failed");
       setBusyKey(null);
       return;
     }
 
+    if (uploadedMediaIds.length > 0) {
+      void linkMediaToTask(supabase, insertedTask.id, uploadedMediaIds);
+    }
+
     form.reset();
+    setTaskAttachmentFiles([]);
+    if (taskAttachmentInputRef.current) taskAttachmentInputRef.current.value = "";
     setBusyKey(null);
     setMessage(t("projectDetail.taskCreated"));
     router.refresh();
@@ -581,6 +620,24 @@ export function ProjectDetailPage({
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
             </div>
+            <div className="space-y-2">
+              <input
+                ref={taskAttachmentInputRef}
+                type="file"
+                multiple
+                accept={ACCEPT_ALL_UPLOADS}
+                onChange={(e) =>
+                  setTaskAttachmentFiles(e.target.files ? Array.from(e.target.files) : [])
+                }
+                className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+              />
+              {taskAttachmentFiles.length > 0 ? (
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {taskAttachmentFiles.length} {t("tasks.attachmentsCount")}
+                </div>
+              ) : null}
+            </div>
+
             <button
               type="submit"
               disabled={busyKey === "create-task"}
