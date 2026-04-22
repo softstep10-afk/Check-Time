@@ -271,6 +271,7 @@ export const translations = {
     en: "Expense records only",
     ru: "Только записи о расходах",
   },
+  "receipts.takePhoto": { en: "📷 Take photo", ru: "📷 Снять фото" },
   "workerProject.openProject": { en: "Open project", ru: "Открыть проект" },
   "workerProject.backToTasks": { en: "Back to my tasks", ru: "← К моим задачам" },
   "workerProject.projectMediaTitle": { en: "Project Media", ru: "Медиа проекта" },

@@ -1300,6 +1300,10 @@ function ReceiptsSection({
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Mobile-first capture: separate hidden input with capture="environment"
+  // so tapping the camera button on phone goes straight to the rear camera
+  // instead of bouncing through the OS file picker.
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -1313,22 +1317,38 @@ function ReceiptsSection({
         .order("created_at", { ascending: false });
 
       const rows = (data ?? []) as Array<Media & { metadata: Record<string, unknown> }>;
+
+      // Sign every receipt URL in one batch round-trip. The "media" bucket
+      // is Private, so getPublicUrl produces 404'ing URLs — same root cause
+      // already fixed in TaskAttachmentList. 1h TTL is plenty for browsing.
+      const paths = rows.map((r) => r.storage_path);
+      let signedByPath = new Map<string, string>();
+      if (paths.length > 0) {
+        const { data: signed } = await supabase.storage
+          .from("media")
+          .createSignedUrls(paths, 3600);
+        signedByPath = new Map(
+          (signed ?? [])
+            .filter((s): s is { path: string; signedUrl: string; error: null } =>
+              Boolean(s.signedUrl && s.path),
+            )
+            .map((s) => [s.path, s.signedUrl]),
+        );
+      }
+
       setReceipts(
-        rows.map((r) => {
-          const { data: urlData } = supabase.storage.from("media").getPublicUrl(r.storage_path);
-          return {
-            id: r.id,
-            storagePath: r.storage_path,
-            url: urlData.publicUrl,
-            filename: r.filename ?? "receipt",
-            storeName: (r.metadata?.store_name as string) ?? "",
-            amount: (r.metadata?.amount as number) ?? 0,
-            purchaseDate: (r.metadata?.purchase_date as string) ?? "",
-            note: r.caption ?? "",
-            uploaderName: (r.metadata?.uploader_name as string) ?? "",
-            isImage: r.mime_type?.startsWith("image/") ?? false,
-          };
-        }),
+        rows.map((r) => ({
+          id: r.id,
+          storagePath: r.storage_path,
+          url: signedByPath.get(r.storage_path) ?? "",
+          filename: r.filename ?? "receipt",
+          storeName: (r.metadata?.store_name as string) ?? "",
+          amount: (r.metadata?.amount as number) ?? 0,
+          purchaseDate: (r.metadata?.purchase_date as string) ?? "",
+          note: r.caption ?? "",
+          uploaderName: (r.metadata?.uploader_name as string) ?? "",
+          isImage: r.mime_type?.startsWith("image/") ?? false,
+        })),
       );
       setLoading(false);
     }
@@ -1341,7 +1361,13 @@ function ReceiptsSection({
     event.preventDefault();
     const form = event.currentTarget;
     const fd = new FormData(form);
-    const files = fileRef.current?.files;
+    // Either ref may hold the user's selection — dropzone (file picker /
+    // drag-drop) or the new mobile camera button. Whichever has files
+    // wins; if both have files (rare), the dropzone takes precedence.
+    const files =
+      fileRef.current?.files && fileRef.current.files.length > 0
+        ? fileRef.current.files
+        : cameraRef.current?.files;
     if (!files || files.length === 0) return;
 
     const storeName = fd.get("store")?.toString() ?? "";
@@ -1429,12 +1455,14 @@ function ReceiptsSection({
         return;
       }
 
-      const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
+      const { data: signedData } = await supabase.storage
+        .from("media")
+        .createSignedUrl(path, 3600);
       setReceipts((prev) => [
         {
           id: row.id,
           storagePath: path,
-          url: urlData.publicUrl,
+          url: signedData?.signedUrl ?? "",
           filename: file.name,
           storeName: finalStore,
           amount,
@@ -1450,6 +1478,7 @@ function ReceiptsSection({
     setUploading(false);
     form.reset();
     if (fileRef.current) fileRef.current.value = "";
+    if (cameraRef.current) cameraRef.current.value = "";
   }
 
   async function handleDelete(receipt: ReceiptItem) {
@@ -1514,6 +1543,24 @@ function ReceiptsSection({
             {t("receipts.inlineLabel")}
           </div>
         </div>
+
+        {/* Mobile camera shortcut. capture="environment" hints rear cam;
+            on desktop the button just opens the native file picker. */}
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={() => {/* just for re-render */}}
+        />
+        <button
+          type="button"
+          onClick={() => cameraRef.current?.click()}
+          className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)]"
+        >
+          {t("receipts.takePhoto")}
+        </button>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <select
