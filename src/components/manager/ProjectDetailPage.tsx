@@ -348,6 +348,14 @@ export function ProjectDetailPage({
   // here. Same pattern, same TTL, same private-bucket support.
   async function openProjectMediaItem(item: { id: string; storage_path: string }) {
     if (typeof window === "undefined") return;
+    // Sync tab open inside the click handler — see TaskAttachmentList
+    // for the iOS/Android popup-blocker rationale.
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) {
+      console.warn("[project-media] popup blocked");
+      setMessage(t("projectDetail.mediaOpenFailed"));
+      return;
+    }
     const normalized = normalizeStoragePath(item.storage_path);
     const { data, error } = await supabase.storage
       .from("media")
@@ -364,14 +372,11 @@ export function ProjectDetailPage({
     });
     if (error || !data?.signedUrl) {
       console.error("[project-media] failed to sign URL", error);
+      tab.close();
       setMessage(t("projectDetail.mediaOpenFailed"));
       return;
     }
-    const popup = window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    if (!popup) {
-      console.warn("[project-media] popup blocked");
-      setMessage(t("projectDetail.mediaOpenFailed"));
-    }
+    tab.location.href = data.signedUrl;
   }
 
   async function handleProjectMediaUpload(
