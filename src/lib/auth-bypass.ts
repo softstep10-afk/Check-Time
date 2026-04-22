@@ -13,6 +13,19 @@
 export const AUTH_BYPASS_ENABLED =
   process.env.NEXT_PUBLIC_AUTH_BYPASS === "true";
 
+// Temporary diagnostic — confirms in the browser console exactly what
+// the deployed bundle resolved AUTH_BYPASS_ENABLED to. Remove once the
+// bypass-state question is settled.
+if (typeof window !== "undefined") {
+  console.log(
+    "[auth-bypass] AUTH_BYPASS_ENABLED =",
+    AUTH_BYPASS_ENABLED,
+    "(NEXT_PUBLIC_AUTH_BYPASS =",
+    JSON.stringify(process.env.NEXT_PUBLIC_AUTH_BYPASS),
+    ")",
+  );
+}
+
 /**
  * Hardcoded auth.users / profiles UUID for the seeded demo owner.
  *
