@@ -4,7 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
-import { formatEventTime } from "@/lib/worker-utils";
+function relativeTime(iso: string, lang: "en" | "ru"): string {
+  const diff = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (diff < 60) return lang === "ru" ? "только что" : "just now";
+  const min = Math.round(diff / 60);
+  if (min < 60) return lang === "ru" ? `${min} мин назад` : `${min} min ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return lang === "ru" ? `${hr} ч назад` : `${hr} hr ago`;
+  const day = Math.round(hr / 24);
+  return lang === "ru" ? `${day} дн назад` : `${day} d ago`;
+}
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
 import {
   PRIORITY_COLOR,
@@ -36,7 +45,7 @@ export function NotificationBell({
   profileId?: string;
   onUrgentArrival?: (msg: AppMessage) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -187,6 +196,17 @@ export function NotificationBell({
     [supabase],
   );
 
+  const markAllRead = useCallback(async () => {
+    const unreadIds = messages.filter((m) => !m.read).map((m) => m.id);
+    if (unreadIds.length === 0) return;
+    setMessages((prev) => prev.map((m) => ({ ...m, read: true })));
+    const { error } = await supabase
+      .from("messages")
+      .update({ read: true })
+      .in("id", unreadIds);
+    if (error) console.warn("markAllRead failed:", error.message);
+  }, [messages, supabase]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -235,10 +255,20 @@ export function NotificationBell({
           }}
         >
           <div
-            className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
+            className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
             style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border-default)" }}
           >
-            {t("messages.notifications")}
+            <span>{t("messages.notifications")}</span>
+            {unreadCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => void markAllRead()}
+                className="rounded-[var(--radius-sm)] border px-2 py-0.5 text-[9px] font-semibold normal-case tracking-normal"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                {t("messages.markAllRead")}
+              </button>
+            ) : null}
           </div>
           <div className="max-h-[400px] overflow-y-auto">
             {sortedMessages.length === 0 ? (
@@ -285,7 +315,7 @@ export function NotificationBell({
                         ) : null}
                         <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                           <span className="text-[10px] text-[var(--text-muted)]">
-                            {msg.from_name ? `${msg.from_name} • ` : ""}{formatEventTime(msg.created_at)}
+                            {msg.from_name ? `${msg.from_name} • ` : ""}{relativeTime(msg.created_at, locale === "ru" ? "ru" : "en")}
                           </span>
                           {!msg.read ? (
                             <div className="flex shrink-0 items-center gap-1.5">

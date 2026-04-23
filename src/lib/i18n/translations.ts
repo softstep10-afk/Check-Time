@@ -58,6 +58,7 @@ export const translations = {
   "tasks.emptyMine": { en: "No tasks assigned specifically to you.", ru: "Нет задач, назначенных лично вам." },
   "tasks.emptyUrgent": { en: "No urgent tasks right now.", ru: "Срочных задач сейчас нет." },
   "tasks.emptyToday": { en: "Nothing due today.", ru: "На сегодня ничего не запланировано." },
+  "messages.markAllRead": { en: "Mark all read", ru: "Отметить все прочитанными" },
   "overview.live": { en: "Live", ru: "В реальном времени" },
   "overview.offline": { en: "Offline", ru: "Нет связи" },
   "overview.realtimeConnected": { en: "Realtime channel connected — page auto-refreshes on new events.", ru: "Канал реального времени подключён — страница сама обновляется при новых событиях." },
