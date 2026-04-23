@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, ClipboardList } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
@@ -215,7 +215,14 @@ export default function AuditLogPage() {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-sm text-[var(--text-secondary)]">
-                    {t("audit.empty")}
+                    <div className="flex flex-col items-center gap-2">
+                      <ClipboardList
+                        size={36}
+                        className="text-[var(--text-muted)]"
+                        strokeWidth={1.5}
+                      />
+                      <span>{t("audit.empty")}</span>
+                    </div>
                   </td>
                 </tr>
               ) : (

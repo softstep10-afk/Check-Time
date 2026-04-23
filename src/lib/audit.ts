@@ -27,16 +27,24 @@ export async function logAudit({
     return;
   }
 
-  const supabase = createClient();
-  await supabase.from("audit_log").insert({
-    org_id: orgId,
-    actor_id: actorId,
-    actor_name: actorName,
-    actor_role: actorRole,
-    action,
-    target_type: targetType ?? null,
-    target_id: targetId ?? null,
-    before_data: beforeData ?? null,
-    after_data: afterData ?? null,
-  });
+  // Best-effort: never throw out of logAudit. Callers use it inside
+  // flows that already committed the primary action (payroll close,
+  // force checkout, …) and a failing audit row must not crash those.
+  try {
+    const supabase = createClient();
+    const { error } = await supabase.from("audit_log").insert({
+      org_id: orgId,
+      actor_id: actorId,
+      actor_name: actorName,
+      actor_role: actorRole,
+      action,
+      target_type: targetType ?? null,
+      target_id: targetId ?? null,
+      before_data: beforeData ?? null,
+      after_data: afterData ?? null,
+    });
+    if (error) console.warn("[Audit] insert failed:", error.message);
+  } catch (err) {
+    console.warn("[Audit] insert threw:", err);
+  }
 }
