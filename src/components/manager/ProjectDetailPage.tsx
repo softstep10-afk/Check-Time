@@ -752,9 +752,11 @@ export function ProjectDetailPage({
               <select
                 name="assigned_to"
                 defaultValue=""
+                aria-label={t("projectDetail.assignToWorkerOptional")}
+                title={t("projectDetail.assignToWorkerOptional")}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               >
-                <option value="">{t("common.unassigned")}</option>
+                <option value="">{t("projectDetail.assignToWorkerOptional")}</option>
                 {assignedProfiles.map((worker) => (
                   <option key={worker.id} value={worker.id}>
                     {worker.name}

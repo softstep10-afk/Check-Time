@@ -44,6 +44,7 @@ export const translations = {
   "common.open": { en: "Open", ru: "Открытые" },
   "common.general": { en: "General", ru: "Общее" },
   "common.unassigned": { en: "Unassigned", ru: "Не назначено" },
+  "projectDetail.assignToWorkerOptional": { en: "Assign to worker (optional)", ru: "Назначить рабочему (необязательно)" },
   "common.address": { en: "Address", ru: "Адрес" },
   "common.active": { en: "Active", ru: "Активный" },
   "common.paused": { en: "Paused", ru: "Приостановлен" },
