@@ -704,15 +704,43 @@ export function ProjectDetailPage({
             <div className="mt-4 space-y-3">
               {assignedProfiles.map((worker) => {
                 const assignment = assignments.find((entry) => entry.profile_id === worker.id);
+                // weekMinutes on ManagerProfileSummary already scopes to
+                // the current Mon-Sun window; not per-project yet, but
+                // for a solo-project worker this matches closely.
+                const weekHours = worker.weekMinutes / 60;
+                const onSiteForThisProject = worker.isOnSite && worker.currentProjectName === project.name;
                 return (
                   <div
                     key={worker.id}
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <Link href={`/team/${worker.id}`} className="text-sm font-semibold text-[var(--text-primary)]">
-                        {worker.name}
-                      </Link>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link href={`/team/${worker.id}`} className="text-sm font-semibold text-[var(--text-primary)]">
+                            {worker.name}
+                          </Link>
+                          <span
+                            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]"
+                            style={{ background: "rgba(191, 162, 52, 0.14)", color: "var(--brand-yellow)" }}
+                          >
+                            {worker.role}
+                          </span>
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                            style={{ color: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
+                          >
+                            <span
+                              className="inline-block h-1.5 w-1.5 rounded-full"
+                              style={{ background: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
+                            />
+                            {onSiteForThisProject ? t("common.onSite") : t("common.off")}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">
+                          {t("common.week")}: {weekHours.toFixed(1)}h
+                        </div>
+                      </div>
                       {assignment ? (
                         <button
                           type="button"
