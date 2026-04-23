@@ -22,7 +22,7 @@ const ROLE_COLORS: Record<string, string> = {
   supervisor: "#a855f7",
 };
 
-const STALE_MS = 2 * 60_000; // 2 min
+const STALE_MS = 5 * 60_000; // 5 min
 
 function makeWorkerIcon(color: string, stale: boolean) {
   return {
@@ -123,7 +123,7 @@ export function LiveWorkerMarkers() {
           recorded_at: loc?.recorded_at ?? new Date().toISOString(),
           consented,
         };
-      }).filter((p) => p.lat !== 0 || !p.consented); // Only show workers with real positions or opt-outs
+      }).filter((p) => p.lat !== 0 && p.lng !== 0); // Only show workers with a real recorded position
 
       if (!cancelled) updatePositions(result);
     }
@@ -145,9 +145,24 @@ export function LiveWorkerMarkers() {
 
     void poll();
     const interval = setInterval(() => void poll(), 20_000);
+
+    // Realtime: every new INSERT into worker_live_locations triggers an
+    // immediate refetch so the map reflects motion within ~1s instead of
+    // waiting up to 20s for the next poll. The interval stays as a
+    // fallback for cases where the realtime channel drops.
+    const channel = supabase
+      .channel("live-worker-locations")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "worker_live_locations" },
+        () => { void poll(); },
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
       clearInterval(interval);
+      void supabase.removeChannel(channel);
     };
   }, [supabase]);
 
@@ -165,7 +180,7 @@ export function LiveWorkerMarkers() {
           return (
             <Marker
               key={`opted-out-${pos.worker_id}`}
-              position={{ lat: pos.lat || 37.7749, lng: pos.lng || -122.4194 }}
+              position={{ lat: pos.lat, lng: pos.lng }}
               icon={{
                 path: 0 as google.maps.SymbolPath,
                 fillColor: "#6B7280",
