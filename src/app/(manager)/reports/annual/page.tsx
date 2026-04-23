@@ -342,6 +342,154 @@ export default function AnnualReportPage() {
     URL.revokeObjectURL(url);
   }
 
+  async function exportAnnualPdf() {
+    // jspdf + jspdf-autotable ship as CJS defaults; dynamic import keeps
+    // them off the initial bundle and out of the SSR path. The
+    // autotable module mutates the jsPDF prototype on import, so it has
+    // to load after jsPDF itself.
+    const { default: jsPDF } = await import("jspdf");
+    const { default: autoTable } = await import("jspdf-autotable");
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const darkBg: [number, number, number] = [30, 35, 51];
+    const ink: [number, number, number] = [241, 245, 249];
+    const goldHex = "#f59e0b";
+    const generated = new Date().toLocaleString(locale === "ru" ? "ru-RU" : "en-US");
+
+    function paintPage() {
+      doc.setFillColor(...darkBg);
+      doc.rect(0, 0, pageWidth, pageHeight, "F");
+    }
+
+    function footer() {
+      doc.setTextColor(148, 163, 184);
+      doc.setFontSize(9);
+      doc.text(`Construction Clock — ${generated}`, pageWidth / 2, pageHeight - 24, {
+        align: "center",
+      });
+    }
+
+    // Cover
+    paintPage();
+    doc.setTextColor(...ink);
+    doc.setFontSize(28);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Annual Report ${year}`, pageWidth / 2, 180, { align: "center" });
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "normal");
+    doc.text("Andrew's Crew — Construction Clock", pageWidth / 2, 220, {
+      align: "center",
+    });
+    doc.setFontSize(11);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Generated ${generated}`, pageWidth / 2, 244, { align: "center" });
+    footer();
+
+    // Summary
+    doc.addPage();
+    paintPage();
+    doc.setTextColor(...ink);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Summary", 40, 56);
+    autoTable(doc, {
+      startY: 80,
+      head: [["Metric", "Value"]],
+      body: [
+        ["Total Hours", `${Math.round(summary.totalHours)} h`],
+        ["Gross Payroll", currency.format(summary.totalGross)],
+        ["Material Cost", currency.format(summary.totalMaterials)],
+        ["Projects Worked", String(summary.totalProjectsWorked)],
+        ["Active Workers", String(summary.activeWorkers)],
+        ["Store Visits", String(summary.totalVisits)],
+      ],
+      theme: "grid",
+      styles: { fillColor: darkBg, textColor: ink, lineColor: [51, 65, 85] },
+      headStyles: { fillColor: goldHex, textColor: [24, 24, 27], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [40, 47, 69] },
+    });
+    footer();
+
+    // Workers
+    doc.addPage();
+    paintPage();
+    doc.setTextColor(...ink);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Workers", 40, 56);
+    autoTable(doc, {
+      startY: 80,
+      head: [["Name", "Role", "Hours", "OT", "Gross", "Projects", "Avg h/day"]],
+      body: workerRows.map((w) => [
+        w.name,
+        w.role,
+        w.totalHours.toFixed(1),
+        w.otHours.toFixed(1),
+        currency.format(w.grossPaid),
+        String(w.projectCount),
+        `${w.avgHoursPerDay}`,
+      ]),
+      theme: "grid",
+      styles: { fillColor: darkBg, textColor: ink, lineColor: [51, 65, 85], fontSize: 9 },
+      headStyles: { fillColor: goldHex, textColor: [24, 24, 27], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [40, 47, 69] },
+    });
+    footer();
+
+    // Projects
+    doc.addPage();
+    paintPage();
+    doc.setTextColor(...ink);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Projects", 40, 56);
+    autoTable(doc, {
+      startY: 80,
+      head: [["Name", "Status", "Start", "End", "Hours", "Materials", "Total"]],
+      body: projectRows.map((p) => [
+        p.name,
+        p.status,
+        p.startDate ?? "—",
+        p.endDate ?? "—",
+        p.laborHours.toFixed(1),
+        currency.format(p.materialCost),
+        currency.format(p.totalCost),
+      ]),
+      theme: "grid",
+      styles: { fillColor: darkBg, textColor: ink, lineColor: [51, 65, 85], fontSize: 9 },
+      headStyles: { fillColor: goldHex, textColor: [24, 24, 27], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [40, 47, 69] },
+    });
+    footer();
+
+    // Monthly
+    doc.addPage();
+    paintPage();
+    doc.setTextColor(...ink);
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Monthly Breakdown", 40, 56);
+    autoTable(doc, {
+      startY: 80,
+      head: [["Month", "Labor Cost", "Material Cost", "Active Workers"]],
+      body: monthlyData.map((m) => [
+        m.label,
+        currency.format(m.laborCost),
+        currency.format(m.materialCost),
+        String(m.activeWorkers),
+      ]),
+      theme: "grid",
+      styles: { fillColor: darkBg, textColor: ink, lineColor: [51, 65, 85] },
+      headStyles: { fillColor: goldHex, textColor: [24, 24, 27], fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [40, 47, 69] },
+    });
+    footer();
+
+    doc.save(`annual_report_${year}.pdf`);
+  }
+
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
   const hasData = events.length > 0 || receipts.length > 0;
   const maxBar = Math.max(...monthlyData.map((m) => m.laborCost + m.materialCost), 1);
@@ -374,6 +522,16 @@ export default function AnnualReportPage() {
         <button type="button" onClick={exportWorkersCsv} className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}>
           <Download size={13} />
           {t("report.exportCsv")}
+        </button>
+        <button
+          type="button"
+          onClick={() => void exportAnnualPdf()}
+          disabled={!hasData || loading}
+          className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold disabled:opacity-50"
+          style={{ background: "#f59e0b", color: "#000" }}
+        >
+          <Download size={13} />
+          {t("report.exportPdf")}
         </button>
       </section>
 
