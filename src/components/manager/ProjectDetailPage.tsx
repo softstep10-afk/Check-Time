@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Pencil, X } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
@@ -62,6 +63,7 @@ export function ProjectDetailPage({
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
@@ -186,6 +188,7 @@ export function ProjectDetailPage({
     }
 
     setBusyKey(null);
+    setShowEditModal(false);
     setMessage(t("projects.updated"));
     router.refresh();
   }
@@ -506,10 +509,60 @@ export function ProjectDetailPage({
         <Link href="/projects" className="text-sm font-semibold text-[var(--brand-yellow)]">
           {t("projectDetail.backToProjects")}
         </Link>
-        <h1 className="text-[28px] font-bold text-[var(--text-primary)]">{project.name}</h1>
-        <p className="max-w-[60ch] text-sm leading-6 text-[var(--text-secondary)]">
-          {t("projectDetail.description")}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-[28px] font-bold text-[var(--text-primary)]">{project.name}</h1>
+            {project.address ? (
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">{project.address}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowEditModal(true)}
+            className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+            style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+          >
+            <Pencil size={12} /> {t("common.edit")}
+          </button>
+        </div>
+      </section>
+
+      {/* ── Stats (first content after header) ── */}
+      <section className="surface-card p-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("common.crew")}
+            </div>
+            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
+              {assignedProfiles.length}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("common.onSite")}
+            </div>
+            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
+              {project.onSiteWorkerCount}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("common.tasks")}
+            </div>
+            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
+              {tasks.filter((task) => task.status !== "done" && task.status !== "cancelled").length}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("common.week")}
+            </div>
+            <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+              {formatDurationCompact(project.weekMinutes)}
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* ── Project Timer ── */}
@@ -595,123 +648,31 @@ export function ProjectDetailPage({
         </div>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-5 xl:grid-cols-2">
         <div className="surface-card p-4">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.projectSettings")}</h2>
-          <form className="mt-4 grid gap-3" onSubmit={handleUpdateProject}>
-            <TextInputWithVoice
-              name="name"
-              defaultValue={project.name}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <TextInputWithVoice
-              name="address"
-              defaultValue={project.address ?? ""}
-              placeholder={t("common.address")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <input
-                name="rate"
-                type="number"
-                step="0.01"
-                defaultValue={project.rate}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
-              <input
-                name="radius_m"
-                type="number"
-                defaultValue={project.radius_m}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
-              <select
-                name="status"
-                defaultValue={project.status}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="active">{t("common.active")}</option>
-                <option value="paused">{t("common.paused")}</option>
-                <option value="completed">{t("common.completed")}</option>
-                <option value="archived">{t("common.archived")}</option>
-              </select>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.siteMap")}</h2>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                {t("projectDetail.siteMapDesc")}
+              </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <input
-                name="lat"
-                type="number"
-                step="0.000001"
-                defaultValue={site?.lat ?? ""}
-                placeholder={t("projects.latitude")}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
-              <input
-                name="lng"
-                type="number"
-                step="0.000001"
-                defaultValue={site?.lng ?? ""}
-                placeholder={t("projects.longitude")}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
+            <div className="status-pill" data-tone={site ? "warning" : "neutral"}>
+              {site ? `${project.radius_m}${t("clock.radiusM")}` : t("projectDetail.noGps")}
             </div>
-            <TextInputWithVoice
-              multiline
-              name="notes"
-              defaultValue={project.notes ?? ""}
-              className="min-h-[110px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <button
-              type="submit"
-              disabled={busyKey === "project-update"}
-              className="button-base button-primary"
-            >
-              {busyKey === "project-update" ? t("common.saving") : t("projectDetail.saveProject")}
-            </button>
-          </form>
+          </div>
+          {site ? (
+            <div className="mt-4 h-[220px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] md:h-[300px]">
+              <ProjectSiteMap site={site} radiusMeters={project.radius_m} />
+            </div>
+          ) : (
+            <div className="surface-panel mt-4 p-4 text-sm text-[var(--text-secondary)]">
+              {t("projectDetail.addLatLng")}
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
-          <div className="surface-card p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.siteMap")}</h2>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  {t("projectDetail.siteMapDesc")}
-                </p>
-              </div>
-              <div className="status-pill" data-tone={site ? "warning" : "neutral"}>
-                {site ? `${project.radius_m}${t("clock.radiusM")}` : t("projectDetail.noGps")}
-              </div>
-            </div>
-            {site ? (
-              <div className="mt-4 h-[220px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] md:h-[300px]">
-                <ProjectSiteMap site={site} radiusMeters={project.radius_m} />
-              </div>
-            ) : (
-              <div className="surface-panel mt-4 p-4 text-sm text-[var(--text-secondary)]">
-                {t("projectDetail.addLatLng")}
-              </div>
-            )}
-          </div>
-
-          <div className="surface-card p-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.crew")}</div>
-                <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">{assignedProfiles.length}</div>
-              </div>
-              <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.open")}</div>
-                <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-                  {tasks.filter((task) => task.status !== "done" && task.status !== "cancelled").length}
-                </div>
-              </div>
-              <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.week")}</div>
-                <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">{formatDurationCompact(project.weekMinutes)}</div>
-              </div>
-            </div>
-          </div>
-
           <div className="surface-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.assignedCrew")}</h2>
@@ -1155,6 +1116,113 @@ export function ProjectDetailPage({
         onClose={() => setFlagModalMediaId(null)}
         onMutate={() => void refreshOpenFlags()}
       />
+
+      {showEditModal ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            className="surface-card w-full max-w-[700px] max-h-[90vh] overflow-y-auto p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("projects.editProject")}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                aria-label={t("common.cancel")}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <form className="mt-4 grid gap-3" onSubmit={handleUpdateProject}>
+              <TextInputWithVoice
+                name="name"
+                defaultValue={project.name}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <TextInputWithVoice
+                name="address"
+                defaultValue={project.address ?? ""}
+                placeholder={t("common.address")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <input
+                  name="rate"
+                  type="number"
+                  step="0.01"
+                  defaultValue={project.rate}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <input
+                  name="radius_m"
+                  type="number"
+                  defaultValue={project.radius_m}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <select
+                  name="status"
+                  defaultValue={project.status}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="active">{t("common.active")}</option>
+                  <option value="paused">{t("common.paused")}</option>
+                  <option value="completed">{t("common.completed")}</option>
+                  <option value="archived">{t("common.archived")}</option>
+                </select>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  name="lat"
+                  type="number"
+                  step="0.000001"
+                  defaultValue={site?.lat ?? ""}
+                  placeholder={t("projects.latitude")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <input
+                  name="lng"
+                  type="number"
+                  step="0.000001"
+                  defaultValue={site?.lng ?? ""}
+                  placeholder={t("projects.longitude")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+              </div>
+              <TextInputWithVoice
+                multiline
+                name="notes"
+                defaultValue={project.notes ?? ""}
+                className="min-h-[110px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={busyKey === "project-update"}
+                  className="button-base button-primary"
+                >
+                  {busyKey === "project-update" ? t("common.saving") : t("projectDetail.saveProject")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
