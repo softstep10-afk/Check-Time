@@ -65,6 +65,8 @@ function makeProject(overrides: Partial<Project> & Pick<Project, "id" | "name">)
     start_date: null,
     end_date: null,
     settings: {},
+    timeline_status: "on_track",
+    budget_status: "on_budget",
     deleted_at: null,
     created_at: isoOffset(-24 * 30),
     updated_at: isoOffset(-3),

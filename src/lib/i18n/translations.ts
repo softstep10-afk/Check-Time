@@ -225,6 +225,12 @@ export const translations = {
   "projects.noNotesHint": { en: "No notes — click Edit to add", ru: "Нет заметок — нажмите Редактировать, чтобы добавить" },
   "projects.removeConfirmTitle": { en: "Remove this project?", ru: "Убрать этот проект?" },
   "projects.removeConfirmBody": { en: "{name} will be archived. Shifts, tasks, and media stay in the system but the project stops appearing in active lists.", ru: "{name} будет перемещён в архив. Смены, задачи и медиа сохранятся в системе, но проект исчезнет из активных списков." },
+  "projects.timeline.on_track": { en: "Timeline: on track", ru: "График: по плану" },
+  "projects.timeline.at_risk": { en: "Timeline: at risk", ru: "График: под риском" },
+  "projects.timeline.delayed": { en: "Timeline: delayed", ru: "График: отставание" },
+  "projects.budget.on_budget": { en: "Budget: on budget", ru: "Бюджет: по плану" },
+  "projects.budget.over_budget": { en: "Budget: over budget", ru: "Бюджет: перерасход" },
+  "projects.budget.critical": { en: "Budget: critical", ru: "Бюджет: критично" },
 
   // ── Project Detail Page ──
   "projectDetail.backToProjects": { en: "Back to projects", ru: "Назад к проектам" },

@@ -19,7 +19,11 @@ import {
   toSupabasePoint,
 } from "@/lib/worker-utils";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
-import type { ProjectStatus } from "@/types/database";
+import type {
+  ProjectBudgetStatus,
+  ProjectStatus,
+  ProjectTimelineStatus,
+} from "@/types/database";
 
 const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
@@ -33,25 +37,92 @@ function activityState(project: ManagerProjectSummary): ActivityState {
   return ageMs > STALE_THRESHOLD_MS ? "stale" : "open";
 }
 
-function TrafficLights({ state }: { state: ActivityState }) {
+const TIMELINE_COLOR: Record<ProjectTimelineStatus, string> = {
+  on_track: "#84cc16",
+  at_risk: "#f59e0b",
+  delayed: "#ef4444",
+};
+
+const BUDGET_COLOR: Record<ProjectBudgetStatus, string> = {
+  on_budget: "#84cc16",
+  over_budget: "#f59e0b",
+  critical: "#ef4444",
+};
+
+const TIMELINE_NEXT: Record<ProjectTimelineStatus, ProjectTimelineStatus> = {
+  on_track: "at_risk",
+  at_risk: "delayed",
+  delayed: "on_track",
+};
+
+const BUDGET_NEXT: Record<ProjectBudgetStatus, ProjectBudgetStatus> = {
+  on_budget: "over_budget",
+  over_budget: "critical",
+  critical: "on_budget",
+};
+
+type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
+
+function timelineLabel(t: TFn, status: string | null): string {
+  if (status === "at_risk") return t("projects.timeline.at_risk");
+  if (status === "delayed") return t("projects.timeline.delayed");
+  return t("projects.timeline.on_track");
+}
+
+function budgetLabel(t: TFn, status: string | null): string {
+  if (status === "over_budget") return t("projects.budget.over_budget");
+  if (status === "critical") return t("projects.budget.critical");
+  return t("projects.budget.on_budget");
+}
+
+function TrafficLights({
+  state,
+  timeline,
+  budget,
+  onTimelineClick,
+  onBudgetClick,
+  timelineLabel,
+  budgetLabel,
+}: {
+  state: ActivityState;
+  timeline: ProjectTimelineStatus;
+  budget: ProjectBudgetStatus;
+  onTimelineClick: () => void;
+  onBudgetClick: () => void;
+  timelineLabel: string;
+  budgetLabel: string;
+}) {
   const isLive = state === "live";
-  const isOpen = state === "open";
-  const isStale = state === "stale";
   const dim = "color-mix(in srgb, currentColor 18%, transparent)";
 
   return (
-    <div className="flex items-center gap-1" aria-hidden>
+    <div className="flex items-center gap-1">
       <span
+        aria-hidden
         className="inline-block h-2.5 w-2.5 rounded-full"
         style={{ background: isLive ? "var(--green)" : dim, color: "var(--green)" }}
       />
-      <span
-        className="inline-block h-2.5 w-2.5 rounded-full"
-        style={{ background: isOpen ? "#f59e0b" : dim, color: "#f59e0b" }}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onTimelineClick();
+        }}
+        title={timelineLabel}
+        aria-label={timelineLabel}
+        className="inline-block h-2.5 w-2.5 cursor-pointer rounded-full border-0 p-0"
+        style={{ background: TIMELINE_COLOR[timeline] }}
       />
-      <span
-        className="inline-block h-2.5 w-2.5 rounded-full"
-        style={{ background: isStale ? "var(--red)" : dim, color: "var(--red)" }}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onBudgetClick();
+        }}
+        title={budgetLabel}
+        aria-label={budgetLabel}
+        className="inline-block h-2.5 w-2.5 cursor-pointer rounded-full border-0 p-0"
+        style={{ background: BUDGET_COLOR[budget] }}
       />
     </div>
   );
@@ -299,6 +370,34 @@ export function ProjectsPage({
     router.refresh();
   }
 
+  async function handleCycleTimeline(project: ManagerProjectSummary) {
+    const current = (project.timeline_status ?? "on_track") as ProjectTimelineStatus;
+    const next = TIMELINE_NEXT[current];
+    const { error } = await supabase
+      .from("projects")
+      .update({ timeline_status: next })
+      .eq("id", project.id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleCycleBudget(project: ManagerProjectSummary) {
+    const current = (project.budget_status ?? "on_budget") as ProjectBudgetStatus;
+    const next = BUDGET_NEXT[current];
+    const { error } = await supabase
+      .from("projects")
+      .update({ budget_status: next })
+      .eq("id", project.id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    router.refresh();
+  }
+
   async function handleArchiveProject(projectId: string) {
     setBusyKey(`archive-${projectId}`);
     setMessage("");
@@ -499,7 +598,15 @@ export function ProjectsPage({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <TrafficLights state={state} />
+                      <TrafficLights
+                        state={state}
+                        timeline={(project.timeline_status ?? "on_track") as ProjectTimelineStatus}
+                        budget={(project.budget_status ?? "on_budget") as ProjectBudgetStatus}
+                        onTimelineClick={() => void handleCycleTimeline(project)}
+                        onBudgetClick={() => void handleCycleBudget(project)}
+                        timelineLabel={timelineLabel(t, project.timeline_status)}
+                        budgetLabel={budgetLabel(t, project.budget_status)}
+                      />
                       <div className="text-base font-semibold text-[var(--text-primary)]">
                         {project.name}
                       </div>

@@ -46,6 +46,9 @@ export interface Profile {
   updated_at: string;
 }
 
+export type ProjectTimelineStatus = "on_track" | "at_risk" | "delayed";
+export type ProjectBudgetStatus = "on_budget" | "over_budget" | "critical";
+
 export interface Project {
   id: string;
   org_id: string;
@@ -59,6 +62,8 @@ export interface Project {
   start_date: string | null;
   end_date: string | null;
   settings: Record<string, unknown>;
+  timeline_status: ProjectTimelineStatus | null;
+  budget_status: ProjectBudgetStatus | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
