@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { TeamMemberPage } from "@/components/manager/TeamMemberPage";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import {
@@ -20,7 +20,10 @@ export default async function TeamMemberRoutePage({
   const profile = profileSummaries.find((item) => item.id === id);
 
   if (!profile) {
-    notFound();
+    // Soft redirect instead of 404 so clicking a stale worker link
+    // just sends the manager back to the roster rather than hitting
+    // Next's default not-found shell.
+    redirect("/team");
   }
 
   const assignments = data.assignments.filter((assignment) => assignment.profile_id === id);
