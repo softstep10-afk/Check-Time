@@ -40,6 +40,17 @@ export function ClockPage() {
   );
   const lastClosedSession =
     shell.sessions.find((session) => session.clockOutTime !== null) ?? null;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const todaySummary = useMemo(() => {
+    const closedToday = shell.sessions.filter(
+      (s) => s.clockOutTime && s.clockInTime.slice(0, 10) === todayIso,
+    );
+    const totalMinutes = closedToday.reduce((acc, s) => acc + s.durationMinutes, 0);
+    const projectNames = Array.from(
+      new Set(closedToday.map((s) => s.projectName).filter(Boolean)),
+    );
+    return { totalMinutes, projectNames, count: closedToday.length };
+  }, [shell.sessions, todayIso]);
   const showGpsCheck = lastGpsCheck?.action === "clock_in";
   const gpsTone =
     showGpsCheck && lastGpsCheck.withinFence === false ? "danger" : "success";
@@ -116,6 +127,26 @@ export function ClockPage() {
               ? activeProject.name
               : t("clock.selectProject")}
           </p>
+          {shell.clockState.isClockedIn ? (() => {
+            // Derive live GPS status from the last clock-in check. If GPS
+            // returned a point at all (lastGpsCheck.accuracy present), we
+            // treat the shift as GPS-tracked. Outside-fence is still
+            // "active" — the fence check is a check-in gate, not a live
+            // disconnect. A totally missing lastGpsCheck means either the
+            // worker has no GPS hardware or permission was denied.
+            const hasGps = Boolean(lastGpsCheck && lastGpsCheck.accuracy !== null);
+            const gpsColor = hasGps ? "var(--green)" : "var(--red)";
+            const gpsLabel = hasGps ? t("clock.gpsActive") : t("clock.gpsOff");
+            return (
+              <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: gpsColor }}>
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full"
+                  style={{ background: gpsColor, boxShadow: hasGps ? `0 0 6px ${gpsColor}` : undefined }}
+                />
+                {gpsLabel}
+              </div>
+            );
+          })() : null}
         </div>
 
         {shell.clockState.isClockedIn && activeProject ? (
@@ -152,8 +183,19 @@ export function ClockPage() {
         ) : (
           <div className="mt-4 space-y-2">
             {shell.projects.length === 0 ? (
-              <div className="surface-panel p-4 text-sm text-[var(--text-secondary)]">
-                {t("clock.noProjects")}
+              <div
+                className="surface-panel p-4"
+                style={{
+                  borderColor: "rgba(245, 158, 11, 0.3)",
+                  background: "rgba(245, 158, 11, 0.06)",
+                }}
+              >
+                <div className="text-sm font-semibold" style={{ color: "#f59e0b" }}>
+                  {t("clock.noProjectsTitle")}
+                </div>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {t("clock.noProjectsHint")}
+                </p>
               </div>
             ) : (
               shell.projects.map((project) => {
@@ -360,6 +402,31 @@ export function ClockPage() {
               {t("clock.openJournal")}
             </button>
           </div>
+        </section>
+      ) : null}
+
+      {!shell.clockState.isClockedIn && todaySummary.count > 0 ? (
+        <section
+          className="surface-card p-4"
+          style={{
+            borderColor: "rgba(15, 168, 120, 0.35)",
+            boxShadow: "0 0 0 1px rgba(15, 168, 120, 0.14), 0 0 14px rgba(15, 168, 120, 0.12)",
+          }}
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {t("clock.todaySummary")}
+          </p>
+          <div className="mt-2 font-mono text-[32px] font-bold leading-none" style={{ color: "var(--green)" }}>
+            {formatDurationCompact(todaySummary.totalMinutes)}
+          </div>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            {todaySummary.projectNames.length > 0
+              ? todaySummary.projectNames.join(", ")
+              : t("clock.todaySummaryNoProject")}
+          </p>
+          <p className="mt-2 text-sm font-semibold" style={{ color: "var(--green)" }}>
+            {t("clock.goodWork")}
+          </p>
         </section>
       ) : null}
 
