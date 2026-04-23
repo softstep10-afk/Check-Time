@@ -233,6 +233,117 @@ function ProjectThumbStrip({
   );
 }
 
+function InlineNotesEditor({
+  projectId,
+  initialNotes,
+  placeholder,
+}: {
+  projectId: string;
+  initialNotes: string | null;
+  placeholder: string;
+}) {
+  const supabase = useMemo(() => createClient(), []);
+  const [notes, setNotes] = useState<string>(initialNotes ?? "");
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<string>(notes);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Hide the "Saved ✓" flash after 2s without parking a timer in state.
+  useEffect(() => {
+    if (!savedAt) return;
+    const id = setTimeout(() => setSavedAt(null), 2000);
+    return () => clearTimeout(id);
+  }, [savedAt]);
+
+  // Sync with the initial prop — if the card re-renders from a server
+  // refresh with a newer value, pick it up unless the user is actively
+  // editing.
+  useEffect(() => {
+    if (!editing) setNotes(initialNotes ?? "");
+  }, [initialNotes, editing]);
+
+  function openEditor(e: React.MouseEvent) {
+    e.stopPropagation();
+    setDraft(notes);
+    setEditing(true);
+    // Focus after the textarea mounts.
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }
+
+  async function commit(next: string) {
+    setEditing(false);
+    if (next === notes) return;
+    const previous = notes;
+    setNotes(next); // optimistic
+    const { error } = await supabase
+      .from("projects")
+      .update({ notes: next || null })
+      .eq("id", projectId);
+    if (error) {
+      // Roll back on failure so the UI doesn't drift from the DB.
+      setNotes(previous);
+      console.warn("notes save failed:", error.message);
+      return;
+    }
+    setSavedAt(Date.now());
+  }
+
+  const preview = notes
+    ? notes.length > 80
+      ? notes.slice(0, 80) + "…"
+      : notes
+    : null;
+
+  if (editing) {
+    return (
+      <div onClick={(e) => e.stopPropagation()}>
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => void commit(draft)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setEditing(false);
+              setDraft(notes);
+            }
+          }}
+          placeholder={placeholder}
+          className="min-h-[60px] w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={openEditor}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          setDraft(notes);
+          setEditing(true);
+          setTimeout(() => textareaRef.current?.focus(), 0);
+        }
+      }}
+      className="cursor-text text-xs italic"
+      style={{ color: preview ? "var(--text-secondary)" : "var(--text-muted)" }}
+    >
+      {preview ?? placeholder}
+      {savedAt ? (
+        <span className="ml-2 not-italic" style={{ color: "var(--green)" }}>
+          ✓ saved
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function CopyAddressButton({ address }: { address: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -676,12 +787,6 @@ export function ProjectsPage({
               ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
               : undefined;
 
-          const notesPreview = project.notes
-            ? project.notes.length > 80
-              ? project.notes.slice(0, 80) + "…"
-              : project.notes
-            : null;
-
           return (
             <article
               key={project.id}
@@ -769,9 +874,11 @@ export function ProjectsPage({
                   </div>
                 </div>
 
-                <div className="text-xs italic" style={{ color: notesPreview ? "var(--text-secondary)" : "var(--text-muted)" }}>
-                  {notesPreview ?? t("projects.noNotesHint")}
-                </div>
+                <InlineNotesEditor
+                  projectId={project.id}
+                  initialNotes={project.notes}
+                  placeholder={t("projects.noNotesHint")}
+                />
 
                 {project.recentMedia.length > 0 ? (
                   <ProjectThumbStrip
