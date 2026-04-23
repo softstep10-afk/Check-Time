@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Calculator, Download, Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
@@ -204,6 +206,7 @@ export function PayrollCalculator({
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
+  const searchParams = useSearchParams();
   const [showNewPeriod, setShowNewPeriod] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -236,7 +239,7 @@ export function PayrollCalculator({
   }, [supabase, orgId]);
 
   // Load a saved period's items
-  async function loadPeriod(periodId: string) {
+  const loadPeriod = useCallback(async function loadPeriod(periodId: string) {
     const { data: periodRow } = await supabase
       .from("pay_periods")
       .select("*")
@@ -288,7 +291,13 @@ export function PayrollCalculator({
       status: p.status as PeriodStatus,
       lines,
     });
-  }
+  }, [supabase, profiles]);
+
+  // Auto-load a period when arriving via /payroll?period=<id> (e.g. from history page).
+  useEffect(() => {
+    const periodId = searchParams.get("period");
+    if (periodId) void loadPeriod(periodId);
+  }, [searchParams, loadPeriod]);
 
   function handlePreset(preset: string) {
     const dates = presetDates(preset);
@@ -633,6 +642,94 @@ export function PayrollCalculator({
     URL.revokeObjectURL(url);
   }
 
+  async function downloadPaystub(line: WorkerLine) {
+    if (!period) return;
+    const { jsPDF } = await import("jspdf");
+    const autoTable = (await import("jspdf-autotable")).default;
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const gold: [number, number, number] = [191, 162, 52];
+    const darkText: [number, number, number] = [30, 30, 30];
+    const mutedText: [number, number, number] = [100, 100, 100];
+
+    doc.setFillColor(...gold);
+    doc.rect(0, 0, pageWidth, 18, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.text("Andrew's Crew \u2014 Paystub", 14, 12);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(...mutedText);
+    doc.text(`Pay Period: ${period.startDate} to ${period.endDate}`, 14, 26);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12);
+    doc.setTextColor(...darkText);
+    doc.text(line.workerName, 14, 34);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(...mutedText);
+    doc.text(line.workerRole, 14, 39);
+
+    autoTable(doc, {
+      startY: 46,
+      head: [["Item", "Hours", "Rate", "Amount"]],
+      body: [
+        ["Regular hours", line.regHours.toFixed(2), `$${line.rate.toFixed(2)}`, `$${line.grossRegular.toFixed(2)}`],
+        ["Overtime (1.5x)", line.otHours.toFixed(2), `$${(line.rate * OT_MULTIPLIER).toFixed(2)}`, `$${line.grossOt.toFixed(2)}`],
+        [{ content: "Gross pay", colSpan: 3, styles: { fontStyle: "bold", halign: "right" } }, { content: `$${line.grossTotal.toFixed(2)}`, styles: { fontStyle: "bold" } }],
+      ],
+      styles: { fontSize: 9, cellPadding: 3, textColor: darkText, lineColor: [220, 220, 220], lineWidth: 0.2 },
+      headStyles: { fillColor: gold, textColor: [255, 255, 255], fontStyle: "bold" },
+      margin: { left: 14, right: 14 },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let currentY = (doc as any).lastAutoTable.finalY + 8;
+
+    if (line.adjustments.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(...gold);
+      doc.text("Adjustments", 14, currentY);
+      autoTable(doc, {
+        startY: currentY + 2,
+        head: [["Type", "Note", "Amount"]],
+        body: line.adjustments.map((adj) => [
+          adj.type,
+          adj.note || "-",
+          `${adj.type === "deduction" ? "-" : "+"}$${adj.amount.toFixed(2)}`,
+        ]),
+        styles: { fontSize: 9, cellPadding: 3, textColor: darkText, lineColor: [220, 220, 220], lineWidth: 0.2 },
+        headStyles: { fillColor: gold, textColor: [255, 255, 255], fontStyle: "bold" },
+        margin: { left: 14, right: 14 },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      currentY = (doc as any).lastAutoTable.finalY + 8;
+    }
+
+    doc.setFillColor(248, 248, 248);
+    doc.setDrawColor(220, 220, 220);
+    doc.roundedRect(14, currentY, pageWidth - 28, 14, 2, 2, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...darkText);
+    doc.text("Net pay", 20, currentY + 9);
+    doc.setTextColor(...gold);
+    doc.text(`$${line.netTotal.toFixed(2)}`, pageWidth - 20, currentY + 9, { align: "right" });
+
+    const pageHeight = doc.internal.pageSize.getHeight();
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(...mutedText);
+    doc.text("Generated by Construction Clock", 14, pageHeight - 8);
+
+    const safeName = line.workerName.replace(/[^a-zA-Z0-9]+/g, "_");
+    doc.save(`paystub_${safeName}_${period.startDate}_to_${period.endDate}.pdf`);
+  }
+
   const eligibleSelectableLines = useMemo(() => {
     if (!period) return [] as WorkerLine[];
     return period.lines.filter((line) => line.hasHours && line.status !== "paid");
@@ -708,6 +805,13 @@ export function PayrollCalculator({
                 ))}
               </select>
             ) : null}
+            <Link
+              href="/payroll/history"
+              className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+            >
+              {t("payroll.history")}
+            </Link>
             <button
               type="button"
               onClick={() => setShowNewPeriod(true)}
@@ -950,9 +1054,22 @@ export function PayrollCalculator({
                       </td>
                       <td className="py-3 pr-3 whitespace-nowrap font-mono font-bold text-[var(--brand-yellow)]">{currency.format(line.netTotal)}</td>
                       <td className="py-3">
-                        <span className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={{ background: `color-mix(in srgb, ${statusColor(line.status)} 16%, transparent)`, color: statusColor(line.status) }}>
-                          {line.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={{ background: `color-mix(in srgb, ${statusColor(line.status)} 16%, transparent)`, color: statusColor(line.status) }}>
+                            {line.status}
+                          </span>
+                          {line.hasHours ? (
+                            <button
+                              type="button"
+                              onClick={() => void downloadPaystub(line)}
+                              title={t("payroll.viewPaystub")}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] border"
+                              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+                            >
+                              <Download size={11} />
+                            </button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
