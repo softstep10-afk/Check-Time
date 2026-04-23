@@ -90,6 +90,8 @@ export default async function WorkerProjectPage({
       project={project}
       projectMedia={projectMedia}
       tasks={tasksWithAttachments}
+      orgId={project.org_id}
+      profileId={user.id}
     />
   );
 }

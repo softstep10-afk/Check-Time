@@ -1,21 +1,44 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { validateUploadFile } from "@/lib/upload-limits";
 import type { TaskAttachmentRef } from "@/lib/task-attachments";
 import type { Project, Task } from "@/types/database";
 
 type TaskWithAttachments = Task & { attachments?: TaskAttachmentRef[] };
 
+const STORES = [
+  "Home Depot",
+  "Lowe's",
+  "Floor & Decor",
+  "Harbor Freight",
+  "Ferguson",
+  "Supply Masters",
+];
+
+type MaterialRow = {
+  id: string;
+  title: string;
+  quantity: string;
+  delivered: boolean;
+};
+
 export function WorkerProjectView({
   project,
   projectMedia,
   tasks,
+  orgId,
+  profileId,
 }: {
   project: Project;
   projectMedia: TaskAttachmentRef[];
   tasks: TaskWithAttachments[];
+  orgId: string;
+  profileId: string;
 }) {
   const { t } = useTranslation();
 
@@ -48,6 +71,13 @@ export function WorkerProjectView({
           </div>
         )}
       </section>
+
+      <WorkerMaterialsList projectId={project.id} />
+      <WorkerReceiptUpload
+        orgId={orgId}
+        projectId={project.id}
+        profileId={profileId}
+      />
 
       <section className="surface-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -93,5 +123,253 @@ export function WorkerProjectView({
         )}
       </section>
     </div>
+  );
+}
+
+function WorkerMaterialsList({ projectId }: { projectId: string }) {
+  const { t } = useTranslation();
+  const supabase = useMemo(() => createClient(), []);
+  const [items, setItems] = useState<MaterialRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const { data } = await supabase
+        .from("tasks")
+        .select("id, title, status, metadata")
+        .eq("project_id", projectId)
+        .eq("metadata->>category", "material")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true });
+
+      if (cancelled) return;
+      const rows = (data ?? []) as Array<{
+        id: string;
+        title: string;
+        status: string;
+        metadata: Record<string, unknown> | null;
+      }>;
+      setItems(
+        rows.map((r) => ({
+          id: r.id,
+          title: r.title,
+          quantity: (r.metadata?.quantity as string) ?? "",
+          delivered: r.status === "done",
+        })),
+      );
+      setLoading(false);
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, projectId]);
+
+  return (
+    <section className="surface-card p-4">
+      <h2 className="text-lg font-bold text-[var(--text-primary)]">
+        {t("materials.title")}
+      </h2>
+      <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+        {t("workerProject.readOnlyHint")}
+      </p>
+      <div className="mt-3 space-y-2">
+        {loading ? (
+          <div className="text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
+        ) : items.length === 0 ? (
+          <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+            {t("materials.empty")}
+          </div>
+        ) : (
+          items.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+              style={{ opacity: item.delivered ? 0.55 : 1 }}
+            >
+              <span
+                className="text-sm font-semibold text-[var(--text-primary)]"
+                style={{ textDecoration: item.delivered ? "line-through" : "none" }}
+              >
+                {item.title}
+              </span>
+              {item.quantity ? (
+                <span className="ml-2 text-xs text-[var(--text-muted)]">×{item.quantity}</span>
+              ) : null}
+              {item.delivered ? (
+                <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--green)" }}>
+                  {t("materials.delivered")}
+                </span>
+              ) : null}
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function WorkerReceiptUpload({
+  orgId,
+  projectId,
+  profileId,
+}: {
+  orgId: string;
+  projectId: string;
+  profileId: string;
+}) {
+  const { t } = useTranslation();
+  const supabase = useMemo(() => createClient(), []);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [showOther, setShowOther] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fd = new FormData(form);
+    const file = fileRef.current?.files?.[0] ?? null;
+    const storeName = fd.get("store")?.toString() ?? "";
+    const otherStore = fd.get("store_other")?.toString().trim() ?? "";
+    const finalStore = storeName === "__other" ? otherStore : storeName;
+    const amount = Number.parseFloat(fd.get("amount")?.toString() ?? "0");
+    const note = fd.get("note")?.toString().trim() ?? "";
+
+    if (!file) {
+      setMessage({ kind: "err", text: t("workerProject.receiptPhotoRequired") });
+      return;
+    }
+    if (!amount || !Number.isFinite(amount) || amount <= 0) {
+      setMessage({ kind: "err", text: t("workerProject.receiptAmountRequired") });
+      return;
+    }
+
+    const validation = validateUploadFile(file);
+    if (!validation.ok) {
+      setMessage({ kind: "err", text: t("uploads.unsupportedType").replace("{kind}", "mime" in validation.error ? validation.error.mime : "") });
+      return;
+    }
+
+    setBusy(true);
+    setMessage(null);
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${orgId}/${projectId}/receipts/${Date.now()}-${safeName}`;
+    const mimeType = file.type || "application/octet-stream";
+
+    const { error: uploadErr } = await supabase.storage
+      .from("media")
+      .upload(path, file, { upsert: false, cacheControl: "3600", contentType: mimeType });
+    if (uploadErr) {
+      setBusy(false);
+      setMessage({ kind: "err", text: uploadErr.message });
+      return;
+    }
+
+    const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
+    const metadata = {
+      kind: "receipt" as const,
+      category: "receipt" as const,
+      store_name: finalStore || null,
+      amount,
+      purchase_date: new Date().toISOString().slice(0, 10),
+      uploader_name: "Worker",
+    };
+
+    const { error: insertErr } = await supabase.from("media").insert({
+      org_id: orgId,
+      project_id: projectId,
+      uploaded_by: profileId,
+      media_type: mediaType,
+      storage_path: path,
+      filename: file.name,
+      file_size: file.size,
+      mime_type: mimeType,
+      caption: note || null,
+      is_checkout: false,
+      time_event_id: null,
+      metadata,
+    });
+
+    setBusy(false);
+    if (insertErr) {
+      setMessage({ kind: "err", text: insertErr.message });
+      return;
+    }
+    form.reset();
+    if (fileRef.current) fileRef.current.value = "";
+    setShowOther(false);
+    setMessage({ kind: "ok", text: t("workerProject.receiptSaved") });
+  }
+
+  return (
+    <section className="surface-card p-4">
+      <h2 className="text-lg font-bold text-[var(--text-primary)]">
+        {t("workerProject.addReceiptTitle")}
+      </h2>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">
+        {t("workerProject.addReceiptHint")}
+      </p>
+      {message ? (
+        <div
+          className="mt-3 text-xs font-semibold"
+          style={{ color: message.kind === "ok" ? "var(--green)" : "var(--red)" }}
+        >
+          {message.text}
+        </div>
+      ) : null}
+      <form className="mt-3 grid gap-3" onSubmit={handleSubmit}>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*,application/pdf"
+          capture="environment"
+          className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+        />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <input
+            name="amount"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder={t("workerProject.receiptAmount")}
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+          />
+          <select
+            name="store"
+            defaultValue=""
+            onChange={(e) => setShowOther(e.target.value === "__other")}
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+          >
+            <option value="">{t("workerProject.receiptStorePlaceholder")}</option>
+            {STORES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+            <option value="__other">{t("workerProject.receiptStoreOther")}</option>
+          </select>
+        </div>
+        {showOther ? (
+          <input
+            name="store_other"
+            placeholder={t("workerProject.receiptStoreOtherLabel")}
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+          />
+        ) : null}
+        <input
+          name="note"
+          placeholder={t("workerProject.receiptNote")}
+          className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+        />
+        <button
+          type="submit"
+          disabled={busy}
+          className="button-base button-primary"
+        >
+          {busy ? t("common.saving") : t("workerProject.receiptSaveCta")}
+        </button>
+      </form>
+    </section>
   );
 }
