@@ -14,6 +14,14 @@ const ROLE_POWER: Record<UserRole, number> = {
   owner: 5,
 };
 
+/**
+ * Public alias of ROLE_POWER. Callers that only need to compare roles
+ * by rank (schedule UI, manager filters, etc.) can read this directly
+ * instead of importing the helper functions — works for any string
+ * input, not just the UserRole union.
+ */
+export const ROLE_HIERARCHY: Record<string, number> = ROLE_POWER;
+
 export function isOwner(role: UserRole): boolean {
   return role === "owner";
 }
