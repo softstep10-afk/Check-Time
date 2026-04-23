@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ProjectsStatusMap } from "@/components/maps/ProjectsStatusMap";
 import { ForceCheckoutButton } from "@/components/manager/ForceCheckoutButton";
 import { EventFeed, type FeedEvent } from "@/components/manager/EventFeed";
+import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import {
   buildManagerSessions,
@@ -264,9 +265,12 @@ export default async function OverviewPage() {
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          {t("overview.title")}
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {t("overview.title")}
+          </p>
+          <OverviewLiveIndicator />
+        </div>
         <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
           {data.org.name}
         </h1>
