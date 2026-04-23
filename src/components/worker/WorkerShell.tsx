@@ -1124,7 +1124,10 @@ export function WorkerShell({
                 >
                   {muted ? "\ud83d\udd07" : "\ud83d\udd0a"}
                 </button>
-                <NotificationBell profileId={shell.profile.id} />
+                <NotificationBell
+                  profileId={shell.profile.id}
+                  onUrgentArrival={setOverlayMessage}
+                />
                 <LanguageSwitcher />
                 <button
                   type="button"

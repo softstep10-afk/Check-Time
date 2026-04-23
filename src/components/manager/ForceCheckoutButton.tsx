@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { useTranslation } from "@/lib/i18n";
 import { logAudit } from "@/lib/audit";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
@@ -79,21 +78,28 @@ export function ForceCheckoutButton({
     // ends their shift.
     await closeOpenStoreVisits(supabase, profileId, timestamp);
 
-    // Send notification message to worker
+    // Send notification message to worker. Includes time of checkout so
+    // the worker has audit context, and priority='urgent' so the worker's
+    // overlay surfaces it immediately.
+    const timeLabel = new Date(timestamp).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
     const notifyText = reason.trim()
-      ? `${t("overview.forceCheckoutNotify")} — ${reason.trim()}`
-      : t("overview.forceCheckoutNotify");
+      ? `${t("overview.forceCheckoutNotify")} (${timeLabel}) — ${reason.trim()}`
+      : `${t("overview.forceCheckoutNotify")} (${timeLabel})`;
 
-    if (!AUTH_BYPASS_ENABLED) {
-      await supabase.from("messages").insert({
-        org_id: orgId,
-        sender_id: managerId,
-        recipient_id: profileId,
-        text: notifyText,
-        color: "#ef4444",
-        metadata: { kind: "force_checkout_notice" },
-      });
-    }
+    await supabase.from("messages").insert({
+      org_id: orgId,
+      sender_id: managerId,
+      recipient_id: profileId,
+      text: notifyText,
+      color: "#ef4444",
+      priority: "urgent",
+      metadata: { kind: "force_checkout_notice" },
+    });
 
     // Audit log
     void logAudit({

@@ -29,12 +29,21 @@ function inferPriority(row: { priority?: string | null; color?: string | null; m
   return "info";
 }
 
-export function NotificationBell({ profileId }: { profileId?: string }) {
+export function NotificationBell({
+  profileId,
+  onUrgentArrival,
+}: {
+  profileId?: string;
+  onUrgentArrival?: (msg: AppMessage) => void;
+}) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
+  // Track which message ids we've already surfaced so the urgent-overlay
+  // callback fires once per newly-arrived urgent unread, not on every poll.
+  const seenIdsRef = useRef<Set<string>>(new Set());
   // Lazy-init from localStorage so the load is one-shot at mount and
   // doesn't trigger the react-hooks/set-state-in-effect lint.
   const [deferredIds, setDeferredIds] = useState<Set<string>>(() => {
@@ -95,36 +104,67 @@ export function NotificationBell({ profileId }: { profileId?: string }) {
           metadata?: Record<string, unknown> | null;
           created_at: string;
         }>;
-        setMessages(
-          rows.map((r) => ({
-            id: r.id,
-            from_id: r.sender_id,
-            from_name: "", // We don't join profiles here for simplicity
-            to_id: r.recipient_id,
-            text: r.text,
-            color: r.color as AppMessage["color"],
-            priority: inferPriority(r),
-            read: r.read,
-            created_at: r.created_at,
-            attachment: r.attachment
-              ? {
-                  url: (r.attachment as Record<string, string>).url ?? "",
-                  filename: (r.attachment as Record<string, string>).filename ?? "",
-                  type: ((r.attachment as Record<string, string>).type ?? "image") as "image" | "video" | "pdf",
-                  size: Number((r.attachment as Record<string, number>).size ?? 0),
-                }
-              : undefined,
-          })),
-        );
+        const mapped: AppMessage[] = rows.map((r) => ({
+          id: r.id,
+          from_id: r.sender_id,
+          from_name: "", // We don't join profiles here for simplicity
+          to_id: r.recipient_id,
+          text: r.text,
+          color: r.color as AppMessage["color"],
+          priority: inferPriority(r),
+          read: r.read,
+          created_at: r.created_at,
+          attachment: r.attachment
+            ? {
+                url: (r.attachment as Record<string, string>).url ?? "",
+                filename: (r.attachment as Record<string, string>).filename ?? "",
+                type: ((r.attachment as Record<string, string>).type ?? "image") as "image" | "video" | "pdf",
+                size: Number((r.attachment as Record<string, number>).size ?? 0),
+              }
+            : undefined,
+        }));
+        setMessages(mapped);
+        // Fire the urgent-arrival callback once per newly-seen unread urgent
+        // message. Tracking via ref so it survives re-renders + multiple polls.
+        for (const msg of mapped) {
+          if (
+            msg.priority === "urgent" &&
+            !msg.read &&
+            !seenIdsRef.current.has(msg.id)
+          ) {
+            onUrgentArrival?.(msg);
+          }
+          seenIdsRef.current.add(msg.id);
+        }
       }
       setLoaded(true);
     }
     void load();
 
-    // Poll every 30 seconds for new messages
+    // Realtime: every new message INSERT for this recipient triggers an
+    // immediate refetch so the bell badge + urgent overlay react within
+    // ~1s of the manager's send. The 30s poll stays as a fallback for
+    // cases where the realtime channel drops.
+    const channel = supabase
+      .channel(`messages-recipient-${profileId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `recipient_id=eq.${profileId}`,
+        },
+        () => { void load(); },
+      )
+      .subscribe();
+
     const interval = setInterval(() => void load(), 30_000);
-    return () => clearInterval(interval);
-  }, [supabase, profileId]);
+    return () => {
+      clearInterval(interval);
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, profileId, onUrgentArrival]);
 
   const unreadCount = messages.filter((m) => !m.read).length;
 
