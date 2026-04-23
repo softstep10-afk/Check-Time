@@ -17,6 +17,46 @@ function endOfDayPlusOne(isoDate: string): string {
   return d.toISOString();
 }
 
+function eventTypeLabel(
+  eventType: string,
+  t: (key: Parameters<typeof serverT>[1]) => string,
+): string {
+  switch (eventType) {
+    case "clock_in":
+      return t("timeline.clockIn");
+    case "clock_out":
+      return t("timeline.clockOut");
+    case "auto_out":
+      return t("timeline.autoOut");
+    case "adjust":
+      return t("timeline.adjust");
+    case "break_start":
+      return t("timeline.breakStart");
+    case "break_end":
+      return t("timeline.breakEnd");
+    default:
+      return eventType.replace(/_/g, " ");
+  }
+}
+
+function videoStatusLabel(
+  status: string | null | undefined,
+  t: (key: Parameters<typeof serverT>[1]) => string,
+): string | null {
+  // not_required is the default — noise on the timeline, hide it.
+  if (!status || status === "not_required") return null;
+  switch (status) {
+    case "pending":
+      return t("timeline.videoPending");
+    case "uploaded":
+      return t("timeline.videoUploaded");
+    case "verified":
+      return t("timeline.videoVerified");
+    default:
+      return status;
+  }
+}
+
 export default async function TimelinePage({
   searchParams,
 }: {
@@ -153,12 +193,14 @@ export default async function TimelinePage({
                       </Link>
                     </div>
                     <div className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                      {item.event_type.replace("_", " ")}
+                      {eventTypeLabel(item.event_type, t)}
                     </div>
                   </div>
                   <div className="text-right text-xs text-[var(--text-secondary)]">
                     <div>{formatDateTime(item.event_time)}</div>
-                    <div>{item.video_status}</div>
+                    {videoStatusLabel(item.video_status, t) ? (
+                      <div>{videoStatusLabel(item.video_status, t)}</div>
+                    ) : null}
                   </div>
                 </div>
                 {item.notes ? (
