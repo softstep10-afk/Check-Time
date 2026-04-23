@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FolderKanban, User, ClipboardCheck, Receipt } from "lucide-react";
+import { FolderKanban, User, ClipboardCheck, Receipt, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/worker-utils";
@@ -24,6 +24,32 @@ export default function TrashPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmEmptyAll, setConfirmEmptyAll] = useState(false);
+
+  async function handleEmptyAll() {
+    setBusyKey("empty-all");
+    setMessage("");
+    const snapshot = [...items];
+    let failures = 0;
+    for (const item of snapshot) {
+      const { error } = await supabase
+        .from(tableName(item.kind))
+        .delete()
+        .eq("id", item.id);
+      if (error) failures += 1;
+    }
+    setBusyKey(null);
+    setConfirmEmptyAll(false);
+    if (failures > 0) {
+      setMessage(`${failures} / ${snapshot.length} ${t("common.errorTryAgain").toLowerCase()}`);
+      setMessageType("error");
+    } else {
+      setMessage(t("trash.emptied"));
+      setMessageType("success");
+    }
+    void loadTrash();
+    router.refresh();
+  }
 
   async function loadTrash() {
     const [projectsRes, profilesRes, tasksRes, receiptsRes] = await Promise.all([
@@ -164,7 +190,20 @@ export default function TrashPage() {
       <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("trash.title")}</h2>
-          <div className="text-xs text-[var(--text-muted)]">{items.length} {t("tasks.items")}</div>
+          <div className="flex items-center gap-3">
+            <div className="text-xs text-[var(--text-muted)]">{items.length} {t("tasks.items")}</div>
+            {items.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setConfirmEmptyAll(true)}
+                disabled={busyKey === "empty-all"}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+              >
+                <Trash2 size={12} /> {t("trash.emptyAll")}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="mt-4 space-y-3">
@@ -173,8 +212,9 @@ export default function TrashPage() {
               {t("common.loading")}
             </div>
           ) : items.length === 0 ? (
-            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-center text-sm text-[var(--text-secondary)]">
-              {t("trash.empty")}
+            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-6 text-center">
+              <div className="text-3xl" role="img" aria-label="broom">🧹</div>
+              <div className="mt-2 text-sm text-[var(--text-secondary)]">{t("trash.empty")}</div>
             </div>
           ) : (
             items.map((item) => (
@@ -250,6 +290,45 @@ export default function TrashPage() {
           )}
         </div>
       </section>
+
+      {confirmEmptyAll ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setConfirmEmptyAll(false)}
+        >
+          <div
+            className="surface-card w-full max-w-[440px] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-bold text-[var(--text-primary)]">
+              {t("trash.emptyAllConfirmTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {t("trash.emptyAllConfirmBody").replace("{n}", String(items.length))}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void handleEmptyAll()}
+                disabled={busyKey === "empty-all"}
+                className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                style={{ background: "var(--red)", color: "white" }}
+              >
+                {busyKey === "empty-all" ? "…" : t("trash.emptyAll")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmEmptyAll(false)}
+                className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
