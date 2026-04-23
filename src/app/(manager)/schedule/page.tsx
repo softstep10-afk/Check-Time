@@ -1,141 +1,270 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
-import type { Project } from "@/types/database";
+import { formatDateTime, formatDurationCompact } from "@/lib/worker-utils";
+import type { Profile, TimeEvent } from "@/types/database";
 
-type CalProject = Project & {
-  barColor: string;
-  category: "active" | "upcoming" | "overdue" | "completed";
+function startOfWeekMonday(input: Date): Date {
+  const d = new Date(input);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + mondayOffset);
+  return d;
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+type SessionLike = {
+  profileId: string;
+  projectId: string | null;
+  projectName: string | null;
+  clockIn: string;
+  clockOut: string | null;
+  minutes: number;
+  partial: boolean;
 };
 
-function daysBetween(a: Date, b: Date): number {
-  return Math.floor((b.getTime() - a.getTime()) / 86_400_000);
-}
+type CellKey = `${string}__${string}`; // profileId__YYYY-MM-DD
 
-function toDate(s: string): Date {
-  return new Date(s + "T00:00:00");
-}
+type CellDetail = {
+  profileId: string;
+  profileName: string;
+  dayIso: string;
+  sessions: SessionLike[];
+  totalMinutes: number;
+};
 
-function categorize(project: Project, today: Date): CalProject {
-  const start = project.start_date ? toDate(project.start_date) : null;
-  const end = project.end_date ? toDate(project.end_date) : null;
-
-  if (project.status === "completed" || project.status === "archived") {
-    return { ...project, barColor: "var(--text-muted)", category: "completed" };
-  }
-  if (end && end.getTime() < today.getTime()) {
-    return { ...project, barColor: "#ef4444", category: "overdue" };
-  }
-  if (start && start.getTime() > today.getTime()) {
-    return { ...project, barColor: "var(--blue)", category: "upcoming" };
-  }
-  return { ...project, barColor: "var(--green)", category: "active" };
-}
-
-function daysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function firstDayOfWeek(year: number, month: number): number {
-  const d = new Date(year, month, 1).getDay();
-  return d === 0 ? 6 : d - 1; // Monday = 0
+function keyFor(profileId: string, dayIso: string): CellKey {
+  return `${profileId}__${dayIso}` as CellKey;
 }
 
 export default function SchedulePage() {
   const supabase = useMemo(() => createClient(), []);
   const { t, locale } = useTranslation();
-  const [projects, setProjects] = useState<CalProject[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [events, setEvents] = useState<TimeEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const todayRef = useMemo(() => {
+  const [selected, setSelected] = useState<CellDetail | null>(null);
+
+  const today = useMemo(() => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
   }, []);
-  const [viewYear, setViewYear] = useState(todayRef.getFullYear());
-  const [viewMonth, setViewMonth] = useState(todayRef.getMonth());
+
+  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
+  const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
+  const weekEndExclusive = useMemo(() => addDays(weekStart, 7), [weekStart]);
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
-      const { data } = await supabase
-        .from("projects")
-        .select("*")
-        .is("deleted_at", null)
-        .order("name");
-      const rows = (data as Project[] | null) ?? [];
-      setProjects(rows.map((p) => categorize(p, todayRef)));
+      setLoading(true);
+      const [profilesRes, eventsRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("*")
+          .is("deleted_at", null)
+          .order("name", { ascending: true })
+          .returns<Profile[]>(),
+        supabase
+          .from("time_events")
+          .select("*")
+          .gte("event_time", weekStart.toISOString())
+          .lt("event_time", weekEndExclusive.toISOString())
+          .order("event_time", { ascending: true })
+          .returns<TimeEvent[]>(),
+      ]);
+      if (cancelled) return;
+      setProfiles(profilesRes.data ?? []);
+      setEvents(eventsRes.data ?? []);
       setLoading(false);
     }
     void load();
-  }, [supabase, todayRef]);
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, weekStart, weekEndExclusive]);
 
-  function prevMonth() {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear((y) => y - 1);
-    } else {
-      setViewMonth((m) => m - 1);
+  // Fetch project names referenced by the visible events once per week.
+  // Keyed by the stringified list of distinct project ids so the effect only
+  // re-fires when the set of visible projects actually changes (not every
+  // event tick).
+  const projectIdsKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const e of events) if (e.project_id) ids.add(e.project_id);
+    return [...ids].sort().join(",");
+  }, [events]);
+
+  const [projectNames, setProjectNames] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectIdsKey) {
+      // Defer so the write doesn't happen synchronously inside render/effect.
+      const t = setTimeout(() => {
+        if (!cancelled) setProjectNames(new Map());
+      }, 0);
+      return () => {
+        cancelled = true;
+        clearTimeout(t);
+      };
     }
-  }
-
-  function nextMonth() {
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear((y) => y + 1);
-    } else {
-      setViewMonth((m) => m + 1);
+    async function load() {
+      const ids = projectIdsKey.split(",");
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name")
+        .in("id", ids);
+      if (cancelled) return;
+      const map = new Map<string, string>();
+      for (const row of (data ?? []) as Array<{ id: string; name: string }>) {
+        map.set(row.id, row.name);
+      }
+      setProjectNames(map);
     }
-  }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, projectIdsKey]);
 
-  const monthNames =
-    locale === "ru"
-      ? ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"]
-      : ["January","February","March","April","May","June","July","August","September","October","November","December"];
-  const monthLabel = `${monthNames[viewMonth]} ${viewYear}`;
+  const sessionsByKey = useMemo(() => {
+    const result = new Map<CellKey, SessionLike[]>();
+    const byProfile = new Map<string, TimeEvent[]>();
+    for (const e of events) {
+      if (e.event_type !== "clock_in" && e.event_type !== "clock_out" && e.event_type !== "auto_out") continue;
+      const list = byProfile.get(e.profile_id) ?? [];
+      list.push(e);
+      byProfile.set(e.profile_id, list);
+    }
+    for (const [profileId, evs] of byProfile) {
+      // evs already ordered ascending by event_time from the query.
+      let openIn: TimeEvent | null = null;
+      for (const ev of evs) {
+        if (ev.event_type === "clock_in") {
+          if (openIn) {
+            // Unclosed previous clock_in (partial) — capture as partial.
+            const day = openIn.event_time.slice(0, 10);
+            const k = keyFor(profileId, day);
+            const arr = result.get(k) ?? [];
+            arr.push({
+              profileId,
+              projectId: openIn.project_id,
+              projectName: projectNames.get(openIn.project_id) ?? null,
+              clockIn: openIn.event_time,
+              clockOut: null,
+              minutes: 0,
+              partial: true,
+            });
+            result.set(k, arr);
+          }
+          openIn = ev;
+        } else if (openIn) {
+          const minutes = Math.max(
+            0,
+            Math.round((new Date(ev.event_time).getTime() - new Date(openIn.event_time).getTime()) / 60_000),
+          );
+          const day = openIn.event_time.slice(0, 10);
+          const k = keyFor(profileId, day);
+          const arr = result.get(k) ?? [];
+          arr.push({
+            profileId,
+            projectId: openIn.project_id,
+            projectName: projectNames.get(openIn.project_id) ?? null,
+            clockIn: openIn.event_time,
+            clockOut: ev.event_time,
+            minutes,
+            partial: false,
+          });
+          result.set(k, arr);
+          openIn = null;
+        }
+      }
+      if (openIn) {
+        // Still-open session at week end.
+        const day = openIn.event_time.slice(0, 10);
+        const k = keyFor(profileId, day);
+        const arr = result.get(k) ?? [];
+        arr.push({
+          profileId,
+          projectId: openIn.project_id,
+          projectName: projectNames.get(openIn.project_id) ?? null,
+          clockIn: openIn.event_time,
+          clockOut: null,
+          minutes: 0,
+          partial: true,
+        });
+        result.set(k, arr);
+      }
+    }
+    return result;
+  }, [events, projectNames]);
 
-  const totalDays = daysInMonth(viewYear, viewMonth);
-  const startOffset = firstDayOfWeek(viewYear, viewMonth);
-  const totalCells = startOffset + totalDays;
-  const rows = Math.ceil(totalCells / 7);
-  const todayStr = todayRef.toISOString().slice(0, 10);
+  const days = useMemo(() => {
+    const weekdayLabels =
+      locale === "ru"
+        ? ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const out: { date: Date; iso: string; label: string }[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i);
+      out.push({
+        date: d,
+        iso: isoDay(d),
+        label: `${weekdayLabels[i]} ${d.getDate()}`,
+      });
+    }
+    return out;
+  }, [weekStart, locale]);
 
-  // Which projects span into this month?
-  const monthStart = new Date(viewYear, viewMonth, 1);
-  const monthEnd = new Date(viewYear, viewMonth, totalDays);
-  const visibleProjects = projects.filter((p) => {
-    if (!p.start_date && !p.end_date) return false;
-    const s = p.start_date ? toDate(p.start_date) : monthStart;
-    const e = p.end_date ? toDate(p.end_date) : monthEnd;
-    return s.getTime() <= monthEnd.getTime() && e.getTime() >= monthStart.getTime();
-  });
+  const cellSummary = useCallback(
+    (profileId: string, iso: string) => {
+      const list = sessionsByKey.get(keyFor(profileId, iso)) ?? [];
+      let totalMinutes = 0;
+      let partial = false;
+      for (const s of list) {
+        totalMinutes += s.minutes;
+        if (s.partial) partial = true;
+      }
+      return { totalMinutes, partial, sessions: list };
+    },
+    [sessionsByKey],
+  );
 
-  // Build bars for the calendar
-  function projectBarsForDay(day: number): CalProject[] {
-    const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const date = toDate(dateStr);
-    return visibleProjects.filter((p) => {
-      const s = p.start_date ? toDate(p.start_date) : monthStart;
-      const e = p.end_date ? toDate(p.end_date) : monthEnd;
-      return date.getTime() >= s.getTime() && date.getTime() <= e.getTime();
+  function openDetail(profile: Profile, iso: string) {
+    const { totalMinutes, sessions } = cellSummary(profile.id, iso);
+    if (sessions.length === 0) return;
+    setSelected({
+      profileId: profile.id,
+      profileName: profile.name,
+      dayIso: iso,
+      sessions,
+      totalMinutes,
     });
   }
 
-  const weekdaysFull =
-    locale === "ru"
-      ? ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"]
-      : ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+  const dailyTotals = useMemo(() => {
+    return days.map((d) => {
+      let total = 0;
+      for (const p of profiles) total += cellSummary(p.id, d.iso).totalMinutes;
+      return total;
+    });
+  }, [days, profiles, cellSummary]);
 
-  const upcomingList = projects
-    .filter((p) => p.category === "upcoming" || p.category === "active")
-    .sort((a, b) => {
-      const aStart = a.start_date ?? "9999";
-      const bStart = b.start_date ?? "9999";
-      return aStart.localeCompare(bStart);
-    })
-    .slice(0, 10);
+  const weekLabel = `${weekStart.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")} – ${weekEnd.toLocaleDateString(locale === "ru" ? "ru-RU" : "en-US")}`;
+  const isThisWeek = weekStart.getTime() === startOfWeekMonday(today).getTime();
 
   return (
     <div className="space-y-5 p-5">
@@ -144,27 +273,40 @@ export default function SchedulePage() {
           {t("nav.schedule")}
         </p>
         <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
-          {t("schedule.title")}
+          {t("schedule.weeklyTitle")}
         </h1>
       </section>
 
-      {/* Month navigation */}
       <section className="surface-card p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <button
             type="button"
-            onClick={prevMonth}
+            onClick={() => setWeekStart((d) => addDays(d, -7))}
             className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)]"
             style={{ color: "var(--text-secondary)" }}
+            aria-label={t("schedule.prevWeek")}
           >
             <ChevronLeft size={16} />
           </button>
-          <h2 className="text-lg font-bold text-[var(--text-primary)] capitalize">{monthLabel}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">{weekLabel}</h2>
+            {!isThisWeek ? (
+              <button
+                type="button"
+                onClick={() => setWeekStart(startOfWeekMonday(today))}
+                className="rounded-[var(--radius-sm)] border px-2 py-0.5 text-[10px] font-semibold"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                {t("schedule.thisWeek")}
+              </button>
+            ) : null}
+          </div>
           <button
             type="button"
-            onClick={nextMonth}
+            onClick={() => setWeekStart((d) => addDays(d, 7))}
             className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)]"
             style={{ color: "var(--text-secondary)" }}
+            aria-label={t("schedule.nextWeek")}
           >
             <ChevronRight size={16} />
           </button>
@@ -172,158 +314,167 @@ export default function SchedulePage() {
 
         {loading ? (
           <div className="mt-4 text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
+        ) : profiles.length === 0 ? (
+          <div className="mt-4 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+            {t("schedule.noCrew")}
+          </div>
         ) : (
-          <div className="mt-4">
-            {/* Weekday header */}
-            <div className="grid grid-cols-7 gap-px text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-              {weekdaysFull.map((d, i) => (
-                <div key={i} className="py-2">{d}</div>
-              ))}
-            </div>
-
-            {/* Calendar grid */}
-            <div
-              className="grid grid-cols-7 gap-px rounded-[var(--radius-md)] overflow-hidden"
-              style={{ background: "var(--border-subtle)" }}
-            >
-              {Array.from({ length: rows * 7 }, (_, i) => {
-                const dayNum = i - startOffset + 1;
-                const isValid = dayNum >= 1 && dayNum <= totalDays;
-                const dateStr = isValid
-                  ? `${viewYear}-${String(viewMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
-                  : "";
-                const isToday = dateStr === todayStr;
-                const bars = isValid ? projectBarsForDay(dayNum) : [];
-
-                return (
-                  <div
-                    key={i}
-                    className="min-h-[120px] p-1.5"
-                    style={{
-                      background: isToday
-                        ? "rgba(191, 162, 52, 0.08)"
-                        : "var(--bg-card)",
-                    }}
-                  >
-                    {isValid ? (
-                      <>
-                        <div
-                          className="text-right text-xs font-medium"
-                          style={{
-                            color: isToday ? "var(--brand-yellow)" : "var(--text-secondary)",
-                          }}
-                        >
-                          {dayNum}
-                        </div>
-                        <div className="mt-0.5 space-y-0.5">
-                          {bars.slice(0, 3).map((p) => (
-                            <Link
-                              key={p.id}
-                              href={`/projects/${p.id}`}
-                              className="block truncate rounded-sm px-1 text-[9px] font-medium leading-[16px]"
-                              style={{
-                                background: `${p.barColor}22`,
-                                color: p.barColor,
-                              }}
-                              title={p.name}
-                            >
-                              {p.name}
-                            </Link>
-                          ))}
-                          {bars.length > 3 ? (
-                            <div className="px-1 text-[9px] text-[var(--text-muted)]">
-                              +{bars.length - 3}
-                            </div>
-                          ) : null}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr
+                  className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]"
+                  style={{ borderBottom: "1px solid var(--border-default)" }}
+                >
+                  <th className="py-2 pr-3 font-semibold">{t("common.crew")}</th>
+                  {days.map((d) => (
+                    <th key={d.iso} className="py-2 pr-2 font-semibold">{d.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {profiles.map((profile) => (
+                  <tr key={profile.id} className="border-b border-[var(--border-subtle)]">
+                    <td className="py-2 pr-3 text-sm font-semibold text-[var(--text-primary)]">
+                      {profile.name}
+                      <div className="text-[10px] uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                        {profile.role}
+                      </div>
+                    </td>
+                    {days.map((d) => {
+                      const { totalMinutes, partial, sessions } = cellSummary(profile.id, d.iso);
+                      const hasShift = sessions.length > 0;
+                      const bg = !hasShift
+                        ? "transparent"
+                        : partial
+                          ? "rgba(245, 158, 11, 0.18)"
+                          : "rgba(15, 168, 120, 0.18)";
+                      const color = !hasShift
+                        ? "var(--text-muted)"
+                        : partial
+                          ? "#f59e0b"
+                          : "var(--green)";
+                      const firstProject = sessions[0]?.projectName ?? "";
+                      return (
+                        <td key={d.iso} className="py-1 pr-2">
+                          <button
+                            type="button"
+                            onClick={() => openDetail(profile, d.iso)}
+                            disabled={!hasShift}
+                            className="block w-full rounded-[var(--radius-sm)] px-2 py-1.5 text-left"
+                            style={{ background: bg, color, cursor: hasShift ? "pointer" : "default" }}
+                          >
+                            {hasShift ? (
+                              <>
+                                <div className="font-mono text-xs font-bold">
+                                  {formatDurationCompact(totalMinutes)}
+                                </div>
+                                {firstProject ? (
+                                  <div className="truncate text-[10px] opacity-80">
+                                    {firstProject}
+                                    {sessions.length > 1 ? ` +${sessions.length - 1}` : ""}
+                                  </div>
+                                ) : null}
+                              </>
+                            ) : (
+                              <span className="text-[10px]">—</span>
+                            )}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+                <tr
+                  className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]"
+                  style={{ borderTop: "1px solid var(--border-default)" }}
+                >
+                  <td className="py-2 pr-3 font-semibold text-[var(--text-primary)]">
+                    {t("schedule.dailyTotal")}
+                  </td>
+                  {dailyTotals.map((m, i) => (
+                    <td key={i} className="py-2 pr-2 font-mono text-xs font-bold text-[var(--text-primary)]">
+                      {m > 0 ? formatDurationCompact(m) : "—"}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
           </div>
         )}
-      </section>
 
-      {/* Legend */}
-      <section className="flex flex-wrap gap-4 text-xs text-[var(--text-secondary)]">
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--green)" }} />
-          {t("common.active")}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--blue)" }} />
-          {t("schedule.upcoming")}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "#ef4444" }} />
-          {t("schedule.overdue")}
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--text-muted)" }} />
-          {t("common.completed")}
-        </span>
-      </section>
-
-      {/* Upcoming project list */}
-      <section className="surface-card p-4">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("schedule.upcoming")}</h2>
-        <div className="mt-4 space-y-3">
-          {upcomingList.length === 0 ? (
-            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-              {t("schedule.noSchedule")}
-            </div>
-          ) : (
-            upcomingList.map((project) => {
-              const remaining = project.end_date
-                ? daysBetween(todayRef, toDate(project.end_date))
-                : null;
-              const isOverdue = remaining !== null && remaining < 0;
-
-              return (
-                <Link
-                  key={project.id}
-                  href={`/projects/${project.id}`}
-                  className="block rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</div>
-                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {project.start_date ?? "—"} → {project.end_date ?? "—"}
-                      </div>
-                      {project.address ? (
-                        <div className="mt-0.5 text-xs text-[var(--text-muted)]">{project.address}</div>
-                      ) : null}
-                    </div>
-                    <div className="text-right">
-                      {remaining !== null ? (
-                        isOverdue ? (
-                          <div className="text-xs font-semibold" style={{ color: "#ef4444" }}>
-                            {t("schedule.overdueDays")} {Math.abs(remaining)} {t("schedule.days")}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-[var(--text-secondary)]">
-                            <span className="font-semibold text-[var(--brand-yellow)]">{remaining}</span>{" "}
-                            {t("schedule.daysRemaining")}
-                          </div>
-                        )
-                      ) : null}
-                      <div
-                        className="mt-1 inline-block rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase"
-                        style={{ background: `${project.barColor}22`, color: project.barColor }}
-                      >
-                        {project.status}
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })
-          )}
+        <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-[var(--text-muted)]">
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-2 w-3 rounded-sm" style={{ background: "rgba(15, 168, 120, 0.18)" }} />
+            {t("schedule.legendWorked")}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-2 w-3 rounded-sm" style={{ background: "rgba(245, 158, 11, 0.18)" }} />
+            {t("schedule.legendPartial")}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block h-2 w-3 rounded-sm border border-[var(--border-default)]" />
+            {t("schedule.legendEmpty")}
+          </span>
         </div>
       </section>
+
+      {selected ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setSelected(null)}
+        >
+          <div
+            className="surface-card w-full max-w-[520px] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-[var(--text-primary)]">
+                  {selected.profileName}
+                </h2>
+                <div className="text-xs text-[var(--text-muted)]">{selected.dayIso}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                aria-label={t("common.cancel")}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="mt-3 text-sm text-[var(--text-primary)]">
+              {t("schedule.dayTotal")}:{" "}
+              <span className="font-mono font-bold">{formatDurationCompact(selected.totalMinutes)}</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {selected.sessions.map((s, idx) => (
+                <div
+                  key={`${s.clockIn}-${idx}`}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                >
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    {s.projectName ?? t("common.projectNotResolved")}
+                  </div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    <div>{t("schedule.clockIn")}: {formatDateTime(s.clockIn)}</div>
+                    <div>
+                      {t("schedule.clockOut")}:{" "}
+                      {s.clockOut ? formatDateTime(s.clockOut) : <span style={{ color: "#f59e0b" }}>{t("schedule.openShift")}</span>}
+                    </div>
+                  </div>
+                  <div className="mt-2 font-mono text-sm font-bold text-[var(--text-primary)]">
+                    {formatDurationCompact(s.minutes)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
