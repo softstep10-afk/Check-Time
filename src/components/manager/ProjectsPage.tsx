@@ -258,9 +258,12 @@ function InlineNotesEditor({
 
   // Sync with the initial prop — if the card re-renders from a server
   // refresh with a newer value, pick it up unless the user is actively
-  // editing.
+  // editing. Deferred so the setState doesn't fire synchronously inside
+  // the effect body.
   useEffect(() => {
-    if (!editing) setNotes(initialNotes ?? "");
+    if (editing) return;
+    const id = setTimeout(() => setNotes(initialNotes ?? ""), 0);
+    return () => clearTimeout(id);
   }, [initialNotes, editing]);
 
   function openEditor(e: React.MouseEvent) {

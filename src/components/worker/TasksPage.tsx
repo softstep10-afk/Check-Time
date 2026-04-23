@@ -18,6 +18,41 @@ const PRIORITY_ORDER: Record<string, number> = {
   low: 3,
 };
 
+type ProjectBucket = {
+  key: string;
+  name: string;
+  tasks: WorkerTaskItem[];
+};
+
+function groupByProject(
+  tasks: WorkerTaskItem[],
+  generalLabel: string,
+): ProjectBucket[] {
+  const map = new Map<string, ProjectBucket>();
+  for (const task of tasks) {
+    const key = task.project_id ?? "__noproject__";
+    const name = task.projectName ?? generalLabel;
+    const bucket = map.get(key) ?? { key, name, tasks: [] };
+    bucket.tasks.push(task);
+    map.set(key, bucket);
+  }
+  for (const bucket of map.values()) {
+    bucket.tasks.sort((a, b) => {
+      const pa = PRIORITY_ORDER[a.priority] ?? 99;
+      const pb = PRIORITY_ORDER[b.priority] ?? 99;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }
+  const entries = [...map.values()];
+  entries.sort((a, b) => {
+    if (a.key === "__noproject__") return 1;
+    if (b.key === "__noproject__") return -1;
+    return 0;
+  });
+  return entries;
+}
+
 export function TasksPage() {
   const { shell, busyAction, updateTaskStatus } = useWorkerShell();
   const { t } = useTranslation();
@@ -41,43 +76,6 @@ export function TasksPage() {
     .filter(filterMatch);
   const doneTasks = shell.tasks.filter((task) => task.status === "done");
 
-  // Group by project_id (stable) with name/done-count carried alongside
-  // for display. Entries sorted: no-project bucket always last.
-  type ProjectBucket = {
-    key: string;
-    name: string;
-    tasks: WorkerTaskItem[];
-  };
-
-  function groupByProject(tasks: WorkerTaskItem[]): ProjectBucket[] {
-    const map = new Map<string, ProjectBucket>();
-    for (const task of tasks) {
-      const key = task.project_id ?? "__noproject__";
-      const name = task.projectName ?? t("common.general");
-      const bucket = map.get(key) ?? { key, name, tasks: [] };
-      bucket.tasks.push(task);
-      map.set(key, bucket);
-    }
-    // Sort each bucket by priority asc (urgent first), then by
-    // created_at desc so stable ordering within a priority band.
-    for (const bucket of map.values()) {
-      bucket.tasks.sort((a, b) => {
-        const pa = PRIORITY_ORDER[a.priority] ?? 99;
-        const pb = PRIORITY_ORDER[b.priority] ?? 99;
-        if (pa !== pb) return pa - pb;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
-    }
-    const entries = [...map.values()];
-    // No-project bucket pinned to the end.
-    entries.sort((a, b) => {
-      if (a.key === "__noproject__") return 1;
-      if (b.key === "__noproject__") return -1;
-      return 0;
-    });
-    return entries;
-  }
-
   // Done-counts per project across ALL tasks (filter-independent) so the
   // progress bar's denominator reflects total project scope, not the
   // currently-visible slice.
@@ -93,8 +91,14 @@ export function TasksPage() {
     return counts;
   }, [shell.tasks]);
 
-  const activeByProject = useMemo(() => groupByProject(activeTasks), [activeTasks]);
-  const doneByProject = useMemo(() => groupByProject(doneTasks), [doneTasks]);
+  const activeByProject = useMemo(
+    () => groupByProject(activeTasks, t("common.general")),
+    [activeTasks, t],
+  );
+  const doneByProject = useMemo(
+    () => groupByProject(doneTasks, t("common.general")),
+    [doneTasks, t],
+  );
 
   function bumpTask(taskId: string) {
     setBumpedTaskId(taskId);

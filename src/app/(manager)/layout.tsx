@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
+import { TopProgressBar } from "@/components/shared/TopProgressBar";
 
 type SidebarItem =
   | { section: string; sectionKey: TranslationKey; ownerOnly?: boolean }
@@ -92,6 +93,7 @@ export default function ManagerLayout({
 
   return (
     <div className="h-screen flex overflow-hidden">
+      <TopProgressBar />
       <aside
         className="hidden w-[232px] flex-shrink-0 flex-col overflow-y-auto md:flex"
         style={{
