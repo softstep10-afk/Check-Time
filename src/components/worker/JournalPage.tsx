@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileVideo2, ImagePlus, Trash2, UploadCloud } from "lucide-react";
+import { FileVideo2, Trash2, UploadCloud } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { formatDateTime } from "@/lib/worker-utils";
 import { useTranslation } from "@/lib/i18n";
@@ -46,6 +46,9 @@ export function JournalPage() {
   const { shell, busyAction, uploadMedia } = useWorkerShell();
   const { t } = useTranslation();
   const journalInputRef = useRef<HTMLInputElement | null>(null);
+  const journalPhotoRef = useRef<HTMLInputElement | null>(null);
+  const journalVideoRef = useRef<HTMLInputElement | null>(null);
+  const journalPdfRef = useRef<HTMLInputElement | null>(null);
   const checkoutInputRef = useRef<HTMLInputElement | null>(null);
   const [journalFiles, setJournalFiles] = useState<PendingUpload[]>([]);
   const [checkoutFiles, setCheckoutFiles] = useState<PendingUpload[]>([]);
@@ -59,6 +62,16 @@ export function JournalPage() {
     () => shell.media.map((m) => m.id),
     [shell.media],
   );
+
+  // Pre-compute the 7-day filter once so the render stays pure.
+  // eslint-disable-next-line react-hooks/purity
+  const cutoffRef = useRef<number>(Date.now() - 7 * 86_400_000);
+  const last7DaysMedia = useMemo(() => {
+    const cutoff = cutoffRef.current;
+    return shell.media.filter(
+      (m) => new Date(m.created_at).getTime() >= cutoff,
+    );
+  }, [shell.media]);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,27 +246,71 @@ export function JournalPage() {
           disabled={!shell.clockState.isClockedIn}
           className="hidden"
         />
-
-        <button
-          type="button"
-          onClick={() => journalInputRef.current?.click()}
+        <input
+          ref={journalPhotoRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          multiple
+          onChange={(event) => replaceJournalFiles(event.target.files)}
           disabled={!shell.clockState.isClockedIn}
-          className="upload-dropzone mt-4 w-full p-4 text-left disabled:opacity-60"
-        >
-          <div className="flex items-start gap-3">
-            <div className="upload-dropzone-icon rounded-[var(--radius-md)] bg-[rgba(191,162,52,0.12)] p-2 text-[var(--brand-yellow)]">
-              <ImagePlus size={18} />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-[var(--text-primary)]">
-                {t("journal.addPhotoVideo")}
-              </div>
-              <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                {t("journal.snapProgress")}
-              </div>
-            </div>
-          </div>
-        </button>
+          className="hidden"
+        />
+        <input
+          ref={journalVideoRef}
+          type="file"
+          accept="video/*"
+          capture="environment"
+          multiple
+          onChange={(event) => replaceJournalFiles(event.target.files)}
+          disabled={!shell.clockState.isClockedIn}
+          className="hidden"
+        />
+        <input
+          ref={journalPdfRef}
+          type="file"
+          accept="application/pdf"
+          multiple
+          onChange={(event) => replaceJournalFiles(event.target.files)}
+          disabled={!shell.clockState.isClockedIn}
+          className="hidden"
+        />
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <button
+            type="button"
+            onClick={() => journalPhotoRef.current?.click()}
+            disabled={!shell.clockState.isClockedIn}
+            className="rounded-[var(--radius-md)] border px-3 py-4 text-center text-sm font-semibold transition-opacity disabled:opacity-60"
+            style={{ borderColor: "rgba(191, 162, 52, 0.3)", color: "var(--brand-yellow)", background: "rgba(191, 162, 52, 0.08)" }}
+          >
+            <div className="text-2xl">📷</div>
+            <div className="mt-1 text-xs">{t("journal.bigBtnPhoto")}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => journalVideoRef.current?.click()}
+            disabled={!shell.clockState.isClockedIn}
+            className="rounded-[var(--radius-md)] border px-3 py-4 text-center text-sm font-semibold transition-opacity disabled:opacity-60"
+            style={{ borderColor: "rgba(74, 127, 191, 0.3)", color: "var(--blue)", background: "rgba(74, 127, 191, 0.08)" }}
+          >
+            <div className="text-2xl">🎬</div>
+            <div className="mt-1 text-xs">{t("journal.bigBtnVideo")}</div>
+          </button>
+          <button
+            type="button"
+            onClick={() => journalPdfRef.current?.click()}
+            disabled={!shell.clockState.isClockedIn}
+            className="rounded-[var(--radius-md)] border px-3 py-4 text-center text-sm font-semibold transition-opacity disabled:opacity-60"
+            style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)", background: "rgba(212, 81, 94, 0.06)" }}
+          >
+            <div className="text-2xl">📄</div>
+            <div className="mt-1 text-xs">{t("journal.bigBtnPdf")}</div>
+          </button>
+        </div>
+        <div className="mt-1 text-[10px] text-[var(--text-muted)] text-center">
+          {t("journal.snapProgress")}
+        </div>
 
         {journalFiles.length > 0 ? (
           <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -338,7 +395,7 @@ export function JournalPage() {
               {t("journal.noMedia")}
             </div>
           ) : (
-            groupMediaByDay(shell.media).map(({ key, label, items }) => (
+            groupMediaByDay(last7DaysMedia).map(({ key, label, items }) => (
               <div key={key}>
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {label === "today" ? t("journal.todayLabel") : label === "yesterday" ? t("journal.yesterdayLabel") : key}
