@@ -373,19 +373,43 @@ export function WorkerShell({
   // DB is source of truth, localStorage is cache. "unknown" leaves the
   // existing boolean state alone (no UI block — modal opens lazily on
   // the first GPS-requiring action, same as before).
+  //
+  // Sync path: if localStorage says consented=true but the DB has no
+  // row yet (e.g. the worker consented before the DB table existed,
+  // or on another device that never synced), append a grant row now so
+  // the audit trail and the manager's Location Data view catch up. All
+  // failures are swallowed — GPS consent must never crash the shell.
   useEffect(() => {
     if (consentChecked) return;
     async function checkConsent() {
-      const state = await readLatestConsent(supabase, shell.profile.id);
-      if (state !== "unknown") {
-        const granted = state === "granted";
-        setGpsConsented(granted);
-        localStorage.setItem("check-time-gps-consent", String(granted));
+      try {
+        const state = await readLatestConsent(supabase, shell.profile.id);
+        if (state !== "unknown") {
+          const granted = state === "granted";
+          setGpsConsented(granted);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("check-time-gps-consent", String(granted));
+          }
+        } else if (
+          typeof window !== "undefined" &&
+          localStorage.getItem("check-time-gps-consent") === "true"
+        ) {
+          const res = await writeConsent(supabase, {
+            orgId: shell.profile.org_id,
+            workerId: shell.profile.id,
+            signedName: shell.profile.name,
+            granted: true,
+            userAgent: navigator.userAgent,
+          });
+          if (!res.ok) console.warn("consent sync failed:", res.error);
+        }
+      } catch (err) {
+        console.warn("consent check failed:", err);
       }
       setConsentChecked(true);
     }
     void checkConsent();
-  }, [supabase, shell.profile.id, consentChecked]);
+  }, [supabase, shell.profile.id, shell.profile.org_id, shell.profile.name, consentChecked]);
 
   const gpsTrackingEnabled = gpsConsented && shell.clockState.isClockedIn;
 
