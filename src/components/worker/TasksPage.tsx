@@ -9,37 +9,92 @@ import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import type { WorkerTaskItem } from "@/lib/worker-types";
 
+type TaskFilter = "all" | "mine" | "urgent" | "today";
+
+const PRIORITY_ORDER: Record<string, number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
 export function TasksPage() {
   const { shell, busyAction, updateTaskStatus } = useWorkerShell();
   const { t } = useTranslation();
   const [bumpedTaskId, setBumpedTaskId] = useState<string | null>(null);
-  const activeTasks = shell.tasks.filter(
-    (task) => task.status !== "done" && task.status !== "cancelled",
-  );
+  const [filter, setFilter] = useState<TaskFilter>("all");
+
+  const todayIsoRef = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  function filterMatch(task: WorkerTaskItem): boolean {
+    if (filter === "all") return true;
+    if (filter === "mine") return task.assigned_to === shell.profile.id;
+    if (filter === "urgent") return task.priority === "urgent" || task.priority === "high";
+    if (filter === "today") {
+      return Boolean(task.due_date && task.due_date.slice(0, 10) === todayIsoRef);
+    }
+    return true;
+  }
+
+  const activeTasks = shell.tasks
+    .filter((task) => task.status !== "done" && task.status !== "cancelled")
+    .filter(filterMatch);
   const doneTasks = shell.tasks.filter((task) => task.status === "done");
 
-  // Group by project name so the header above each block makes the
-  // global-vs-per-project distinction obvious. Order of insertion is
-  // preserved, which matches shell.tasks order (newest first).
-  const activeByProject = useMemo(() => {
-    const map = new Map<string, WorkerTaskItem[]>();
-    for (const task of activeTasks) {
-      const key = task.projectName ?? t("common.general");
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(task);
-    }
-    return map;
-  }, [activeTasks, t]);
+  // Group by project_id (stable) with name/done-count carried alongside
+  // for display. Entries sorted: no-project bucket always last.
+  type ProjectBucket = {
+    key: string;
+    name: string;
+    tasks: WorkerTaskItem[];
+  };
 
-  const doneByProject = useMemo(() => {
-    const map = new Map<string, WorkerTaskItem[]>();
-    for (const task of doneTasks) {
-      const key = task.projectName ?? t("common.general");
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(task);
+  function groupByProject(tasks: WorkerTaskItem[]): ProjectBucket[] {
+    const map = new Map<string, ProjectBucket>();
+    for (const task of tasks) {
+      const key = task.project_id ?? "__noproject__";
+      const name = task.projectName ?? t("common.general");
+      const bucket = map.get(key) ?? { key, name, tasks: [] };
+      bucket.tasks.push(task);
+      map.set(key, bucket);
     }
-    return map;
-  }, [doneTasks, t]);
+    // Sort each bucket by priority asc (urgent first), then by
+    // created_at desc so stable ordering within a priority band.
+    for (const bucket of map.values()) {
+      bucket.tasks.sort((a, b) => {
+        const pa = PRIORITY_ORDER[a.priority] ?? 99;
+        const pb = PRIORITY_ORDER[b.priority] ?? 99;
+        if (pa !== pb) return pa - pb;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+    }
+    const entries = [...map.values()];
+    // No-project bucket pinned to the end.
+    entries.sort((a, b) => {
+      if (a.key === "__noproject__") return 1;
+      if (b.key === "__noproject__") return -1;
+      return 0;
+    });
+    return entries;
+  }
+
+  // Done-counts per project across ALL tasks (filter-independent) so the
+  // progress bar's denominator reflects total project scope, not the
+  // currently-visible slice.
+  const projectCounts = useMemo(() => {
+    const counts = new Map<string, { done: number; total: number }>();
+    for (const task of shell.tasks) {
+      const key = task.project_id ?? "__noproject__";
+      const entry = counts.get(key) ?? { done: 0, total: 0 };
+      entry.total += 1;
+      if (task.status === "done") entry.done += 1;
+      counts.set(key, entry);
+    }
+    return counts;
+  }, [shell.tasks]);
+
+  const activeByProject = useMemo(() => groupByProject(activeTasks), [activeTasks]);
+  const doneByProject = useMemo(() => groupByProject(doneTasks), [doneTasks]);
 
   function bumpTask(taskId: string) {
     setBumpedTaskId(taskId);
@@ -84,8 +139,34 @@ export function TasksPage() {
             <div className="task-title text-sm font-semibold text-[var(--text-primary)]">
               {task.title}
             </div>
-            <div className="mt-1 text-xs text-[var(--text-secondary)]">
-              {task.projectName ?? t("common.general")} • {task.status.replace("_", " ")}
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <span>{task.projectName ?? t("common.general")} • {task.status.replace("_", " ")}</span>
+              {task.due_date ? (() => {
+                const dueIso = task.due_date.slice(0, 10);
+                const overdue = dueIso < todayIsoRef && task.status !== "done";
+                return (
+                  <span
+                    className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold"
+                    style={{
+                      background: overdue ? "rgba(212, 81, 94, 0.14)" : "rgba(148, 163, 184, 0.12)",
+                      color: overdue ? "var(--red)" : "var(--text-muted)",
+                    }}
+                    title={t("tasks.dueDate")}
+                  >
+                    {overdue ? "⚠ " : "📅 "}
+                    {dueIso}
+                  </span>
+                );
+              })() : null}
+              {task.attachments && task.attachments.length > 0 ? (
+                <span
+                  className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{ background: "rgba(191, 162, 52, 0.14)", color: "var(--brand-yellow)" }}
+                  title={t("tasks.filesShort")}
+                >
+                  📎 {task.attachments.length}
+                </span>
+              ) : null}
             </div>
           </div>
           <span
@@ -191,20 +272,69 @@ export function TasksPage() {
           <div className="text-lg font-bold text-[var(--text-primary)]">{t("common.open")}</div>
           <div className="text-xs text-[var(--text-muted)]">{activeTasks.length} {t("tasks.items")}</div>
         </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {(["all", "mine", "urgent", "today"] as const).map((key) => {
+            const selected = filter === key;
+            const label =
+              key === "all"
+                ? t("tasks.filterAll")
+                : key === "mine"
+                  ? t("tasks.filterMine")
+                  : key === "urgent"
+                    ? t("tasks.filterUrgent")
+                    : t("tasks.filterToday");
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                aria-pressed={selected}
+                className="rounded-[var(--radius-pill)] border px-3 py-1 text-xs font-semibold"
+                style={{
+                  borderColor: selected ? "var(--brand-yellow)" : "var(--border-default)",
+                  background: selected ? "rgba(191, 162, 52, 0.14)" : "transparent",
+                  color: selected ? "var(--brand-yellow)" : "var(--text-secondary)",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
         <div className="mt-4 space-y-5">
           {activeTasks.length === 0 ? (
             <div className="surface-panel p-4 text-sm text-[var(--text-secondary)]">
-              {t("tasks.nothingOpen")}
+              {filter === "all"
+                ? t("tasks.nothingOpen")
+                : filter === "mine"
+                  ? t("tasks.emptyMine")
+                  : filter === "urgent"
+                    ? t("tasks.emptyUrgent")
+                    : t("tasks.emptyToday")}
             </div>
           ) : (
-            Array.from(activeByProject.entries()).map(([projectName, tasks]) => (
-              <div key={projectName} className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {projectName} <span className="opacity-60">· {tasks.length}</span>
+            activeByProject.map((bucket) => {
+              const counts = projectCounts.get(bucket.key) ?? { done: 0, total: 0 };
+              const pct = counts.total > 0 ? Math.round((counts.done / counts.total) * 100) : 0;
+              const displayName =
+                bucket.key === "__noproject__" ? t("tasks.noProjectSection") : bucket.name;
+              return (
+                <div key={bucket.key} className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {displayName}{" "}
+                      <span className="opacity-60">
+                        · {counts.done} / {counts.total} {t("tasks.progressDone")}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: "rgba(148, 163, 184, 0.18)" }}>
+                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--green)" }} />
+                  </div>
+                  {bucket.tasks.map(renderActiveCard)}
                 </div>
-                {tasks.map(renderActiveCard)}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>
@@ -220,14 +350,18 @@ export function TasksPage() {
               {t("tasks.completedWillLand")}
             </div>
           ) : (
-            Array.from(doneByProject.entries()).map(([projectName, tasks]) => (
-              <div key={projectName} className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {projectName} <span className="opacity-60">· {tasks.length}</span>
+            doneByProject.map((bucket) => {
+              const displayName =
+                bucket.key === "__noproject__" ? t("tasks.noProjectSection") : bucket.name;
+              return (
+                <div key={bucket.key} className="space-y-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {displayName} <span className="opacity-60">· {bucket.tasks.length}</span>
+                  </div>
+                  {bucket.tasks.map(renderDoneCard)}
                 </div>
-                {tasks.map(renderDoneCard)}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>
