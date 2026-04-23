@@ -14,6 +14,7 @@ export const translations = {
   "common.create": { en: "Create", ru: "Создать" },
   "common.creating": { en: "Creating...", ru: "Создание..." },
   "common.remove": { en: "Remove", ru: "Убрать" },
+  "common.edit": { en: "Edit", ru: "Редактировать" },
   "common.filter": { en: "Filter", ru: "Фильтр" },
   "common.start": { en: "Start", ru: "Начать" },
   "common.done": { en: "Done", ru: "Готово" },
@@ -220,6 +221,10 @@ export const translations = {
   "projects.archive": { en: "Archive", ru: "Архивировать" },
   "projects.archiving": { en: "Archiving...", ru: "Архивация..." },
   "projects.materials": { en: "Materials", ru: "Материалы" },
+  "projects.editProject": { en: "Edit Project", ru: "Редактировать проект" },
+  "projects.noNotesHint": { en: "No notes — click Edit to add", ru: "Нет заметок — нажмите Редактировать, чтобы добавить" },
+  "projects.removeConfirmTitle": { en: "Remove this project?", ru: "Убрать этот проект?" },
+  "projects.removeConfirmBody": { en: "{name} will be archived. Shifts, tasks, and media stay in the system but the project stops appearing in active lists.", ru: "{name} будет перемещён в архив. Смены, задачи и медиа сохранятся в системе, но проект исчезнет из активных списков." },
 
   // ── Project Detail Page ──
   "projectDetail.backToProjects": { en: "Back to projects", ru: "Назад к проектам" },

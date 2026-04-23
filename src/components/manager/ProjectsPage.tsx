@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { ChevronDown, ExternalLink, Copy, Check, Plus } from "lucide-react";
+import { Copy, Check, Plus, Pencil, Trash2, X } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import {
@@ -152,11 +151,15 @@ export function ProjectsPage({
   const { t } = useTranslation();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [openProjectIds, setOpenProjectIds] = useState<Set<string>>(new Set());
-  const [copyConfirmId, setCopyConfirmId] = useState<string | null>(null);
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [pickingLocation, setPickingLocation] = useState(false);
   const createLatRef = useRef<HTMLInputElement>(null);
   const createLngRef = useRef<HTMLInputElement>(null);
+  const editingProject =
+    initialProjects.find((p) => p.id === editingProjectId) ?? null;
+  const editingSite = editingProject ? parseGeoPoint(editingProject.site_point) : null;
 
   function fillCurrentLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
@@ -180,18 +183,6 @@ export function ProjectsPage({
       },
       { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
     );
-  }
-
-  function toggleProject(projectId: string) {
-    setOpenProjectIds((current) => {
-      const next = new Set(current);
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
-      }
-      return next;
-    });
   }
 
   async function handleCreateProject(event: React.FormEvent<HTMLFormElement>) {
@@ -245,6 +236,7 @@ export function ProjectsPage({
 
     form.reset();
     setBusyKey(null);
+    setShowCreatePanel(false);
     setMessage(t("projects.created"));
     router.refresh();
   }
@@ -302,46 +294,8 @@ export function ProjectsPage({
     }
 
     setBusyKey(null);
+    setEditingProjectId(null);
     setMessage(t("projects.updated"));
-    router.refresh();
-  }
-
-  async function handleCopyProject(project: ManagerProjectSummary) {
-    setBusyKey(`copy-${project.id}`);
-    setMessage("");
-
-    const suffix = ` ${t("projects.copySuffix")}`;
-    const copyName = project.name.endsWith(suffix.trim())
-      ? project.name
-      : project.name + suffix;
-
-    const payload: Record<string, unknown> = {
-      org_id: orgId,
-      name: copyName,
-      address: project.address ?? null,
-      notes: project.notes ?? null,
-      rate: Number(project.rate ?? 0),
-      radius_m: project.radius_m ?? 200,
-      gps_radius_m:
-        (project as { gps_radius_m?: number | null }).gps_radius_m ?? GPS_RADIUS_DEFAULT,
-      status: "active",
-      settings: {},
-      site_point: project.site_point ?? null,
-      start_date: project.start_date ?? null,
-      end_date: project.end_date ?? null,
-    };
-
-    const { error } = await insertProjectTolerant(supabase, payload);
-
-    setBusyKey(null);
-    setCopyConfirmId(null);
-
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-
-    setMessage(t("projects.copySuccess"));
     router.refresh();
   }
 
@@ -396,7 +350,30 @@ export function ProjectsPage({
       ) : null}
 
       <section className="surface-card p-4">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projects.createProject")}</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projects.createProject")}</h2>
+          <button
+            type="button"
+            onClick={() => setShowCreatePanel((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+            style={{
+              background: showCreatePanel ? "transparent" : "var(--brand-yellow)",
+              color: showCreatePanel ? "var(--text-primary)" : "var(--text-inverse)",
+              border: showCreatePanel ? "1px solid var(--border-default)" : "none",
+            }}
+          >
+            {showCreatePanel ? (
+              <>
+                <X size={14} /> {t("common.cancel")}
+              </>
+            ) : (
+              <>
+                <Plus size={14} /> {t("projects.addProject")}
+              </>
+            )}
+          </button>
+        </div>
+        {showCreatePanel ? (
         <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateProject}>
           <TextInputWithVoice
             name="name"
@@ -478,35 +455,11 @@ export function ProjectsPage({
             {busyKey === "create" ? t("common.creating") : t("projects.createProject")}
           </button>
         </form>
+        ) : null}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => {
-            const formEl = document.querySelector<HTMLInputElement>(
-              'form input[name="name"]',
-            );
-            formEl?.focus();
-            formEl?.scrollIntoView({ behavior: "smooth", block: "center" });
-          }}
-          className="surface-card flex min-h-[180px] flex-col items-center justify-center gap-3 border-2 border-dashed p-4 text-center transition-colors hover:border-[var(--brand-yellow)]"
-          style={{ borderColor: "var(--border-default)" }}
-        >
-          <span
-            className="flex h-12 w-12 items-center justify-center rounded-full"
-            style={{ background: "rgba(191, 162, 52, 0.12)" }}
-          >
-            <Plus size={24} style={{ color: "var(--brand-yellow)" }} />
-          </span>
-          <span className="text-sm font-semibold" style={{ color: "var(--brand-yellow)" }}>
-            {t("projects.addProject")}
-          </span>
-        </button>
-
         {initialProjects.map((project) => {
-          const site = parseGeoPoint(project.site_point);
-          const isOpen = openProjectIds.has(project.id);
           const state = activityState(project);
           const cardBorder =
             state === "live"
@@ -519,6 +472,12 @@ export function ProjectsPage({
               ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
               : undefined;
 
+          const notesPreview = project.notes
+            ? project.notes.length > 80
+              ? project.notes.slice(0, 80) + "…"
+              : project.notes
+            : null;
+
           return (
             <article
               key={project.id}
@@ -528,14 +487,14 @@ export function ProjectsPage({
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => toggleProject(project.id)}
+                onClick={() => router.push(`/projects/${project.id}`)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    toggleProject(project.id);
+                    router.push(`/projects/${project.id}`);
                   }
                 }}
-                className="w-full text-left cursor-pointer"
+                className="w-full text-left cursor-pointer space-y-3"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -555,235 +514,265 @@ export function ProjectsPage({
                       </div>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="status-pill" data-tone={getProjectTone(project.status)}>
-                      {project.status}
-                    </div>
-                    <ChevronDown
-                      size={18}
-                      className="chevron text-[var(--text-secondary)]"
-                      data-open={isOpen}
-                    />
+                  <div className="status-pill" data-tone={getProjectTone(project.status)}>
+                    {project.status}
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="metric-panel rounded-[var(--radius-md)] p-2">
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("common.crew")}
+                    </div>
+                    <div className="mt-1 text-base font-bold text-[var(--text-primary)]">
+                      {project.assignedWorkerCount}
+                    </div>
+                  </div>
+                  <div className="metric-panel rounded-[var(--radius-md)] p-2">
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("common.week")}
+                    </div>
+                    <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                      {formatDurationCompact(project.weekMinutes)}
+                    </div>
+                  </div>
+                  <div className="metric-panel rounded-[var(--radius-md)] p-2">
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("projects.materials")}
+                    </div>
+                    <div
+                      className="mt-1 font-mono text-sm font-bold"
+                      style={{ color: project.receiptTotal > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
+                    >
+                      {currencyFormatter.format(project.receiptTotal)}
+                    </div>
+                  </div>
+                  <div className="metric-panel rounded-[var(--radius-md)] p-2">
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("common.tasks")}
+                    </div>
+                    <div className="mt-1 text-base font-bold text-[var(--text-primary)]">
+                      {project.openTaskCount}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-xs italic" style={{ color: notesPreview ? "var(--text-secondary)" : "var(--text-muted)" }}>
+                  {notesPreview ?? t("projects.noNotesHint")}
                 </div>
               </div>
 
-              <div className="collapsible-body mt-4" data-open={isOpen}>
-                <div className="collapsible-inner space-y-4">
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                        {t("common.crew")}
-                      </div>
-                      <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-                        {project.assignedWorkerCount}
-                      </div>
-                    </div>
-                    <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                        {t("common.onSite")}
-                      </div>
-                      <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-                        {project.onSiteWorkerCount}
-                      </div>
-                    </div>
-                    <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                        {t("common.tasks")}
-                      </div>
-                      <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-                        {project.openTaskCount}
-                      </div>
-                    </div>
-                    <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                        {t("common.week")}
-                      </div>
-                      <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
-                        {formatDurationCompact(project.weekMinutes)}
-                      </div>
-                    </div>
-                    <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                        {t("projects.materials")}
-                      </div>
-                      <div
-                        className="mt-1 font-mono text-sm font-bold"
-                        style={{ color: project.receiptTotal > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
-                      >
-                        {currencyFormatter.format(project.receiptTotal)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-xs text-[var(--text-secondary)]">
-                      {site ? `${project.radius_m}m ${t("projects.geofenceReady")}` : t("projects.noSiteCoords")}
-                    </div>
-                    <Link
-                      href={`/projects/${project.id}`}
-                      className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--brand-yellow)]"
-                    >
-                      {t("projects.openDetail")}
-                      <ExternalLink size={14} />
-                    </Link>
-                  </div>
-
-                  <form
-                    className="grid gap-3"
-                    onSubmit={(event) => void handleUpdateProject(event, project.id)}
-                  >
-                    <TextInputWithVoice
-                      name="name"
-                      defaultValue={project.name}
-                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                    />
-                    <TextInputWithVoice
-                      name="address"
-                      defaultValue={project.address ?? ""}
-                      placeholder={t("common.address")}
-                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                    />
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <input
-                        name="rate"
-                        type="number"
-                        step="0.01"
-                        defaultValue={project.rate}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                      />
-                      <input
-                        name="radius_m"
-                        type="number"
-                        defaultValue={project.radius_m}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                      />
-                      <select
-                        name="status"
-                        defaultValue={project.status}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                      >
-                        <option value="active">{t("common.active")}</option>
-                        <option value="paused">{t("common.paused")}</option>
-                        <option value="completed">{t("common.completed")}</option>
-                        <option value="archived">{t("common.archived")}</option>
-                      </select>
-                    </div>
-                    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3">
-                      <GpsRadiusSlider
-                        defaultValue={(project as { gps_radius_m?: number | null }).gps_radius_m ?? GPS_RADIUS_DEFAULT}
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <input
-                        name="lat"
-                        type="number"
-                        step="0.000001"
-                        defaultValue={site?.lat ?? ""}
-                        placeholder={t("projects.latitude")}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                      />
-                      <input
-                        name="lng"
-                        type="number"
-                        step="0.000001"
-                        defaultValue={site?.lng ?? ""}
-                        placeholder={t("projects.longitude")}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                      />
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <DateField
-                        name="start_date"
-                        label={t("projects.startDate")}
-                        defaultValue={project.start_date ?? ""}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                      />
-                      <DateField
-                        name="end_date"
-                        label={t("projects.endDate")}
-                        defaultValue={project.end_date ?? ""}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                      />
-                    </div>
-                    <TextInputWithVoice
-                      multiline
-                      name="notes"
-                      defaultValue={project.notes ?? ""}
-                      placeholder={t("projects.managerNotes")}
-                      className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="submit"
-                        disabled={busyKey === `update-${project.id}`}
-                        className="button-base button-primary"
-                      >
-                        {busyKey === `update-${project.id}` ? t("common.saving") : t("projects.saveChanges")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCopyConfirmId(project.id)}
-                        disabled={busyKey === `copy-${project.id}`}
-                        className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                        style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-                      >
-                        {t("projects.copyProject")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleArchiveProject(project.id)}
-                        disabled={busyKey === `archive-${project.id}`}
-                        className="button-base button-danger-ghost"
-                      >
-                        {busyKey === `archive-${project.id}` ? t("projects.archiving") : t("projects.archive")}
-                      </button>
-                    </div>
-                    {copyConfirmId === project.id ? (
-                      <div
-                        className="rounded-[var(--radius-md)] border p-3"
-                        style={{
-                          borderColor: "rgba(191, 162, 52, 0.3)",
-                          background: "rgba(191, 162, 52, 0.06)",
-                        }}
-                      >
-                        <div className="text-sm font-semibold text-[var(--text-primary)]">
-                          {t("projects.copyConfirmTitle")}
-                        </div>
-                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                          {t("projects.copyConfirmBody")}
-                        </p>
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void handleCopyProject(project)}
-                            disabled={busyKey === `copy-${project.id}`}
-                            className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
-                            style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
-                          >
-                            {busyKey === `copy-${project.id}`
-                              ? t("common.creating")
-                              : t("projects.copyProject")}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCopyConfirmId(null)}
-                            disabled={busyKey === `copy-${project.id}`}
-                            className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
-                            style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-                          >
-                            {t("common.cancel")}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </form>
-                </div>
+              <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/projects/${project.id}`)}
+                  className="button-base button-primary min-h-0 px-3 py-2 text-xs"
+                >
+                  {t("projects.openDetail")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingProjectId(project.id)}
+                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                >
+                  <Pencil size={12} /> {t("common.edit")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRemoveConfirmId(project.id)}
+                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                  style={{ borderColor: "rgba(212, 81, 94, 0.4)", color: "var(--red)" }}
+                >
+                  <Trash2 size={12} /> {t("common.remove")}
+                </button>
               </div>
             </article>
           );
         })}
       </section>
+
+      {editingProject ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setEditingProjectId(null)}
+        >
+          <div
+            className="surface-card w-full max-w-[700px] max-h-[90vh] overflow-y-auto p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("projects.editProject")}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setEditingProjectId(null)}
+                aria-label={t("common.cancel")}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <form
+              className="mt-4 grid gap-3"
+              onSubmit={(event) => void handleUpdateProject(event, editingProject.id)}
+            >
+              <TextInputWithVoice
+                name="name"
+                defaultValue={editingProject.name}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <TextInputWithVoice
+                name="address"
+                defaultValue={editingProject.address ?? ""}
+                placeholder={t("common.address")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <input
+                  name="rate"
+                  type="number"
+                  step="0.01"
+                  defaultValue={editingProject.rate}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <input
+                  name="radius_m"
+                  type="number"
+                  defaultValue={editingProject.radius_m}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <select
+                  name="status"
+                  defaultValue={editingProject.status}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="active">{t("common.active")}</option>
+                  <option value="paused">{t("common.paused")}</option>
+                  <option value="completed">{t("common.completed")}</option>
+                  <option value="archived">{t("common.archived")}</option>
+                </select>
+              </div>
+              <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3">
+                <GpsRadiusSlider
+                  defaultValue={
+                    (editingProject as { gps_radius_m?: number | null }).gps_radius_m ??
+                    GPS_RADIUS_DEFAULT
+                  }
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <input
+                  name="lat"
+                  type="number"
+                  step="0.000001"
+                  defaultValue={editingSite?.lat ?? ""}
+                  placeholder={t("projects.latitude")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <input
+                  name="lng"
+                  type="number"
+                  step="0.000001"
+                  defaultValue={editingSite?.lng ?? ""}
+                  placeholder={t("projects.longitude")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DateField
+                  name="start_date"
+                  label={t("projects.startDate")}
+                  defaultValue={editingProject.start_date ?? ""}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <DateField
+                  name="end_date"
+                  label={t("projects.endDate")}
+                  defaultValue={editingProject.end_date ?? ""}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+              </div>
+              <TextInputWithVoice
+                multiline
+                name="notes"
+                defaultValue={editingProject.notes ?? ""}
+                placeholder={t("projects.managerNotes")}
+                className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={busyKey === `update-${editingProject.id}`}
+                  className="button-base button-primary"
+                >
+                  {busyKey === `update-${editingProject.id}` ? t("common.saving") : t("projects.saveChanges")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingProjectId(null)}
+                  className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {removeConfirmId ? (() => {
+        const removeTarget = initialProjects.find((p) => p.id === removeConfirmId);
+        if (!removeTarget) return null;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ background: "rgba(0,0,0,0.5)" }}
+            onClick={() => setRemoveConfirmId(null)}
+          >
+            <div
+              className="surface-card w-full max-w-[420px] p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-base font-bold text-[var(--text-primary)]">
+                {t("projects.removeConfirmTitle")}
+              </h2>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                {t("projects.removeConfirmBody").replace("{name}", removeTarget.name)}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = removeTarget.id;
+                    setRemoveConfirmId(null);
+                    void handleArchiveProject(id);
+                  }}
+                  disabled={busyKey === `archive-${removeTarget.id}`}
+                  className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                  style={{ background: "var(--red)", color: "white" }}
+                >
+                  {busyKey === `archive-${removeTarget.id}`
+                    ? t("projects.archiving")
+                    : t("common.remove")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRemoveConfirmId(null)}
+                  className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                >
+                  {t("common.cancel")}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }
