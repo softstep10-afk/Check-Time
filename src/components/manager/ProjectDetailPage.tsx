@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, X } from "lucide-react";
+import { Pencil, Plus, X } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
@@ -64,6 +64,8 @@ export function ProjectDetailPage({
   const supabase = useMemo(() => createClient(), []);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddWorker, setShowAddWorker] = useState(false);
+  const [removeAssignmentId, setRemoveAssignmentId] = useState<string | null>(null);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
@@ -218,6 +220,7 @@ export function ProjectDetailPage({
     }
 
     setBusyKey(null);
+    setShowAddWorker(false);
     setMessage(t("projectDetail.workerAssigned"));
     router.refresh();
   }
@@ -238,6 +241,7 @@ export function ProjectDetailPage({
     }
 
     setBusyKey(null);
+    setRemoveAssignmentId(null);
     setMessage(t("projectDetail.assignmentRemoved"));
     router.refresh();
   }
@@ -676,31 +680,48 @@ export function ProjectDetailPage({
           <div className="surface-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.assignedCrew")}</h2>
-              <div className="text-xs text-[var(--text-muted)]">{assignedProfiles.length} {t("projectDetail.workers")}</div>
+              <div className="flex items-center gap-3">
+                <div className="text-xs text-[var(--text-muted)]">{assignedProfiles.length} {t("projectDetail.workers")}</div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddWorker((v) => !v)}
+                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-2 py-1 text-[11px] font-semibold"
+                  style={{
+                    background: showAddWorker ? "transparent" : "var(--brand-yellow)",
+                    color: showAddWorker ? "var(--text-primary)" : "var(--text-inverse)",
+                    border: showAddWorker ? "1px solid var(--border-default)" : "none",
+                  }}
+                >
+                  {showAddWorker ? <X size={12} /> : <Plus size={12} />}
+                  {showAddWorker ? t("common.cancel") : t("projectDetail.addWorker")}
+                </button>
+              </div>
             </div>
-            <form className="mt-4 flex gap-2" onSubmit={handleAssignWorker}>
-              <select
-                name="profile_id"
-                defaultValue=""
-                className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="" disabled>
-                  {t("projectDetail.assignWorker")}
-                </option>
-                {availableProfiles.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.name} • {worker.role}
+            {showAddWorker ? (
+              <form className="mt-4 flex gap-2" onSubmit={handleAssignWorker}>
+                <select
+                  name="profile_id"
+                  defaultValue=""
+                  className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="" disabled>
+                    {t("projectDetail.assignWorker")}
                   </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                disabled={busyKey === "assign-worker"}
-                className="button-base button-primary"
-              >
-                {t("projectDetail.assign")}
-              </button>
-            </form>
+                  {availableProfiles.map((worker) => (
+                    <option key={worker.id} value={worker.id}>
+                      {worker.name} • {worker.role}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  disabled={busyKey === "assign-worker"}
+                  className="button-base button-primary"
+                >
+                  {t("projectDetail.assign")}
+                </button>
+              </form>
+            ) : null}
             <div className="mt-4 space-y-3">
               {assignedProfiles.map((worker) => {
                 const assignment = assignments.find((entry) => entry.profile_id === worker.id);
@@ -709,47 +730,91 @@ export function ProjectDetailPage({
                 // for a solo-project worker this matches closely.
                 const weekHours = worker.weekMinutes / 60;
                 const onSiteForThisProject = worker.isOnSite && worker.currentProjectName === project.name;
+                const initial = worker.name.trim().charAt(0).toUpperCase() || "?";
                 return (
                   <div
                     key={worker.id}
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link href={`/team/${worker.id}`} className="text-sm font-semibold text-[var(--text-primary)]">
-                            {worker.name}
-                          </Link>
-                          <span
-                            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]"
-                            style={{ background: "rgba(191, 162, 52, 0.14)", color: "var(--brand-yellow)" }}
-                          >
-                            {worker.role}
-                          </span>
-                          <span
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
-                            style={{ color: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
-                          >
-                            <span
-                              className="inline-block h-1.5 w-1.5 rounded-full"
-                              style={{ background: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
-                            />
-                            {onSiteForThisProject ? t("common.onSite") : t("common.off")}
-                          </span>
+                      <div className="flex min-w-0 items-start gap-2">
+                        <div
+                          aria-hidden
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                          style={{
+                            background: "rgba(191, 162, 52, 0.18)",
+                            color: "var(--brand-yellow)",
+                          }}
+                        >
+                          {initial}
                         </div>
-                        <div className="text-[10px] text-[var(--text-muted)]">
-                          {t("common.week")}: {weekHours.toFixed(1)}h
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link href={`/team/${worker.id}`} className="text-sm font-semibold text-[var(--text-primary)]">
+                              {worker.name}
+                            </Link>
+                            <span
+                              className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.1em]"
+                              style={{ background: "rgba(191, 162, 52, 0.14)", color: "var(--brand-yellow)" }}
+                            >
+                              {worker.role}
+                            </span>
+                            <span
+                              className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                              style={{ color: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
+                            >
+                              <span
+                                className="inline-block h-1.5 w-1.5 rounded-full"
+                                style={{ background: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
+                              />
+                              {onSiteForThisProject ? t("common.onSite") : t("common.off")}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-[var(--text-muted)]">
+                            {t("common.week")}: {weekHours.toFixed(1)}h
+                          </div>
                         </div>
                       </div>
                       {assignment ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleRemoveAssignment(assignment.id)}
-                          disabled={busyKey === `remove-${assignment.id}`}
-                          className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
-                        >
-                          {t("common.remove")}
-                        </button>
+                        removeAssignmentId === assignment.id ? (
+                          <div className="flex items-center gap-1.5 text-[10px] font-semibold">
+                            <span style={{ color: "var(--red)" }}>
+                              {t("projectDetail.removeWorkerConfirm").replace("{name}", worker.name)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void handleRemoveAssignment(assignment.id)}
+                              disabled={busyKey === `remove-${assignment.id}`}
+                              className="rounded-[var(--radius-sm)] px-2 py-1"
+                              style={{ background: "var(--red)", color: "white" }}
+                            >
+                              {t("common.yes")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRemoveAssignmentId(null)}
+                              className="rounded-[var(--radius-sm)] border px-2 py-1"
+                              style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                            >
+                              {t("common.no")}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setRemoveAssignmentId(assignment.id)}
+                            disabled={busyKey === `remove-${assignment.id}`}
+                            aria-label={t("common.remove")}
+                            title={t("common.remove")}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border"
+                            style={{
+                              borderColor: "rgba(212, 81, 94, 0.3)",
+                              color: "var(--red)",
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        )
                       ) : null}
                     </div>
                   </div>
