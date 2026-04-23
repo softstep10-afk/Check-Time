@@ -50,6 +50,13 @@ export interface ManagerProjectSummary extends Project {
   weekMinutes: number;
   receiptTotal: number;
   lastActivityTime: string | null;
+  recentMedia: Array<{
+    id: string;
+    media_type: string;
+    storage_path: string;
+    filename: string | null;
+  }>;
+  recentMediaTotal: number;
 }
 
 export interface ManagerProfileSummary extends Profile {

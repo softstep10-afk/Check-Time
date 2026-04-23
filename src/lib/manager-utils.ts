@@ -240,6 +240,34 @@ export function buildProjectSummaries(
     }
   }
 
+  // Pre-index media per project — most recent first, receipts excluded,
+  // soft-deletes excluded. Keep the first 6 for the strip + a separate
+  // total count so the card can render "+N" overflow badge.
+  const mediaByProject = new Map<string, ManagerProjectSummary["recentMedia"]>();
+  const mediaTotalByProject = new Map<string, number>();
+  const sortedMedia = [...data.media].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+  );
+  for (const item of sortedMedia) {
+    if (item.deleted_at || !item.project_id) continue;
+    const meta = item.metadata as Record<string, unknown> | null;
+    if (meta?.category === "receipt") continue;
+    mediaTotalByProject.set(
+      item.project_id,
+      (mediaTotalByProject.get(item.project_id) ?? 0) + 1,
+    );
+    const list = mediaByProject.get(item.project_id) ?? [];
+    if (list.length < 6) {
+      list.push({
+        id: item.id,
+        media_type: item.media_type,
+        storage_path: item.storage_path,
+        filename: item.filename ?? null,
+      });
+      mediaByProject.set(item.project_id, list);
+    }
+  }
+
   return data.projects
     .map((project) => ({
       ...project,
@@ -249,6 +277,8 @@ export function buildProjectSummaries(
       weekMinutes: weekMinutesByProject.get(project.id) ?? 0,
       receiptTotal: receiptTotalByProject.get(project.id) ?? 0,
       lastActivityTime: lastActivityByProject.get(project.id) ?? null,
+      recentMedia: mediaByProject.get(project.id) ?? [],
+      recentMediaTotal: mediaTotalByProject.get(project.id) ?? 0,
     }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }

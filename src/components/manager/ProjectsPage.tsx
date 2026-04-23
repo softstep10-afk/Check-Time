@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { Copy, Check, Plus, Pencil, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Copy, Check, Plus, Pencil, Trash2, X, FileText, Play } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import {
@@ -19,6 +19,7 @@ import {
   toSupabasePoint,
 } from "@/lib/worker-utils";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
+import { normalizeStoragePath } from "@/lib/task-attachments";
 import type {
   ProjectBudgetStatus,
   ProjectStatus,
@@ -124,6 +125,110 @@ function TrafficLights({
         className="inline-block h-2.5 w-2.5 cursor-pointer rounded-full border-0 p-0"
         style={{ background: BUDGET_COLOR[budget] }}
       />
+    </div>
+  );
+}
+
+function useThumbnailUrl(storagePath: string): string | null {
+  const supabase = useMemo(() => createClient(), []);
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const normalized = normalizeStoragePath(storagePath);
+      const { data } = await supabase.storage
+        .from("media")
+        .createSignedUrl(normalized, 3600);
+      if (!cancelled) setUrl(data?.signedUrl ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, storagePath]);
+  return url;
+}
+
+function ProjectThumb({
+  item,
+  onClick,
+}: {
+  item: ManagerProjectSummary["recentMedia"][number];
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const isPhoto = item.media_type === "photo";
+  const isVideo = item.media_type === "video";
+  const url = useThumbnailUrl(isPhoto ? item.storage_path : "");
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={item.filename ?? item.media_type}
+      aria-label={item.filename ?? item.media_type}
+      className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-md)] border"
+      style={{
+        borderColor: "var(--border-default)",
+        background: isPhoto && url ? "transparent" : "rgba(15, 17, 23, 0.9)",
+        color: "var(--text-muted)",
+      }}
+    >
+      {isPhoto ? (
+        url ? (
+          // Signed URL is time-limited; plain <img> lazy-loaded is correct
+          // here — next/image would require a loader + domain allowlist.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={url}
+            alt={item.filename ?? "thumbnail"}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="h-full w-full animate-pulse" style={{ background: "rgba(148, 163, 184, 0.12)" }} />
+        )
+      ) : isVideo ? (
+        <Play size={16} style={{ color: "white" }} />
+      ) : (
+        <FileText size={16} style={{ color: "white" }} />
+      )}
+    </button>
+  );
+}
+
+function ProjectThumbStrip({
+  projectId,
+  items,
+  total,
+}: {
+  projectId: string;
+  items: ManagerProjectSummary["recentMedia"];
+  total: number;
+}) {
+  const router = useRouter();
+  const visible = items.slice(0, 6);
+  const overflow = Math.max(0, total - visible.length);
+  function goToProject(e: React.MouseEvent) {
+    e.stopPropagation();
+    router.push(`/projects/${projectId}`);
+  }
+  return (
+    <div className="mt-2 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+      {visible.map((item) => (
+        <ProjectThumb key={item.id} item={item} onClick={goToProject} />
+      ))}
+      {overflow > 0 ? (
+        <button
+          type="button"
+          onClick={goToProject}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-md)] border text-[10px] font-semibold"
+          style={{
+            borderColor: "var(--border-default)",
+            color: "var(--text-muted)",
+            background: "rgba(15, 17, 23, 0.9)",
+          }}
+        >
+          +{overflow}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -667,13 +772,21 @@ export function ProjectsPage({
                 <div className="text-xs italic" style={{ color: notesPreview ? "var(--text-secondary)" : "var(--text-muted)" }}>
                   {notesPreview ?? t("projects.noNotesHint")}
                 </div>
+
+                {project.recentMedia.length > 0 ? (
+                  <ProjectThumbStrip
+                    projectId={project.id}
+                    items={project.recentMedia}
+                    total={project.recentMediaTotal}
+                  />
+                ) : null}
               </div>
 
               <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() => router.push(`/projects/${project.id}`)}
-                  className="button-base button-primary min-h-0 px-3 py-2 text-xs"
+                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold" style={{ background: "#f59e0b", color: "#000", border: "none" }}
                 >
                   {t("projects.openDetail")}
                 </button>
@@ -681,7 +794,7 @@ export function ProjectsPage({
                   type="button"
                   onClick={() => setEditingProjectId(project.id)}
                   className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                  style={{ borderColor: "#3b82f6", color: "#3b82f6", background: "transparent" }}
                 >
                   <Pencil size={12} /> {t("common.edit")}
                 </button>
@@ -689,7 +802,7 @@ export function ProjectsPage({
                   type="button"
                   onClick={() => setRemoveConfirmId(project.id)}
                   className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                  style={{ borderColor: "rgba(212, 81, 94, 0.4)", color: "var(--red)" }}
+                  style={{ borderColor: "#ef4444", color: "#ef4444", background: "transparent" }}
                 >
                   <Trash2 size={12} /> {t("common.remove")}
                 </button>
@@ -822,7 +935,7 @@ export function ProjectsPage({
                   type="button"
                   onClick={() => setEditingProjectId(null)}
                   className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                  style={{ borderColor: "#3b82f6", color: "#3b82f6", background: "transparent" }}
                 >
                   {t("common.cancel")}
                 </button>
@@ -871,7 +984,7 @@ export function ProjectsPage({
                   type="button"
                   onClick={() => setRemoveConfirmId(null)}
                   className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
-                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                  style={{ borderColor: "#3b82f6", color: "#3b82f6", background: "transparent" }}
                 >
                   {t("common.cancel")}
                 </button>
