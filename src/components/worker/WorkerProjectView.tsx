@@ -20,12 +20,20 @@ const STORES = [
   "Supply Masters",
 ];
 
+type MaterialStatus = "needed" | "ordered" | "delivered";
+
 type MaterialRow = {
   id: string;
   title: string;
   quantity: string;
-  delivered: boolean;
+  status: MaterialStatus;
 };
+
+function mapTaskStatusToMaterialStatus(taskStatus: string): MaterialStatus {
+  if (taskStatus === "done") return "delivered";
+  if (taskStatus === "in_progress") return "ordered";
+  return "needed";
+}
 
 export function WorkerProjectView({
   project,
@@ -155,7 +163,7 @@ function WorkerMaterialsList({ projectId }: { projectId: string }) {
           id: r.id,
           title: r.title,
           quantity: (r.metadata?.quantity as string) ?? "",
-          delivered: r.status === "done",
+          status: mapTaskStatusToMaterialStatus(r.status),
         })),
       );
       setLoading(false);
@@ -182,28 +190,48 @@ function WorkerMaterialsList({ projectId }: { projectId: string }) {
             {t("materials.empty")}
           </div>
         ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-              style={{ opacity: item.delivered ? 0.55 : 1 }}
-            >
-              <span
-                className="text-sm font-semibold text-[var(--text-primary)]"
-                style={{ textDecoration: item.delivered ? "line-through" : "none" }}
+          items.map((item) => {
+            const delivered = item.status === "delivered";
+            const statusColor =
+              item.status === "delivered"
+                ? "var(--green)"
+                : item.status === "ordered"
+                  ? "var(--brand-yellow)"
+                  : "var(--text-muted)";
+            const statusLabel =
+              item.status === "delivered"
+                ? t("materials.delivered")
+                : item.status === "ordered"
+                  ? t("materials.ordered")
+                  : t("materials.needed");
+            return (
+              <div
+                key={item.id}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                style={{ opacity: delivered ? 0.6 : 1 }}
               >
-                {item.title}
-              </span>
-              {item.quantity ? (
-                <span className="ml-2 text-xs text-[var(--text-muted)]">×{item.quantity}</span>
-              ) : null}
-              {item.delivered ? (
-                <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--green)" }}>
-                  {t("materials.delivered")}
-                </span>
-              ) : null}
-            </div>
-          ))
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span
+                      className="text-sm font-semibold text-[var(--text-primary)]"
+                      style={{ textDecoration: delivered ? "line-through" : "none" }}
+                    >
+                      {item.title}
+                    </span>
+                    {item.quantity ? (
+                      <span className="ml-2 text-xs text-[var(--text-muted)]">×{item.quantity}</span>
+                    ) : null}
+                  </div>
+                  <span
+                    className="shrink-0 rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                    style={{ background: `${statusColor}1f`, color: statusColor }}
+                  >
+                    {statusLabel}
+                  </span>
+                </div>
+              </div>
+            );
+          })
         )}
       </div>
     </section>

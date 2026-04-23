@@ -961,6 +961,8 @@ export const translations = {
   "materials.name": { en: "Material name", ru: "Название материала" },
   "materials.quantity": { en: "Qty", ru: "Кол-во" },
   "materials.delivered": { en: "Delivered", ru: "Доставлено" },
+  "materials.ordered": { en: "Ordered", ru: "Заказано" },
+  "materials.needed": { en: "Needed", ru: "Нужно" },
   "materials.empty": { en: "No materials added yet.", ru: "Материалы ещё не добавлены." },
   "materials.urgent": { en: "Urgent", ru: "Срочно" },
   "materials.soon": { en: "Needed soon", ru: "Скоро нужно" },
