@@ -1,12 +1,14 @@
-import { getManagerWorkspaceData } from "@/lib/manager-data";
+import { getPayrollPageData } from "@/lib/manager-data";
 import { buildManagerSessions } from "@/lib/manager-utils";
 import { PayrollCalculator } from "@/components/manager/PayrollCalculator";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 
+export const revalidate = 30;
+
 export default async function PayrollPage() {
   const locale = await getServerLocale();
   const t = (key: Parameters<typeof serverT>[1]) => serverT(locale, key);
-  const data = await getManagerWorkspaceData();
+  const data = await getPayrollPageData();
   const sessions = buildManagerSessions(data);
 
   return (

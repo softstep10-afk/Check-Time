@@ -1,9 +1,11 @@
 import { ManagerTasksPage } from "@/components/manager/ManagerTasksPage";
-import { getManagerWorkspaceData } from "@/lib/manager-data";
+import { getProjectsPageData } from "@/lib/manager-data";
 import { getAttachmentMediaIds, type TaskAttachmentRef } from "@/lib/task-attachments";
 
+export const revalidate = 30;
+
 export default async function ManagerTasksRoutePage() {
-  const data = await getManagerWorkspaceData();
+  const data = await getProjectsPageData();
 
   const projects = data.projects
     .filter((project) => !project.deleted_at)

@@ -1,9 +1,11 @@
 import { TeamPage } from "@/components/manager/TeamPage";
-import { getManagerWorkspaceData } from "@/lib/manager-data";
+import { getTeamPageData } from "@/lib/manager-data";
 import { buildManagerSessions, buildProfileSummaries } from "@/lib/manager-utils";
 
+export const revalidate = 30;
+
 export default async function TeamRoutePage() {
-  const data = await getManagerWorkspaceData();
+  const data = await getTeamPageData();
   const sessions = buildManagerSessions(data);
   const profileSummaries = buildProfileSummaries(data, sessions).filter(
     (profile) => !profile.deleted_at,

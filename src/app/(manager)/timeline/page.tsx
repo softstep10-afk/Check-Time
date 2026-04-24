@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { DateRangePresets } from "@/components/shared/DateRangePresets";
-import { getManagerWorkspaceData } from "@/lib/manager-data";
+import { getTimelinePageData } from "@/lib/manager-data";
 import { buildTimelineItems } from "@/lib/manager-utils";
+
+export const revalidate = 30;
 import { formatDateTime } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 
@@ -72,7 +74,7 @@ export default async function TimelinePage({
   const end = readParam(params.end);
   const range = readParam(params.range);
   const endExclusive = end ? endOfDayPlusOne(end) : "";
-  const data = await getManagerWorkspaceData();
+  const data = await getTimelinePageData();
   const timeline = buildTimelineItems(data).filter((item) => {
     if (worker && item.profile_id !== worker) {
       return false;

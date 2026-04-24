@@ -1,9 +1,11 @@
 import { ProjectsPage } from "@/components/manager/ProjectsPage";
-import { getManagerWorkspaceData } from "@/lib/manager-data";
+import { getProjectsPageData } from "@/lib/manager-data";
 import { buildManagerSessions, buildProjectSummaries } from "@/lib/manager-utils";
 
+export const revalidate = 30;
+
 export default async function ProjectsRoutePage() {
-  const data = await getManagerWorkspaceData();
+  const data = await getProjectsPageData();
   const sessions = buildManagerSessions(data);
   const projectSummaries = buildProjectSummaries(data, sessions);
 
