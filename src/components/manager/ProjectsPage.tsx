@@ -445,6 +445,54 @@ export function ProjectsPage({
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [pickingLocation, setPickingLocation] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused" | "completed">("active");
+  const [sortBy, setSortBy] = useState<"activity" | "name" | "week" | "cost">("activity");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Debounce the live search 300ms so typing doesn't thrash the filter.
+  useEffect(() => {
+    const id = setTimeout(() => setSearchQuery(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+
+  const visibleProjects = useMemo(() => {
+    let list = initialProjects;
+    if (statusFilter !== "all") list = list.filter((p) => p.status === statusFilter);
+    if (searchQuery) {
+      list = list.filter((p) => {
+        return (
+          p.name.toLowerCase().includes(searchQuery) ||
+          (p.address ?? "").toLowerCase().includes(searchQuery)
+        );
+      });
+    }
+    const sorted = [...list];
+    if (sortBy === "name") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === "week") {
+      sorted.sort((a, b) => b.weekMinutes - a.weekMinutes);
+    } else if (sortBy === "cost") {
+      sorted.sort((a, b) => b.receiptTotal - a.receiptTotal);
+    } else {
+      // activity: live (on-site now) first, then most-recent, then stale.
+      sorted.sort((a, b) => {
+        const aScore =
+          a.onSiteWorkerCount > 0 ? 2 : a.lastActivityTime ? 1 : 0;
+        const bScore =
+          b.onSiteWorkerCount > 0 ? 2 : b.lastActivityTime ? 1 : 0;
+        if (aScore !== bScore) return bScore - aScore;
+        if (a.lastActivityTime && b.lastActivityTime) {
+          return (
+            new Date(b.lastActivityTime).getTime() -
+            new Date(a.lastActivityTime).getTime()
+          );
+        }
+        return a.name.localeCompare(b.name);
+      });
+    }
+    return sorted;
+  }, [initialProjects, statusFilter, sortBy, searchQuery]);
   const createLatRef = useRef<HTMLInputElement>(null);
   const createLngRef = useRef<HTMLInputElement>(null);
   const editingProject =
@@ -776,8 +824,61 @@ export function ProjectsPage({
         ) : null}
       </section>
 
+      <section className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap gap-1.5">
+          {(
+            [
+              { key: "all", label: t("projects.filterAll") },
+              { key: "active", label: t("common.active") },
+              { key: "paused", label: t("common.paused") },
+              { key: "completed", label: t("common.completed") },
+            ] as const
+          ).map(({ key, label }) => {
+            const selected = statusFilter === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStatusFilter(key)}
+                aria-pressed={selected}
+                className="rounded-[var(--radius-pill)] border px-3 py-1 text-xs font-semibold"
+                style={{
+                  borderColor: selected ? "var(--brand-yellow)" : "var(--border-default)",
+                  background: selected ? "rgba(191, 162, 52, 0.14)" : "transparent",
+                  color: selected ? "var(--brand-yellow)" : "var(--text-secondary)",
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+          className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+          aria-label={t("projects.sortBy")}
+        >
+          <option value="activity">{t("projects.sortActivity")}</option>
+          <option value="name">{t("projects.sortName")}</option>
+          <option value="week">{t("projects.sortWeek")}</option>
+          <option value="cost">{t("projects.sortCost")}</option>
+        </select>
+        <input
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder={t("projects.searchPlaceholder")}
+          className="min-w-[180px] flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+        />
+        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+          {t("projects.shownCount")
+            .replace("{shown}", String(visibleProjects.length))
+            .replace("{total}", String(initialProjects.length))}
+        </div>
+      </section>
+
       <section className="grid gap-4 xl:grid-cols-2">
-        {initialProjects.map((project) => {
+        {visibleProjects.map((project) => {
           const state = activityState(project);
           const cardBorder =
             state === "live"
