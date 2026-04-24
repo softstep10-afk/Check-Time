@@ -615,6 +615,8 @@ export const translations = {
   "projects.sortCost": { en: "By cost", ru: "По стоимости" },
   "projects.searchPlaceholder": { en: "Search name or address…", ru: "Поиск по имени или адресу…" },
   "projects.shownCount": { en: "Shown {shown} of {total}", ru: "Показано {shown} из {total}" },
+  "team.addWorkerCta": { en: "Add Worker", ru: "Добавить рабочего" },
+  "team.showInactive": { en: "Show inactive ({n})", ru: "Показать неактивных ({n})" },
   "journal.bigBtnPhoto": { en: "Photo", ru: "Фото" },
   "journal.bigBtnVideo": { en: "Video", ru: "Видео" },
   "journal.bigBtnPdf": { en: "PDF", ru: "PDF" },

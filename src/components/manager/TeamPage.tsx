@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, MessageSquare, Trash2 } from "lucide-react";
+import { Pencil, MessageSquare, Trash2, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDurationCompact } from "@/lib/worker-utils";
 import type { ManagerProfileSummary } from "@/lib/manager-types";
@@ -31,14 +31,16 @@ const roleOptions: UserRole[] = [
   "owner",
 ];
 
+// Wave 10 spec colors — kept consistent across the roster, mobile row,
+// and any role-pill surface that reads from this map.
 const ROLE_TAG_COLORS: Record<string, { bg: string; color: string }> = {
-  worker: { bg: "rgba(245, 158, 11, 0.12)", color: "#f59e0b" },
-  driver: { bg: "rgba(34, 197, 94, 0.12)", color: "#22c55e" },
-  supervisor: { bg: "rgba(59, 130, 246, 0.12)", color: "#3b82f6" },
-  subcontractor: { bg: "rgba(168, 85, 247, 0.12)", color: "#a855f7" },
-  manager: { bg: "rgba(59, 130, 246, 0.12)", color: "#3b82f6" },
-  admin: { bg: "rgba(245, 158, 11, 0.12)", color: "#f59e0b" },
-  owner: { bg: "rgba(245, 158, 11, 0.2)", color: "#f59e0b" },
+  owner: { bg: "rgba(245, 158, 11, 0.18)", color: "#f59e0b" },          // gold
+  admin: { bg: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" },          // gold
+  manager: { bg: "rgba(59, 130, 246, 0.14)", color: "#3b82f6" },        // blue
+  supervisor: { bg: "rgba(139, 92, 246, 0.14)", color: "#8b5cf6" },     // purple
+  driver: { bg: "rgba(34, 197, 94, 0.14)", color: "#22c55e" },          // green
+  worker: { bg: "rgba(107, 114, 128, 0.18)", color: "#9ca3af" },        // gray (lighter text on dark bg)
+  subcontractor: { bg: "rgba(249, 115, 22, 0.14)", color: "#f97316" },  // orange
 };
 
 const AVATAR_COLORS = ["#f59e0b", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#06b6d4", "#f97316", "#ec4899"];
@@ -65,6 +67,7 @@ export function TeamPage({
   const [messageType, setMessageType] = useState<"success" | "error" | "info">("info");
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
   const [nameError, setNameError] = useState("");
   const [pinError, setPinError] = useState("");
   const [pinValue, setPinValue] = useState(() =>
@@ -85,6 +88,10 @@ export function TeamPage({
   const visibleProfiles = useMemo(() => {
     let filtered = initialProfiles;
 
+    if (!showInactive) {
+      filtered = filtered.filter((p) => p.is_active);
+    }
+
     if (roleFilter) {
       filtered = filtered.filter((p) => p.role === roleFilter);
     }
@@ -103,7 +110,20 @@ export function TeamPage({
     }
 
     return filtered;
-  }, [initialProfiles, query, roleFilter]);
+  }, [initialProfiles, query, roleFilter, showInactive]);
+
+  const inactiveCount = useMemo(
+    () => initialProfiles.filter((p) => !p.is_active).length,
+    [initialProfiles],
+  );
+
+  function scrollToCreateForm() {
+    const el = document.querySelector<HTMLInputElement>('form input[name="name"]');
+    if (el) {
+      el.focus();
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
 
 
   function validateName(value: string) {
@@ -199,16 +219,29 @@ export function TeamPage({
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
-      <section className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          {t("team.title")}
-        </p>
-        <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
-          {t("team.subtitle")}
-        </h1>
-        <p className="max-w-[60ch] text-sm leading-6 text-[var(--text-secondary)]">
-          {t("team.description")}
-        </p>
+      <section className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {t("team.title")}
+          </p>
+          <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
+            {t("team.subtitle")}
+          </h1>
+          <p className="max-w-[60ch] text-sm leading-6 text-[var(--text-secondary)]">
+            {t("team.description")}
+          </p>
+        </div>
+        {hasAdminProvisioning ? (
+          <button
+            type="button"
+            onClick={scrollToCreateForm}
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold"
+            style={{ background: "#f59e0b", color: "#0a0c14" }}
+          >
+            <UserPlus size={14} />
+            {t("team.addWorkerCta")}
+          </button>
+        ) : null}
       </section>
 
       {message ? (
@@ -543,6 +576,22 @@ export function TeamPage({
               </div>
             </div>
           </div>
+
+          {inactiveCount > 0 ? (
+            <div className="mt-3 flex items-center justify-end">
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={showInactive}
+                  onChange={(e) => setShowInactive(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                <span>
+                  {t("team.showInactive").replace("{n}", String(inactiveCount))}
+                </span>
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-4">
