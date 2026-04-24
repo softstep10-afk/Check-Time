@@ -226,6 +226,7 @@ export const translations = {
   "projects.useCurrentLocation": { en: "Use my current location", ru: "Моё местоположение" },
   "projects.locationDenied": { en: "Location access denied.", ru: "Доступ к геолокации запрещён." },
   "projects.locationUnavailable": { en: "Location unavailable on this device.", ru: "Геолокация недоступна на этом устройстве." },
+  "projects.locationTimeout": { en: "Location request timed out. Try again or enter coordinates by hand.", ru: "Геолокация не успела ответить. Попробуйте ещё раз или введите координаты вручную." },
   "projects.latitude": { en: "Latitude", ru: "Широта" },
   "projects.longitude": { en: "Longitude", ru: "Долгота" },
   "projects.managerNotes": { en: "Manager notes", ru: "Заметки менеджера" },

@@ -495,11 +495,16 @@ export function ProjectsPage({
   }, [initialProjects, statusFilter, sortBy, searchQuery]);
   const createLatRef = useRef<HTMLInputElement>(null);
   const createLngRef = useRef<HTMLInputElement>(null);
+  const editLatRef = useRef<HTMLInputElement>(null);
+  const editLngRef = useRef<HTMLInputElement>(null);
   const editingProject =
     initialProjects.find((p) => p.id === editingProjectId) ?? null;
   const editingSite = editingProject ? parseGeoPoint(editingProject.site_point) : null;
 
-  function fillCurrentLocation() {
+  function fillCurrentLocation(
+    targetLatRef: React.RefObject<HTMLInputElement | null>,
+    targetLngRef: React.RefObject<HTMLInputElement | null>,
+  ) {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setMessage(t("projects.locationUnavailable"));
       return;
@@ -507,19 +512,31 @@ export function ProjectsPage({
     setPickingLocation(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        if (createLatRef.current) {
-          createLatRef.current.value = position.coords.latitude.toFixed(6);
+        if (targetLatRef.current) {
+          targetLatRef.current.value = position.coords.latitude.toFixed(6);
         }
-        if (createLngRef.current) {
-          createLngRef.current.value = position.coords.longitude.toFixed(6);
+        if (targetLngRef.current) {
+          targetLngRef.current.value = position.coords.longitude.toFixed(6);
         }
         setPickingLocation(false);
       },
-      () => {
-        setMessage(t("projects.locationDenied"));
+      (err: GeolocationPositionError) => {
+        // Route to a code-specific message so "I didn't get a fix in time"
+        // doesn't surface as "you denied permission". Previously every
+        // failure landed on the same locationDenied banner.
+        const key =
+          err.code === err.PERMISSION_DENIED
+            ? "projects.locationDenied"
+            : err.code === err.TIMEOUT
+              ? "projects.locationTimeout"
+              : "projects.locationUnavailable";
+        setMessage(t(key));
         setPickingLocation(false);
       },
-      { enableHighAccuracy: true, timeout: 10_000, maximumAge: 30_000 },
+      // 20s timeout (was 10s) — desktop browsers without GPS hardware fall
+      // back to Wi-Fi triangulation which routinely takes 10–15s on first
+      // call. maximumAge bumped too so a fresh tab-open isn't penalized.
+      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 60_000 },
     );
   }
 
@@ -788,7 +805,7 @@ export function ProjectsPage({
             />
             <button
               type="button"
-              onClick={fillCurrentLocation}
+              onClick={() => fillCurrentLocation(createLatRef, createLngRef)}
               disabled={pickingLocation}
               title={t("projects.useCurrentLocation")}
               aria-label={t("projects.useCurrentLocation")}
@@ -1105,15 +1122,30 @@ export function ProjectsPage({
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex items-stretch gap-2">
+                  <input
+                    ref={editLatRef}
+                    name="lat"
+                    type="number"
+                    step="0.000001"
+                    defaultValue={editingSite?.lat ?? ""}
+                    placeholder={t("projects.latitude")}
+                    className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fillCurrentLocation(editLatRef, editLngRef)}
+                    disabled={pickingLocation}
+                    title={t("projects.useCurrentLocation")}
+                    aria-label={t("projects.useCurrentLocation")}
+                    className="inline-flex shrink-0 items-center justify-center rounded-[var(--radius-md)] border px-3 text-base disabled:opacity-50"
+                    style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+                  >
+                    {pickingLocation ? "…" : "📍"}
+                  </button>
+                </div>
                 <input
-                  name="lat"
-                  type="number"
-                  step="0.000001"
-                  defaultValue={editingSite?.lat ?? ""}
-                  placeholder={t("projects.latitude")}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                />
-                <input
+                  ref={editLngRef}
                   name="lng"
                   type="number"
                   step="0.000001"
