@@ -545,6 +545,15 @@ export function ProjectsPage({
       return;
     }
 
+    // Coordinates are now required: without them the worker-side
+    // geofence has nothing to check against and anyone can clock in
+    // from anywhere on this project. Refuse the insert before it
+    // reaches Supabase rather than saving a site_point: null row.
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setMessage(t("projects.coordsRequired"));
+      return;
+    }
+
     setBusyKey("create");
     setMessage("");
 

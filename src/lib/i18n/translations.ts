@@ -230,6 +230,7 @@ export const translations = {
   "projects.longitude": { en: "Longitude", ru: "Долгота" },
   "projects.managerNotes": { en: "Manager notes", ru: "Заметки менеджера" },
   "projects.nameRequired": { en: "Project name is required.", ru: "Название проекта обязательно." },
+  "projects.coordsRequired": { en: "Latitude and longitude are required. Use the 📍 button or enter coordinates by hand — without them the GPS fence can't protect this site.", ru: "Широта и долгота обязательны. Нажмите 📍 или введите координаты вручную — без них GPS-геозона не защитит этот объект." },
   "projects.created": { en: "Project created.", ru: "Проект создан." },
   "projects.updated": { en: "Project updated.", ru: "Проект обновлён." },
   "projects.archived": { en: "Project archived.", ru: "Проект архивирован." },
