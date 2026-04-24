@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 import { TeamMemberPage } from "@/components/manager/TeamMemberPage";
-import { getManagerWorkspaceData } from "@/lib/manager-data";
+import { getTeamPageData } from "@/lib/manager-data";
+import { createClient } from "@/lib/supabase/server";
 import {
   buildManagerSessions,
   buildProfileSummaries,
   buildProjectSummaries,
 } from "@/lib/manager-utils";
+import type { Media } from "@/types/database";
+
+export const revalidate = 30;
 
 export default async function TeamMemberRoutePage({
   params,
@@ -13,7 +17,7 @@ export default async function TeamMemberRoutePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getManagerWorkspaceData();
+  const data = await getTeamPageData();
   const sessions = buildManagerSessions(data);
   const profileSummaries = buildProfileSummaries(data, sessions);
   const projectSummaries = buildProjectSummaries(data, sessions);
@@ -44,14 +48,23 @@ export default async function TeamMemberRoutePage({
     .slice(0, 20);
 
   // Worker's recent journal entries (newest first), enriched with project name.
+  // getTeamPageData skips media on purpose — query just this worker's rows
+  // inline so the detail page still renders the journal without a broad
+  // org-wide fetch.
   const projectsById = new Map(data.projects.map((p) => [p.id, p.name]));
-  const workerMedia = data.media
-    .filter((m) => m.uploaded_by === id && !m.deleted_at)
-    .slice(0, 20)
-    .map((m) => ({
-      ...m,
-      projectName: m.project_id ? projectsById.get(m.project_id) ?? null : null,
-    }));
+  const supabase = await createClient();
+  const { data: workerMediaRows } = await supabase
+    .from("media")
+    .select("*")
+    .eq("uploaded_by", id)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(20)
+    .returns<Media[]>();
+  const workerMedia = (workerMediaRows ?? []).map((m) => ({
+    ...m,
+    projectName: m.project_id ? projectsById.get(m.project_id) ?? null : null,
+  }));
 
   return (
     <TeamMemberPage
