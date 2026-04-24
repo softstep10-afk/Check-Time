@@ -223,42 +223,68 @@ function isoDaysAgo(days: number): string {
 
 /**
  * Projects / Tasks / Project-Detail pages. Fetches the project-facing
- * tables only; skips time_events, payroll tables, and store_visits —
- * those pages never read them.
+ * tables plus a narrow 14-day window of time_events — the window is
+ * the minimum needed for buildManagerSessions() / buildProjectSummaries()
+ * to compute:
+ *   - onSiteWorkerCount     (open sessions right now)
+ *   - weekMinutes           (current Mon-Sun always fits in 14 days)
+ *   - lastActivityTime      (most-recent event per project)
+ *   - activityState()       (live / open / stale thresholds)
+ * Without this the projects page showed 0 on-site, 0 week hours, and a
+ * null lastActivityTime for every card, which forced every traffic-
+ * light activity dot to read cold and broke the "sort by activity" and
+ * "sort by week" options. Payroll tables + store_visits are still
+ * skipped — they're not read on these pages.
  */
 export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData> => {
   const resolved = await resolveContextOrPreview();
   if (resolved.preview) return resolved.preview;
   const { supabase, context } = resolved;
 
-  const [profilesResult, projectsResult, assignmentsResult, tasksResult, mediaResult] =
-    await Promise.all([
-      supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
-      supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
-      supabase
-        .from("project_assignments")
-        .select("*")
-        .order("assigned_at", { ascending: false })
-        .returns<ProjectAssignment[]>(),
-      supabase
-        .from("tasks")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .range(0, 199)
-        .returns<Task[]>(),
-      supabase
-        .from("media")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .range(0, 149)
-        .returns<Media[]>(),
-    ]);
+  const since14d = isoDaysAgo(14);
+
+  const [
+    profilesResult,
+    projectsResult,
+    assignmentsResult,
+    tasksResult,
+    mediaResult,
+    timeEventsResult,
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
+    supabase
+      .from("project_assignments")
+      .select("*")
+      .order("assigned_at", { ascending: false })
+      .returns<ProjectAssignment[]>(),
+    supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(0, 199)
+      .returns<Task[]>(),
+    supabase
+      .from("media")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(0, 149)
+      .returns<Media[]>(),
+    supabase
+      .from("time_events")
+      .select("*")
+      .gte("event_time", since14d)
+      .order("event_time", { ascending: false })
+      .range(0, 499)
+      .returns<TimeEvent[]>(),
+  ]);
 
   assertNoError(profilesResult.error, "Profiles query failed");
   assertNoError(projectsResult.error, "Projects query failed");
   assertNoError(assignmentsResult.error, "Assignments query failed");
   assertNoError(tasksResult.error, "Tasks query failed");
   assertNoError(mediaResult.error, "Media query failed");
+  assertNoError(timeEventsResult.error, "Time events query failed");
 
   return {
     manager: context.profile,
@@ -267,7 +293,7 @@ export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData>
     projects: projectsResult.data ?? [],
     assignments: assignmentsResult.data ?? [],
     tasks: tasksResult.data ?? [],
-    timeEvents: [],
+    timeEvents: timeEventsResult.data ?? [],
     media: mediaResult.data ?? [],
     payrollRuns: [],
     payrollClosures: [],
