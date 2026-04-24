@@ -511,6 +511,13 @@ export function PayrollCalculator({
 
   async function approveAll() {
     if (!period) return;
+    const previous = period;
+
+    // Optimistic flip so the buttons re-render immediately ("Approve All"
+    // → "Mark All Paid"). Roll back if the DB writes fail.
+    setPeriod((prev) =>
+      prev ? { ...prev, status: "approved", lines: prev.lines.map((l) => ({ ...l, status: "approved" })) } : prev,
+    );
 
     if (!AUTH_BYPASS_ENABLED) {
       const { error: pErr } = await supabase.from("pay_periods").update({
@@ -519,12 +526,14 @@ export function PayrollCalculator({
         approved_at: new Date().toISOString(),
       }).eq("id", period.id);
 
-      if (pErr) { setError(pErr.message); return; }
+      if (pErr) { setPeriod(previous); setError(pErr.message); return; }
 
-      await supabase.from("pay_period_items").update({ status: "approved" }).eq("pay_period_id", period.id);
+      const { error: iErr } = await supabase
+        .from("pay_period_items")
+        .update({ status: "approved" })
+        .eq("pay_period_id", period.id);
+      if (iErr) { setPeriod(previous); setError(iErr.message); return; }
     }
-
-    setPeriod((prev) => prev ? { ...prev, status: "approved", lines: prev.lines.map((l) => ({ ...l, status: "approved" })) } : prev);
 
     void logAudit({
       orgId,
@@ -541,6 +550,11 @@ export function PayrollCalculator({
 
   async function markAllPaid() {
     if (!period) return;
+    const previous = period;
+
+    setPeriod((prev) =>
+      prev ? { ...prev, status: "paid", lines: prev.lines.map((l) => ({ ...l, status: "paid" })) } : prev,
+    );
 
     if (!AUTH_BYPASS_ENABLED) {
       const { error: pErr } = await supabase.from("pay_periods").update({
@@ -548,12 +562,14 @@ export function PayrollCalculator({
         paid_at: new Date().toISOString(),
       }).eq("id", period.id);
 
-      if (pErr) { setError(pErr.message); return; }
+      if (pErr) { setPeriod(previous); setError(pErr.message); return; }
 
-      await supabase.from("pay_period_items").update({ status: "paid" }).eq("pay_period_id", period.id);
+      const { error: iErr } = await supabase
+        .from("pay_period_items")
+        .update({ status: "paid" })
+        .eq("pay_period_id", period.id);
+      if (iErr) { setPeriod(previous); setError(iErr.message); return; }
     }
-
-    setPeriod((prev) => prev ? { ...prev, status: "paid", lines: prev.lines.map((l) => ({ ...l, status: "paid" })) } : prev);
 
     void logAudit({
       orgId,
