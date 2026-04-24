@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ProjectsStatusMap } from "@/components/maps/ProjectsStatusMap";
+import { FullscreenMapWrapper } from "@/components/maps/FullscreenMapWrapper";
 import { ForceCheckoutButton } from "@/components/manager/ForceCheckoutButton";
 import { EventFeed, type FeedEvent } from "@/components/manager/EventFeed";
 import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
@@ -12,6 +13,8 @@ import {
 } from "@/lib/manager-utils";
 import { formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
+
+export const revalidate = 60;
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -314,33 +317,6 @@ export default async function OverviewPage() {
         </div>
       </section>
 
-      <section className="flex flex-wrap gap-3">
-        <Link
-          href="/payroll?calc=true"
-          className="inline-flex items-center gap-2 rounded-[var(--radius-md)] px-5 py-3 text-sm font-semibold shadow-sm transition-opacity hover:opacity-85"
-          style={{ background: "#f59e0b", color: "#000" }}
-        >
-          <span className="text-base">🧮</span>
-          {t("overview.calculator")}
-        </Link>
-        <Link
-          href="/payroll?report=annual"
-          className="inline-flex items-center gap-2 rounded-[var(--radius-md)] px-5 py-3 text-sm font-semibold shadow-sm transition-opacity hover:opacity-85"
-          style={{ background: "#3b82f6", color: "#fff" }}
-        >
-          <span className="text-base">📊</span>
-          {t("overview.annualReport")}
-        </Link>
-        <Link
-          href="/payroll"
-          className="inline-flex items-center gap-2 rounded-[var(--radius-md)] px-5 py-3 text-sm font-semibold shadow-sm transition-opacity hover:opacity-85"
-          style={{ background: "#ef4444", color: "#fff" }}
-        >
-          <span className="text-base">🚀</span>
-          {t("overview.processPayroll")}
-        </Link>
-      </section>
-
       <section className="surface-card p-4">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -353,11 +329,7 @@ export default async function OverviewPage() {
             {t("overview.openProjects")}
           </Link>
         </div>
-        <div className="mt-4 h-[220px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] md:h-[300px]">
-          <ProjectsStatusMap
-            projects={projectSummaries.filter((project) => project.status !== "completed")}
-          />
-        </div>
+        <FullscreenMapWrapper projects={projectSummaries} />
       </section>
 
       {/* ── Currently on site table ── */}
