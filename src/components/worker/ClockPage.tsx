@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, MapPin, Navigation, ShieldCheck } from "lucide-react";
 import { WorkerGpsCheckMap } from "@/components/maps/WorkerGpsCheckMap";
@@ -40,6 +40,22 @@ export function ClockPage() {
   );
   const lastClosedSession =
     shell.sessions.find((session) => session.clockOutTime !== null) ?? null;
+
+  // Detect the clocked-in → clocked-out transition to show the "Смена
+  // завершена" success screen for 3 seconds. `wasClockedInRef` tracks
+  // the previous render's value so we don't fire on the initial mount
+  // when isClockedIn is already false.
+  const wasClockedInRef = useRef<boolean>(shell.clockState.isClockedIn);
+  const [justCheckedOut, setJustCheckedOut] = useState(false);
+  useEffect(() => {
+    if (wasClockedInRef.current && !shell.clockState.isClockedIn) {
+      setJustCheckedOut(true);
+      const id = setTimeout(() => setJustCheckedOut(false), 3000);
+      wasClockedInRef.current = shell.clockState.isClockedIn;
+      return () => clearTimeout(id);
+    }
+    wasClockedInRef.current = shell.clockState.isClockedIn;
+  }, [shell.clockState.isClockedIn]);
   const todayIso = new Date().toISOString().slice(0, 10);
   const todaySummary = useMemo(() => {
     const closedToday = shell.sessions.filter(
@@ -55,6 +71,38 @@ export function ClockPage() {
   const gpsTone =
     showGpsCheck && lastGpsCheck.withinFence === false ? "danger" : "success";
   const { t } = useTranslation();
+
+  if (justCheckedOut && lastClosedSession) {
+    const startIso = lastClosedSession.clockInTime;
+    const endIso = lastClosedSession.clockOutTime;
+    return (
+      <div className="space-y-4">
+        <section
+          className="surface-card p-6 text-center"
+          style={{
+            borderColor: "rgba(15, 168, 120, 0.35)",
+            boxShadow: "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 28px rgba(15, 168, 120, 0.2)",
+          }}
+        >
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "rgba(15, 168, 120, 0.18)" }}>
+            <CheckCircle2 size={30} className="text-[var(--green)]" />
+          </div>
+          <h2 className="mt-3 text-2xl font-bold text-[var(--text-primary)]">
+            {t("clock.shiftCompleteTitle")}
+          </h2>
+          <div className="mt-4 font-mono text-[36px] font-bold leading-none" style={{ color: "var(--green)" }}>
+            {formatDurationCompact(lastClosedSession.durationMinutes)}
+          </div>
+          <p className="mt-2 text-sm font-semibold text-[var(--text-primary)]">
+            {lastClosedSession.projectName}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {formatDateTime(startIso)} → {endIso ? formatDateTime(endIso) : "—"}
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -115,8 +163,13 @@ export function ClockPage() {
           <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
             {t("clock.elapsed")}
           </div>
+          {shell.clockState.isClockedIn && todaySummary.count > 0 ? (
+            <p className="mt-1 text-xs font-semibold text-[var(--text-secondary)]">
+              {t("clock.todayInline")}: {(todaySummary.totalMinutes / 60).toFixed(1)}h
+            </p>
+          ) : null}
           <div
-            className={`mt-2 font-[var(--font-mono)] text-[40px] font-medium leading-none text-[var(--brand-yellow)] ${
+            className={`mt-2 font-[var(--font-mono)] text-[48px] font-semibold leading-none text-[var(--brand-yellow)] ${
               shell.clockState.isClockedIn ? "clock-pulse" : ""
             }`}
           >
@@ -236,28 +289,41 @@ export function ClockPage() {
           </div>
         )}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => void clockIn(selectedProjectId)}
-            disabled={
-              shell.clockState.isClockedIn ||
-              !selectedProjectId ||
-              busyAction === "clock-in" ||
-              shell.projects.length === 0
-            }
-            className="button-base button-success w-full"
-          >
-            {busyAction === "clock-in" ? t("clock.checkingLocation") : t("clock.clockIn")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setCheckoutOpen(true)}
-            disabled={!shell.clockState.isClockedIn || busyAction === "clock-out"}
-            className="button-base button-danger w-full"
-          >
-            {busyAction === "clock-out" ? t("clock.closingShift") : t("clock.clockOut")}
-          </button>
+        <div className="mt-4">
+          {shell.clockState.isClockedIn ? (
+            <button
+              type="button"
+              onClick={() => setCheckoutOpen(true)}
+              disabled={busyAction === "clock-out"}
+              className="w-full rounded-[var(--radius-md)] text-base font-bold uppercase tracking-[0.08em] disabled:opacity-60"
+              style={{
+                height: 64,
+                background: "#ef4444",
+                color: "white",
+                letterSpacing: "0.08em",
+              }}
+            >
+              {busyAction === "clock-out" ? t("clock.closingShift") : t("clock.endShiftCta")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void clockIn(selectedProjectId)}
+              disabled={
+                !selectedProjectId ||
+                busyAction === "clock-in" ||
+                shell.projects.length === 0
+              }
+              className="w-full rounded-[var(--radius-md)] text-base font-bold uppercase tracking-[0.08em] disabled:opacity-60"
+              style={{
+                height: 64,
+                background: "#f59e0b",
+                color: "#0a0c14",
+              }}
+            >
+              {busyAction === "clock-in" ? t("clock.checkingLocation") : t("clock.startShiftCta")}
+            </button>
+          )}
         </div>
         <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
 
