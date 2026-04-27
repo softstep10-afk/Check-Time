@@ -19,12 +19,22 @@ export function FullscreenMapWrapper({
 
   return (
     <>
-      {/* Normal inline map */}
+      {/* Normal inline map.
+          Map content is unmounted while the fullscreen overlay is open so
+          we never have two <GoogleMap> + <LiveWorkerMarkers> instances
+          mounted at once. The Google Maps API and the Supabase realtime
+          channel "live-worker-locations" each refuse a second concurrent
+          consumer with the same key/name — the second map shows
+          "This page couldn't load". The container div and button stay
+          mounted to avoid layout shift; they're covered by the overlay
+          anyway. */}
       <div className="relative mt-4 h-[220px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] md:h-[320px]">
-        <ProjectsStatusMap
-          projects={projects.filter((p) => p.status !== "completed")}
-          activeWorkers={activeWorkers}
-        />
+        {!fullscreen && (
+          <ProjectsStatusMap
+            projects={projects.filter((p) => p.status !== "completed")}
+            activeWorkers={activeWorkers}
+          />
+        )}
         <button
           type="button"
           onClick={() => setFullscreen(true)}
