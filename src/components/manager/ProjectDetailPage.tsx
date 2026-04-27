@@ -28,6 +28,7 @@ import {
   parseCoordinateInputPair,
 } from "@/lib/worker-utils";
 import type { ProjectAddressGeocodeResult } from "@/lib/project-geocoding";
+import { GPS_STATUS_COLOR, type WorkerGpsStatus } from "@/lib/gps-status";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -95,6 +96,7 @@ export function ProjectDetailPage({
   tasks,
   media,
   sessions,
+  gpsStatusByProfileId,
 }: {
   orgId: string;
   managerId: string;
@@ -105,6 +107,7 @@ export function ProjectDetailPage({
   tasks: Task[];
   media: Media[];
   sessions: ManagerSession[];
+  gpsStatusByProfileId: Record<string, WorkerGpsStatus>;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -1053,6 +1056,16 @@ export function ProjectDetailPage({
                 // for a solo-project worker this matches closely.
                 const weekHours = worker.weekMinutes / 60;
                 const onSiteForThisProject = worker.isOnSite && worker.currentProjectName === project.name;
+                const gpsStatus = onSiteForThisProject ? gpsStatusByProfileId[worker.id] ?? null : null;
+                const gpsStatusLabel = !gpsStatus
+                  ? null
+                  : gpsStatus === "on_site"
+                    ? t("gpsStatus.onSite")
+                    : gpsStatus === "no_gps"
+                      ? t("gpsStatus.noGps")
+                      : gpsStatus === "off_site"
+                        ? t("gpsStatus.offSite")
+                        : t("gpsStatus.noFence");
                 const initial = worker.name.trim().charAt(0).toUpperCase() || "?";
                 return (
                   <div
@@ -1084,13 +1097,21 @@ export function ProjectDetailPage({
                             </span>
                             <span
                               className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
-                              style={{ color: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
+                              style={{
+                                color: gpsStatus
+                                  ? GPS_STATUS_COLOR[gpsStatus]
+                                  : "var(--text-muted)",
+                              }}
                             >
                               <span
                                 className="inline-block h-1.5 w-1.5 rounded-full"
-                                style={{ background: onSiteForThisProject ? "var(--green)" : "var(--text-muted)" }}
+                                style={{
+                                  background: gpsStatus
+                                    ? GPS_STATUS_COLOR[gpsStatus]
+                                    : "var(--text-muted)",
+                                }}
                               />
-                              {onSiteForThisProject ? t("common.onSite") : t("common.off")}
+                              {gpsStatusLabel ?? t("common.off")}
                             </span>
                           </div>
                           <div className="text-[10px] text-[var(--text-muted)]">

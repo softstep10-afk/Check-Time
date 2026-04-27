@@ -13,6 +13,11 @@ import {
 } from "@/lib/manager-utils";
 import { formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
+import {
+  GPS_STATUS_COLOR,
+  deriveWorkerGpsStatus,
+  type WorkerGpsStatus,
+} from "@/lib/gps-status";
 
 export const revalidate = 60;
 
@@ -78,13 +83,27 @@ export default async function OverviewPage() {
       const project = projectsById.get(session.projectId);
       const clockInEvent = clockInEventsById.get(session.clockInEventId);
       const todayMinutes = session.durationMinutes;
+      const gpsStatus = deriveWorkerGpsStatus({
+        clockInGpsPoint: clockInEvent?.gps_point,
+        projectSitePoint: project?.site_point,
+        projectRadiusM:
+          (project as { gps_radius_m?: number | null } | undefined)?.gps_radius_m ??
+          project?.radius_m,
+      });
       return {
         ...session,
         projectAddress: project?.address ?? null,
-        hasGps: clockInEvent?.gps_point != null,
+        gpsStatus,
         todayMinutes,
       };
     });
+
+  const gpsStatusLabel: Record<WorkerGpsStatus, string> = {
+    on_site: t("gpsStatus.onSite"),
+    no_gps: t("gpsStatus.noGps"),
+    off_site: t("gpsStatus.offSite"),
+    no_fence: t("gpsStatus.noFence"),
+  };
 
   // ── Travel gap detection: gaps > 60 min between clock_out → clock_in for same worker today ──
   const todayStart = new Date();
@@ -402,17 +421,16 @@ export default async function OverviewPage() {
                       {formatDurationCompact(session.todayMinutes)}
                     </td>
                     <td className="py-3 pr-4">
-                      {session.hasGps ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--red)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      )}
+                      <span
+                        className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
+                        style={{ color: GPS_STATUS_COLOR[session.gpsStatus] }}
+                      >
+                        <span
+                          className="inline-block h-2 w-2 rounded-full"
+                          style={{ background: GPS_STATUS_COLOR[session.gpsStatus] }}
+                        />
+                        {gpsStatusLabel[session.gpsStatus]}
+                      </span>
                     </td>
                     <td className="py-3">
                       <ForceCheckoutButton

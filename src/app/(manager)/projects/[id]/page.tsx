@@ -7,6 +7,7 @@ import {
   buildProjectSummaries,
   isManagerRole,
 } from "@/lib/manager-utils";
+import { deriveWorkerGpsStatus, type WorkerGpsStatus } from "@/lib/gps-status";
 
 export default async function ProjectDetailRoutePage({
   params,
@@ -34,6 +35,24 @@ export default async function ProjectDetailRoutePage({
   const media = data.media.filter((item) => item.project_id === id).slice(0, 18);
   const projectSessions = sessions.filter((session) => session.projectId === id).slice(0, 18);
 
+  const clockInEventById = new Map(
+    data.timeEvents
+      .filter((e) => e.event_type === "clock_in")
+      .map((e) => [e.id, e]),
+  );
+  const gpsStatusByProfileId: Record<string, WorkerGpsStatus> = {};
+  for (const session of sessions) {
+    if (!session.isOpen || session.projectId !== id) continue;
+    const clockInEvent = clockInEventById.get(session.clockInEventId);
+    gpsStatusByProfileId[session.profileId] = deriveWorkerGpsStatus({
+      clockInGpsPoint: clockInEvent?.gps_point,
+      projectSitePoint: project.site_point,
+      projectRadiusM:
+        (project as { gps_radius_m?: number | null }).gps_radius_m ??
+        project.radius_m,
+    });
+  }
+
   return (
     <ProjectDetailPage
       orgId={data.manager.org_id}
@@ -45,6 +64,7 @@ export default async function ProjectDetailRoutePage({
       tasks={tasks}
       media={media}
       sessions={projectSessions}
+      gpsStatusByProfileId={gpsStatusByProfileId}
     />
   );
 }
