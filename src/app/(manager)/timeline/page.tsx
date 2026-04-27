@@ -11,6 +11,10 @@ function readParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function isValidDateString(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime());
+}
+
 function endOfDayPlusOne(isoDate: string): string {
   // Treat 'end' as inclusive — bump to the start of the next day so the
   // string compare against ISO timestamps catches everything on that day.
@@ -70,10 +74,15 @@ export default async function TimelinePage({
   const worker = readParam(params.worker);
   const project = readParam(params.project);
   const type = readParam(params.type);
-  const start = readParam(params.start);
-  const end = readParam(params.end);
+  const startRaw = readParam(params.start);
+  const endRaw = readParam(params.end);
   const range = readParam(params.range);
+  // Defensive: ignore garbage date params instead of crashing endOfDayPlusOne
+  // or skewing string compares. Only YYYY-MM-DD is accepted.
+  const start = isValidDateString(startRaw) ? startRaw : "";
+  const end = isValidDateString(endRaw) ? endRaw : "";
   const endExclusive = end ? endOfDayPlusOne(end) : "";
+  const hasFilters = Boolean(worker || project || type || start || end);
   const data = await getTimelinePageData();
   const timeline = buildTimelineItems(data).filter((item) => {
     if (worker && item.profile_id !== worker) {
@@ -173,7 +182,14 @@ export default async function TimelinePage({
       <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("timeline.events")}</h2>
-          <div className="text-sm text-[var(--text-secondary)]">{timeline.length} {t("timeline.rows")}</div>
+          <div className="flex items-center gap-3">
+            {hasFilters ? (
+              <Link href="/timeline" className="text-sm font-semibold text-[var(--brand-yellow)]">
+                {t("timeline.clearFilters")}
+              </Link>
+            ) : null}
+            <div className="text-sm text-[var(--text-secondary)]">{timeline.length} {t("timeline.rows")}</div>
+          </div>
         </div>
         <div className="mt-4 space-y-3">
           {timeline.length === 0 ? (
@@ -181,7 +197,7 @@ export default async function TimelinePage({
               {t("timeline.noEvents")}
             </div>
           ) : (
-            timeline.slice(0, 120).map((item) => (
+            timeline.map((item) => (
               <div
                 key={item.id}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"

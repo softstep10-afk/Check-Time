@@ -1098,6 +1098,7 @@ export const translations = {
   "timeline.events": { en: "Events", ru: "События" },
   "timeline.rows": { en: "rows", ru: "строк" },
   "timeline.noEvents": { en: "No events matched that filter.", ru: "Нет событий по этому фильтру." },
+  "timeline.clearFilters": { en: "Clear filters", ru: "Сбросить фильтры" },
 } as const;
 
 export type TranslationKey = keyof typeof translations;
