@@ -1463,13 +1463,23 @@ export function ProjectDetailPage({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => void openProjectMediaItem(item)}
-                          className="text-left text-sm font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline focus:underline"
-                        >
-                          {item.filename ?? item.media_type}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void openProjectMediaItem(item)}
+                            className="text-left text-sm font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline focus:underline"
+                          >
+                            {item.filename ?? item.media_type}
+                          </button>
+                          {item.is_checkout ? (
+                            <span
+                              className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                              style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
+                            >
+                              {t("journal.checkout")}
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="mt-1 text-xs text-[var(--text-secondary)]">
                           {formatDateTime(item.created_at)} • {item.media_type}
                         </div>
