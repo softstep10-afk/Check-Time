@@ -886,6 +886,8 @@ export const translations = {
   "payroll.paid": { en: "Paid", ru: "Оплачен" },
   "payroll.regHours": { en: "Regular", ru: "Обычные" },
   "payroll.otHours": { en: "Overtime", ru: "Сверхурочные" },
+  "payroll.noGpsHours": { en: "No-GPS", ru: "Без GPS" },
+  "payroll.noGpsHoursLoadedHint": { en: "No-GPS breakdown is only computed for newly built periods.", ru: "Разбивка без GPS считается только для свеже-собранных периодов." },
   "payroll.grossPay": { en: "Gross Pay", ru: "Начислено" },
   "payroll.adjustments": { en: "Adjustments", ru: "Корректировки" },
   "payroll.netPay": { en: "Net", ru: "Итого" },

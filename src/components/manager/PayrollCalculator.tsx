@@ -34,6 +34,10 @@ type WorkerLine = {
   rate: number;
   regHours: number;
   otHours: number;
+  // No-GPS hours within the period. Only meaningful for freshly-built
+  // periods; loaded-from-DB periods report 0 because we don't persist
+  // this breakdown yet.
+  noGpsHours: number;
   grossRegular: number;
   grossOt: number;
   adjustments: Adjustment[];
@@ -82,11 +86,19 @@ function buildWorkerLines(
   sessions: ManagerSession[],
   startDate: string,
   endDate: string,
+  hasGpsBySessionId: Record<string, boolean>,
 ): WorkerLine[] {
   const startMs = new Date(`${startDate}T00:00:00`).getTime();
   const endMs = new Date(`${endDate}T23:59:59`).getTime();
 
-  const hoursByWorker = new Map<string, { total: number; byProject: Map<string, { name: string; minutes: number }> }>();
+  // Hours come exclusively from sessions, and `buildManagerSessions`
+  // only opens a session on a real `clock_in` event. So workers who
+  // never checked in cannot accrue minutes here — see #2 of the
+  // payroll-safety task.
+  const hoursByWorker = new Map<
+    string,
+    { total: number; noGps: number; byProject: Map<string, { name: string; minutes: number }> }
+  >();
 
   for (const s of sessions) {
     const sStart = new Date(s.clockInTime).getTime();
@@ -96,8 +108,9 @@ function buildWorkerLines(
     if (effEnd <= effStart) continue;
 
     const minutes = Math.round((effEnd - effStart) / 60_000);
-    const entry = hoursByWorker.get(s.profileId) ?? { total: 0, byProject: new Map() };
+    const entry = hoursByWorker.get(s.profileId) ?? { total: 0, noGps: 0, byProject: new Map() };
     entry.total += minutes;
+    if (!hasGpsBySessionId[s.id]) entry.noGps += minutes;
     const proj = entry.byProject.get(s.projectId) ?? { name: s.projectName, minutes: 0 };
     proj.minutes += minutes;
     entry.byProject.set(s.projectId, proj);
@@ -109,6 +122,7 @@ function buildWorkerLines(
     .map((p) => {
       const data = hoursByWorker.get(p.id);
       const totalHours = data ? r2(data.total / 60) : 0;
+      const noGpsHours = data ? r2(data.noGps / 60) : 0;
       const { reg, ot } = computeOt(totalHours);
       const rate = Number(p.hourly_rate ?? 0);
       const grossReg = r2(reg * rate);
@@ -131,6 +145,7 @@ function buildWorkerLines(
         rate,
         regHours: reg,
         otHours: ot,
+        noGpsHours,
         grossRegular: grossReg,
         grossOt,
         adjustments: [],
@@ -175,14 +190,14 @@ function presetDates(preset: string): { start: string; end: string } {
 }
 
 function generateCsv(period: PayPeriod): string {
-  const headers = "Name,Role,Reg Hours,OT Hours,Rate,Gross Reg,Gross OT,Bonus,Reimbursement,Deduction,Net,Period Start,Period End";
+  const headers = "Name,Role,Reg Hours,OT Hours,No-GPS Hours,Rate,Gross Reg,Gross OT,Bonus,Reimbursement,Deduction,Net,Period Start,Period End";
   const rows = period.lines
     .filter((l) => l.hasHours)
     .map((l) => {
       const bonus = l.adjustments.filter((a) => a.type === "bonus").reduce((s, a) => s + a.amount, 0);
       const reimb = l.adjustments.filter((a) => a.type === "reimbursement").reduce((s, a) => s + a.amount, 0);
       const deduct = l.adjustments.filter((a) => a.type === "deduction").reduce((s, a) => s + a.amount, 0);
-      return `"${l.workerName}","${l.workerRole}",${l.regHours},${l.otHours},${l.rate},${l.grossRegular},${l.grossOt},${bonus},${reimb},${deduct},${l.netTotal},"${period.startDate}","${period.endDate}"`;
+      return `"${l.workerName}","${l.workerRole}",${l.regHours},${l.otHours},${l.noGpsHours},${l.rate},${l.grossRegular},${l.grossOt},${bonus},${reimb},${deduct},${l.netTotal},"${period.startDate}","${period.endDate}"`;
     });
   return [headers, ...rows].join("\n");
 }
@@ -196,6 +211,7 @@ export function PayrollCalculator({
   managerRole,
   profiles,
   sessions,
+  hasGpsBySessionId,
 }: {
   orgId: string;
   managerId: string;
@@ -203,6 +219,7 @@ export function PayrollCalculator({
   managerRole: string;
   profiles: Profile[];
   sessions: ManagerSession[];
+  hasGpsBySessionId: Record<string, boolean>;
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -271,6 +288,9 @@ export function PayrollCalculator({
         rate: Number(item.rate),
         regHours: Number(item.regular_hours),
         otHours: Number(item.overtime_hours),
+        // No-GPS breakdown isn't persisted yet — show as unknown (0) for
+        // historical periods.
+        noGpsHours: 0,
         grossRegular: Number(item.gross_regular),
         grossOt: Number(item.gross_overtime),
         adjustments: (item.adjustments_json ?? []) as Adjustment[],
@@ -317,7 +337,7 @@ export function PayrollCalculator({
 
   async function handleCreatePeriodFor(start: string, end: string, type: PeriodType) {
     if (!start || !end) return;
-    const lines = buildWorkerLines(profiles, sessions, start, end);
+    const lines = buildWorkerLines(profiles, sessions, start, end, hasGpsBySessionId);
     const label = `${start} → ${end}`;
 
     if (AUTH_BYPASS_ENABLED) {
@@ -325,6 +345,10 @@ export function PayrollCalculator({
       // eslint-disable-next-line react-hooks/purity
       setPeriod({ id: `period-${Date.now()}`, label, startDate: start, endDate: end, type, status: "draft", lines });
       setShowNewPeriod(false);
+      return;
+    }
+
+    if (!(await confirmNoOverlap(start, end))) {
       return;
     }
 
@@ -377,14 +401,41 @@ export function PayrollCalculator({
     setError("");
   }
 
+  async function confirmNoOverlap(start: string, end: string): Promise<boolean> {
+    // Block silent overwrites: if any existing pay_period for this org
+    // overlaps the requested window, surface them and require a manual
+    // confirmation before creating a new one. We never delete or update
+    // the existing rows — duplicate creation is the only failure mode,
+    // and this guard makes it explicit.
+    const { data: overlapping } = await supabase
+      .from("pay_periods")
+      .select("id, label, status")
+      .eq("org_id", orgId)
+      .lte("start_date", end)
+      .gte("end_date", start);
+    if (!overlapping || overlapping.length === 0) {
+      return true;
+    }
+    const summary = (overlapping as Array<{ label: string; status: string }>)
+      .map((p) => `• ${p.label} (${p.status})`)
+      .join("\n");
+    return window.confirm(
+      `An existing pay period overlaps ${start} → ${end}:\n\n${summary}\n\nCreate another period anyway?`,
+    );
+  }
+
   async function handleCreatePeriod() {
     if (!startDate || !endDate) return;
-    const lines = buildWorkerLines(profiles, sessions, startDate, endDate);
+    const lines = buildWorkerLines(profiles, sessions, startDate, endDate, hasGpsBySessionId);
     const label = `${startDate} → ${endDate}`;
 
     if (AUTH_BYPASS_ENABLED) {
       setPeriod({ id: `period-${Date.now()}`, label, startDate, endDate, type: periodType, status: "draft", lines });
       setShowNewPeriod(false);
+      return;
+    }
+
+    if (!(await confirmNoOverlap(startDate, endDate))) {
       return;
     }
 
@@ -1023,6 +1074,7 @@ export function PayrollCalculator({
                     <th className="pb-3 pr-3 font-semibold">{t("overview.colName")}</th>
                     <th className="pb-3 pr-3 font-semibold">{t("payroll.regHours")}</th>
                     <th className="pb-3 pr-3 font-semibold">{t("payroll.otHours")}</th>
+                    <th className="pb-3 pr-3 font-semibold">{t("payroll.noGpsHours")}</th>
                     <th className="pb-3 pr-3 font-semibold">{t("common.rate")}</th>
                     <th className="pb-3 pr-3 font-semibold">{t("payroll.grossPay")}</th>
                     <th className="pb-3 pr-3 font-semibold">{t("payroll.adjustments")}</th>
@@ -1051,6 +1103,15 @@ export function PayrollCalculator({
                       </td>
                       <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-primary)]">{line.regHours.toFixed(1)}h</td>
                       <td className="py-3 pr-3 whitespace-nowrap font-mono" style={{ color: line.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{line.otHours.toFixed(1)}h</td>
+                      <td
+                        className="py-3 pr-3 whitespace-nowrap font-mono"
+                        style={{ color: line.noGpsHours > 0 ? "#f59e0b" : "var(--text-muted)" }}
+                        title={line.itemId && line.noGpsHours === 0 ? t("payroll.noGpsHoursLoadedHint") : undefined}
+                      >
+                        {line.itemId && line.noGpsHours === 0
+                          ? "—"
+                          : `${line.noGpsHours.toFixed(1)}h`}
+                      </td>
                       <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-secondary)]">${line.rate.toFixed(2)}</td>
                       <td className="py-3 pr-3 whitespace-nowrap font-mono font-semibold text-[var(--text-primary)]">{currency.format(line.grossTotal)}</td>
                       <td className="py-3 pr-3">
