@@ -20,11 +20,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
 import {
+  assessDeviceLocationAccuracy,
+  type DeviceLocationAssessment,
   formatDateTime,
   formatDurationCompact,
-  parseGeoPoint,
-  toSupabasePoint,
+  isValidGeoPoint,
+  parseCoordinateInputPair,
 } from "@/lib/worker-utils";
+import type { ProjectAddressGeocodeResult } from "@/lib/project-geocoding";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -38,6 +41,49 @@ import type {
   TaskPriority,
   TaskStatus,
 } from "@/types/database";
+
+async function readRouteError(response: Response): Promise<string> {
+  const payload = (await response.json().catch(() => null)) as { error?: unknown } | null;
+  if (payload && typeof payload.error === "string" && payload.error.trim()) {
+    return payload.error;
+  }
+
+  return `Request failed (${response.status})`;
+}
+
+async function readRouteFailure(response: Response): Promise<{
+  error: string;
+  code: string | null;
+  status: number;
+}> {
+  const payload = (await response.json().catch(() => null)) as
+    | { error?: unknown; code?: unknown }
+    | null;
+
+  return {
+    error:
+      payload && typeof payload.error === "string" && payload.error.trim()
+        ? payload.error
+        : `Request failed (${response.status})`,
+    code: payload && typeof payload.code === "string" ? payload.code : null,
+    status: response.status,
+  };
+}
+
+type AddressLookupState = ProjectAddressGeocodeResult & {
+  requestedAddress: string;
+};
+
+function setInputElementValue(
+  input: HTMLInputElement | null,
+  value: string,
+) {
+  if (!input) {
+    return;
+  }
+
+  input.value = value;
+}
 
 export function ProjectDetailPage({
   orgId,
@@ -64,6 +110,12 @@ export function ProjectDetailPage({
   const supabase = useMemo(() => createClient(), []);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [pickingLocation, setPickingLocation] = useState(false);
+  const [geocodingAddress, setGeocodingAddress] = useState(false);
+  const [coordinatesConfirmed, setCoordinatesConfirmed] = useState(false);
+  const [deviceLocation, setDeviceLocation] = useState<DeviceLocationAssessment | null>(null);
+  const [addressLookup, setAddressLookup] = useState<AddressLookupState | null>(null);
+  const [addressLookupError, setAddressLookupError] = useState("");
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [removeAssignmentId, setRemoveAssignmentId] = useState<string | null>(null);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
@@ -71,6 +123,9 @@ export function ProjectDetailPage({
   const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
   const [taskAttachmentFiles, setTaskAttachmentFiles] = useState<File[]>([]);
   const taskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const editFormRef = useRef<HTMLFormElement | null>(null);
+  const editLatRef = useRef<HTMLInputElement | null>(null);
+  const editLngRef = useRef<HTMLInputElement | null>(null);
   const mediaById = useMemo(
     () => new Map(media.map((m) => [m.id, m])),
     [media],
@@ -142,8 +197,150 @@ export function ProjectDetailPage({
     setOpenFlagIds(ids);
   }
   const [message, setMessage] = useState("");
-  const site = parseGeoPoint(project.site_point);
+  const site = project.siteCoordinates;
   const { t } = useTranslation();
+
+  function openEditModal() {
+    setCoordinatesConfirmed(false);
+    setDeviceLocation(null);
+    setAddressLookup(null);
+    setAddressLookupError("");
+    setShowEditModal(true);
+  }
+
+  function closeEditModal() {
+    setShowEditModal(false);
+    setCoordinatesConfirmed(false);
+    setDeviceLocation(null);
+    setAddressLookup(null);
+    setAddressLookupError("");
+    setGeocodingAddress(false);
+  }
+
+  function fillCurrentLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setDeviceLocation(null);
+      setMessage(t("projects.locationUnavailable"));
+      return;
+    }
+
+    setPickingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const point = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        if (!isValidGeoPoint(point)) {
+          setDeviceLocation(null);
+          setMessage(t("projects.locationInvalid"));
+          setPickingLocation(false);
+          return;
+        }
+        const assessment = assessDeviceLocationAccuracy(position.coords.accuracy);
+
+        if (editLatRef.current) {
+          editLatRef.current.value = point.lat.toFixed(6);
+        }
+        if (editLngRef.current) {
+          editLngRef.current.value = point.lng.toFixed(6);
+        }
+        setDeviceLocation(assessment);
+        setCoordinatesConfirmed(false);
+        setAddressLookup(null);
+        setAddressLookupError("");
+        setMessage(assessment.shouldWarn ? t("projects.deviceLocationAccuracyWarning") : "");
+        setPickingLocation(false);
+      },
+      (err: GeolocationPositionError) => {
+        const key =
+          err.code === err.PERMISSION_DENIED
+            ? "projects.locationDenied"
+            : err.code === err.TIMEOUT
+              ? "projects.locationTimeout"
+              : "projects.locationUnavailable";
+        setDeviceLocation(null);
+        setMessage(t(key));
+        setPickingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 60_000 },
+    );
+  }
+
+  async function fillCoordinatesFromAddress() {
+    const form = editFormRef.current;
+    if (!form) {
+      return;
+    }
+
+    const formData = new FormData(form);
+    const address = formData.get("address")?.toString().trim() ?? "";
+    if (!address) {
+      setAddressLookup(null);
+      setAddressLookupError(t("projects.addressLookupAddressRequired"));
+      setMessage(t("projects.addressLookupAddressRequired"));
+      return;
+    }
+
+    setGeocodingAddress(true);
+    setAddressLookupError("");
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/manager/projects/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address }),
+      });
+
+      if (!response.ok) {
+        setAddressLookup(null);
+        const failure = await readRouteFailure(response);
+        setAddressLookupError(failure.error);
+        setMessage(failure.error);
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        formattedAddress?: string | null;
+        lat?: unknown;
+        lng?: unknown;
+      };
+      const point = {
+        lat: typeof payload.lat === "number" ? payload.lat : Number.NaN,
+        lng: typeof payload.lng === "number" ? payload.lng : Number.NaN,
+      };
+
+      if (!isValidGeoPoint(point)) {
+        setAddressLookup(null);
+        setAddressLookupError(t("projects.locationInvalid"));
+        setMessage(t("projects.locationInvalid"));
+        return;
+      }
+
+      setInputElementValue(editLatRef.current, point.lat.toFixed(6));
+      setInputElementValue(editLngRef.current, point.lng.toFixed(6));
+      setDeviceLocation(null);
+      setCoordinatesConfirmed(false);
+      setAddressLookupError("");
+      setAddressLookup({
+        requestedAddress: address,
+        formattedAddress:
+          typeof payload.formattedAddress === "string" && payload.formattedAddress.trim()
+            ? payload.formattedAddress
+            : null,
+        lat: point.lat,
+        lng: point.lng,
+      });
+    } catch (error) {
+      setAddressLookup(null);
+      const nextError = error instanceof Error ? error.message : t("common.errorTryAgain");
+      setAddressLookupError(nextError);
+      setMessage(nextError);
+    } finally {
+      setGeocodingAddress(false);
+    }
+  }
 
   async function handleUpdateProject(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -154,43 +351,51 @@ export function ProjectDetailPage({
     const rate = Number.parseFloat(formData.get("rate")?.toString() ?? `${project.rate}`);
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? `${project.radius_m}`, 10);
     const status = (formData.get("status")?.toString() ?? project.status) as ProjectStatus;
-    const lat = Number.parseFloat(formData.get("lat")?.toString() ?? "");
-    const lng = Number.parseFloat(formData.get("lng")?.toString() ?? "");
+    const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"), {
+      allowBlank: project.hasValidSiteCoordinates,
+    });
+    if (coordinates.error) {
+      setMessage(
+        coordinates.error === "invalid"
+          ? t("projects.locationInvalid")
+          : t("projects.coordsRequired"),
+      );
+      event.currentTarget.reportValidity();
+      return;
+    }
+    if (!coordinatesConfirmed) {
+      setMessage(t("projects.coordsConfirmationRequired"));
+      event.currentTarget.reportValidity();
+      return;
+    }
 
     setBusyKey("project-update");
     setMessage("");
 
-    const payload: {
-      name: string;
-      address: string | null;
-      notes: string | null;
-      rate: number;
-      radius_m: number;
-      status: ProjectStatus;
-      site_point?: string;
-    } = {
-      name,
-      address: address || null,
-      notes: notes || null,
-      rate: Number.isFinite(rate) ? rate : project.rate,
-      radius_m: Number.isFinite(radius) ? radius : project.radius_m,
-      status,
-    };
+    const response = await fetch(`/api/manager/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        address: address || null,
+        notes: notes || null,
+        rate: Number.isFinite(rate) ? rate : project.rate,
+        radius_m: Number.isFinite(radius) ? radius : project.radius_m,
+        status,
+        lat: coordinates.point?.lat ?? null,
+        lng: coordinates.point?.lng ?? null,
+        coordinatesConfirmed,
+      }),
+    });
 
-    if (Number.isFinite(lat) && Number.isFinite(lng)) {
-      payload.site_point = toSupabasePoint({ lat, lng });
-    }
-
-    const { error } = await supabase.from("projects").update(payload).eq("id", project.id);
-
-    if (error) {
-      setMessage(error.message);
+    if (!response.ok) {
+      setMessage(await readRouteError(response));
       setBusyKey(null);
       return;
     }
 
     setBusyKey(null);
-    setShowEditModal(false);
+    closeEditModal();
     setMessage(t("projects.updated"));
     router.refresh();
   }
@@ -519,14 +724,43 @@ export function ProjectDetailPage({
             {project.address ? (
               <p className="mt-1 text-sm text-[var(--text-secondary)]">{project.address}</p>
             ) : null}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span
+                className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                style={
+                  site
+                    ? {
+                        background: "rgba(15, 168, 120, 0.14)",
+                        color: "var(--green)",
+                      }
+                    : {
+                        background: "rgba(245, 158, 11, 0.12)",
+                        color: "#f59e0b",
+                      }
+                }
+              >
+                {site ? t("projects.gpsOkBadge") : t("projects.gpsMissingBadge")}
+              </span>
+              <span className="text-xs text-[var(--text-secondary)]">
+                {site ? t("projects.gpsOkHint") : t("projects.noSiteCoords")}
+              </span>
+            </div>
           </div>
           <button
             type="button"
-            onClick={() => setShowEditModal(true)}
+            onClick={openEditModal}
             className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-            style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+            style={
+              site
+                ? { borderColor: "var(--border-default)", color: "var(--text-primary)" }
+                : {
+                    borderColor: "#f59e0b",
+                    color: "#f59e0b",
+                    background: "rgba(245, 158, 11, 0.08)",
+                  }
+            }
           >
-            <Pencil size={12} /> {t("common.edit")}
+            <Pencil size={12} /> {site ? t("common.edit") : t("projects.fixCoordinates")}
           </button>
         </div>
       </section>
@@ -670,8 +904,31 @@ export function ProjectDetailPage({
               <ProjectSiteMap site={site} radiusMeters={project.radius_m} />
             </div>
           ) : (
-            <div className="surface-panel mt-4 p-4 text-sm text-[var(--text-secondary)]">
-              {t("projectDetail.addLatLng")}
+            <div className="surface-panel mt-4 space-y-3 p-4">
+              <div
+                className="inline-flex items-center rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                style={{
+                  background: "rgba(245, 158, 11, 0.12)",
+                  color: "#f59e0b",
+                }}
+              >
+                {t("projects.gpsMissingBadge")}
+              </div>
+              <p className="text-sm text-[var(--text-secondary)]">
+                {t("projectDetail.addLatLng")}
+              </p>
+              <button
+                type="button"
+                onClick={openEditModal}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                style={{
+                  borderColor: "#f59e0b",
+                  color: "#f59e0b",
+                  background: "rgba(245, 158, 11, 0.08)",
+                }}
+              >
+                <Pencil size={12} /> {t("projects.fixCoordinates")}
+              </button>
             </div>
           )}
         </div>
@@ -1216,7 +1473,7 @@ export function ProjectDetailPage({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={() => setShowEditModal(false)}
+          onClick={closeEditModal}
         >
           <div
             className="surface-card w-full max-w-[700px] max-h-[90vh] overflow-y-auto p-4"
@@ -1228,7 +1485,7 @@ export function ProjectDetailPage({
               </h2>
               <button
                 type="button"
-                onClick={() => setShowEditModal(false)}
+                onClick={closeEditModal}
                 aria-label={t("common.cancel")}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
                 style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
@@ -1236,18 +1493,64 @@ export function ProjectDetailPage({
                 <X size={14} />
               </button>
             </div>
-            <form className="mt-4 grid gap-3" onSubmit={handleUpdateProject}>
+            <form
+              ref={editFormRef}
+              className="mt-4 grid gap-3"
+              onSubmit={handleUpdateProject}
+            >
               <TextInputWithVoice
                 name="name"
                 defaultValue={project.name}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
-              <TextInputWithVoice
-                name="address"
-                defaultValue={project.address ?? ""}
-                placeholder={t("common.address")}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
+              <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.2)] p-3">
+                <TextInputWithVoice
+                  name="address"
+                  defaultValue={project.address ?? ""}
+                  placeholder={t("common.address")}
+                  onChange={() => {
+                    setAddressLookup(null);
+                    setAddressLookupError("");
+                    setCoordinatesConfirmed(false);
+                  }}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <p className="mt-3 text-xs text-[var(--text-muted)]">
+                  {t("projects.addressLookupDisabled")}
+                </p>
+                {addressLookupError ? (
+                  <div
+                    className="mt-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm"
+                    style={{
+                      borderColor: "rgba(212, 81, 94, 0.35)",
+                      background: "rgba(212, 81, 94, 0.08)",
+                      color: "var(--red)",
+                    }}
+                  >
+                    {addressLookupError}
+                  </div>
+                ) : null}
+                {addressLookup ? (
+                  <div
+                    className="mt-3 rounded-[var(--radius-md)] border px-3 py-3 text-xs"
+                    style={{
+                      borderColor: "rgba(15, 168, 120, 0.25)",
+                      background: "rgba(15, 168, 120, 0.08)",
+                    }}
+                  >
+                    <div className="font-semibold text-[var(--text-primary)]">
+                      {t("projects.addressLookupMatched")}
+                    </div>
+                    <div className="mt-1 text-sm text-[var(--text-primary)]">
+                      {addressLookup.formattedAddress ?? addressLookup.requestedAddress}
+                    </div>
+                    <div className="mt-2 text-[var(--text-secondary)]">
+                      {t("projects.latitude")}: {addressLookup.lat.toFixed(6)} · {t("projects.longitude")}:{" "}
+                      {addressLookup.lng.toFixed(6)}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <input
                   name="rate"
@@ -1274,23 +1577,115 @@ export function ProjectDetailPage({
                 </select>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex items-stretch gap-2">
+                  <input
+                    ref={editLatRef}
+                    name="lat"
+                    type="number"
+                    step="0.000001"
+                    min={-90}
+                    max={90}
+                    inputMode="decimal"
+                    required={!project.hasValidSiteCoordinates}
+                    onChange={() => {
+                      setCoordinatesConfirmed(false);
+                      setDeviceLocation(null);
+                      setAddressLookup(null);
+                      setAddressLookupError("");
+                    }}
+                    defaultValue={site?.lat ?? ""}
+                    placeholder={t("projects.latitude")}
+                    className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={fillCurrentLocation}
+                    disabled={pickingLocation}
+                    title={t("projects.useCurrentLocation")}
+                    aria-label={t("projects.useCurrentLocation")}
+                    className="inline-flex shrink-0 items-center justify-center rounded-[var(--radius-md)] border px-3 text-xs font-semibold disabled:opacity-50"
+                    style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+                  >
+                    {pickingLocation ? "..." : t("projects.useCurrentLocation")}
+                  </button>
+                </div>
                 <input
-                  name="lat"
-                  type="number"
-                  step="0.000001"
-                  defaultValue={site?.lat ?? ""}
-                  placeholder={t("projects.latitude")}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                />
-                <input
+                  ref={editLngRef}
                   name="lng"
                   type="number"
                   step="0.000001"
+                  min={-180}
+                  max={180}
+                  inputMode="decimal"
+                  required={!project.hasValidSiteCoordinates}
+                  onChange={() => {
+                    setCoordinatesConfirmed(false);
+                    setDeviceLocation(null);
+                    setAddressLookup(null);
+                    setAddressLookupError("");
+                  }}
                   defaultValue={site?.lng ?? ""}
                   placeholder={t("projects.longitude")}
                   className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 />
               </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                {t("projects.deviceLocationHint")}
+              </p>
+              {deviceLocation ? (
+                <div
+                  className="rounded-[var(--radius-md)] border px-3 py-3 text-xs"
+                  style={{
+                    borderColor: deviceLocation.shouldWarn
+                      ? "rgba(245, 158, 11, 0.35)"
+                      : "var(--border-default)",
+                    background: deviceLocation.shouldWarn
+                      ? "rgba(245, 158, 11, 0.08)"
+                      : "rgba(15, 17, 23, 0.24)",
+                  }}
+                >
+                  <div className="font-semibold text-[var(--text-primary)]">
+                    {deviceLocation.accuracyMeters !== null
+                      ? t("projects.deviceLocationAccuracy").replace(
+                          "{meters}",
+                          String(deviceLocation.accuracyMeters),
+                        )
+                      : t("projects.deviceLocationAccuracyUnavailable")}
+                  </div>
+                  {deviceLocation.shouldWarn ? (
+                    <p className="mt-1 font-semibold" style={{ color: "#f59e0b" }}>
+                      {t("projects.deviceLocationAccuracyWarning")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <label
+                className="flex items-start gap-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm text-[var(--text-secondary)]"
+                style={{
+                  borderColor: coordinatesConfirmed
+                    ? "rgba(15, 168, 120, 0.35)"
+                    : "rgba(245, 158, 11, 0.35)",
+                  background: coordinatesConfirmed
+                    ? "rgba(15, 168, 120, 0.08)"
+                    : "rgba(245, 158, 11, 0.08)",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  required
+                  checked={coordinatesConfirmed}
+                  onChange={(event) => setCoordinatesConfirmed(event.target.checked)}
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border-default)]"
+                />
+                <span className="flex-1">
+                  <span className="block font-semibold text-[var(--text-primary)]">
+                    {t("projects.coordsConfirmationLabel")}
+                  </span>
+                  <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                    {t("projects.coordsConfirmationHint")}
+                  </span>
+                </span>
+              </label>
               <TextInputWithVoice
                 multiline
                 name="notes"
@@ -1307,7 +1702,7 @@ export function ProjectDetailPage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowEditModal(false)}
+                  onClick={closeEditModal}
                   className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
                   style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
                 >
