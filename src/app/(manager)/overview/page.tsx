@@ -11,7 +11,7 @@ import {
   buildProjectSummaries,
   getOverviewStats,
 } from "@/lib/manager-utils";
-import { formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
+import { formatDurationCompact, formatEventTime, parseGeoPoint } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import {
   GPS_STATUS_COLOR,
@@ -104,6 +104,22 @@ export default async function OverviewPage() {
     off_site: t("gpsStatus.offSite"),
     no_fence: t("gpsStatus.noFence"),
   };
+
+  const activeWorkerMarkers = onSiteSessions
+    .map((session) => {
+      const clockInEvent = clockInEventsById.get(session.clockInEventId);
+      const point = parseGeoPoint(clockInEvent?.gps_point);
+      if (!point) return null;
+      return {
+        id: session.profileId,
+        name: session.profileName,
+        role: session.profileRole,
+        projectName: session.projectName,
+        lat: point.lat,
+        lng: point.lng,
+      };
+    })
+    .filter((w): w is NonNullable<typeof w> => w !== null);
 
   // ── Travel gap detection: gaps > 60 min between clock_out → clock_in for same worker today ──
   const todayStart = new Date();
@@ -348,7 +364,7 @@ export default async function OverviewPage() {
             {t("overview.openProjects")}
           </Link>
         </div>
-        <FullscreenMapWrapper projects={projectSummaries} />
+        <FullscreenMapWrapper projects={projectSummaries} activeWorkers={activeWorkerMarkers} />
       </section>
 
       {/* ── Currently on site table ── */}

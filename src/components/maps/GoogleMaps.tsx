@@ -84,8 +84,9 @@ export function MapProvider({
   options?: google.maps.MapOptions;
   onLoad?: (map: google.maps.Map) => void;
 }) {
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "",
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: apiKey,
   });
 
   const handleLoad = useCallback(
@@ -94,6 +95,28 @@ export function MapProvider({
     },
     [onLoad],
   );
+
+  if (!apiKey) {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center px-4 text-center text-sm"
+        style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}
+      >
+        Map unavailable: NEXT_PUBLIC_GOOGLE_MAPS_KEY is not set.
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center px-4 text-center text-sm"
+        style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}
+      >
+        Map failed to load. Check the Google Maps API key and billing.
+      </div>
+    );
+  }
 
   if (!isLoaded) {
     return (
