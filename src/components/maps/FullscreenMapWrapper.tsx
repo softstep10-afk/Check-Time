@@ -60,10 +60,16 @@ export function FullscreenMapWrapper({
               Закрыть
             </button>
           </div>
-          <div className="flex-1">
-            <ProjectsStatusMap
-              projects={projects.filter((p) => p.status !== "completed")}
-            />
+          <div className="relative flex-1">
+            {/* GoogleMap's container uses height: 100%, which collapses to
+                0 inside a bare flex-1 child in some browsers. The
+                relative+absolute wrap gives it explicit dimensions
+                matching the remaining flex slot. */}
+            <div className="absolute inset-0">
+              <ProjectsStatusMap
+                projects={projects.filter((p) => p.status !== "completed")}
+              />
+            </div>
           </div>
         </div>
       )}
