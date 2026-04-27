@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 import {
   ProjectsStatusMap,
@@ -16,56 +17,71 @@ export function FullscreenMapWrapper({
   activeWorkers?: ActiveWorkerMarker[];
 }) {
   const [fullscreen, setFullscreen] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
 
-  // ONE <ProjectsStatusMap> mounted at a fixed JSX position. The outer
-  // <div>'s className flips between inline (h-[220px]) and fullscreen
-  // (fixed inset-0) styles — same DOM node, just CSS changes. The map's
-  // container fills its parent via absolute inset-0 in both modes, so
-  // Google Maps' built-in ResizeObserver handles the size change without
-  // re-init / flicker. The header (fullscreen) and the open button
-  // (inline) live as siblings of the map wrapper and only one is rendered
-  // at a time — they're at different child indices so they never collide
-  // with the map wrapper's identity in React reconciliation.
-  return (
+  // document.body only exists client-side post-hydration. Gate the portal
+  // until mount so SSR doesn't try to read it.
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  const filteredProjects = projects.filter((p) => p.status !== "completed");
+
+  // The fullscreen overlay is portaled into document.body so it escapes
+  // any transform / filter / contain ancestor that would otherwise pin
+  // a `position: fixed` element to the overview-page subtree. That kept
+  // the app background visible behind the overlay (the flicker symptom).
+  // Also: only one <ProjectsStatusMap> is mounted at a time — when
+  // fullscreen flips, the inline instance unmounts before the portal
+  // mounts, so we never run two GoogleMap + LiveWorkerMarkers in
+  // parallel against the same Maps key / Supabase channel.
+  const fullscreenOverlay = (
     <div
-      className={
-        fullscreen
-          ? "fixed inset-0 z-50"
-          : "relative mt-4 h-[220px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] md:h-[320px]"
-      }
-      style={fullscreen ? { background: "#0f1117" } : undefined}
+      className="fixed inset-0 flex flex-col"
+      style={{ zIndex: 9999, background: "#0f1117" }}
     >
-      {/* Map: always mounted at index 0, fills the outer div */}
-      <div className="absolute inset-0">
-        <ProjectsStatusMap
-          projects={projects.filter((p) => p.status !== "completed")}
-          activeWorkers={activeWorkers}
-        />
-      </div>
-
-      {fullscreen ? (
-        <div
-          className="absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-4 py-2"
-          style={{ background: "#181c27", borderBottom: "1px solid #2a3045" }}
+      <div
+        className="flex items-center justify-between px-4 py-2"
+        style={{ background: "#181c27", borderBottom: "1px solid #2a3045" }}
+      >
+        <span className="font-bold text-[var(--text-primary)]">
+          Карта объектов и бригады
+        </span>
+        <button
+          type="button"
+          onClick={() => setFullscreen(false)}
+          className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-semibold"
+          style={{
+            background: "rgba(239,68,68,0.15)",
+            color: "#ef4444",
+            border: "1px solid rgba(239,68,68,0.3)",
+          }}
         >
-          <span className="font-bold text-[var(--text-primary)]">
-            Карта объектов и бригады
-          </span>
-          <button
-            type="button"
-            onClick={() => setFullscreen(false)}
-            className="flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-semibold"
-            style={{
-              background: "rgba(239,68,68,0.15)",
-              color: "#ef4444",
-              border: "1px solid rgba(239,68,68,0.3)",
-            }}
-          >
-            <X size={14} />
-            Закрыть
-          </button>
+          <X size={14} />
+          Закрыть
+        </button>
+      </div>
+      <div className="relative flex-1">
+        <div className="absolute inset-0">
+          <ProjectsStatusMap
+            projects={filteredProjects}
+            activeWorkers={activeWorkers}
+          />
         </div>
-      ) : (
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Inline map — only mounted when fullscreen is closed. */}
+      <div className="relative mt-4 h-[220px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] md:h-[320px]">
+        {!fullscreen && (
+          <ProjectsStatusMap
+            projects={filteredProjects}
+            activeWorkers={activeWorkers}
+          />
+        )}
         <button
           type="button"
           onClick={() => setFullscreen(true)}
@@ -80,7 +96,9 @@ export function FullscreenMapWrapper({
           <Maximize2 size={13} />
           На весь экран
         </button>
-      )}
-    </div>
+      </div>
+
+      {fullscreen && portalReady ? createPortal(fullscreenOverlay, document.body) : null}
+    </>
   );
 }
