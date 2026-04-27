@@ -323,7 +323,6 @@ export function TeamPage({
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colHours")}</th>
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colRate")}</th>
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colEarned")}</th>
-                  <th className="pb-3 pr-3 text-center font-semibold">{t("team.colVideo")}</th>
                   <th className="pb-3 text-right font-semibold">{t("team.colActions")}</th>
                 </tr>
               </thead>
@@ -387,17 +386,6 @@ export function TeamPage({
                       >
                         {currencyFmt.format(earned)}
                       </td>
-                      <td className="py-3 pr-3 text-center">
-                        <span
-                          title={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
-                          aria-label={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
-                          className="inline-block h-3 w-3 rounded-full border"
-                          style={{
-                            background: profile.videoUploadedToday ? "var(--green)" : "transparent",
-                            borderColor: profile.videoUploadedToday ? "var(--green)" : "var(--text-muted)",
-                          }}
-                        />
-                      </td>
                       <td className="py-3 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Link
@@ -453,7 +441,7 @@ export function TeamPage({
                   <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--green)" }}>
                     {currencyFmt.format(totals.earned)}
                   </td>
-                  <td className="py-3 pr-3" colSpan={2} />
+                  <td className="py-3 pr-3" />
                 </tr>
               </tfoot>
             </table>
@@ -493,14 +481,6 @@ export function TeamPage({
                       </div>
                       <div className="mt-0.5 flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
                         <span className="font-mono">PIN ****</span>
-                        <span
-                          title={profile.videoUploadedToday ? t("team.videoToday") : t("team.noVideoToday")}
-                          className="inline-block h-2.5 w-2.5 rounded-full border"
-                          style={{
-                            background: profile.videoUploadedToday ? "var(--green)" : "transparent",
-                            borderColor: profile.videoUploadedToday ? "var(--green)" : "var(--text-muted)",
-                          }}
-                        />
                       </div>
                     </div>
                     <span

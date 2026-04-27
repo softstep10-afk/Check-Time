@@ -31,6 +31,12 @@ const roleOptions: UserRole[] = [
 
 type WorkerMediaRow = Media & { projectName: string | null };
 
+type DailyTotal = {
+  date: string;
+  minutes: number;
+  otLevel: "ok" | "warning" | "critical";
+};
+
 export function TeamMemberPage({
   orgId,
   managerId,
@@ -41,6 +47,10 @@ export function TeamMemberPage({
   sessions,
   storeVisits,
   media,
+  hasGpsBySessionId,
+  weekGpsMinutes,
+  weekNoGpsMinutes,
+  dailyTotals,
 }: {
   orgId: string;
   managerId: string;
@@ -51,6 +61,10 @@ export function TeamMemberPage({
   sessions: ManagerSession[];
   storeVisits: StoreVisit[];
   media: WorkerMediaRow[];
+  hasGpsBySessionId: Record<string, boolean>;
+  weekGpsMinutes: number;
+  weekNoGpsMinutes: number;
+  dailyTotals: DailyTotal[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -505,6 +519,55 @@ export function TeamMemberPage({
                 </div>
               </div>
             </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("teamMember.gpsHours")}</div>
+                <div className="mt-1 text-sm font-bold" style={{ color: "var(--green)" }}>
+                  {formatDurationCompact(weekGpsMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("teamMember.noGpsHours")}</div>
+                <div className="mt-1 text-sm font-bold" style={{ color: weekNoGpsMinutes > 0 ? "#f59e0b" : "var(--text-muted)" }}>
+                  {formatDurationCompact(weekNoGpsMinutes)}
+                </div>
+              </div>
+            </div>
+            {dailyTotals.length > 0 ? (
+              <div className="mt-4">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.dailyTotals")}
+                </div>
+                <div className="mt-2 space-y-1">
+                  {dailyTotals.map((day) => (
+                    <div key={day.date} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-[var(--text-secondary)]">{day.date}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[var(--text-primary)]">
+                          {formatDurationCompact(day.minutes)}
+                        </span>
+                        {day.otLevel !== "ok" ? (
+                          <span
+                            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                            style={{
+                              background:
+                                day.otLevel === "critical"
+                                  ? "rgba(239, 68, 68, 0.15)"
+                                  : "rgba(245, 158, 11, 0.15)",
+                              color: day.otLevel === "critical" ? "#ef4444" : "#f59e0b",
+                            }}
+                          >
+                            {day.otLevel === "critical"
+                              ? t("teamMember.overtime13h")
+                              : t("teamMember.overtime11h")}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <div className="mt-4 text-sm text-[var(--text-secondary)]">
               {profile.currentProjectName ?? t("teamMember.noCurrentProject")}
             </div>
@@ -775,6 +838,7 @@ export function TeamMemberPage({
             ) : (
               sessions.map((session) => {
                 const dayKey = session.clockInTime.slice(0, 10);
+                const hasGps = hasGpsBySessionId[session.id] ?? false;
                 return (
                   <button
                     key={session.id}
@@ -784,9 +848,16 @@ export function TeamMemberPage({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <span className="text-sm font-semibold text-[var(--text-primary)]">
-                          {session.projectName}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="inline-block h-1.5 w-1.5 rounded-full"
+                            style={{ background: hasGps ? "var(--green)" : "#f59e0b" }}
+                            title={hasGps ? "GPS" : "No GPS"}
+                          />
+                          <span className="text-sm font-semibold text-[var(--text-primary)]">
+                            {session.projectName}
+                          </span>
+                        </div>
                         <div className="mt-1 text-xs text-[var(--text-secondary)]">
                           {formatDateTime(session.clockInTime)}
                           {session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}

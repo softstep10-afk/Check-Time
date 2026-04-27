@@ -32,7 +32,51 @@ export default async function TeamMemberRoutePage({
 
   const assignments = data.assignments.filter((assignment) => assignment.profile_id === id);
   const tasks = data.tasks.filter((task) => task.assigned_to === id && !task.deleted_at).slice(0, 20);
-  const workerSessions = sessions.filter((session) => session.profileId === id).slice(0, 20);
+  const allWorkerSessions = sessions.filter((session) => session.profileId === id);
+  const workerSessions = allWorkerSessions.slice(0, 20);
+
+  // Build clock_in event lookup (events come from getTeamPageData — last 14 days).
+  const clockInById = new Map<string, (typeof data.timeEvents)[number]>();
+  for (const e of data.timeEvents) {
+    if (e.event_type === "clock_in") clockInById.set(e.id, e);
+  }
+  const hasGpsBySessionId: Record<string, boolean> = {};
+  for (const s of workerSessions) {
+    hasGpsBySessionId[s.id] = clockInById.get(s.clockInEventId)?.gps_point != null;
+  }
+
+  // Current Mon-Sun window — same convention as buildProfileSummaries.weekMinutes.
+  const nowDate = new Date();
+  const dow = nowDate.getDay();
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  const weekStartDate = new Date(nowDate);
+  weekStartDate.setDate(nowDate.getDate() + mondayOffset);
+  weekStartDate.setHours(0, 0, 0, 0);
+  const weekStartIso = weekStartDate.toISOString();
+
+  let weekGpsMinutes = 0;
+  let weekNoGpsMinutes = 0;
+  const dailyMap = new Map<string, number>();
+  for (const s of allWorkerSessions) {
+    if (s.clockInTime < weekStartIso) continue;
+    const day = s.clockInTime.slice(0, 10);
+    dailyMap.set(day, (dailyMap.get(day) ?? 0) + s.durationMinutes);
+    const hasGps = clockInById.get(s.clockInEventId)?.gps_point != null;
+    if (hasGps) weekGpsMinutes += s.durationMinutes;
+    else weekNoGpsMinutes += s.durationMinutes;
+  }
+  const dailyTotals = [...dailyMap.entries()]
+    .map(([date, minutes]) => ({
+      date,
+      minutes,
+      otLevel:
+        minutes > 13 * 60
+          ? ("critical" as const)
+          : minutes > 11 * 60
+            ? ("warning" as const)
+            : ("ok" as const),
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   // Closed store visits in the last 7 days, newest first.
   // Date.now() is fine here — server component, runs once per request.
@@ -77,6 +121,10 @@ export default async function TeamMemberRoutePage({
       sessions={workerSessions}
       storeVisits={workerStoreVisits}
       media={workerMedia}
+      hasGpsBySessionId={hasGpsBySessionId}
+      weekGpsMinutes={weekGpsMinutes}
+      weekNoGpsMinutes={weekNoGpsMinutes}
+      dailyTotals={dailyTotals}
     />
   );
 }
