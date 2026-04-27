@@ -233,6 +233,8 @@ export const translations = {
   "projects.deviceLocationHint": { en: "Use this device GPS only when you are physically at the job site. It does not look up the typed address.", ru: "Используйте GPS этого устройства только когда вы физически находитесь на объекте. Введённый адрес не геокодируется." },
   "projects.addressLookupHint": { en: "Use the typed address to fill latitude and longitude. Review the matched address before saving.", ru: "Используйте введённый адрес, чтобы заполнить широту и долготу. Перед сохранением проверьте найденный адрес." },
   "projects.addressLookupDisabled": { en: "Address lookup not configured. Use phone GPS or enter coordinates manually.", ru: "Поиск по адресу не настроен. Используйте GPS телефона или введите координаты вручную." },
+  "projects.useLocationAsAddress": { en: "Use my location as address", ru: "Использовать мои координаты как адрес" },
+  "projects.findingLocationAsAddress": { en: "Finding address...", ru: "Поиск адреса..." },
   "projects.addressLookupMatched": { en: "Matched address", ru: "Найденный адрес" },
   "projects.addressLookupAddressRequired": { en: "Type an address before looking up GPS coordinates.", ru: "Введите адрес перед поиском GPS-координат." },
   "projects.deviceLocationAccuracy": { en: "Device GPS accuracy: {meters} m.", ru: "Точность GPS этого устройства: {meters} м." },

@@ -456,6 +456,7 @@ export function ProjectsPage({
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
   const [pickingLocation, setPickingLocation] = useState(false);
   const [geocodingTarget, setGeocodingTarget] = useState<"create" | "edit" | null>(null);
+  const [reverseLookupTarget, setReverseLookupTarget] = useState<"create" | "edit" | null>(null);
   const [createCoordinatesConfirmed, setCreateCoordinatesConfirmed] = useState(false);
   const [editCoordinatesConfirmed, setEditCoordinatesConfirmed] = useState(false);
   const [createDeviceLocation, setCreateDeviceLocation] = useState<DeviceLocationAssessment | null>(null);
@@ -625,6 +626,78 @@ export function ProjectsPage({
       // 20s timeout (was 10s) — desktop browsers without GPS hardware fall
       // back to Wi-Fi triangulation which routinely takes 10–15s on first
       // call. maximumAge bumped too so a fresh tab-open isn't penalized.
+      { enableHighAccuracy: true, timeout: 20_000, maximumAge: 60_000 },
+    );
+  }
+
+  function fillAddressFromDeviceLocation(
+    mode: "create" | "edit",
+    formRef: React.RefObject<HTMLFormElement | null>,
+    targetLatRef: React.RefObject<HTMLInputElement | null>,
+    targetLngRef: React.RefObject<HTMLInputElement | null>,
+    setDeviceLocation: Dispatch<SetStateAction<DeviceLocationAssessment | null>>,
+    clearConfirmation: () => void,
+  ) {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setMessage(t("projects.locationUnavailable"));
+      return;
+    }
+    setReverseLookupTarget(mode);
+    setMessage("");
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const point = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        if (!isValidGeoPoint(point)) {
+          setReverseLookupTarget(null);
+          setMessage(t("projects.locationInvalid"));
+          return;
+        }
+        setInputElementValue(targetLatRef.current, point.lat.toFixed(6));
+        setInputElementValue(targetLngRef.current, point.lng.toFixed(6));
+        setDeviceLocation(assessDeviceLocationAccuracy(position.coords.accuracy));
+        clearConfirmation();
+        try {
+          const response = await fetch("/api/manager/projects/geocode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lat: point.lat, lng: point.lng, reverse: true }),
+          });
+          if (!response.ok) {
+            const failure = await readRouteFailure(response);
+            setMessage(failure.error);
+            return;
+          }
+          const payload = (await response.json()) as { formattedAddress?: string | null };
+          const formatted =
+            typeof payload.formattedAddress === "string" && payload.formattedAddress.trim()
+              ? payload.formattedAddress
+              : "";
+          if (formatted) {
+            const form = formRef.current;
+            const addressEl = form?.elements.namedItem("address");
+            if (addressEl instanceof HTMLInputElement) {
+              addressEl.value = formatted;
+            }
+          }
+        } catch (err) {
+          setMessage(err instanceof Error ? err.message : t("projects.locationUnavailable"));
+        } finally {
+          setReverseLookupTarget(null);
+        }
+      },
+      (err: GeolocationPositionError) => {
+        const key =
+          err.code === err.PERMISSION_DENIED
+            ? "projects.locationDenied"
+            : err.code === err.TIMEOUT
+              ? "projects.locationTimeout"
+              : "projects.locationUnavailable";
+        setReverseLookupTarget(null);
+        setMessage(t(key));
+      },
       { enableHighAccuracy: true, timeout: 20_000, maximumAge: 60_000 },
     );
   }
@@ -1023,9 +1096,28 @@ export function ProjectsPage({
               }}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
-            <p className="mt-3 text-xs text-[var(--text-muted)]">
-              {t("projects.addressLookupDisabled")}
-            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  fillAddressFromDeviceLocation(
+                    "create",
+                    createFormRef,
+                    createLatRef,
+                    createLngRef,
+                    setCreateDeviceLocation,
+                    () => setCreateCoordinatesConfirmed(false),
+                  )
+                }
+                disabled={reverseLookupTarget === "create"}
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+              >
+                {reverseLookupTarget === "create"
+                  ? t("projects.findingLocationAsAddress")
+                  : t("projects.useLocationAsAddress")}
+              </button>
+            </div>
             {createAddressLookupError ? (
               <div
                 className="mt-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm"
@@ -1493,9 +1585,28 @@ export function ProjectsPage({
                   }}
                   className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 />
-                <p className="mt-3 text-xs text-[var(--text-muted)]">
-                  {t("projects.addressLookupDisabled")}
-                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      fillAddressFromDeviceLocation(
+                        "edit",
+                        editFormRef,
+                        editLatRef,
+                        editLngRef,
+                        setEditDeviceLocation,
+                        () => setEditCoordinatesConfirmed(false),
+                      )
+                    }
+                    disabled={reverseLookupTarget === "edit"}
+                    className="inline-flex items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                    style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+                  >
+                    {reverseLookupTarget === "edit"
+                      ? t("projects.findingLocationAsAddress")
+                      : t("projects.useLocationAsAddress")}
+                  </button>
+                </div>
                 {editAddressLookupError ? (
                   <div
                     className="mt-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm"
