@@ -992,6 +992,32 @@ export function ProjectsPage({
     router.refresh();
   }
 
+  async function handleDeleteProject(projectId: string) {
+    setBusyKey(`delete-${projectId}`);
+    setMessage("");
+
+    const response = await fetch(`/api/manager/projects/${projectId}`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: unknown }
+        | null;
+      const errorMessage =
+        payload && typeof payload.error === "string" && payload.error.trim()
+          ? payload.error
+          : `Request failed (${response.status})`;
+      setMessage(errorMessage);
+      setBusyKey(null);
+      return;
+    }
+
+    setBusyKey(null);
+    setMessage(t("projects.deleted"));
+    router.refresh();
+  }
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
@@ -1854,7 +1880,10 @@ export function ProjectsPage({
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
                 {t("projects.removeConfirmBody").replace("{name}", removeTarget.name)}
               </p>
-              <div className="mt-3 flex gap-2">
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                {t("projects.deletePermanentlyHint")}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -1864,11 +1893,33 @@ export function ProjectsPage({
                   }}
                   disabled={busyKey === `archive-${removeTarget.id}`}
                   className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
-                  style={{ background: "var(--red)", color: "white" }}
+                  style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
                 >
                   {busyKey === `archive-${removeTarget.id}`
                     ? t("projects.archiving")
-                    : t("common.remove")}
+                    : t("projects.archive")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = removeTarget.id;
+                    if (
+                      !window.confirm(
+                        t("projects.deletePermanentlyHint"),
+                      )
+                    ) {
+                      return;
+                    }
+                    setRemoveConfirmId(null);
+                    void handleDeleteProject(id);
+                  }}
+                  disabled={busyKey === `delete-${removeTarget.id}`}
+                  className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                  style={{ background: "var(--red)", color: "white" }}
+                >
+                  {busyKey === `delete-${removeTarget.id}`
+                    ? t("projects.deleting")
+                    : t("projects.deletePermanently")}
                 </button>
                 <button
                   type="button"
