@@ -65,8 +65,11 @@ export default async function WorkerProjectPage({
   }
   if (!allowed) notFound();
 
-  // Project Media — strict filter to metadata.kind="project_media".
-  // Receipts and task attachments are intentionally excluded.
+  // All visible media for this project. Worker RLS already scopes this
+  // to projects they're assigned to (or all-active mode minus exclusions).
+  // We split client-side into project media vs receipts based on
+  // metadata.kind so the worker view can render two separate sections.
+  // Receipts and task attachments stay out of the "Project Media" list.
   const { data: rawMedia } = await supabase
     .from("media")
     .select("id, filename, mime_type, media_type, storage_path, metadata, created_at")
@@ -85,6 +88,33 @@ export default async function WorkerProjectPage({
       media_type: m.media_type,
       storage_path: m.storage_path,
     }));
+  const projectReceipts = (rawMedia ?? [])
+    .filter((m) => {
+      const meta = (m as unknown as Media).metadata as Record<string, unknown> | null;
+      // metadata.category="receipt" is the legacy worker upload path
+      // (WorkerProjectView WorkerReceiptUpload); metadata.kind="receipt"
+      // is the manager-side path (ProjectDetailPage ReceiptsSection).
+      // Accept both so neither side stays invisible.
+      return meta?.kind === "receipt" || meta?.category === "receipt";
+    })
+    .map((m) => {
+      const meta = (m as unknown as Media).metadata as Record<string, unknown> | null;
+      return {
+        id: m.id,
+        filename: m.filename,
+        mime_type: m.mime_type,
+        media_type: m.media_type,
+        storage_path: m.storage_path,
+        created_at: m.created_at,
+        store_name: typeof meta?.store_name === "string" ? meta.store_name : null,
+        amount:
+          typeof meta?.amount === "number"
+            ? meta.amount
+            : typeof meta?.amount === "string"
+              ? Number.parseFloat(meta.amount)
+              : null,
+      };
+    });
 
   // Tasks for this project: assigned to this worker OR project-level
   // (assigned_to IS NULL) so the whole crew sees crew-wide tasks.
@@ -113,6 +143,7 @@ export default async function WorkerProjectPage({
     <WorkerProjectView
       project={project}
       projectMedia={projectMedia}
+      projectReceipts={projectReceipts}
       tasks={tasksWithAttachments}
       orgId={project.org_id}
       profileId={user.id}

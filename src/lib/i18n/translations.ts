@@ -351,6 +351,12 @@ export const translations = {
   "workerProject.projectMediaEmpty": { en: "No project media yet.", ru: "Пока нет медиа проекта." },
   "workerProject.tasksTitle": { en: "Project Tasks", ru: "Задачи проекта" },
   "workerProject.tasksEmpty": { en: "No tasks yet.", ru: "Пока нет задач." },
+  "workerProject.notesTitle": { en: "Notes", ru: "Заметки" },
+  "workerProject.notesEmpty": { en: "No notes yet.", ru: "Заметок нет." },
+  "workerProject.tasksMineTitle": { en: "My tasks", ru: "Мои задачи" },
+  "workerProject.tasksProjectTitle": { en: "Project tasks", ru: "Общие задачи" },
+  "workerProject.receiptsTitle": { en: "Receipts", ru: "Чеки" },
+  "workerProject.receiptsEmpty": { en: "No receipts yet.", ru: "Чеков пока нет." },
   "workerProject.readOnlyHint": {
     en: "Read-only view. Upload files from your worker tools.",
     ru: "Только просмотр. Загружайте файлы из своих рабочих инструментов.",

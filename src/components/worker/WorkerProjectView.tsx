@@ -2,14 +2,26 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { Receipt as ReceiptIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { validateUploadFile } from "@/lib/upload-limits";
-import type { TaskAttachmentRef } from "@/lib/task-attachments";
+import { normalizeStoragePath, type TaskAttachmentRef } from "@/lib/task-attachments";
 import type { Project, Task } from "@/types/database";
 
 type TaskWithAttachments = Task & { attachments?: TaskAttachmentRef[] };
+
+type ReceiptItem = {
+  id: string;
+  filename: string | null;
+  mime_type: string | null;
+  media_type: string;
+  storage_path: string;
+  created_at: string;
+  store_name: string | null;
+  amount: number | null;
+};
 
 const STORES = [
   "Home Depot",
@@ -38,17 +50,25 @@ function mapTaskStatusToMaterialStatus(taskStatus: string): MaterialStatus {
 export function WorkerProjectView({
   project,
   projectMedia,
+  projectReceipts,
   tasks,
   orgId,
   profileId,
 }: {
   project: Project;
   projectMedia: TaskAttachmentRef[];
+  projectReceipts: ReceiptItem[];
   tasks: TaskWithAttachments[];
   orgId: string;
   profileId: string;
 }) {
   const { t } = useTranslation();
+
+  // Split tasks into "mine" (assigned to this worker) vs "project-level"
+  // (assigned_to IS NULL — visible to the whole crew). Both lists were
+  // already loaded by the server route, just split here for display.
+  const mineTasks = tasks.filter((task) => task.assigned_to === profileId);
+  const projectLevelTasks = tasks.filter((task) => task.assigned_to === null);
 
   return (
     <div className="space-y-4">
@@ -63,6 +83,22 @@ export function WorkerProjectView({
         <p className="mt-2 text-[10px] font-semibold text-[var(--text-muted)]">
           {t("workerProject.readOnlyHint")}
         </p>
+      </section>
+
+      {/* Notes — visible to the whole crew. project.notes is on every Project row. */}
+      <section className="surface-card p-4">
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">
+          {t("workerProject.notesTitle")}
+        </h2>
+        {project.notes ? (
+          <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
+            {project.notes}
+          </p>
+        ) : (
+          <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
+            {t("workerProject.notesEmpty")}
+          </div>
+        )}
       </section>
 
       <section className="surface-card p-4">
@@ -87,50 +123,149 @@ export function WorkerProjectView({
         profileId={profileId}
       />
 
+      {/* Existing receipts on this project — list view. Worker can tap to
+          open the file in a signed Storage URL. */}
+      <ProjectReceiptsList items={projectReceipts} />
+
+      {/* My tasks (assigned_to = me) */}
       <section className="surface-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">
-            {t("workerProject.tasksTitle")}
+            {t("workerProject.tasksMineTitle")}
           </h2>
           <span className="rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
-            {t("workerProject.tasksScopeChip")}
+            {mineTasks.length}
           </span>
         </div>
-        <p className="mt-1 text-xs text-[var(--text-muted)]">
-          {t("workerProject.tasksForThisProjectSubtitle")}
-        </p>
-        {tasks.length === 0 ? (
+        {mineTasks.length === 0 ? (
           <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
             {t("workerProject.tasksEmpty")}
           </div>
         ) : (
           <div className="mt-3 space-y-3">
-            {tasks.map((task) => (
-              <div
-                key={task.id}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-              >
-                <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
-                <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                  {task.priority} • {task.status.replace("_", " ")}
-                </div>
-                {task.description ? (
-                  <p className="mt-2 text-sm text-[var(--text-secondary)]">{task.description}</p>
-                ) : null}
-                {task.attachments && task.attachments.length > 0 ? (
-                  <>
-                    <div className="mt-2 text-[10px] text-[var(--text-muted)]">
-                      📎 {task.attachments.length} {t("tasks.filesShort")}
-                    </div>
-                    <TaskAttachmentList items={task.attachments} />
-                  </>
-                ) : null}
-              </div>
+            {mineTasks.map((task) => (
+              <WorkerTaskCard key={task.id} task={task} t={t} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Project-level tasks (assigned_to IS NULL) */}
+      <section className="surface-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">
+            {t("workerProject.tasksProjectTitle")}
+          </h2>
+          <span className="rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+            {projectLevelTasks.length}
+          </span>
+        </div>
+        {projectLevelTasks.length === 0 ? (
+          <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
+            {t("workerProject.tasksEmpty")}
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {projectLevelTasks.map((task) => (
+              <WorkerTaskCard key={task.id} task={task} t={t} />
             ))}
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+function WorkerTaskCard({
+  task,
+  t,
+}: {
+  task: TaskWithAttachments;
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  return (
+    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3">
+      <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
+      <div className="mt-1 text-xs text-[var(--text-secondary)]">
+        {task.priority} • {task.status.replace("_", " ")}
+      </div>
+      {task.description ? (
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">{task.description}</p>
+      ) : null}
+      {task.attachments && task.attachments.length > 0 ? (
+        <>
+          <div className="mt-2 text-[10px] text-[var(--text-muted)]">
+            📎 {task.attachments.length} {t("tasks.filesShort")}
+          </div>
+          <TaskAttachmentList items={task.attachments} />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function ProjectReceiptsList({ items }: { items: ReceiptItem[] }) {
+  const { t } = useTranslation();
+  const supabase = useMemo(() => createClient(), []);
+
+  async function open(item: ReceiptItem) {
+    if (typeof window === "undefined") return;
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) return;
+    const { data, error } = await supabase.storage
+      .from("media")
+      .createSignedUrl(normalizeStoragePath(item.storage_path), 3600);
+    if (error || !data?.signedUrl) {
+      tab.close();
+      return;
+    }
+    tab.location.href = data.signedUrl;
+  }
+
+  return (
+    <section className="surface-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">
+          {t("workerProject.receiptsTitle")}
+        </h2>
+        <span className="rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+          {items.length}
+        </span>
+      </div>
+      {items.length === 0 ? (
+        <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
+          {t("workerProject.receiptsEmpty")}
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => void open(item)}
+              className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] p-3 text-left"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <ReceiptIcon size={14} className="shrink-0 text-[var(--brand-yellow)]" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    {item.store_name ?? item.filename ?? t("workerProject.receiptsTitle")}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                    {item.created_at.slice(0, 10)}
+                  </div>
+                </div>
+              </div>
+              {item.amount !== null && Number.isFinite(item.amount) ? (
+                <span className="shrink-0 font-mono text-sm font-semibold text-[var(--brand-yellow)]">
+                  ${item.amount.toFixed(2)}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
