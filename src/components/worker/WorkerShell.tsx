@@ -590,6 +590,40 @@ export function WorkerShell({
     setShell(initialData);
   }, [initialData]);
 
+  // ── Profile-change realtime subscription ──────────────────────────────
+  // The worker's `shell.profile.require_video` (and other profile flags)
+  // are loaded once when the layout server-renders. Without this listener,
+  // a manager toggling "Require checkout video" off would not propagate to
+  // a worker who's already on /clock — the worker keeps the stale value
+  // until they hard-refresh, so they'd still be gated by the modal even
+  // though the DB row says require_video=false.
+  //
+  // On an UPDATE to this worker's own profiles row, call router.refresh()
+  // to re-run the (worker) layout server-side; that hands new initialData
+  // to the shell, the existing setShell(initialData) effect above wires it
+  // into state, and CheckoutModal reads the fresh require_video on its
+  // next render. Mirrors the manager-side OverviewLiveIndicator pattern.
+  useEffect(() => {
+    const channel = supabase
+      .channel(`worker-profile-${shell.profile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${shell.profile.id}`,
+        },
+        () => {
+          router.refresh();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, router, shell.profile.id]);
+
   useEffect(() => {
     if (!mounted) return;
     if (!shell.clockState.isClockedIn || !shell.clockState.clockInTime) {
