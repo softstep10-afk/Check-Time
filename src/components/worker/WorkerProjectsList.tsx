@@ -1,7 +1,8 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
-import { ArrowRight, MapPin } from "lucide-react";
+import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
 import type { ProjectStatus } from "@/types/database";
@@ -17,6 +18,18 @@ export function WorkerProjectsList() {
   const { shell } = useWorkerShell();
   const { t } = useTranslation();
   const projects = shell.projects;
+
+  // Per-project task counts derived once from shell.tasks. shell.tasks is
+  // already loaded by getWorkerShellData (personal + project-level), so
+  // this is a free aggregation — no extra DB calls.
+  const tasksByProject = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const task of shell.tasks) {
+      if (!task.project_id || task.status === "done" || task.status === "cancelled") continue;
+      map.set(task.project_id, (map.get(task.project_id) ?? 0) + 1);
+    }
+    return map;
+  }, [shell.tasks]);
 
   return (
     <div className="space-y-4">
@@ -37,6 +50,8 @@ export function WorkerProjectsList() {
           {projects.map((project) => {
             const tone =
               STATUS_COLORS[project.status as ProjectStatus] ?? STATUS_COLORS.active;
+            const hasFence = project.site !== null;
+            const taskCount = tasksByProject.get(project.id) ?? 0;
             return (
               <Link
                 key={project.id}
@@ -55,6 +70,23 @@ export function WorkerProjectsList() {
                       >
                         {project.status}
                       </span>
+                      <span
+                        className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                        style={{
+                          background: hasFence
+                            ? "rgba(46, 166, 122, 0.14)"
+                            : "rgba(107, 114, 128, 0.18)",
+                          color: hasFence ? "var(--green)" : "var(--text-muted)",
+                        }}
+                        title={hasFence ? t("worker.projectFenceOn") : t("worker.projectFenceOff")}
+                      >
+                        {hasFence ? (
+                          <Navigation size={9} />
+                        ) : (
+                          <NavigationOff size={9} />
+                        )}
+                        {hasFence ? t("worker.projectFenceOn") : t("worker.projectFenceOff")}
+                      </span>
                     </div>
                     {project.address ? (
                       <div className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
@@ -62,6 +94,12 @@ export function WorkerProjectsList() {
                         <span className="truncate">{project.address}</span>
                       </div>
                     ) : null}
+                    <div className="mt-1.5 flex items-center gap-1 text-[11px] text-[var(--text-secondary)]">
+                      <ClipboardList size={11} className="shrink-0" />
+                      <span>
+                        {taskCount} {t("worker.projectTasks")}
+                      </span>
+                    </div>
                   </div>
                   <span
                     className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-semibold"

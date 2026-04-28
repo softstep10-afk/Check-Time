@@ -115,6 +115,9 @@ export const translations = {
   "worker.projectsTitle": { en: "Projects", ru: "Проекты" },
   "worker.projectsEmpty": { en: "No projects available.", ru: "Нет доступных проектов." },
   "worker.openProject": { en: "Open project", ru: "Открыть проект" },
+  "worker.projectFenceOn": { en: "GPS", ru: "GPS" },
+  "worker.projectFenceOff": { en: "No fence", ru: "Без зоны" },
+  "worker.projectTasks": { en: "tasks", ru: "задач" },
 
   // ── Clock Page ──
   "clock.shiftStatus": { en: "Shift Status", ru: "Статус смены" },
