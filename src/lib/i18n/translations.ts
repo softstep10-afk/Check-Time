@@ -108,9 +108,13 @@ export const translations = {
   "worker.readyToStart": { en: "Ready to start the next shift", ru: "Готов начать следующую смену" },
   "worker.checkoutVideoNeeded": { en: "Checkout video still needs upload for", ru: "Видео при выходе ещё нужно загрузить для" },
   "worker.navClock": { en: "Clock", ru: "Смена" },
+  "worker.navProjects": { en: "Projects", ru: "Проекты" },
   "worker.navJournal": { en: "Journal", ru: "Журнал" },
   "worker.navTasks": { en: "Tasks", ru: "Задачи" },
   "worker.navHours": { en: "Hours", ru: "Часы" },
+  "worker.projectsTitle": { en: "Projects", ru: "Проекты" },
+  "worker.projectsEmpty": { en: "No projects available.", ru: "Нет доступных проектов." },
+  "worker.openProject": { en: "Open project", ru: "Открыть проект" },
 
   // ── Clock Page ──
   "clock.shiftStatus": { en: "Shift Status", ru: "Статус смены" },
