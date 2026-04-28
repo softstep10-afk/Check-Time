@@ -51,6 +51,7 @@ export function TeamMemberPage({
   weekGpsMinutes,
   weekNoGpsMinutes,
   dailyTotals,
+  excludedProjectIds,
 }: {
   orgId: string;
   managerId: string;
@@ -65,6 +66,7 @@ export function TeamMemberPage({
   weekGpsMinutes: number;
   weekNoGpsMinutes: number;
   dailyTotals: DailyTotal[];
+  excludedProjectIds: string[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -111,6 +113,17 @@ export function TeamMemberPage({
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
   const activeProjects = projects.filter((project) => project.status !== "archived");
 
+  // Migration 00018 — per-worker visibility mode. Default to 'list' for
+  // legacy / unmigrated rows so behavior matches today.
+  const initialAccessMode: "list" | "all_active" =
+    (profile as { project_access_mode?: "list" | "all_active" | null }).project_access_mode === "all_active"
+      ? "all_active"
+      : "list";
+  const [accessMode, setAccessMode] = useState<"list" | "all_active">(initialAccessMode);
+  const [excludedSet, setExcludedSet] = useState<Set<string>>(
+    () => new Set(excludedProjectIds),
+  );
+
   async function handleUpdateProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -150,6 +163,51 @@ export function TeamMemberPage({
     setBusyKey(`toggle-${projectId}`);
     setMessage("");
 
+    if (accessMode === "all_active") {
+      // In 'all_active' mode the per-project switch toggles an exclusion.
+      // Toggle ON  = project visible = ensure NO exclusion row exists.
+      // Toggle OFF = project hidden  = INSERT an exclusion row.
+      const isExcluded = excludedSet.has(projectId);
+      if (isExcluded) {
+        const { error } = await supabase
+          .from("project_exclusions")
+          .delete()
+          .eq("profile_id", profile.id)
+          .eq("project_id", projectId);
+        if (error) {
+          setMessage(error.message);
+          setMessageType("error");
+          setBusyKey(null);
+          return;
+        }
+        const next = new Set(excludedSet);
+        next.delete(projectId);
+        setExcludedSet(next);
+        setMessage(t("teamMember.projectAssigned"));
+      } else {
+        const { error } = await supabase.from("project_exclusions").insert({
+          org_id: orgId,
+          profile_id: profile.id,
+          project_id: projectId,
+        });
+        if (error) {
+          setMessage(error.message);
+          setMessageType("error");
+          setBusyKey(null);
+          return;
+        }
+        const next = new Set(excludedSet);
+        next.add(projectId);
+        setExcludedSet(next);
+        setMessage(t("teamMember.assignmentRemoved"));
+      }
+      setBusyKey(null);
+      setMessageType("success");
+      router.refresh();
+      return;
+    }
+
+    // 'list' mode — original behavior, untouched.
     const existing = assignments.find((a) => a.project_id === projectId);
 
     if (existing) {
@@ -183,6 +241,53 @@ export function TeamMemberPage({
       setMessage(t("teamMember.projectAssigned"));
     }
 
+    setMessageType("success");
+    setBusyKey(null);
+    router.refresh();
+  }
+
+  async function handleSetAccessMode(nextMode: "list" | "all_active") {
+    if (nextMode === accessMode) return;
+
+    // Surface the visibility delta before flipping. Going list → all_active
+    // can grow the worker's project set significantly; going the other way
+    // can shrink it. The manager should explicitly opt in.
+    if (nextMode === "all_active") {
+      const willGrow = activeProjects.filter(
+        (project) => !assignedProjectIds.has(project.id) && !excludedSet.has(project.id),
+      ).length;
+      if (willGrow > 0) {
+        const ok = window.confirm(
+          t("teamMember.accessModeAllActiveConfirm").replace("{count}", String(willGrow)),
+        );
+        if (!ok) return;
+      }
+    } else {
+      const visibleNow = activeProjects.filter(
+        (project) => !excludedSet.has(project.id),
+      ).length;
+      if (visibleNow > 0) {
+        const ok = window.confirm(
+          t("teamMember.accessModeListConfirm").replace("{count}", String(visibleNow)),
+        );
+        if (!ok) return;
+      }
+    }
+
+    setBusyKey("access-mode");
+    setMessage("");
+    const { error } = await supabase
+      .from("profiles")
+      .update({ project_access_mode: nextMode })
+      .eq("id", profile.id);
+    if (error) {
+      setMessage(error.message);
+      setMessageType("error");
+      setBusyKey(null);
+      return;
+    }
+    setAccessMode(nextMode);
+    setMessage(t("teamMember.accessModeUpdated"));
     setMessageType("success");
     setBusyKey(null);
     router.refresh();
@@ -575,8 +680,76 @@ export function TeamMemberPage({
 
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.projectAssignments")}</h2>
-              <div className="text-xs text-[var(--text-muted)]">{assignments.length} {t("common.assigned").toLowerCase()}</div>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.projectAccess")}</h2>
+              <div className="text-xs text-[var(--text-muted)]">
+                {accessMode === "all_active"
+                  ? `${activeProjects.filter((p) => !excludedSet.has(p.id)).length} ${t("common.assigned").toLowerCase()}`
+                  : `${assignments.length} ${t("common.assigned").toLowerCase()}`}
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <button
+                type="button"
+                onClick={() => void handleSetAccessMode("list")}
+                disabled={busyKey === "access-mode"}
+                className="flex w-full items-start gap-3 rounded-[var(--radius-md)] border p-3 text-left"
+                style={{
+                  borderColor:
+                    accessMode === "list" ? "var(--brand-yellow)" : "var(--border-default)",
+                  background:
+                    accessMode === "list" ? "rgba(191, 162, 52, 0.08)" : "transparent",
+                }}
+                aria-pressed={accessMode === "list"}
+              >
+                <span
+                  className="mt-0.5 inline-block h-3 w-3 shrink-0 rounded-full border-2"
+                  style={{
+                    borderColor:
+                      accessMode === "list" ? "var(--brand-yellow)" : "var(--text-muted)",
+                    background:
+                      accessMode === "list" ? "var(--brand-yellow)" : "transparent",
+                  }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[var(--text-primary)]">
+                    {t("teamMember.accessModeListLabel")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">
+                    {t("teamMember.accessModeListHint")}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSetAccessMode("all_active")}
+                disabled={busyKey === "access-mode"}
+                className="flex w-full items-start gap-3 rounded-[var(--radius-md)] border p-3 text-left"
+                style={{
+                  borderColor:
+                    accessMode === "all_active" ? "var(--brand-yellow)" : "var(--border-default)",
+                  background:
+                    accessMode === "all_active" ? "rgba(191, 162, 52, 0.08)" : "transparent",
+                }}
+                aria-pressed={accessMode === "all_active"}
+              >
+                <span
+                  className="mt-0.5 inline-block h-3 w-3 shrink-0 rounded-full border-2"
+                  style={{
+                    borderColor:
+                      accessMode === "all_active" ? "var(--brand-yellow)" : "var(--text-muted)",
+                    background:
+                      accessMode === "all_active" ? "var(--brand-yellow)" : "transparent",
+                  }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-[var(--text-primary)]">
+                    {t("teamMember.accessModeAllActiveLabel")}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-[var(--text-secondary)]">
+                    {t("teamMember.accessModeAllActiveHint")}
+                  </span>
+                </span>
+              </button>
             </div>
             <div className="mt-4 space-y-2">
               {activeProjects.length === 0 ? (
@@ -585,7 +758,15 @@ export function TeamMemberPage({
                 </div>
               ) : (
                 activeProjects.map((project) => {
-                  const isAssigned = assignedProjectIds.has(project.id);
+                  // In 'list' mode the toggle reflects project_assignments
+                  // membership (ON = visible). In 'all_active' mode the toggle
+                  // reflects "NOT in exclusions" (ON = visible). Either way
+                  // the visual contract for the manager is "ON = worker can
+                  // see this project".
+                  const isVisible =
+                    accessMode === "all_active"
+                      ? !excludedSet.has(project.id)
+                      : assignedProjectIds.has(project.id);
                   const isBusy = busyKey === `toggle-${project.id}`;
 
                   return (
@@ -612,16 +793,20 @@ export function TeamMemberPage({
                         disabled={isBusy}
                         className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
                         style={{
-                          background: isAssigned
+                          background: isVisible
                             ? "var(--brand-yellow)"
                             : "var(--border-default)",
                         }}
-                        aria-label={isAssigned ? `Unassign from ${project.name}` : `Assign to ${project.name}`}
+                        aria-label={
+                          isVisible
+                            ? `Hide ${project.name} from this worker`
+                            : `Show ${project.name} to this worker`
+                        }
                       >
                         <span
                           className="absolute top-0.5 block h-5 w-5 rounded-full bg-white transition-transform"
                           style={{
-                            transform: isAssigned ? "translateX(22px)" : "translateX(2px)",
+                            transform: isVisible ? "translateX(22px)" : "translateX(2px)",
                           }}
                         />
                       </button>

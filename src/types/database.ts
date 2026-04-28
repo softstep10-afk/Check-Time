@@ -41,9 +41,23 @@ export interface Profile {
   // may not have it yet; the worker shell reads it defensively and falls
   // back to localStorage for the silent-mode toggle.
   notif_mode?: "sound" | "silent" | null;
+  // Migration 00018 — per-worker project visibility mode.
+  //   'list' (default): worker sees projects in project_assignments.
+  //   'all_active': worker sees every active project except those in
+  //   project_exclusions. Older deploys without the column read as
+  //   undefined → app code defaults to 'list'.
+  project_access_mode?: "list" | "all_active" | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectExclusion {
+  id: string;
+  org_id: string;
+  profile_id: string;
+  project_id: string;
+  excluded_at: string;
 }
 
 export type ProjectTimelineStatus = "on_track" | "at_risk" | "delayed";

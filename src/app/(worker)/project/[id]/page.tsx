@@ -21,18 +21,10 @@ export default async function WorkerProjectPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Worker must be assigned to this project to view it. Owners /
-  // managers should be using /projects/<id> (their own surface) — they
-  // get bounced to /overview by the (manager) layout normally, so this
-  // route is effectively worker-only in practice.
-  const { data: assignment } = await supabase
-    .from("project_assignments")
-    .select("project_id")
-    .eq("project_id", id)
-    .eq("profile_id", user.id)
-    .maybeSingle();
-  if (!assignment) notFound();
-
+  // Migration 00018 — visibility honors profile.project_access_mode.
+  // Owners / managers should be using /projects/<id> (their own surface)
+  // — they get bounced to /overview by the (manager) layout normally, so
+  // this route is effectively worker-only in practice.
   const { data: project } = await supabase
     .from("projects")
     .select("*")
@@ -40,6 +32,38 @@ export default async function WorkerProjectPage({
     .is("deleted_at", null)
     .maybeSingle<Project>();
   if (!project) notFound();
+
+  const { data: profileRow } = await supabase
+    .from("profiles")
+    .select("project_access_mode")
+    .eq("id", user.id)
+    .maybeSingle<{ project_access_mode: "list" | "all_active" | null }>();
+  const accessMode: "list" | "all_active" =
+    profileRow?.project_access_mode === "all_active" ? "all_active" : "list";
+
+  let allowed = false;
+  if (accessMode === "list") {
+    const { data: assignment } = await supabase
+      .from("project_assignments")
+      .select("project_id")
+      .eq("project_id", id)
+      .eq("profile_id", user.id)
+      .maybeSingle();
+    allowed = Boolean(assignment);
+  } else {
+    if (project.status === "active") {
+      const { data: exclusion, error: exclusionError } = await supabase
+        .from("project_exclusions")
+        .select("id")
+        .eq("project_id", id)
+        .eq("profile_id", user.id)
+        .maybeSingle();
+      // If the table doesn't exist yet (pre-migration deploy), treat as
+      // "no exclusions" rather than failing closed.
+      allowed = exclusionError ? true : !exclusion;
+    }
+  }
+  if (!allowed) notFound();
 
   // Project Media — strict filter to metadata.kind="project_media".
   // Receipts and task attachments are intentionally excluded.

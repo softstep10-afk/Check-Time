@@ -106,27 +106,69 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   const media = mediaResult.data ?? [];
 
   const projectIds = new Set<string>();
-  const assignedProjectIds = new Set<string>();
   const assignedAtByProjectId = new Map<string, string | null>();
 
   for (const assignment of assignments) {
     if (assignment.project_id) {
       projectIds.add(assignment.project_id);
-      assignedProjectIds.add(assignment.project_id);
       assignedAtByProjectId.set(assignment.project_id, assignment.assigned_at ?? null);
     }
   }
 
+  // Migration 00018 — visibility set depends on profile.project_access_mode.
+  //   'list'        → existing project_assignments rows
+  //   'all_active'  → every active project minus project_exclusions
+  // The column is optional in older deploys; treat undefined as 'list'
+  // so workers default to today's behavior until the migration runs.
+  const accessMode: "list" | "all_active" =
+    profile.project_access_mode === "all_active" ? "all_active" : "list";
+
+  const allowedProjectIds = new Set<string>();
+  if (accessMode === "list") {
+    for (const assignment of assignments) {
+      if (assignment.project_id) {
+        allowedProjectIds.add(assignment.project_id);
+      }
+    }
+  } else {
+    const [activeProjectsResult, exclusionsResult] = await Promise.all([
+      supabase
+        .from("projects")
+        .select("id")
+        .eq("status", "active")
+        .is("deleted_at", null)
+        .returns<Array<{ id: string }>>(),
+      supabase
+        .from("project_exclusions")
+        .select("project_id")
+        .eq("profile_id", user.id)
+        .returns<Array<{ project_id: string }>>(),
+    ]);
+    assertNoError(activeProjectsResult.error, "Active projects query failed");
+    // project_exclusions table may not exist on a deploy that hasn't run
+    // migration 00018 yet — treat that as "no exclusions" rather than a hard
+    // failure so a partially-migrated environment doesn't lock workers out.
+    const exclusionRows = exclusionsResult.error ? [] : (exclusionsResult.data ?? []);
+    for (const row of activeProjectsResult.data ?? []) {
+      allowedProjectIds.add(row.id);
+      projectIds.add(row.id); // hydrate the project list below too
+    }
+    for (const row of exclusionRows) {
+      allowedProjectIds.delete(row.project_id);
+    }
+  }
+
   // Project-level tasks (assigned_to is null, project the worker is on).
-  // Visible to every worker assigned to that project — manager creates one
-  // task without a specific assignee and the whole crew sees it.
+  // Visible to every worker whose access mode includes that project.
+  // Manager creates one task without a specific assignee and the whole
+  // crew sees it.
   let projectLevelTasks: Task[] = [];
-  if (assignedProjectIds.size > 0) {
+  if (allowedProjectIds.size > 0) {
     const { data, error } = await supabase
       .from("tasks")
       .select("*")
       .is("assigned_to", null)
-      .in("project_id", [...assignedProjectIds])
+      .in("project_id", [...allowedProjectIds])
       .order("created_at", { ascending: false })
       .limit(60)
       .returns<Task[]>();
@@ -225,9 +267,17 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       };
     });
 
+  // Hide projects that aren't in the worker's access set. We keep
+  // workerProjects fully populated above so session rows / task rows /
+  // media rows can still resolve a projectName for historical entries
+  // — only the live picker (shell.projects) is filtered down.
+  const visibleProjects = workerProjects.filter((project) =>
+    allowedProjectIds.has(project.id),
+  );
+
   return {
     profile,
-    projects: workerProjects.sort((left, right) => left.name.localeCompare(right.name)),
+    projects: visibleProjects.sort((left, right) => left.name.localeCompare(right.name)),
     tasks: taskItems,
     media: mediaItems,
     sessions,

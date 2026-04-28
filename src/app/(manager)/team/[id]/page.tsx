@@ -111,6 +111,16 @@ export default async function TeamMemberRoutePage({
     projectName: m.project_id ? projectsById.get(m.project_id) ?? null : null,
   }));
 
+  // Migration 00018 — current exclusion rows for this worker. Empty when
+  // the worker is in 'list' mode or the migration hasn't run yet.
+  const { data: exclusionRows } = await supabase
+    .from("project_exclusions")
+    .select("project_id")
+    .eq("profile_id", id);
+  const excludedProjectIds = new Set<string>(
+    ((exclusionRows ?? []) as Array<{ project_id: string }>).map((row) => row.project_id),
+  );
+
   return (
     <TeamMemberPage
       orgId={data.manager.org_id}
@@ -126,6 +136,7 @@ export default async function TeamMemberRoutePage({
       weekGpsMinutes={weekGpsMinutes}
       weekNoGpsMinutes={weekNoGpsMinutes}
       dailyTotals={dailyTotals}
+      excludedProjectIds={[...excludedProjectIds]}
     />
   );
 }
