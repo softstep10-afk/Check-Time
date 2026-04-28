@@ -19,7 +19,10 @@ import {
   type WorkerGpsStatus,
 } from "@/lib/gps-status";
 
-export const revalidate = 60;
+// 0 = force-dynamic. F5 must always fetch the current state of time_events,
+// projects, tasks, media; OverviewLiveIndicator still pushes router.refresh()
+// for passive updates between manual reloads.
+export const revalidate = 0;
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",

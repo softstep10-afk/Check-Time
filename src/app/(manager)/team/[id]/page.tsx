@@ -9,7 +9,8 @@ import {
 } from "@/lib/manager-utils";
 import type { Media } from "@/types/database";
 
-export const revalidate = 30;
+// F5 must reflect the worker's latest shifts, tasks, and media.
+export const revalidate = 0;
 
 export default async function TeamMemberRoutePage({
   params,

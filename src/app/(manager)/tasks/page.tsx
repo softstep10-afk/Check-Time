@@ -2,7 +2,8 @@ import { ManagerTasksPage } from "@/components/manager/ManagerTasksPage";
 import { getProjectsPageData } from "@/lib/manager-data";
 import { getAttachmentMediaIds, type TaskAttachmentRef } from "@/lib/task-attachments";
 
-export const revalidate = 30;
+// F5 must reflect newly assigned/completed tasks immediately.
+export const revalidate = 0;
 
 export default async function ManagerTasksRoutePage() {
   const data = await getProjectsPageData();

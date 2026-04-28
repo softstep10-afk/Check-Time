@@ -2,7 +2,8 @@ import { TeamPage } from "@/components/manager/TeamPage";
 import { getTeamPageData } from "@/lib/manager-data";
 import { buildManagerSessions, buildProfileSummaries } from "@/lib/manager-utils";
 
-export const revalidate = 30;
+// F5 must reflect newly added/edited workers and live shift state.
+export const revalidate = 0;
 
 export default async function TeamRoutePage() {
   const data = await getTeamPageData();

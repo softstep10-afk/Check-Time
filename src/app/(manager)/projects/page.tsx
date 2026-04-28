@@ -2,7 +2,8 @@ import { ProjectsPage } from "@/components/manager/ProjectsPage";
 import { getProjectsPageData } from "@/lib/manager-data";
 import { buildManagerSessions, buildProjectSummaries } from "@/lib/manager-utils";
 
-export const revalidate = 30;
+// F5 must reflect newly created/edited/deleted projects immediately.
+export const revalidate = 0;
 
 export default async function ProjectsRoutePage() {
   const data = await getProjectsPageData();
@@ -11,7 +12,6 @@ export default async function ProjectsRoutePage() {
 
   return (
     <ProjectsPage
-      orgId={data.manager.org_id}
       initialProjects={projectSummaries}
     />
   );
