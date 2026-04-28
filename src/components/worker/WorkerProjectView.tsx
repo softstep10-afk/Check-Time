@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Receipt as ReceiptIcon } from "lucide-react";
+import { Play, Square, Receipt as ReceiptIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { validateUploadFile } from "@/lib/upload-limits";
+import { useWorkerShell } from "@/components/worker/WorkerShell";
+import { CheckoutModal } from "@/components/worker/CheckoutModal";
 import { normalizeStoragePath, type TaskAttachmentRef } from "@/lib/task-attachments";
 import type { Project, Task } from "@/types/database";
 
@@ -80,10 +82,12 @@ export function WorkerProjectView({
         {project.address ? (
           <p className="mt-1 text-xs text-[var(--text-muted)]">{project.address}</p>
         ) : null}
-        <p className="mt-2 text-[10px] font-semibold text-[var(--text-muted)]">
-          {t("workerProject.readOnlyHint")}
-        </p>
       </section>
+
+      {/* Clock In / Clock Out for THIS project. Reuses the shell's existing
+          clockIn / clockOut from useWorkerShell — the GPS prompt, offline
+          queue, and require-video gate all flow through unchanged. */}
+      <ProjectClockControls projectId={project.id} projectName={project.name} />
 
       {/* Notes — visible to the whole crew. project.notes is on every Project row. */}
       <section className="surface-card p-4">
@@ -265,6 +269,116 @@ function ProjectReceiptsList({ items }: { items: ReceiptItem[] }) {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+/**
+ * Clock In / Clock Out for THIS project. Routes both actions through the
+ * existing WorkerShell.clockIn / clockOut via useWorkerShell — keeping the
+ * GPS prompt, offline queue, no-GPS path, and require-video gate intact
+ * without duplicating any clock logic.
+ *
+ * Three render branches:
+ *   1. Worker is currently clocked in to THIS project → "End shift" button +
+ *      opens the existing CheckoutModal (which gates on require_video).
+ *   2. Worker is clocked in to a DIFFERENT project → warning panel with the
+ *      conflicting project's name and an explicit "End there and start here"
+ *      button. The "switch" calls clockOut() then clockIn(thisProjectId).
+ *   3. Worker is not clocked in → plain "Start shift" button → clockIn(thisProjectId).
+ */
+function ProjectClockControls({
+  projectId,
+  projectName,
+}: {
+  projectId: string;
+  projectName: string;
+}) {
+  const { shell, busyAction, clockIn } = useWorkerShell();
+  const { t } = useTranslation();
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+
+  const isClockedIn = shell.clockState.isClockedIn;
+  const currentProjectId = shell.clockState.currentProjectId;
+  const currentProjectName = shell.clockState.currentProjectName;
+  const clockedInHere = isClockedIn && currentProjectId === projectId;
+  const clockedInElsewhere = isClockedIn && currentProjectId !== projectId;
+  const startingShift = busyAction === "clock-in";
+
+  async function handleStart() {
+    await clockIn(projectId);
+  }
+
+  async function handleSwitch() {
+    setCheckoutOpen(true);
+    // Once the worker confirms in CheckoutModal, the modal calls clockOut()
+    // and closes itself. The next render will see isClockedIn=false; the
+    // worker can tap Start Shift here. We don't auto-chain into clockIn
+    // because the require-video / GPS-prompt branches inside clockOut may
+    // need worker interaction first.
+  }
+
+  return (
+    <section className="surface-card p-4">
+      <h2 className="text-lg font-bold text-[var(--text-primary)]">
+        {t("workerProject.clockSectionTitle")}
+      </h2>
+
+      {clockedInHere ? (
+        <>
+          <p
+            className="mt-2 inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-2 py-0.5 text-[11px] font-semibold"
+            style={{ background: "rgba(46, 166, 122, 0.14)", color: "var(--green)" }}
+          >
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
+            {t("workerProject.clockedInHere")}
+          </p>
+          <button
+            type="button"
+            onClick={() => setCheckoutOpen(true)}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold"
+            style={{ background: "var(--red)", color: "white" }}
+          >
+            <Square size={14} />
+            {t("clock.endShiftCta")}
+          </button>
+        </>
+      ) : clockedInElsewhere ? (
+        <>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            {t("workerProject.clockedInElsewhere").replace(
+              "{project}",
+              currentProjectName ?? "",
+            )}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {t("workerProject.switchProjectConfirm")}
+          </p>
+          <button
+            type="button"
+            onClick={() => void handleSwitch()}
+            disabled={startingShift}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
+            style={{ background: "#f59e0b", color: "var(--text-inverse)" }}
+          >
+            <Square size={14} />
+            {t("workerProject.switchEndAndStart")}
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => void handleStart()}
+          disabled={startingShift}
+          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
+          style={{ background: "#f59e0b", color: "var(--text-inverse)" }}
+        >
+          <Play size={14} />
+          {startingShift ? t("clock.checkingLocation") : t("clock.startShiftCta")}
+        </button>
+      )}
+
+      <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
     </section>
   );
 }

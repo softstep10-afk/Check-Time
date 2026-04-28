@@ -357,6 +357,13 @@ export const translations = {
   "workerProject.tasksProjectTitle": { en: "Project tasks", ru: "Общие задачи" },
   "workerProject.receiptsTitle": { en: "Receipts", ru: "Чеки" },
   "workerProject.receiptsEmpty": { en: "No receipts yet.", ru: "Чеков пока нет." },
+  "workerProject.clockSectionTitle": { en: "Clock", ru: "Смена" },
+  "workerProject.clockedInHere": { en: "You're clocked in here.", ru: "Вы на этом проекте." },
+  "workerProject.clockedInElsewhere": { en: "You're already clocked in to {project}.", ru: "Вы уже на проекте «{project}»." },
+  "workerProject.switchProjectConfirm": { en: "End that shift and start here?", ru: "Завершить ту смену и начать здесь?" },
+  "workerProject.switchPromptTitle": { en: "Switch projects?", ru: "Сменить проект?" },
+  "workerProject.switchEndAndStart": { en: "End there and start here", ru: "Завершить и начать здесь" },
+  "workerProject.notReady": { en: "Pick a project before clocking in.", ru: "Выберите проект перед началом смены." },
   "workerProject.readOnlyHint": {
     en: "Read-only view. Upload files from your worker tools.",
     ru: "Только просмотр. Загружайте файлы из своих рабочих инструментов.",
