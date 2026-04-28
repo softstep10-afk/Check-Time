@@ -42,6 +42,16 @@ import {
   type OfflineUpload,
   type OfflineUploadMode,
 } from "@/lib/offline-uploads";
+import {
+  isNetworkLikeError,
+  loadOfflineEventQueue,
+  markEventStatus,
+  queueOfflineEvent,
+  removeOfflineEvent,
+  sortQueueByEventTimeAsc,
+  type QueuedTimeEvent,
+  type QueuedTimeEventPayload,
+} from "@/lib/offline-time-events";
 import type { AppMessage } from "@/lib/message-types";
 
 const navItems = [
@@ -58,6 +68,8 @@ type BannerState = {
 
 type UploadMode = "journal" | "checkout" | "before_leave";
 
+type ClockOptions = { skipGps?: boolean };
+
 type WorkerShellContextValue = {
   shell: WorkerShellData;
   activeSeconds: number;
@@ -69,8 +81,8 @@ type WorkerShellContextValue = {
   isOnline: boolean;
   draining: boolean;
   dismissBanner: () => void;
-  clockIn: (projectId: string) => Promise<void>;
-  clockOut: () => Promise<void>;
+  clockIn: (projectId: string, options?: ClockOptions) => Promise<void>;
+  clockOut: (options?: ClockOptions) => Promise<void>;
   uploadMedia: (files: FileList | File[], caption: string, mode: UploadMode) => Promise<void>;
   updateTaskStatus: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
   toggleMute: () => void;
@@ -139,6 +151,76 @@ async function getCurrentPosition(): Promise<WorkerGeoPoint & { accuracy: number
       },
     );
   });
+}
+
+// ── Offline time-events helpers ──
+
+/**
+ * Replay the queued offline events onto the shell's session list so the
+ * UI reflects "Clocked in (pending sync)" across refreshes. This mirrors
+ * the pairing logic from buildWorkerSessions but works incrementally on
+ * top of whatever the server already returned.
+ */
+function applyQueuedEventsToShell(
+  current: WorkerShellData,
+  queue: QueuedTimeEvent[],
+): WorkerShellData {
+  if (queue.length === 0) return current;
+  const sorted = sortQueueByEventTimeAsc(queue);
+  let working: WorkerSession[] = [...current.sessions];
+  const projectsById = new Map(current.projects.map((p) => [p.id, p]));
+
+  for (const item of sorted) {
+    if (item.payload.event_type === "clock_in") {
+      working = [
+        {
+          // Synthetic id — namespaced so it never collides with a real
+          // time_events.id UUID and is easy to spot in console output.
+          id: `pending:${item.client_event_id}`,
+          projectId: item.payload.project_id,
+          projectName:
+            projectsById.get(item.payload.project_id)?.name ??
+            item.ui.projectName,
+          clockInEventId: `pending:${item.client_event_id}`,
+          clockOutEventId: null,
+          clockInTime: item.payload.event_time,
+          clockOutTime: null,
+          durationMinutes: 0,
+          checkoutStatus: "not_required",
+        },
+        ...working,
+      ];
+    } else if (item.payload.event_type === "clock_out") {
+      const idx = working.findIndex((s) => s.clockOutTime === null);
+      if (idx >= 0) {
+        const open = working[idx];
+        const durationMinutes = Math.max(
+          0,
+          Math.round(
+            (new Date(item.payload.event_time).getTime() -
+              new Date(open.clockInTime).getTime()) /
+              60_000,
+          ),
+        );
+        working[idx] = {
+          ...open,
+          clockOutEventId: `pending:${item.client_event_id}`,
+          clockOutTime: item.payload.event_time,
+          durationMinutes,
+          checkoutStatus: item.payload.video_status,
+        };
+      }
+    }
+  }
+
+  const nextClockState = deriveClockState(working);
+  const nextSummary = deriveWorkerSummary(working);
+  return {
+    ...current,
+    sessions: working,
+    clockState: nextClockState,
+    summary: nextSummary,
+  };
 }
 
 // ── Web Audio sound effects ──
@@ -243,6 +325,15 @@ export function WorkerShell({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState>(null);
   const [lastGpsCheck, setLastGpsCheck] = useState<WorkerGpsCheck | null>(null);
+  // GPS-failure prompt shown when getCurrentPosition rejects. Replaces
+  // the old "Tap to retry" banner that left the worker in a loop with no
+  // way to record their shift. Worker can either retry or commit a
+  // No-GPS event that the manager will see flagged.
+  const [gpsPrompt, setGpsPrompt] = useState<
+    | { kind: "clockIn"; projectId: string; errorKind: GpsErrorKind }
+    | { kind: "clockOut"; errorKind: GpsErrorKind }
+    | null
+  >(null);
   // Time ticker. `mounted` gates every client-only rendering of the
   // elapsed timer so SSR and the first client render produce identical
   // HTML. `now` is seeded with a stable zero and replaced with Date.now()
@@ -297,6 +388,8 @@ export function WorkerShell({
 
   // ── Offline queue (Wave 8) ─────────────────────────────────────────────
   const [offlineQueue, setOfflineQueue] = useState<OfflineUpload[]>([]);
+  // Phase-1 offline queue for clock-in / clock-out events.
+  const [offlineEventQueue, setOfflineEventQueue] = useState<QueuedTimeEvent[]>([]);
   // Optimistic default `true`; effect below syncs from navigator.onLine
   // after mount so SSR and hydration agree on the same starting value.
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -305,6 +398,16 @@ export function WorkerShell({
   // Hydrate queue once on mount.
   useEffect(() => {
     setOfflineQueue(loadOfflineQueue());
+    // Time-events queue: hydrate state, then re-apply optimistic shell
+    // state (clocked-in / clocked-out) from any queued events that
+    // haven't synced yet. Server-rendered initialData doesn't see
+    // pending events because they live only in localStorage on this
+    // device — without this overlay a refresh would make the worker
+    // look "off shift" even though their clock-in is queued.
+    const eventQueue = loadOfflineEventQueue();
+    setOfflineEventQueue(eventQueue);
+    if (eventQueue.length === 0) return;
+    setShell((current) => applyQueuedEventsToShell(current, eventQueue));
   }, []);
 
   // ── Online/offline listeners ─────────────────────────────────────────
@@ -527,7 +630,7 @@ export function WorkerShell({
     }
   }
 
-  async function clockIn(projectId: string) {
+  async function clockIn(projectId: string, options?: ClockOptions) {
     const project = shell.projects.find((entry) => entry.id === projectId);
 
     if (!project) {
@@ -539,14 +642,33 @@ export function WorkerShell({
     setBanner(null);
 
     try {
-      const gps = await getCurrentPosition();
+      // GPS capture, with fallback prompt path if the device denies / fails.
+      // skipGps=true means the worker explicitly chose "Start without GPS"
+      // from the prompt — we honor it and write a No-GPS time event.
+      let gps: (WorkerGeoPoint & { accuracy: number }) | null = null;
+      if (!options?.skipGps) {
+        try {
+          gps = await getCurrentPosition();
+        } catch (err) {
+          if (err instanceof GpsError) {
+            setBusyAction(null);
+            setGpsPrompt({ kind: "clockIn", projectId, errorKind: err.kind });
+            playSound("error");
+            return;
+          }
+          throw err;
+        }
+      }
+
       const timestamp = new Date().toISOString();
 
       // Resolve check-in radius: per-project gps_radius_m → app_settings → 75m.
+      // Still resolved so the lastGpsCheck widget can render the configured
+      // radius even on the no-GPS path (just with null distance).
       const appRadius = await getAppGeofenceRadiusM(supabase);
       const effectiveRadius = resolveProjectRadiusM(project, appRadius);
 
-      if (project.site) {
+      if (gps && project.site) {
         const distanceMeters = haversineMeters(project.site, gps);
         const allowedDistance = effectiveRadius + Math.max(gps.accuracy, 25);
 
@@ -571,7 +693,7 @@ export function WorkerShell({
           playSound("error");
           return;
         }
-      } else {
+      } else if (gps) {
         setLastGpsCheck({
           action: "clock_in",
           projectId: project.id,
@@ -584,31 +706,128 @@ export function WorkerShell({
           withinFence: null,
           capturedAt: timestamp,
         });
+      } else {
+        // No-GPS path — clear the widget so stale data doesn't linger.
+        setLastGpsCheck(null);
       }
-      const insertPayload = {
+      const client_event_id =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+
+      const insertPayload: QueuedTimeEventPayload = {
         org_id: shell.profile.org_id,
         profile_id: shell.profile.id,
         project_id: project.id,
-        event_type: "clock_in" as const,
+        event_type: "clock_in",
         event_time: timestamp,
-        gps_point: toSupabasePoint(gps),
-        gps_accuracy_m: gps.accuracy,
-        gps_source: "device",
-        video_status: "not_required" as const,
+        gps_point: gps ? toSupabasePoint(gps) : null,
+        gps_accuracy_m: gps ? gps.accuracy : null,
+        gps_source: gps ? "device" : "unavailable",
+        video_status: "not_required",
         metadata: {
           capturedBy: "worker-shell",
           gps,
+          client_event_id,
+          ...(gps ? {} : { location_unverified: true }),
         },
       };
 
-      const { data: insertedEvent, error } = await supabase
-        .from("time_events")
-        .insert(insertPayload)
-        .select("*")
-        .single<TimeEvent>();
+      // Offline-first guard — if the browser already says we're offline,
+      // skip the network round-trip and queue immediately.
+      const offlineFromStart =
+        typeof window !== "undefined" && !window.navigator.onLine;
 
-      if (error || !insertedEvent) {
-        throw new Error(error?.message ?? "Clock-in failed.");
+      let insertedEvent: TimeEvent | null = null;
+      let networkFailed = offlineFromStart;
+      let hardError: { message?: string | null } | null = null;
+
+      if (!offlineFromStart) {
+        try {
+          const result = await supabase
+            .from("time_events")
+            .insert({ ...insertPayload, metadata: { ...insertPayload.metadata, queued_offline: false } })
+            .select("*")
+            .single<TimeEvent>();
+          if (result.error) {
+            if (
+              isNetworkLikeError(result.error) ||
+              (typeof window !== "undefined" && !window.navigator.onLine)
+            ) {
+              networkFailed = true;
+            } else {
+              hardError = result.error;
+            }
+          } else {
+            insertedEvent = result.data;
+          }
+        } catch (caught) {
+          // supabase-js usually packs network failures into result.error
+          // but a thrown TypeError ("Failed to fetch") can still happen.
+          networkFailed = true;
+          if (caught instanceof Error) {
+            console.warn("clock-in throw treated as network error:", caught.message);
+          }
+        }
+      }
+
+      if (hardError) {
+        throw new Error(hardError.message ?? "Clock-in failed.");
+      }
+
+      if (!insertedEvent && networkFailed) {
+        // ── Offline path: queue locally, optimistic shell state, banner.
+        const queuedPayload: QueuedTimeEventPayload = {
+          ...insertPayload,
+          metadata: { ...insertPayload.metadata, queued_offline: true },
+        };
+        queueOfflineEvent({
+          client_event_id,
+          payload: queuedPayload,
+          projectName: project.name,
+        });
+        setOfflineEventQueue(loadOfflineEventQueue());
+
+        const optimisticSession = {
+          id: `pending:${client_event_id}`,
+          projectId: project.id,
+          projectName: project.name,
+          clockInEventId: `pending:${client_event_id}`,
+          clockOutEventId: null,
+          clockInTime: timestamp,
+          clockOutTime: null,
+          durationMinutes: 0,
+          checkoutStatus: "not_required" as const,
+        };
+        const nextSessionsOffline = [optimisticSession, ...shell.sessions];
+        const nextClockStateOffline = deriveClockState(nextSessionsOffline);
+        const nextSummaryOffline = deriveWorkerSummary(nextSessionsOffline);
+
+        setShell((current) => ({
+          ...current,
+          profile: {
+            ...current.profile,
+            current_project: project.id,
+            last_clock_in: timestamp,
+          },
+          sessions: nextSessionsOffline,
+          clockState: nextClockStateOffline,
+          summary: nextSummaryOffline,
+        }));
+        setBanner({
+          tone: "info",
+          text: gps ? t("worker.queuedClockIn") : t("worker.queuedClockInNoGps"),
+        });
+        playSound("clock-in");
+
+        if (gps && !localStorage.getItem("check-time-gps-consent")) {
+          setShowConsentModal(true);
+        }
+        return;
+      }
+
+      if (!insertedEvent) {
+        throw new Error("Clock-in failed.");
       }
 
       const { error: profileError } = await supabase
@@ -652,22 +871,23 @@ export function WorkerShell({
         clockState: nextClockState,
         summary: nextSummary,
       }));
-      setBanner({ tone: "success", text: `Clocked into ${project.name}.` });
+      setBanner({
+        tone: gps ? "success" : "info",
+        text: gps
+          ? `Clocked into ${project.name}.`
+          : t("worker.startedWithoutGps"),
+      });
       playSound("clock-in");
 
-      // Show consent modal on first-ever clock-in if not yet decided
-      if (!localStorage.getItem("check-time-gps-consent")) {
+      // Only seed the consent modal when a real fix was captured. On the
+      // No-GPS path the device couldn't produce a fix anyway — there's
+      // no point prompting for tracking consent.
+      if (gps && !localStorage.getItem("check-time-gps-consent")) {
         setShowConsentModal(true);
       }
 
       router.refresh();
     } catch (error) {
-      if (error instanceof GpsError) {
-        const { tone, key } = gpsBanner(error.kind);
-        setBanner({ tone, text: t(key) });
-        playSound("error");
-        return;
-      }
       const message = error instanceof Error ? error.message : "Clock-in failed.";
       setBanner({ tone: "error", text: message });
       playSound("error");
@@ -676,7 +896,7 @@ export function WorkerShell({
     }
   }
 
-  async function clockOut() {
+  async function clockOut(options?: ClockOptions) {
     if (!shell.clockState.isClockedIn || !shell.clockState.currentProjectId) {
       setBanner({ tone: "error", text: "There is no active shift to close." });
       return;
@@ -686,34 +906,142 @@ export function WorkerShell({
     setBanner(null);
 
     try {
-      const gps = await getCurrentPosition();
+      let gps: (WorkerGeoPoint & { accuracy: number }) | null = null;
+      if (!options?.skipGps) {
+        try {
+          gps = await getCurrentPosition();
+        } catch (err) {
+          if (err instanceof GpsError) {
+            setBusyAction(null);
+            setGpsPrompt({ kind: "clockOut", errorKind: err.kind });
+            playSound("error");
+            return;
+          }
+          throw err;
+        }
+      }
+
       const timestamp = new Date().toISOString();
       const videoStatus: WorkerSession["checkoutStatus"] = shell.profile.require_video
         ? "pending"
         : "not_required";
 
-      const { data: insertedEvent, error } = await supabase
-        .from("time_events")
-        .insert({
-          org_id: shell.profile.org_id,
-          profile_id: shell.profile.id,
-          project_id: shell.clockState.currentProjectId,
-          event_type: "clock_out" as const,
-          event_time: timestamp,
-          gps_point: toSupabasePoint(gps),
-          gps_accuracy_m: gps.accuracy,
-          gps_source: "device",
-          video_status: videoStatus,
-          metadata: {
-            capturedBy: "worker-shell",
-            gps,
-          },
-        })
-        .select("*")
-        .single<TimeEvent>();
+      const client_event_id =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 
-      if (error || !insertedEvent) {
-        throw new Error(error?.message ?? "Clock-out failed.");
+      const insertPayload: QueuedTimeEventPayload = {
+        org_id: shell.profile.org_id,
+        profile_id: shell.profile.id,
+        project_id: shell.clockState.currentProjectId,
+        event_type: "clock_out",
+        event_time: timestamp,
+        gps_point: gps ? toSupabasePoint(gps) : null,
+        gps_accuracy_m: gps ? gps.accuracy : null,
+        gps_source: gps ? "device" : "unavailable",
+        video_status: videoStatus,
+        metadata: {
+          capturedBy: "worker-shell",
+          gps,
+          client_event_id,
+          ...(gps ? {} : { location_unverified: true }),
+        },
+      };
+
+      const offlineFromStart =
+        typeof window !== "undefined" && !window.navigator.onLine;
+
+      let insertedEvent: TimeEvent | null = null;
+      let networkFailed = offlineFromStart;
+      let hardError: { message?: string | null } | null = null;
+
+      if (!offlineFromStart) {
+        try {
+          const result = await supabase
+            .from("time_events")
+            .insert({ ...insertPayload, metadata: { ...insertPayload.metadata, queued_offline: false } })
+            .select("*")
+            .single<TimeEvent>();
+          if (result.error) {
+            if (
+              isNetworkLikeError(result.error) ||
+              (typeof window !== "undefined" && !window.navigator.onLine)
+            ) {
+              networkFailed = true;
+            } else {
+              hardError = result.error;
+            }
+          } else {
+            insertedEvent = result.data;
+          }
+        } catch (caught) {
+          networkFailed = true;
+          if (caught instanceof Error) {
+            console.warn("clock-out throw treated as network error:", caught.message);
+          }
+        }
+      }
+
+      if (hardError) {
+        throw new Error(hardError.message ?? "Clock-out failed.");
+      }
+
+      if (!insertedEvent && networkFailed) {
+        // ── Offline path: queue locally, optimistic shell state, banner.
+        const queuedPayload: QueuedTimeEventPayload = {
+          ...insertPayload,
+          metadata: { ...insertPayload.metadata, queued_offline: true },
+        };
+        queueOfflineEvent({
+          client_event_id,
+          payload: queuedPayload,
+          projectName: shell.clockState.currentProjectName ?? "",
+        });
+        setOfflineEventQueue(loadOfflineEventQueue());
+
+        const nextSessionsOffline = shell.sessions.map((session) => {
+          if (session.clockOutTime || session.clockInEventId !== shell.clockState.openEventId) {
+            return session;
+          }
+          const durationMinutes = Math.max(
+            0,
+            Math.round(
+              (new Date(timestamp).getTime() - new Date(session.clockInTime).getTime()) / 60_000,
+            ),
+          );
+          return {
+            ...session,
+            clockOutEventId: `pending:${client_event_id}`,
+            clockOutTime: timestamp,
+            durationMinutes,
+            checkoutStatus: videoStatus,
+          };
+        });
+        const nextClockStateOffline = deriveClockState(nextSessionsOffline);
+        const nextSummaryOffline = deriveWorkerSummary(nextSessionsOffline);
+
+        setShell((current) => ({
+          ...current,
+          profile: {
+            ...current.profile,
+            current_project: null,
+          },
+          sessions: nextSessionsOffline,
+          clockState: nextClockStateOffline,
+          summary: nextSummaryOffline,
+        }));
+
+        setBanner({
+          tone: "info",
+          text: gps ? t("worker.queuedClockOut") : t("worker.queuedClockOutNoGps"),
+        });
+        playSound("clock-out");
+        return;
+      }
+
+      if (!insertedEvent) {
+        throw new Error("Clock-out failed.");
       }
 
       const { error: profileError } = await supabase
@@ -767,20 +1095,16 @@ export function WorkerShell({
       }));
 
       setBanner({
-        tone: shell.profile.require_video ? "info" : "success",
-        text: shell.profile.require_video
-          ? "Shift closed. Checkout video is waiting in Journal."
-          : "Clocked out.",
+        tone: !gps ? "info" : shell.profile.require_video ? "info" : "success",
+        text: !gps
+          ? t("worker.closedWithoutGps")
+          : shell.profile.require_video
+            ? "Shift closed. Checkout video is waiting in Journal."
+            : "Clocked out.",
       });
       playSound("clock-out");
       router.refresh();
     } catch (error) {
-      if (error instanceof GpsError) {
-        const { tone, key } = gpsBanner(error.kind);
-        setBanner({ tone, text: t(key) });
-        playSound("error");
-        return;
-      }
       const message = error instanceof Error ? error.message : "Clock-out failed.";
       setBanner({ tone: "error", text: message });
       playSound("error");
@@ -1030,14 +1354,60 @@ export function WorkerShell({
   }
 
   // Drain the offline queue: best-effort, item-by-item. Skips thumb-only
-  // entries (worker must re-pick the file). Removes each item from
+  // media entries (worker must re-pick the file). Removes each item from
   // localStorage on a successful Storage upload.
+  //
+  // Time-events drain runs first so the worker's session row exists in
+  // the DB before any related media (checkout videos) are inserted —
+  // media.time_event_id can then resolve to a real row. Replay order is
+  // payload.event_time ASC so the DB trigger trg_auto_close_session
+  // sees events in causal order.
   const drainOfflineQueue = useCallback(async () => {
-    const items = loadOfflineQueue();
-    if (items.length === 0) return;
+    const mediaItems = loadOfflineQueue();
+    const eventItems = sortQueueByEventTimeAsc(loadOfflineEventQueue());
+    if (mediaItems.length === 0 && eventItems.length === 0) return;
     setDraining(true);
     try {
-      for (const item of items) {
+      // ── Phase 1: time events ────────────────────────────────────────
+      for (const item of eventItems) {
+        markEventStatus(item.client_event_id, {
+          status: "syncing",
+          lastAttemptAt: new Date().toISOString(),
+        });
+
+        // Layer B dedup: ask the server if a row with this client_event_id
+        // already exists. If so, skip insert and just remove from queue.
+        const { data: existing } = await supabase
+          .from("time_events")
+          .select("id")
+          .eq("profile_id", item.payload.profile_id)
+          .filter("metadata->>client_event_id", "eq", item.client_event_id)
+          .limit(1)
+          .maybeSingle<{ id: string }>();
+        if (existing) {
+          setOfflineEventQueue(removeOfflineEvent(item.client_event_id));
+          continue;
+        }
+
+        const { error: insertError } = await supabase
+          .from("time_events")
+          .insert(item.payload);
+
+        if (insertError) {
+          markEventStatus(item.client_event_id, {
+            status: isNetworkLikeError(insertError) ? "pending" : "failed",
+            retryCount: item.retryCount + 1,
+            lastErrorMessage: insertError.message,
+          });
+          setOfflineEventQueue(loadOfflineEventQueue());
+          continue;
+        }
+
+        setOfflineEventQueue(removeOfflineEvent(item.client_event_id));
+      }
+
+      // ── Phase 2: media ─────────────────────────────────────────────
+      for (const item of mediaItems) {
         const file = offlineUploadToFile(item);
         if (!file) continue; // thumb-only, needs re-pick
         const today = new Date().toISOString().slice(0, 10);
@@ -1081,9 +1451,9 @@ export function WorkerShell({
   // Auto-drain when the browser flips back online.
   useEffect(() => {
     if (!isOnline) return;
-    if (offlineQueue.length === 0) return;
+    if (offlineQueue.length === 0 && offlineEventQueue.length === 0) return;
     void drainOfflineQueue();
-  }, [isOnline, offlineQueue.length, drainOfflineQueue]);
+  }, [isOnline, offlineQueue.length, offlineEventQueue.length, drainOfflineQueue]);
 
   const value: WorkerShellContextValue = {
     shell,
@@ -1182,6 +1552,24 @@ export function WorkerShell({
               </div>
             ) : null}
 
+            {offlineEventQueue.length > 0 ? (
+              <div
+                className="mt-2 inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1.5 text-[11px] font-semibold"
+                style={{
+                  background: isOnline
+                    ? "rgba(15, 168, 120, 0.14)"
+                    : "rgba(245, 158, 11, 0.14)",
+                  color: isOnline ? "var(--green)" : "#f59e0b",
+                }}
+              >
+                <span aria-hidden>{isOnline && draining ? "↻" : "⏳"}</span>
+                {(isOnline && draining
+                  ? t("worker.syncingShifts")
+                  : t("worker.pendingShiftSync")
+                ).replace("{count}", String(offlineEventQueue.length))}
+              </div>
+            ) : null}
+
             <div className="mt-4 grid grid-cols-3 gap-2">
               <div
                 className="metric-panel rounded-[var(--radius-lg)] px-3 py-3"
@@ -1269,13 +1657,20 @@ export function WorkerShell({
             ) : null}
 
             {gpsState === "denied" ? (
+              // Tracking-watch denied while clocked in. The previous behavior
+              // here was a window.location.reload() that did nothing for a
+              // worker whose OS-level GPS permission was off — they were
+              // trapped in the red retry-only banner. Now this opens the
+              // gpsPrompt modal in clockOut mode so the worker can either
+              // retry GPS (after fixing settings) or close their shift
+              // without GPS via the explicit "Clock out without GPS" path.
               <button
                 type="button"
-                onClick={() => window.location.reload()}
+                onClick={() => setGpsPrompt({ kind: "clockOut", errorKind: "denied" })}
                 className="mt-3 w-full rounded-[var(--radius-md)] px-3 py-2.5 text-left text-sm"
-                style={{ background: "rgba(212, 81, 94, 0.12)", color: "var(--red)" }}
+                style={{ background: "rgba(245, 158, 11, 0.12)", color: "#f59e0b" }}
               >
-                {t("gps.permissionDenied")}
+                {t("gps.trackingOffTapForOptions")}
               </button>
             ) : null}
 
@@ -1339,6 +1734,72 @@ export function WorkerShell({
           onAccept={handleGpsConsent}
           onDecline={handleGpsDecline}
         />
+      ) : null}
+      {gpsPrompt ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.5)" }}
+          onClick={() => setGpsPrompt(null)}
+        >
+          <div
+            className="surface-card w-full max-w-[420px] p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-bold text-[var(--text-primary)]">
+              {t("worker.gpsPromptTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {t(gpsBanner(gpsPrompt.errorKind).key)}
+            </p>
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
+              {t("worker.gpsPromptHint")}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const captured = gpsPrompt;
+                  setGpsPrompt(null);
+                  if (captured.kind === "clockIn") {
+                    void clockIn(captured.projectId);
+                  } else {
+                    void clockOut();
+                  }
+                }}
+                className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+              >
+                {t("worker.gpsPromptRetry")}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const captured = gpsPrompt;
+                  setGpsPrompt(null);
+                  if (captured.kind === "clockIn") {
+                    void clockIn(captured.projectId, { skipGps: true });
+                  } else {
+                    void clockOut({ skipGps: true });
+                  }
+                }}
+                className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                style={{ borderColor: "rgba(245,158,11,0.4)", color: "#f59e0b" }}
+              >
+                {gpsPrompt.kind === "clockIn"
+                  ? t("worker.gpsPromptStartWithoutGps")
+                  : t("worker.gpsPromptClockOutWithoutGps")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setGpsPrompt(null)}
+                className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </WorkerShellContext.Provider>
   );
