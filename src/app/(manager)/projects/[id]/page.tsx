@@ -8,6 +8,7 @@ import {
   isManagerRole,
 } from "@/lib/manager-utils";
 import { deriveWorkerGpsStatus, type WorkerGpsStatus } from "@/lib/gps-status";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function ProjectDetailRoutePage({
   params,
@@ -53,6 +54,28 @@ export default async function ProjectDetailRoutePage({
     });
   }
 
+  // Safety acknowledgements count for THIS project, today (worker local
+  // midnight is not knowable server-side; use UTC midnight as the cutoff
+  // — same convention used elsewhere when counting "today" rows).
+  // The query is wrapped so that a pre-migration deploy (table missing)
+  // returns 0 instead of crashing the page.
+  const supabase = await createClient();
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  let safetyAcksToday = 0;
+  try {
+    const { count, error } = await supabase
+      .from("safety_acknowledgements")
+      .select("id", { count: "exact", head: true })
+      .eq("project_id", id)
+      .gte("acknowledged_at", todayStart.toISOString());
+    if (!error && typeof count === "number") {
+      safetyAcksToday = count;
+    }
+  } catch {
+    // Table may not exist yet (migration 00019 not applied); fall through.
+  }
+
   return (
     <ProjectDetailPage
       orgId={data.manager.org_id}
@@ -65,6 +88,7 @@ export default async function ProjectDetailRoutePage({
       media={media}
       sessions={projectSessions}
       gpsStatusByProfileId={gpsStatusByProfileId}
+      safetyAcksToday={safetyAcksToday}
     />
   );
 }

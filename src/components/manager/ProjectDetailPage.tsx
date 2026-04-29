@@ -97,6 +97,7 @@ export function ProjectDetailPage({
   media,
   sessions,
   gpsStatusByProfileId,
+  safetyAcksToday,
 }: {
   orgId: string;
   managerId: string;
@@ -108,6 +109,7 @@ export function ProjectDetailPage({
   media: Media[];
   sessions: ManagerSession[];
   gpsStatusByProfileId: Record<string, WorkerGpsStatus>;
+  safetyAcksToday: number;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -867,6 +869,14 @@ export function ProjectDetailPage({
             </div>
             <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
               {formatDurationCompact(project.weekMinutes)}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("safety.acksToday")}
+            </div>
+            <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
+              {safetyAcksToday}
             </div>
           </div>
         </div>
