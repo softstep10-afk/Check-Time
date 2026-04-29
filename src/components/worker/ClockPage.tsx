@@ -6,6 +6,12 @@ import { CheckCircle2, MapPin, Navigation, ShieldCheck } from "lucide-react";
 import { WorkerGpsCheckMap } from "@/components/maps/WorkerGpsCheckMap";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
+import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
+import { createClient } from "@/lib/supabase/client";
+import {
+  DEFAULT_SAFETY_VERSION,
+  writeSafetyAck,
+} from "@/lib/safety-acknowledgements";
 import {
   formatDateTime,
   formatDurationCompact,
@@ -23,9 +29,36 @@ export function ClockPage() {
     lastGpsCheck,
   } = useWorkerShell();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [safetyOpenForProjectId, setSafetyOpenForProjectId] = useState<string | null>(null);
   const [manualProjectId, setManualProjectId] = useState<string>(
     shell.projects[0]?.id ?? "",
   );
+
+  const supabaseClient = useMemo(() => createClient(), []);
+  const safetyProjectName = useMemo(() => {
+    if (!safetyOpenForProjectId) return "";
+    return (
+      shell.projects.find((p) => p.id === safetyOpenForProjectId)?.name ?? ""
+    );
+  }, [safetyOpenForProjectId, shell.projects]);
+
+  async function handleSafetyConfirm() {
+    const projectId = safetyOpenForProjectId;
+    if (!projectId) return;
+    setSafetyOpenForProjectId(null);
+    // Insert the ack first; failures are logged but never block clockIn
+    // — a missing audit row must not trap a worker on a real site.
+    const ackResult = await writeSafetyAck(supabaseClient, {
+      orgId: shell.profile.org_id,
+      workerId: shell.profile.id,
+      projectId,
+      safetyVersion: DEFAULT_SAFETY_VERSION,
+    });
+    if (!ackResult.ok) {
+      console.warn("safety ack write failed:", ackResult.error);
+    }
+    void clockIn(projectId);
+  }
   const selectedProjectId =
     shell.clockState.currentProjectId ?? manualProjectId ?? shell.projects[0]?.id ?? "";
 
@@ -308,7 +341,7 @@ export function ClockPage() {
           ) : (
             <button
               type="button"
-              onClick={() => void clockIn(selectedProjectId)}
+              onClick={() => setSafetyOpenForProjectId(selectedProjectId)}
               disabled={
                 !selectedProjectId ||
                 busyAction === "clock-in" ||
@@ -326,6 +359,12 @@ export function ClockPage() {
           )}
         </div>
         <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
+        <SafetyBriefModal
+          open={safetyOpenForProjectId !== null}
+          projectName={safetyProjectName}
+          onConfirm={() => void handleSafetyConfirm()}
+          onCancel={() => setSafetyOpenForProjectId(null)}
+        />
 
         {shell.profile.require_video ? (
           <p className="mt-3 text-xs text-[var(--text-secondary)]">

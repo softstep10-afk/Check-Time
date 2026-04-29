@@ -9,6 +9,11 @@ import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { validateUploadFile } from "@/lib/upload-limits";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
+import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
+import {
+  DEFAULT_SAFETY_VERSION,
+  writeSafetyAck,
+} from "@/lib/safety-acknowledgements";
 import { normalizeStoragePath, type TaskAttachmentRef } from "@/lib/task-attachments";
 import type { Project, Task } from "@/types/database";
 
@@ -297,6 +302,8 @@ function ProjectClockControls({
   const { shell, busyAction, clockIn } = useWorkerShell();
   const { t } = useTranslation();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const supabase = useMemo(() => createClient(), []);
 
   const isClockedIn = shell.clockState.isClockedIn;
   const currentProjectId = shell.clockState.currentProjectId;
@@ -305,8 +312,23 @@ function ProjectClockControls({
   const clockedInElsewhere = isClockedIn && currentProjectId !== projectId;
   const startingShift = busyAction === "clock-in";
 
-  async function handleStart() {
-    await clockIn(projectId);
+  function handleStart() {
+    setSafetyOpen(true);
+  }
+
+  async function handleSafetyConfirm() {
+    setSafetyOpen(false);
+    // Best-effort ack write; never block clockIn on a missing audit row.
+    const ackResult = await writeSafetyAck(supabase, {
+      orgId: shell.profile.org_id,
+      workerId: shell.profile.id,
+      projectId,
+      safetyVersion: DEFAULT_SAFETY_VERSION,
+    });
+    if (!ackResult.ok) {
+      console.warn("safety ack write failed:", ackResult.error);
+    }
+    void clockIn(projectId);
   }
 
   async function handleSwitch() {
@@ -368,7 +390,7 @@ function ProjectClockControls({
       ) : (
         <button
           type="button"
-          onClick={() => void handleStart()}
+          onClick={handleStart}
           disabled={startingShift}
           className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
           style={{ background: "#f59e0b", color: "var(--text-inverse)" }}
@@ -379,6 +401,12 @@ function ProjectClockControls({
       )}
 
       <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
+      <SafetyBriefModal
+        open={safetyOpen}
+        projectName={projectName}
+        onConfirm={() => void handleSafetyConfirm()}
+        onCancel={() => setSafetyOpen(false)}
+      />
     </section>
   );
 }
