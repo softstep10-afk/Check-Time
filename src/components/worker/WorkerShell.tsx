@@ -1307,6 +1307,25 @@ export function WorkerShell({
           throw new Error(mediaError?.message ?? "Media record insert failed.");
         }
 
+        // Fire-and-forget Mux transcode kickoff for video uploads. iPhone
+        // captures land here as HEVC inside a .mov container, which Chrome
+        // / Edge / Firefox can't decode. The route creates a Mux asset
+        // from the original and writes the playback ID back into
+        // media.metadata; the read-side selectMediaPlayback() switches
+        // to the playback path once the webhook flips status to 'ready'.
+        // We do not await — checkout and journal upload UX must not be
+        // blocked by Mux ingest latency.
+        if (mediaType === "video") {
+          fetch("/api/media/transcode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mediaId: mediaRow.id }),
+            keepalive: true,
+          }).catch((err) =>
+            console.warn("[transcode] kickoff failed:", err),
+          );
+        }
+
         uploadedEntries.push({
           ...mediaRow,
           projectName:
@@ -1470,25 +1489,43 @@ export function WorkerShell({
           });
         if (uploadError) continue;
 
-        const { error: insertError } = await supabase.from("media").insert({
-          org_id: item.orgId,
-          project_id: item.projectId,
-          uploaded_by: item.profileId,
-          media_type: guessMediaType(file),
-          storage_path: storagePath,
-          filename: file.name,
-          file_size: file.size,
-          mime_type: file.type,
-          caption: item.caption || null,
-          is_checkout: item.mode === "checkout" || item.mode === "before_leave",
-          time_event_id: null,
-          metadata: {
-            uploadedBy: "worker-shell",
-            offlineQueued: true,
-            ...(item.mode === "before_leave" ? { kind: "before_leave" } : {}),
-          },
-        });
-        if (insertError) continue;
+        const queuedMediaType = guessMediaType(file);
+        const { data: insertedRow, error: insertError } = await supabase
+          .from("media")
+          .insert({
+            org_id: item.orgId,
+            project_id: item.projectId,
+            uploaded_by: item.profileId,
+            media_type: queuedMediaType,
+            storage_path: storagePath,
+            filename: file.name,
+            file_size: file.size,
+            mime_type: file.type,
+            caption: item.caption || null,
+            is_checkout: item.mode === "checkout" || item.mode === "before_leave",
+            time_event_id: null,
+            metadata: {
+              uploadedBy: "worker-shell",
+              offlineQueued: true,
+              ...(item.mode === "before_leave" ? { kind: "before_leave" } : {}),
+            },
+          })
+          .select("id")
+          .single<{ id: string }>();
+        if (insertError || !insertedRow) continue;
+
+        // Fire-and-forget Mux transcode kickoff for queued video drains
+        // — same contract as the online path. Never awaited.
+        if (queuedMediaType === "video") {
+          fetch("/api/media/transcode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mediaId: insertedRow.id }),
+            keepalive: true,
+          }).catch((err) =>
+            console.warn("[transcode] kickoff failed:", err),
+          );
+        }
 
         const remaining = removeOfflineUpload(item.id);
         setOfflineQueue(remaining);
