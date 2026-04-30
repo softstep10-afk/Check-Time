@@ -8,6 +8,87 @@ import type {
   WorkerSummary,
 } from "@/lib/worker-types";
 
+export function isValidLatitude(value: number): boolean {
+  return Number.isFinite(value) && value >= -90 && value <= 90;
+}
+
+export function isValidLongitude(value: number): boolean {
+  return Number.isFinite(value) && value >= -180 && value <= 180;
+}
+
+export function isValidGeoPoint(
+  point: Partial<WorkerGeoPoint> | null | undefined,
+): point is WorkerGeoPoint {
+  if (!point) {
+    return false;
+  }
+
+  return isValidLatitude(point.lat ?? Number.NaN) && isValidLongitude(point.lng ?? Number.NaN);
+}
+
+export const DEVICE_LOCATION_WARNING_THRESHOLD_METERS = 100;
+
+export interface DeviceLocationAssessment {
+  accuracyMeters: number | null;
+  shouldWarn: boolean;
+}
+
+export function assessDeviceLocationAccuracy(
+  value: unknown,
+  warningThresholdMeters = DEVICE_LOCATION_WARNING_THRESHOLD_METERS,
+): DeviceLocationAssessment {
+  const accuracyMeters =
+    typeof value === "number" && Number.isFinite(value) && value >= 0
+      ? Math.round(value)
+      : null;
+
+  if (accuracyMeters === null) {
+    return {
+      accuracyMeters: null,
+      shouldWarn: true,
+    };
+  }
+
+  return {
+    accuracyMeters,
+    shouldWarn: accuracyMeters > warningThresholdMeters,
+  };
+}
+
+export function parseCoordinateInputPair(
+  latValue: unknown,
+  lngValue: unknown,
+  options: { allowBlank?: boolean } = {},
+): { point: WorkerGeoPoint | null; error: "missing" | "invalid" | null } {
+  const allowBlank = options.allowBlank ?? false;
+  const latText = latValue?.toString().trim() ?? "";
+  const lngText = lngValue?.toString().trim() ?? "";
+  const hasLat = latText.length > 0;
+  const hasLng = lngText.length > 0;
+
+  if (!hasLat && !hasLng) {
+    return {
+      point: null,
+      error: allowBlank ? null : "missing",
+    };
+  }
+
+  if (hasLat !== hasLng) {
+    return { point: null, error: "missing" };
+  }
+
+  const point = {
+    lat: Number(latText),
+    lng: Number(lngText),
+  };
+
+  if (!isValidGeoPoint(point)) {
+    return { point: null, error: "invalid" };
+  }
+
+  return { point, error: null };
+}
+
 export function parseGeoPoint(value: unknown): WorkerGeoPoint | null {
   if (!value) {
     return null;
@@ -18,7 +99,7 @@ export function parseGeoPoint(value: unknown): WorkerGeoPoint | null {
     if (match) {
       const lng = Number.parseFloat(match[1]);
       const lat = Number.parseFloat(match[2]);
-      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+      if (isValidGeoPoint({ lat, lng })) {
         return { lat, lng };
       }
     }
@@ -38,10 +119,7 @@ export function parseGeoPoint(value: unknown): WorkerGeoPoint | null {
         const littleEndian = bytes[0] === 1;
         const lng = view.getFloat64(9, littleEndian);
         const lat = view.getFloat64(17, littleEndian);
-        if (
-          Number.isFinite(lat) && Number.isFinite(lng) &&
-          lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180
-        ) {
+        if (isValidGeoPoint({ lat, lng })) {
           return { lat, lng };
         }
       } catch {
@@ -65,18 +143,26 @@ export function parseGeoPoint(value: unknown): WorkerGeoPoint | null {
 
     if (Array.isArray(maybePoint.coordinates) && maybePoint.coordinates.length >= 2) {
       const [lng, lat] = maybePoint.coordinates;
-      if (typeof lat === "number" && typeof lng === "number") {
+      if (typeof lat === "number" && typeof lng === "number" && isValidGeoPoint({ lat, lng })) {
         return { lat, lng };
       }
     }
 
-    if (typeof maybePoint.lat === "number" && typeof maybePoint.lng === "number") {
+    if (
+      typeof maybePoint.lat === "number" &&
+      typeof maybePoint.lng === "number" &&
+      isValidGeoPoint({ lat: maybePoint.lat, lng: maybePoint.lng })
+    ) {
       return { lat: maybePoint.lat, lng: maybePoint.lng };
     }
 
     if (
       typeof maybePoint.latitude === "number" &&
-      typeof maybePoint.longitude === "number"
+      typeof maybePoint.longitude === "number" &&
+      isValidGeoPoint({
+        lat: maybePoint.latitude,
+        lng: maybePoint.longitude,
+      })
     ) {
       return {
         lat: maybePoint.latitude,
@@ -84,7 +170,11 @@ export function parseGeoPoint(value: unknown): WorkerGeoPoint | null {
       };
     }
 
-    if (typeof maybePoint.y === "number" && typeof maybePoint.x === "number") {
+    if (
+      typeof maybePoint.y === "number" &&
+      typeof maybePoint.x === "number" &&
+      isValidGeoPoint({ lat: maybePoint.y, lng: maybePoint.x })
+    ) {
       return { lat: maybePoint.y, lng: maybePoint.x };
     }
   }

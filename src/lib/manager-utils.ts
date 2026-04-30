@@ -1,4 +1,5 @@
 import type { UserRole } from "@/types/database";
+import { parseGeoPoint } from "@/lib/worker-utils";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -269,17 +270,23 @@ export function buildProjectSummaries(
   }
 
   return data.projects
-    .map((project) => ({
-      ...project,
-      assignedWorkerCount: assignmentsByProject.get(project.id)?.size ?? 0,
-      onSiteWorkerCount: onSiteByProject.get(project.id)?.size ?? 0,
-      openTaskCount: openTasksByProject.get(project.id) ?? 0,
-      weekMinutes: weekMinutesByProject.get(project.id) ?? 0,
-      receiptTotal: receiptTotalByProject.get(project.id) ?? 0,
-      lastActivityTime: lastActivityByProject.get(project.id) ?? null,
-      recentMedia: mediaByProject.get(project.id) ?? [],
-      recentMediaTotal: mediaTotalByProject.get(project.id) ?? 0,
-    }))
+    .map((project) => {
+      const siteCoordinates = parseGeoPoint(project.site_point);
+
+      return {
+        ...project,
+        assignedWorkerCount: assignmentsByProject.get(project.id)?.size ?? 0,
+        onSiteWorkerCount: onSiteByProject.get(project.id)?.size ?? 0,
+        openTaskCount: openTasksByProject.get(project.id) ?? 0,
+        weekMinutes: weekMinutesByProject.get(project.id) ?? 0,
+        receiptTotal: receiptTotalByProject.get(project.id) ?? 0,
+        lastActivityTime: lastActivityByProject.get(project.id) ?? null,
+        siteCoordinates,
+        hasValidSiteCoordinates: Boolean(siteCoordinates),
+        recentMedia: mediaByProject.get(project.id) ?? [],
+        recentMediaTotal: mediaTotalByProject.get(project.id) ?? 0,
+      };
+    })
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 

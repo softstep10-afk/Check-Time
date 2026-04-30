@@ -11,6 +11,7 @@ import type {
   UserRole,
 } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
+import type { WorkerGeoPoint } from "@/lib/worker-types";
 
 export interface ManagerWorkspaceData {
   manager: Profile;
@@ -50,6 +51,8 @@ export interface ManagerProjectSummary extends Project {
   weekMinutes: number;
   receiptTotal: number;
   lastActivityTime: string | null;
+  siteCoordinates: WorkerGeoPoint | null;
+  hasValidSiteCoordinates: boolean;
   recentMedia: Array<{
     id: string;
     media_type: string;
