@@ -8,6 +8,7 @@ import {
   isManagerRole,
 } from "@/lib/manager-utils";
 import { deriveWorkerGpsStatus, type WorkerGpsStatus } from "@/lib/gps-status";
+import { deriveGpsFreshness, type GpsFreshness } from "@/lib/gps-freshness";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ProjectDetailRoutePage({
@@ -54,12 +55,47 @@ export default async function ProjectDetailRoutePage({
     });
   }
 
+  // GPS freshness — query latest worker_live_locations.recorded_at for
+  // each worker currently clocked in to THIS project. Empty for projects
+  // with nobody on site. Wrapped in try/catch so a missing table or RLS
+  // hiccup doesn't 500 the page.
+  const supabase = await createClient();
+  const onSiteProfileIds = sessions
+    .filter((s) => s.isOpen && s.projectId === id)
+    .map((s) => s.profileId);
+  const freshnessByProfileId: Record<string, GpsFreshness> = {};
+  if (onSiteProfileIds.length > 0) {
+    try {
+      const { data: liveRows } = await supabase
+        .from("worker_live_locations")
+        .select("worker_id, recorded_at")
+        .in("worker_id", onSiteProfileIds)
+        .order("recorded_at", { ascending: false })
+        .limit(onSiteProfileIds.length * 5);
+      const seen = new Set<string>();
+      const lastByWorker = new Map<string, string>();
+      for (const row of (liveRows ?? []) as Array<{ worker_id: string; recorded_at: string }>) {
+        if (seen.has(row.worker_id)) continue;
+        seen.add(row.worker_id);
+        lastByWorker.set(row.worker_id, row.recorded_at);
+      }
+      for (const session of sessions) {
+        if (!session.isOpen || session.projectId !== id) continue;
+        freshnessByProfileId[session.profileId] = deriveGpsFreshness({
+          lastUpdateAt: lastByWorker.get(session.profileId) ?? null,
+          shiftStartAt: session.clockInTime,
+        });
+      }
+    } catch {
+      // Leave map empty — UI shows "no_signal" gracefully.
+    }
+  }
+
   // Safety acknowledgements count for THIS project, today (worker local
   // midnight is not knowable server-side; use UTC midnight as the cutoff
   // — same convention used elsewhere when counting "today" rows).
   // The query is wrapped so that a pre-migration deploy (table missing)
   // returns 0 instead of crashing the page.
-  const supabase = await createClient();
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
   let safetyAcksToday = 0;
@@ -88,6 +124,7 @@ export default async function ProjectDetailRoutePage({
       media={media}
       sessions={projectSessions}
       gpsStatusByProfileId={gpsStatusByProfileId}
+      gpsFreshnessByProfileId={freshnessByProfileId}
       safetyAcksToday={safetyAcksToday}
     />
   );

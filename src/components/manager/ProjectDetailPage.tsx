@@ -29,6 +29,12 @@ import {
 } from "@/lib/worker-utils";
 import type { ProjectAddressGeocodeResult } from "@/lib/project-geocoding";
 import { GPS_STATUS_COLOR, type WorkerGpsStatus } from "@/lib/gps-status";
+import {
+  GPS_FRESHNESS_COLOR,
+  formatGpsAge,
+  type GpsFreshness,
+  type GpsFreshnessStatus,
+} from "@/lib/gps-freshness";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -97,6 +103,7 @@ export function ProjectDetailPage({
   media,
   sessions,
   gpsStatusByProfileId,
+  gpsFreshnessByProfileId,
   safetyAcksToday,
 }: {
   orgId: string;
@@ -109,6 +116,7 @@ export function ProjectDetailPage({
   media: Media[];
   sessions: ManagerSession[];
   gpsStatusByProfileId: Record<string, WorkerGpsStatus>;
+  gpsFreshnessByProfileId: Record<string, GpsFreshness>;
   safetyAcksToday: number;
 }) {
   const router = useRouter();
@@ -1076,6 +1084,17 @@ export function ProjectDetailPage({
                       : gpsStatus === "off_site"
                         ? t("gpsStatus.offSite")
                         : t("gpsStatus.noFence");
+                const freshness = onSiteForThisProject
+                  ? gpsFreshnessByProfileId[worker.id] ?? null
+                  : null;
+                const freshnessLabelMap: Record<GpsFreshnessStatus, string> = {
+                  fresh: t("gpsFresh.fresh"),
+                  delayed: t("gpsFresh.delayed"),
+                  stale: t("gpsFresh.stale"),
+                  lost: t("gpsFresh.lost"),
+                  needs_review: t("gpsFresh.needsReview"),
+                  no_signal: t("gpsFresh.noSignal"),
+                };
                 const initial = worker.name.trim().charAt(0).toUpperCase() || "?";
                 return (
                   <div
@@ -1123,6 +1142,31 @@ export function ProjectDetailPage({
                               />
                               {gpsStatusLabel ?? t("common.off")}
                             </span>
+                            {freshness ? (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                                style={{ color: GPS_FRESHNESS_COLOR[freshness.status] }}
+                                title={
+                                  freshness.lastUpdateAt
+                                    ? t("gpsFresh.tooltipUpdated").replace(
+                                        "{age}",
+                                        formatGpsAge(freshness.ageMs),
+                                      )
+                                    : t("gpsFresh.tooltipNever")
+                                }
+                              >
+                                <span
+                                  className="inline-block h-1.5 w-1.5 rounded-full"
+                                  style={{ background: GPS_FRESHNESS_COLOR[freshness.status] }}
+                                />
+                                {freshnessLabelMap[freshness.status]}
+                                {freshness.ageMs !== null ? (
+                                  <span className="ml-0.5 font-mono text-[9px] text-[var(--text-muted)] normal-case">
+                                    {formatGpsAge(freshness.ageMs)}
+                                  </span>
+                                ) : null}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="text-[10px] text-[var(--text-muted)]">
                             {t("common.week")}: {weekHours.toFixed(1)}h

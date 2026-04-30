@@ -18,6 +18,14 @@ import {
   deriveWorkerGpsStatus,
   type WorkerGpsStatus,
 } from "@/lib/gps-status";
+import {
+  GPS_FRESHNESS_COLOR,
+  deriveGpsFreshness,
+  formatGpsAge,
+  type GpsFreshness,
+  type GpsFreshnessStatus,
+} from "@/lib/gps-freshness";
+import { createClient } from "@/lib/supabase/server";
 
 // 0 = force-dynamic. F5 must always fetch the current state of time_events,
 // projects, tasks, media; OverviewLiveIndicator still pushes router.refresh()
@@ -106,6 +114,54 @@ export default async function OverviewPage() {
     no_gps: t("gpsStatus.noGps"),
     off_site: t("gpsStatus.offSite"),
     no_fence: t("gpsStatus.noFence"),
+  };
+
+  // GPS freshness: latest worker_live_locations.recorded_at per active worker.
+  // The supabase server client is only created when there's at least one
+  // open session — avoids an empty IN() round-trip on quiet orgs. The
+  // try/catch keeps a missing-table or RLS hiccup from breaking the page.
+  const freshnessByProfileId = new Map<string, GpsFreshness>();
+  if (onSiteSessions.length > 0) {
+    try {
+      const supabase = await createClient();
+      const profileIds = onSiteSessions.map((s) => s.profileId);
+      const { data: liveRows, error: liveErr } = await supabase
+        .from("worker_live_locations")
+        .select("worker_id, recorded_at")
+        .in("worker_id", profileIds)
+        .order("recorded_at", { ascending: false })
+        .limit(profileIds.length * 5);
+      if (!liveErr && liveRows) {
+        const seen = new Set<string>();
+        const lastByWorker = new Map<string, string>();
+        for (const row of liveRows as Array<{ worker_id: string; recorded_at: string }>) {
+          if (seen.has(row.worker_id)) continue;
+          seen.add(row.worker_id);
+          lastByWorker.set(row.worker_id, row.recorded_at);
+        }
+        for (const session of onSiteSessions) {
+          freshnessByProfileId.set(
+            session.profileId,
+            deriveGpsFreshness({
+              lastUpdateAt: lastByWorker.get(session.profileId) ?? null,
+              shiftStartAt: session.clockInTime,
+            }),
+          );
+        }
+      }
+    } catch {
+      // Table may be unreachable — leave freshnessByProfileId empty so
+      // the UI shows "no_signal" gracefully rather than crashing.
+    }
+  }
+
+  const gpsFreshnessLabel: Record<GpsFreshnessStatus, string> = {
+    fresh: t("gpsFresh.fresh"),
+    delayed: t("gpsFresh.delayed"),
+    stale: t("gpsFresh.stale"),
+    lost: t("gpsFresh.lost"),
+    needs_review: t("gpsFresh.needsReview"),
+    no_signal: t("gpsFresh.noSignal"),
   };
 
   const activeWorkerMarkers = onSiteSessions
@@ -395,6 +451,7 @@ export default async function OverviewPage() {
                   <th className="pb-3 pr-4 font-semibold">{t("overview.colSince")}</th>
                   <th className="pb-3 pr-4 font-semibold">{t("overview.colHours")}</th>
                   <th className="pb-3 pr-4 font-semibold">{t("overview.colGps")}</th>
+                  <th className="pb-3 pr-4 font-semibold">{t("gpsFresh.columnHeader")}</th>
                   <th className="pb-3 font-semibold" />
                 </tr>
               </thead>
@@ -450,6 +507,41 @@ export default async function OverviewPage() {
                         />
                         {gpsStatusLabel[session.gpsStatus]}
                       </span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      {(() => {
+                        const fresh =
+                          freshnessByProfileId.get(session.profileId) ??
+                          ({
+                            status: "no_signal",
+                            ageMs: null,
+                            lastUpdateAt: null,
+                          } as GpsFreshness);
+                        const tooltip = fresh.lastUpdateAt
+                          ? t("gpsFresh.tooltipUpdated").replace(
+                              "{age}",
+                              formatGpsAge(fresh.ageMs),
+                            )
+                          : t("gpsFresh.tooltipNever");
+                        return (
+                          <span
+                            title={tooltip}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
+                            style={{ color: GPS_FRESHNESS_COLOR[fresh.status] }}
+                          >
+                            <span
+                              className="inline-block h-2 w-2 rounded-full"
+                              style={{ background: GPS_FRESHNESS_COLOR[fresh.status] }}
+                            />
+                            {gpsFreshnessLabel[fresh.status]}
+                            {fresh.ageMs !== null ? (
+                              <span className="ml-1 font-mono text-[10px] text-[var(--text-muted)]">
+                                {formatGpsAge(fresh.ageMs)}
+                              </span>
+                            ) : null}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3">
                       <ForceCheckoutButton
