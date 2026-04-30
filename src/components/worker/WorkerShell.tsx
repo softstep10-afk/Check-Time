@@ -1257,6 +1257,13 @@ export function WorkerShell({
           .upload(storagePath, file, {
             upsert: false,
             cacheControl: "3600",
+            // Without an explicit contentType, Supabase Storage falls back
+            // to application/octet-stream when the filename has no clean
+            // extension (iOS captures sometimes ship as `checkout-…` with
+            // no .mp4). Browsers then play the signed URL as binary →
+            // black frame, no audio. Use the browser-detected MIME so the
+            // signed URL serves the right Content-Type header.
+            contentType: file.type || undefined,
           });
 
         if (uploadError) {
@@ -1451,7 +1458,11 @@ export function WorkerShell({
 
         const { error: uploadError } = await supabase.storage
           .from("media")
-          .upload(storagePath, file, { upsert: false, cacheControl: "3600" });
+          .upload(storagePath, file, {
+            upsert: false,
+            cacheControl: "3600",
+            contentType: file.type || undefined,
+          });
         if (uploadError) continue;
 
         const { error: insertError } = await supabase.from("media").insert({

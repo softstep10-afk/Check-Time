@@ -149,6 +149,19 @@ export function TeamMemberPage({
   const [excludedSet, setExcludedSet] = useState<Set<string>>(
     () => new Set(excludedProjectIds),
   );
+  // Controlled state for the two profile-edit toggles. Uncontrolled
+  // `defaultChecked` only takes effect on initial mount; after
+  // router.refresh() the input keeps whatever the user last toggled
+  // even if the new server prop disagrees. Mirror the prop so the UI
+  // always reflects the latest persisted profile.
+  const [requireVideoUi, setRequireVideoUi] = useState(profile.require_video);
+  const [isActiveUi, setIsActiveUi] = useState(profile.is_active);
+  useEffect(() => {
+    setRequireVideoUi(profile.require_video);
+  }, [profile.require_video]);
+  useEffect(() => {
+    setIsActiveUi(profile.is_active);
+  }, [profile.is_active]);
 
   async function handleUpdateProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -157,13 +170,18 @@ export function TeamMemberPage({
     const role = (formData.get("role")?.toString() ?? profile.role) as UserRole;
     const hourlyRateRaw = formData.get("hourly_rate")?.toString().trim() ?? "";
     const hourlyRate = hourlyRateRaw ? Number.parseFloat(hourlyRateRaw) : null;
-    const requireVideo = formData.get("require_video") === "on";
-    const isActive = formData.get("is_active") === "on";
+    const requireVideo = requireVideoUi;
+    const isActive = isActiveUi;
 
     setBusyKey("profile");
     setMessage("");
 
-    const { error } = await supabase
+    // .select(...).single() so we can detect a silent RLS denial: if the
+    // policy filter excludes this row from the manager's UPDATE, supabase
+    // returns no error AND no row, and the prior code surfaced "saved!"
+    // while the DB never changed. Reading back the persisted values lets
+    // us assert the toggles really moved before declaring success.
+    const { data: updated, error } = await supabase
       .from("profiles")
       .update({
         name,
@@ -172,7 +190,9 @@ export function TeamMemberPage({
         is_active: isActive,
         hourly_rate: Number.isFinite(hourlyRate) ? hourlyRate : null,
       })
-      .eq("id", profile.id);
+      .eq("id", profile.id)
+      .select("require_video, is_active")
+      .single();
 
     if (error) {
       setMessage(error.message);
@@ -180,6 +200,14 @@ export function TeamMemberPage({
       return;
     }
 
+    if (!updated) {
+      setMessage(t("permissions.saveFailed"));
+      setBusyKey(null);
+      return;
+    }
+
+    setRequireVideoUi(updated.require_video);
+    setIsActiveUi(updated.is_active);
     setBusyKey(null);
     setMessage(t("teamMember.profileUpdated"));
     router.refresh();
@@ -567,11 +595,21 @@ export function TeamMemberPage({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-sm text-[var(--text-primary)]">
-                <input type="checkbox" name="require_video" defaultChecked={profile.require_video} />
+                <input
+                  type="checkbox"
+                  name="require_video"
+                  checked={requireVideoUi}
+                  onChange={(event) => setRequireVideoUi(event.target.checked)}
+                />
                 {t("teamMember.requireCheckoutVideo")}
               </label>
               <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-sm text-[var(--text-primary)]">
-                <input type="checkbox" name="is_active" defaultChecked={profile.is_active} />
+                <input
+                  type="checkbox"
+                  name="is_active"
+                  checked={isActiveUi}
+                  onChange={(event) => setIsActiveUi(event.target.checked)}
+                />
                 {t("teamMember.allowPinAccess")}
               </label>
             </div>
