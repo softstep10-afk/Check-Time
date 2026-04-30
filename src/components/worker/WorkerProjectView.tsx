@@ -303,6 +303,7 @@ function ProjectClockControls({
   const { t } = useTranslation();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
+  const [savingAck, setSavingAck] = useState(false);
   const supabase = useMemo(() => createClient(), []);
 
   const isClockedIn = shell.clockState.isClockedIn;
@@ -317,10 +318,12 @@ function ProjectClockControls({
   }
 
   async function handleSafetyConfirm() {
-    setSafetyOpen(false);
-    // Best-effort ack write; never block clockIn on a missing audit row or
-    // a thrown error from the supabase client (network blip, RLS surface,
-    // table missing pre-migration). Always proceed to clockIn.
+    // Show "Saving…" on Confirm while the ack row writes so the worker
+    // gets immediate feedback. Best-effort: never block clockIn on a
+    // missing audit row, supabase throw, or RLS hiccup — the brief
+    // happened, the ack write is the audit record, and the worker is
+    // standing on a real construction site waiting to start.
+    setSavingAck(true);
     try {
       const ackResult = await writeSafetyAck(supabase, {
         orgId: shell.profile.org_id,
@@ -334,6 +337,8 @@ function ProjectClockControls({
     } catch (err) {
       console.warn("safety ack threw:", err);
     }
+    setSavingAck(false);
+    setSafetyOpen(false);
     void clockIn(projectId);
   }
 
@@ -410,8 +415,12 @@ function ProjectClockControls({
       <SafetyBriefModal
         open={safetyOpen}
         projectName={projectName}
+        workerName={shell.profile.name}
+        busy={savingAck}
         onConfirm={() => void handleSafetyConfirm()}
-        onCancel={() => setSafetyOpen(false)}
+        onCancel={() => {
+          if (!savingAck) setSafetyOpen(false);
+        }}
       />
     </section>
   );
