@@ -1,17 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, MapPin, Navigation, ShieldCheck } from "lucide-react";
+import { ArrowRight, CheckCircle2, FolderKanban, MapPin, Navigation, ShieldCheck } from "lucide-react";
 import { WorkerGpsCheckMap } from "@/components/maps/WorkerGpsCheckMap";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
-import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
-import { createClient } from "@/lib/supabase/client";
-import {
-  DEFAULT_SAFETY_VERSION,
-  writeSafetyAck,
-} from "@/lib/safety-acknowledgements";
 import {
   formatDateTime,
   formatDurationCompact,
@@ -25,51 +20,14 @@ export function ClockPage() {
     shell,
     activeSeconds,
     busyAction,
-    clockIn,
     lastGpsCheck,
   } = useWorkerShell();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [safetyOpenForProjectId, setSafetyOpenForProjectId] = useState<string | null>(null);
-  const [manualProjectId, setManualProjectId] = useState<string>(
-    shell.projects[0]?.id ?? "",
-  );
-
-  const supabaseClient = useMemo(() => createClient(), []);
-  const safetyProjectName = useMemo(() => {
-    if (!safetyOpenForProjectId) return "";
-    return (
-      shell.projects.find((p) => p.id === safetyOpenForProjectId)?.name ?? ""
-    );
-  }, [safetyOpenForProjectId, shell.projects]);
-
-  async function handleSafetyConfirm() {
-    const projectId = safetyOpenForProjectId;
-    if (!projectId) return;
-    setSafetyOpenForProjectId(null);
-    // Insert the ack first; failures are logged but never block clockIn
-    // — a missing audit row must not trap a worker on a real site.
-    const ackResult = await writeSafetyAck(supabaseClient, {
-      orgId: shell.profile.org_id,
-      workerId: shell.profile.id,
-      projectId,
-      safetyVersion: DEFAULT_SAFETY_VERSION,
-    });
-    if (!ackResult.ok) {
-      console.warn("safety ack write failed:", ackResult.error);
-    }
-    void clockIn(projectId);
-  }
-  const selectedProjectId =
-    shell.clockState.currentProjectId ?? manualProjectId ?? shell.projects[0]?.id ?? "";
 
   const activeProject = useMemo(
     () =>
       shell.projects.find((project) => project.id === shell.clockState.currentProjectId) ?? null,
     [shell.clockState.currentProjectId, shell.projects],
-  );
-  const otherProjects = useMemo(
-    () => shell.projects.filter((project) => project.id !== shell.clockState.currentProjectId),
-    [shell.projects, shell.clockState.currentProjectId],
   );
   const lastClosedSession =
     shell.sessions.find((session) => session.clockOutTime !== null) ?? null;
@@ -266,64 +224,59 @@ export function ClockPage() {
               </div>
             </div>
           </div>
+        ) : shell.projects.length === 0 ? (
+          // Worker has no allowed projects at all — keep the manager-action
+          // hint visible. Going to /my-projects would just show the same
+          // empty state.
+          <div
+            className="surface-panel mt-4 p-4"
+            style={{
+              borderColor: "rgba(245, 158, 11, 0.3)",
+              background: "rgba(245, 158, 11, 0.06)",
+            }}
+          >
+            <div className="text-sm font-semibold" style={{ color: "#f59e0b" }}>
+              {t("clock.noProjectsTitle")}
+            </div>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              {t("clock.noProjectsHint")}
+            </p>
+          </div>
         ) : (
-          <div className="mt-4 space-y-2">
-            {shell.projects.length === 0 ? (
-              <div
-                className="surface-panel p-4"
-                style={{
-                  borderColor: "rgba(245, 158, 11, 0.3)",
-                  background: "rgba(245, 158, 11, 0.06)",
-                }}
-              >
-                <div className="text-sm font-semibold" style={{ color: "#f59e0b" }}>
-                  {t("clock.noProjectsTitle")}
+          // Worker is off-shift but has allowed projects. Project browsing
+          // and Check In live on the Projects tab now — surface a single
+          // compact CTA that lands on /my-projects.
+          <Link
+            href="/my-projects"
+            className="surface-panel mt-4 flex items-center justify-between gap-3 p-3"
+            style={{
+              borderColor: "rgba(245, 158, 11, 0.35)",
+              background: "rgba(245, 158, 11, 0.08)",
+            }}
+          >
+            <div className="flex items-start gap-2">
+              <FolderKanban size={18} className="mt-0.5 shrink-0" style={{ color: "#f59e0b" }} />
+              <div>
+                <div className="text-sm font-semibold text-[var(--text-primary)]">
+                  {t("clock.chooseProjectTitle")}
                 </div>
-                <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                  {t("clock.noProjectsHint")}
+                <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
+                  {t("clock.chooseProjectHint")}
                 </p>
               </div>
-            ) : (
-              shell.projects.map((project) => {
-                const selected = selectedProjectId === project.id;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    onClick={() => setManualProjectId(project.id)}
-                    className="surface-panel w-full p-3 text-left"
-                    style={{
-                      borderColor: selected ? "var(--border-active)" : "var(--border-default)",
-                      background: selected
-                        ? "linear-gradient(180deg, rgba(191, 162, 52, 0.12), rgba(15, 17, 23, 0.95))"
-                        : "var(--bg-primary)",
-                      boxShadow: selected
-                        ? "inset 0 1px 0 rgba(255,255,255,0.03), inset 0 0 0 1px rgba(191, 162, 52, 0.18), 0 8px 18px rgba(0,0,0,0.16)"
-                        : "inset 0 1px 0 rgba(255,255,255,0.02)",
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-[var(--text-primary)]">
-                          {project.name}
-                        </div>
-                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                          {project.address ?? t("clock.assignedSite")}
-                        </div>
-                      </div>
-                      <div className="text-right text-[11px] text-[var(--text-muted)]">
-                        {project.site ? `${project.radius_m}${t("clock.radiusM")}` : t("clock.openSite")}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
+            </div>
+            <span
+              className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-semibold"
+              style={{ borderColor: "rgba(245, 158, 11, 0.5)", color: "#f59e0b" }}
+            >
+              {t("clock.goToProjects")}
+              <ArrowRight size={11} />
+            </span>
+          </Link>
         )}
 
-        <div className="mt-4">
-          {shell.clockState.isClockedIn ? (
+        {shell.clockState.isClockedIn ? (
+          <div className="mt-4">
             <button
               type="button"
               onClick={() => setCheckoutOpen(true)}
@@ -338,33 +291,9 @@ export function ClockPage() {
             >
               {busyAction === "clock-out" ? t("clock.closingShift") : t("clock.endShiftCta")}
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSafetyOpenForProjectId(selectedProjectId)}
-              disabled={
-                !selectedProjectId ||
-                busyAction === "clock-in" ||
-                shell.projects.length === 0
-              }
-              className="w-full rounded-[var(--radius-md)] text-base font-bold uppercase tracking-[0.08em] disabled:opacity-60"
-              style={{
-                height: 64,
-                background: "#f59e0b",
-                color: "#0a0c14",
-              }}
-            >
-              {busyAction === "clock-in" ? t("clock.checkingLocation") : t("clock.startShiftCta")}
-            </button>
-          )}
-        </div>
+          </div>
+        ) : null}
         <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
-        <SafetyBriefModal
-          open={safetyOpenForProjectId !== null}
-          projectName={safetyProjectName}
-          onConfirm={() => void handleSafetyConfirm()}
-          onCancel={() => setSafetyOpenForProjectId(null)}
-        />
 
         {shell.profile.require_video ? (
           <p className="mt-3 text-xs text-[var(--text-secondary)]">
@@ -372,52 +301,6 @@ export function ClockPage() {
           </p>
         ) : null}
       </section>
-
-      {/* Other projects (read-only browse while clocked in) */}
-      {shell.clockState.isClockedIn && otherProjects.length > 0 ? (
-        <section className="surface-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-                {t("clock.otherProjects")}
-              </p>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                {t("clock.readOnlyHint")}
-              </p>
-            </div>
-            <a
-              href="#active-project"
-              className="rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-[11px] font-semibold"
-              style={{ borderColor: "rgba(15, 168, 120, 0.3)", color: "var(--green)" }}
-            >
-              {t("clock.backToMyProject")}
-            </a>
-          </div>
-          <div className="mt-3 space-y-2">
-            {otherProjects.map((project) => (
-              <div
-                key={project.id}
-                className="surface-panel p-3"
-                style={{ background: "var(--bg-primary)", opacity: 0.85 }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
-                      {project.name}
-                    </div>
-                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {project.address ?? t("clock.assignedSite")}
-                    </div>
-                  </div>
-                  <div className="text-right text-[11px] text-[var(--text-muted)]">
-                    {project.site ? `${project.radius_m}${t("clock.radiusM")}` : t("clock.openSite")}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       {/* Driver receipt shortcut */}
       {shell.profile.role === "driver" && shell.clockState.isClockedIn && shell.clockState.currentProjectId ? (
