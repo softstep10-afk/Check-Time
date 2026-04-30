@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FileText, Film, Image as ImageIcon, Paperclip } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeStoragePath, type TaskAttachmentRef } from "@/lib/task-attachments";
@@ -12,12 +12,50 @@ function iconFor(mediaType: string) {
   return Paperclip;
 }
 
+function typeLabel(mediaType: string): string {
+  if (mediaType === "photo") return "Image";
+  if (mediaType === "video") return "Video";
+  if (mediaType === "pdf") return "PDF";
+  if (mediaType === "document") return "Doc";
+  return "File";
+}
+
 export function TaskAttachmentList({
   items,
 }: {
   items: TaskAttachmentRef[];
 }) {
   const supabase = useMemo(() => createClient(), []);
+  // Eagerly batch-sign image paths so the worker/manager sees real
+  // thumbnails instead of an icon placeholder. Videos and PDFs would
+  // need a separate poster-frame pipeline; for them we keep an icon
+  // tile. One batch call per attachment list mount, regardless of how
+  // many photos.
+  const [thumbUrls, setThumbUrls] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    const photos = items.filter((item) => item.media_type === "photo");
+    if (photos.length === 0) return;
+    let cancelled = false;
+    void (async () => {
+      const paths = photos.map((item) => normalizeStoragePath(item.storage_path));
+      const { data } = await supabase.storage
+        .from("media")
+        .createSignedUrls(paths, 3600);
+      if (cancelled || !data) return;
+      const next = new Map<string, string>();
+      for (let i = 0; i < photos.length; i++) {
+        const url = data[i]?.signedUrl;
+        if (url) next.set(photos[i].id, url);
+      }
+      setThumbUrls(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items, supabase]);
+
   if (items.length === 0) return null;
 
   async function open(item: TaskAttachmentRef) {
@@ -37,17 +75,6 @@ export function TaskAttachmentList({
     const { data, error } = await supabase.storage
       .from("media")
       .createSignedUrl(normalized, 3600);
-    console.log("[task-attach] open attachment", {
-      id: item.id,
-      filename: item.filename,
-      bucket: "media",
-      storage_path_raw: item.storage_path,
-      storage_path_normalized: normalized,
-      pathHadLeadingSlash: item.storage_path.startsWith("/"),
-      pathHadBucketPrefix: item.storage_path.startsWith("media/") || item.storage_path.startsWith("/media/"),
-      signedUrl: data?.signedUrl,
-      error: error ? { message: error.message, name: error.name } : null,
-    });
     if (error || !data?.signedUrl) {
       console.error("[task-attach] failed to sign URL", error);
       tab.close();
@@ -57,25 +84,50 @@ export function TaskAttachmentList({
   }
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5">
+    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
       {items.map((item) => {
         const Icon = iconFor(item.media_type);
+        const thumbUrl = thumbUrls.get(item.id);
         const label = item.filename ?? item.id.slice(0, 8);
         return (
           <button
             key={item.id}
             type="button"
             onClick={() => void open(item)}
-            className="inline-flex max-w-[220px] items-center gap-1.5 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-medium"
+            title={label}
+            className="group relative aspect-square overflow-hidden rounded-[var(--radius-md)] border text-left"
             style={{
               borderColor: "var(--border-default)",
               background: "var(--bg-primary)",
-              color: "var(--text-secondary)",
             }}
-            title={label}
           >
-            <Icon size={12} className="shrink-0" />
-            <span className="truncate">{label}</span>
+            {item.media_type === "photo" && thumbUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={thumbUrl}
+                alt={label}
+                loading="lazy"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                <Icon size={28} className="text-[var(--brand-yellow)]" />
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {typeLabel(item.media_type)}
+                </span>
+              </div>
+            )}
+            <div
+              className="absolute inset-x-0 bottom-0 px-1.5 py-1"
+              style={{
+                background:
+                  "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 100%)",
+              }}
+            >
+              <div className="truncate text-[10px] font-medium text-white">
+                {label}
+              </div>
+            </div>
           </button>
         );
       })}
