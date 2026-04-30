@@ -879,6 +879,11 @@ export const translations = {
     ru: "Этот файл нельзя загрузить напрямую из облачного хранилища. Скачайте его на устройство и загрузите снова.",
   },
   "messages.openFile": { en: "Open", ru: "Открыть" },
+  "messages.downloadFile": { en: "Download", ru: "Скачать" },
+  "messages.videoMaybeUnsupported": {
+    en: "If the video appears black, tap Download to view it in your phone or another player.",
+    ru: "Если видео отображается как чёрный экран, нажмите Скачать, чтобы открыть его на телефоне или в другом плеере.",
+  },
   "messages.priority": { en: "Priority", ru: "Приоритет" },
   "messages.priorityUrgent": { en: "Urgent", ru: "Срочное" },
   "messages.priorityInfo": { en: "Info", ru: "Информация" },

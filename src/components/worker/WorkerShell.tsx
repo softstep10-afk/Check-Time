@@ -20,9 +20,9 @@ import {
   formatDurationCompact,
   guessMediaType,
   haversineMeters,
-  slugifyFilename,
   toSupabasePoint,
 } from "@/lib/worker-utils";
+import { buildSafeUploadName } from "@/lib/media-extension";
 import { Timer, Camera, ClipboardCheck, CalendarClock, FolderKanban } from "lucide-react";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
@@ -1249,7 +1249,12 @@ export function WorkerShell({
       const uploadedEntries: WorkerMediaItem[] = [];
 
       for (const file of selectedFiles) {
-        const safeName = slugifyFilename(file.name || `${mode}-${Date.now()}`);
+        // buildSafeUploadName guarantees a playable extension (.mp4 / .mov /
+        // .webm / etc.) when the OS picker hands us an empty file.name.
+        // Without it, an iPhone capture with no name produced an extension-
+        // less storage path, the manager's signed-URL flow had no hint of
+        // the real format, and downloads landed on disk as raw binary.
+        const safeName = buildSafeUploadName(file, mode);
         const storagePath = `${shell.profile.org_id}/${targetProjectId}/${today}/${Date.now()}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage
@@ -1453,7 +1458,7 @@ export function WorkerShell({
         const file = offlineUploadToFile(item);
         if (!file) continue; // thumb-only, needs re-pick
         const today = new Date().toISOString().slice(0, 10);
-        const safeName = slugifyFilename(file.name || `${item.mode}-${Date.now()}`);
+        const safeName = buildSafeUploadName(file, item.mode);
         const storagePath = `${item.orgId}/${item.projectId}/${today}/${Date.now()}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage

@@ -134,6 +134,37 @@ export function TeamMemberPage({
     tab.location.href = data.signedUrl;
   }
 
+  // Download fallback — for iPhone HEVC `.mov` clips that Chrome / Edge /
+  // Firefox can't decode (frame goes black, audio silent, but duration
+  // loads), and for older uploads whose storage Content-Type metadata
+  // was wrong. Triggers a real file download via the bucket's signed
+  // URL with `?download=...`, so the manager can play the original on
+  // their phone, in QuickTime, or in VLC.
+  async function downloadMediaItem(item: {
+    id: string;
+    storage_path: string;
+    filename: string | null;
+  }) {
+    if (typeof window === "undefined") return;
+    const normalized = normalizeStoragePath(item.storage_path);
+    const fallbackName = normalized.split("/").pop() ?? "download";
+    const downloadAs = (item.filename && item.filename.trim()) || fallbackName;
+    const { data, error } = await supabase.storage
+      .from("media")
+      .createSignedUrl(normalized, 3600, { download: downloadAs });
+    if (error || !data?.signedUrl) {
+      setMessage(t("projectDetail.mediaOpenFailed"));
+      setMessageType("error");
+      return;
+    }
+    const anchor = document.createElement("a");
+    anchor.href = data.signedUrl;
+    anchor.download = downloadAs;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+
   const unpaidMinutes = useMemo(() => {
     let total = 0;
     for (const session of sessions) {
@@ -1312,7 +1343,7 @@ export function TeamMemberPage({
                   {entry.caption ? (
                     <p className="mt-2 text-xs text-[var(--text-secondary)]">{entry.caption}</p>
                   ) : null}
-                  <div className="mt-2 flex justify-end gap-2">
+                  <div className="mt-2 flex flex-wrap justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => void openMediaItem(entry)}
@@ -1323,6 +1354,14 @@ export function TeamMemberPage({
                     </button>
                     <button
                       type="button"
+                      onClick={() => void downloadMediaItem(entry)}
+                      className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                      style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                    >
+                      ⬇ {t("messages.downloadFile")}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setFlagModalMediaId(entry.id)}
                       className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
                       style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
@@ -1330,6 +1369,11 @@ export function TeamMemberPage({
                       🚩 {t("flags.flagForReview")}
                     </button>
                   </div>
+                  {entry.media_type === "video" ? (
+                    <p className="mt-1 text-right text-[10px] text-[var(--text-muted)]">
+                      {t("messages.videoMaybeUnsupported")}
+                    </p>
+                  ) : null}
                 </div>
               ))
             )}
