@@ -1513,29 +1513,34 @@ export function WorkerShell({
     <WorkerShellContext.Provider value={value}>
       <div className="min-h-screen bg-[var(--bg-primary)]">
         <div className="mx-auto flex min-h-screen max-w-[500px] flex-col border-x border-[var(--border-subtle)]">
-          <header
-            className="sticky top-0 z-20 px-4 pb-4 pt-4"
-            style={{
-              background: "rgba(15, 17, 23, 0.96)",
-              backdropFilter: "blur(12px)",
-              borderBottom: "1px solid var(--border-default)",
-            }}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-                  {t("worker.flow")}
-                </p>
-                <h1 className="mt-1 text-[20px] font-bold text-[var(--text-primary)]">
+          <header className="px-4 pb-3 pt-3">
+            {/* Top worker block — intentionally minimal:
+                - Worker name only
+                - Compact on/off indicator pill
+                - Action buttons (mute / notif / language / sign out)
+                The previous version was a sticky header with a 3-card
+                Today/Week/Sessions grid. Those metrics live on /hours
+                already (HoursPage), so they were removed here so the
+                Clock page is not dominated by status chrome on mobile.
+                Header scrolls with page (no `sticky`). */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <h1 className="truncate text-base font-bold text-[var(--text-primary)]">
                   {shell.profile.name}
                 </h1>
-                <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                  {shell.clockState.isClockedIn && shell.clockState.currentProjectName
-                    ? mounted
-                      ? `${shell.clockState.currentProjectName} • ${formatElapsedSeconds(activeSeconds)}`
-                      : shell.clockState.currentProjectName
-                    : t("worker.readyToStart")}
-                </p>
+                <span
+                  className="shrink-0 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                  style={{
+                    background: shell.clockState.isClockedIn
+                      ? "rgba(46, 166, 122, 0.14)"
+                      : "rgba(107, 114, 128, 0.14)",
+                    color: shell.clockState.isClockedIn
+                      ? "var(--green)"
+                      : "var(--text-muted)",
+                  }}
+                >
+                  {shell.clockState.isClockedIn ? t("common.live") : t("clock.ready")}
+                </span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -1605,39 +1610,6 @@ export function WorkerShell({
               </div>
             ) : null}
 
-            <div className="mt-4 grid grid-cols-3 gap-2">
-              <div
-                className="metric-panel rounded-[var(--radius-lg)] px-3 py-3"
-              >
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {t("common.today")}
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
-                  {formatDurationCompact(shell.summary.todayMinutes)}
-                </div>
-              </div>
-              <div
-                className="metric-panel rounded-[var(--radius-lg)] px-3 py-3"
-              >
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {t("common.thisWeek")}
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
-                  {formatDurationCompact(shell.summary.weekMinutes)}
-                </div>
-              </div>
-              <div
-                className="metric-panel rounded-[var(--radius-lg)] px-3 py-3"
-              >
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {t("common.sessions")}
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
-                  {shell.summary.totalSessions}
-                </div>
-              </div>
-            </div>
-
             {banner ? (
               <div
                 className="mt-3 flex items-start justify-between gap-3 rounded-[var(--radius-md)] px-3 py-3 text-sm"
@@ -1668,7 +1640,14 @@ export function WorkerShell({
               </div>
             ) : null}
 
-            {shell.clockState.pendingCheckoutEventId ? (
+            {/* Pending-checkout-video banner only shows when the worker's
+                CURRENT profile.require_video is on. A previously-pending
+                session whose checkoutStatus is "pending" stays in DB after
+                a manager flips require_video off, but we should not keep
+                nagging the worker for a video the manager no longer wants.
+                This banner respects the live setting (synced via the
+                profile realtime channel above). */}
+            {shell.clockState.pendingCheckoutEventId && shell.profile.require_video ? (
               <div
                 className="mt-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm"
                 style={{
