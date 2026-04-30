@@ -25,6 +25,7 @@ import {
   type ShiftReview,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
+import { selectMediaPlayback } from "@/lib/media-playback";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -113,7 +114,12 @@ export function TeamMemberPage({
   // Mirrors ProjectDetailPage.openProjectMediaItem: open a tab synchronously
   // inside the click to dodge mobile popup blockers, then sign the path
   // against the private 'media' bucket and navigate the tab to it.
-  async function openMediaItem(item: { id: string; storage_path: string }) {
+  //
+  // Playback path selection runs through selectMediaPlayback(): if a
+  // transcoded MP4/H.264 copy is ready in metadata.playback_path, we
+  // serve that; otherwise we serve the original. The Download button
+  // intentionally bypasses this and always pulls the original.
+  async function openMediaItem(item: WorkerMediaRow) {
     if (typeof window === "undefined") return;
     const tab = window.open("about:blank", "_blank");
     if (!tab) {
@@ -121,7 +127,8 @@ export function TeamMemberPage({
       setMessageType("error");
       return;
     }
-    const normalized = normalizeStoragePath(item.storage_path);
+    const playback = selectMediaPlayback(item);
+    const normalized = normalizeStoragePath(playback.path);
     const { data, error } = await supabase.storage
       .from("media")
       .createSignedUrl(normalized, 3600);
@@ -1370,9 +1377,36 @@ export function TeamMemberPage({
                     </button>
                   </div>
                   {entry.media_type === "video" ? (
-                    <p className="mt-1 text-right text-[10px] text-[var(--text-muted)]">
-                      {t("messages.videoMaybeUnsupported")}
-                    </p>
+                    (() => {
+                      const playback = selectMediaPlayback(entry);
+                      let statusLabel: string | null = null;
+                      let statusColor = "var(--text-muted)";
+                      if (playback.isPlaybackVersion) {
+                        statusLabel = t("mediaPlayback.previewReady");
+                        statusColor = "var(--green)";
+                      } else if (playback.transcodingStatus === "pending") {
+                        statusLabel = t("mediaPlayback.previewPending");
+                        statusColor = "#f59e0b";
+                      } else if (playback.transcodingStatus === "failed") {
+                        statusLabel = t("mediaPlayback.previewFailed");
+                        statusColor = "var(--red)";
+                      }
+                      return (
+                        <div className="mt-1 flex flex-wrap items-center justify-end gap-2 text-right">
+                          {statusLabel ? (
+                            <span
+                              className="text-[10px] font-semibold"
+                              style={{ color: statusColor }}
+                            >
+                              {statusLabel}
+                            </span>
+                          ) : null}
+                          <p className="text-[10px] text-[var(--text-muted)]">
+                            {t("messages.videoMaybeUnsupported")}
+                          </p>
+                        </div>
+                      );
+                    })()
                   ) : null}
                 </div>
               ))

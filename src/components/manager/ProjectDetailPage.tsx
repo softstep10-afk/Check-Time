@@ -40,6 +40,7 @@ import {
   type ShiftReview,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
+import { selectMediaPlayback } from "@/lib/media-playback";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -644,7 +645,7 @@ export function ProjectDetailPage({
   // as bespoke JSX (not via TaskAttachmentList), so it doesn't inherit
   // the shared component's signed-URL open handler — we replicate it
   // here. Same pattern, same TTL, same private-bucket support.
-  async function openProjectMediaItem(item: { id: string; storage_path: string }) {
+  async function openProjectMediaItem(item: Media) {
     if (typeof window === "undefined") return;
     // Sync tab open inside the click handler — see TaskAttachmentList
     // for the iOS/Android popup-blocker rationale.
@@ -654,20 +655,19 @@ export function ProjectDetailPage({
       setMessage(t("projectDetail.mediaOpenFailed"));
       return;
     }
-    const normalized = normalizeStoragePath(item.storage_path);
+    // selectMediaPlayback prefers a transcoded MP4/H.264 copy when one
+    // is ready in metadata.playback_path; otherwise falls through to the
+    // original. Forward-compatible with a future transcoding pipeline
+    // that writes playback metadata into the same JSONB column.
+    const playback = selectMediaPlayback(item as unknown as {
+      storage_path: string;
+      mime_type: string | null;
+      metadata: Record<string, unknown> | null | undefined;
+    });
+    const normalized = normalizeStoragePath(playback.path);
     const { data, error } = await supabase.storage
       .from("media")
       .createSignedUrl(normalized, 3600);
-    console.log("[project-media] open", {
-      id: item.id,
-      bucket: "media",
-      storage_path_raw: item.storage_path,
-      storage_path_normalized: normalized,
-      pathHadLeadingSlash: item.storage_path.startsWith("/"),
-      pathHadBucketPrefix: item.storage_path.startsWith("media/") || item.storage_path.startsWith("/media/"),
-      signedUrl: data?.signedUrl,
-      error: error ? { message: error.message, name: error.name } : null,
-    });
     if (error || !data?.signedUrl) {
       console.error("[project-media] failed to sign URL", error);
       tab.close();

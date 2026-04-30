@@ -884,6 +884,18 @@ export const translations = {
     en: "If the video appears black, tap Download to view it in your phone or another player.",
     ru: "Если видео отображается как чёрный экран, нажмите Скачать, чтобы открыть его на телефоне или в другом плеере.",
   },
+  "mediaPlayback.previewReady": {
+    en: "Preview ready",
+    ru: "Превью готово",
+  },
+  "mediaPlayback.previewPending": {
+    en: "Preview is being prepared…",
+    ru: "Превью готовится…",
+  },
+  "mediaPlayback.previewFailed": {
+    en: "Preview unavailable — original only",
+    ru: "Превью недоступно — только оригинал",
+  },
   "messages.priority": { en: "Priority", ru: "Приоритет" },
   "messages.priorityUrgent": { en: "Urgent", ru: "Срочное" },
   "messages.priorityInfo": { en: "Info", ru: "Информация" },
