@@ -132,7 +132,7 @@ export function JournalPage() {
 
   return (
     <div className="space-y-4">
-      {shell.clockState.pendingCheckoutEventId ? (
+      {shell.clockState.pendingCheckoutEventId && shell.profile.require_video ? (
         <section className="surface-card p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
             {t("journal.checkoutVideo")}

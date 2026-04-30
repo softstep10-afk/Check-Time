@@ -318,15 +318,21 @@ function ProjectClockControls({
 
   async function handleSafetyConfirm() {
     setSafetyOpen(false);
-    // Best-effort ack write; never block clockIn on a missing audit row.
-    const ackResult = await writeSafetyAck(supabase, {
-      orgId: shell.profile.org_id,
-      workerId: shell.profile.id,
-      projectId,
-      safetyVersion: DEFAULT_SAFETY_VERSION,
-    });
-    if (!ackResult.ok) {
-      console.warn("safety ack write failed:", ackResult.error);
+    // Best-effort ack write; never block clockIn on a missing audit row or
+    // a thrown error from the supabase client (network blip, RLS surface,
+    // table missing pre-migration). Always proceed to clockIn.
+    try {
+      const ackResult = await writeSafetyAck(supabase, {
+        orgId: shell.profile.org_id,
+        workerId: shell.profile.id,
+        projectId,
+        safetyVersion: DEFAULT_SAFETY_VERSION,
+      });
+      if (!ackResult.ok) {
+        console.warn("safety ack write failed:", ackResult.error);
+      }
+    } catch (err) {
+      console.warn("safety ack threw:", err);
     }
     void clockIn(projectId);
   }
