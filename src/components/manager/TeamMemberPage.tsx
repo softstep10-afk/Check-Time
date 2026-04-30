@@ -19,6 +19,7 @@ import { SendMessageForm } from "@/components/manager/SendMessageForm";
 import { DayDetailModal } from "@/components/manager/DayDetailModal";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
+import { normalizeStoragePath } from "@/lib/task-attachments";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -99,6 +100,31 @@ export function TeamMemberPage({
   async function refreshOpenFlags() {
     const ids = await fetchOpenFlagMediaIds(supabase, mediaIds);
     setOpenFlagIds(ids);
+  }
+
+  // Click-to-open for worker media (checkout videos + journal entries).
+  // Mirrors ProjectDetailPage.openProjectMediaItem: open a tab synchronously
+  // inside the click to dodge mobile popup blockers, then sign the path
+  // against the private 'media' bucket and navigate the tab to it.
+  async function openMediaItem(item: { id: string; storage_path: string }) {
+    if (typeof window === "undefined") return;
+    const tab = window.open("about:blank", "_blank");
+    if (!tab) {
+      setMessage(t("projectDetail.mediaOpenFailed"));
+      setMessageType("error");
+      return;
+    }
+    const normalized = normalizeStoragePath(item.storage_path);
+    const { data, error } = await supabase.storage
+      .from("media")
+      .createSignedUrl(normalized, 3600);
+    if (error || !data?.signedUrl) {
+      tab.close();
+      setMessage(t("projectDetail.mediaOpenFailed"));
+      setMessageType("error");
+      return;
+    }
+    tab.location.href = data.signedUrl;
   }
 
   const unpaidMinutes = useMemo(() => {
@@ -1169,9 +1195,13 @@ export function TeamMemberPage({
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-[var(--text-primary)]">
+                      <button
+                        type="button"
+                        onClick={() => void openMediaItem(entry)}
+                        className="text-left text-sm font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline focus:underline"
+                      >
                         {entry.filename ?? entry.media_type}
-                      </div>
+                      </button>
                       <div className="mt-0.5 text-xs text-[var(--text-muted)]">
                         {entry.projectName ?? t("common.general")} · {formatDateTime(entry.created_at)}
                       </div>
@@ -1197,7 +1227,15 @@ export function TeamMemberPage({
                   {entry.caption ? (
                     <p className="mt-2 text-xs text-[var(--text-secondary)]">{entry.caption}</p>
                   ) : null}
-                  <div className="mt-2 flex justify-end">
+                  <div className="mt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void openMediaItem(entry)}
+                      className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                      style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
+                    >
+                      ↗ {t("messages.openFile")}
+                    </button>
                     <button
                       type="button"
                       onClick={() => setFlagModalMediaId(entry.id)}
