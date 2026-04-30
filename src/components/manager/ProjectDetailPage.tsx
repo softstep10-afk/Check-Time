@@ -35,6 +35,11 @@ import {
   type GpsFreshness,
   type GpsFreshnessStatus,
 } from "@/lib/gps-freshness";
+import {
+  SHIFT_REVIEW_COLOR,
+  type ShiftReview,
+  type ShiftReviewStatus,
+} from "@/lib/shift-review";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -104,6 +109,7 @@ export function ProjectDetailPage({
   sessions,
   gpsStatusByProfileId,
   gpsFreshnessByProfileId,
+  shiftReviewByProfileId,
   safetyAcksToday,
 }: {
   orgId: string;
@@ -117,6 +123,7 @@ export function ProjectDetailPage({
   sessions: ManagerSession[];
   gpsStatusByProfileId: Record<string, WorkerGpsStatus>;
   gpsFreshnessByProfileId: Record<string, GpsFreshness>;
+  shiftReviewByProfileId: Record<string, ShiftReview>;
   safetyAcksToday: number;
 }) {
   const router = useRouter();
@@ -1095,6 +1102,18 @@ export function ProjectDetailPage({
                   needs_review: t("gpsFresh.needsReview"),
                   no_signal: t("gpsFresh.noSignal"),
                 };
+                const review = onSiteForThisProject
+                  ? shiftReviewByProfileId[worker.id] ?? null
+                  : null;
+                const reviewLabelMap: Record<ShiftReviewStatus, string> = {
+                  normal: t("shiftReview.normal"),
+                  long_shift: t("shiftReview.longShift"),
+                  gps_stale: t("shiftReview.gpsStale"),
+                  gps_lost: t("shiftReview.gpsLost"),
+                  no_gps: t("shiftReview.noGps"),
+                  needs_review: t("shiftReview.needsReview"),
+                  video_missing: t("shiftReview.videoMissing"),
+                };
                 const initial = worker.name.trim().charAt(0).toUpperCase() || "?";
                 return (
                   <div
@@ -1165,6 +1184,22 @@ export function ProjectDetailPage({
                                     {formatGpsAge(freshness.ageMs)}
                                   </span>
                                 ) : null}
+                              </span>
+                            ) : null}
+                            {review && review.status !== "normal" ? (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                                style={{ color: SHIFT_REVIEW_COLOR[review.status] }}
+                                title={t("shiftReview.tooltipReasons").replace(
+                                  "{list}",
+                                  review.reasons.map((r) => reviewLabelMap[r]).join(", "),
+                                )}
+                              >
+                                <span
+                                  className="inline-block h-1.5 w-1.5 rounded-full"
+                                  style={{ background: SHIFT_REVIEW_COLOR[review.status] }}
+                                />
+                                {reviewLabelMap[review.status]}
                               </span>
                             ) : null}
                           </div>

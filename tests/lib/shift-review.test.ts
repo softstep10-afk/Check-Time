@@ -1,0 +1,218 @@
+import { describe, expect, it } from "vitest";
+import { deriveShiftReview, isShiftActionable } from "@/lib/shift-review";
+import type { GpsFreshness } from "@/lib/gps-freshness";
+
+function fresh(status: GpsFreshness["status"]): GpsFreshness {
+  return {
+    status,
+    ageMs: status === "fresh" ? 30_000 : status === "delayed" ? 3 * 60_000 : 60 * 60_000,
+    lastUpdateAt: status === "no_signal" ? null : "2026-04-29T11:00:00Z",
+  };
+}
+
+describe("deriveShiftReview — open shifts", () => {
+  it("returns normal for a short shift with fresh GPS", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("fresh"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("normal");
+    expect(r.reasons).toEqual([]);
+  });
+
+  it("flags gps_stale when freshness is stale and shift is short", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 120,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("stale"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("gps_stale");
+  });
+
+  it("flags gps_lost when freshness is lost and shift is short", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 4 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("lost"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("gps_lost");
+  });
+
+  it("flags no_gps when the clock_in event had no gps_point", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 4 * 60,
+      hadGpsAtClockIn: false,
+      gpsFreshness: fresh("no_signal"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("no_gps");
+    expect(r.reasons).toContain("no_gps");
+  });
+
+  it("treats freshness=no_signal with prior GPS as gps_lost", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("no_signal"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("gps_lost");
+  });
+
+  it("flags long_shift after 12h with fresh GPS", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 13 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("fresh"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("long_shift");
+  });
+
+  it("does not flag long_shift before 12h", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 11 * 60 + 59,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("fresh"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("normal");
+  });
+
+  it("promotes long_shift + gps_lost to needs_review", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 13 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("lost"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("needs_review");
+    expect(r.reasons).toContain("gps_lost");
+    expect(r.reasons).toContain("long_shift");
+  });
+
+  it("promotes long_shift + no_gps to needs_review", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 14 * 60,
+      hadGpsAtClockIn: false,
+      gpsFreshness: fresh("no_signal"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("needs_review");
+  });
+
+  it("does not promote long_shift + gps_stale to needs_review", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 13 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: fresh("stale"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    // gps_stale is a softer signal — long_shift wins on its own (not needs_review)
+    // and reasons still list both.
+    expect(r.status).toBe("gps_stale");
+    expect(r.reasons).toContain("long_shift");
+  });
+});
+
+describe("deriveShiftReview — closed shifts", () => {
+  it("returns normal for a clean closed shift", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 8 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: true,
+      videoStatus: "uploaded",
+    });
+    expect(r.status).toBe("normal");
+  });
+
+  it("flags video_missing when require_video is true and video_status pending", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 8 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: true,
+      videoStatus: "pending",
+    });
+    expect(r.status).toBe("video_missing");
+  });
+
+  it("does not flag video_missing when require_video is false", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 8 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "pending",
+    });
+    expect(r.status).toBe("normal");
+  });
+
+  it("does not flag closed shifts on duration alone", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 18 * 60,
+      hadGpsAtClockIn: false,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("normal");
+  });
+});
+
+describe("isShiftActionable", () => {
+  it("is false for normal shifts", () => {
+    expect(
+      isShiftActionable({
+        status: "normal",
+        reasons: [],
+        durationMinutes: 60,
+        isOpen: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("is true for any non-normal status", () => {
+    for (const status of [
+      "long_shift",
+      "gps_stale",
+      "gps_lost",
+      "no_gps",
+      "needs_review",
+      "video_missing",
+    ] as const) {
+      expect(
+        isShiftActionable({ status, reasons: [status], durationMinutes: 0, isOpen: true }),
+      ).toBe(true);
+    }
+  });
+});

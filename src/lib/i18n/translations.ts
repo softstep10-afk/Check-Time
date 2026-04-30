@@ -383,6 +383,23 @@ export const translations = {
   "gpsFresh.columnHeader": { en: "Update", ru: "Обновление" },
   "gpsFresh.tooltipUpdated": { en: "Updated {age} ago", ru: "Обновлено {age} назад" },
   "gpsFresh.tooltipNever": { en: "No live GPS pings yet", ru: "Нет ни одного GPS-обновления" },
+  "shiftReview.normal": { en: "Normal", ru: "Норма" },
+  "shiftReview.longShift": { en: "Long shift", ru: "Длинная смена" },
+  "shiftReview.gpsStale": { en: "GPS stale", ru: "GPS устарел" },
+  "shiftReview.gpsLost": { en: "GPS lost", ru: "GPS потерян" },
+  "shiftReview.noGps": { en: "No GPS", ru: "Без GPS" },
+  "shiftReview.needsReview": { en: "Needs review", ru: "Требует проверки" },
+  "shiftReview.videoMissing": { en: "Video missing", ru: "Нет видео" },
+  "shiftReview.columnHeader": { en: "Status", ru: "Статус" },
+  "shiftReview.tooltipReasons": { en: "Reasons: {list}", ru: "Причины: {list}" },
+  "shiftReview.needsReviewCount": {
+    en: "{count} active shifts need review",
+    ru: "{count} активных смен требуют проверки",
+  },
+  "shiftReview.openShiftsAlert": {
+    en: "Open shifts with warnings",
+    ru: "Открытые смены с предупреждениями",
+  },
   "workerProject.readOnlyHint": {
     en: "Read-only view. Upload files from your worker tools.",
     ru: "Только просмотр. Загружайте файлы из своих рабочих инструментов.",

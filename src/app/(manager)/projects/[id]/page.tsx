@@ -9,6 +9,7 @@ import {
 } from "@/lib/manager-utils";
 import { deriveWorkerGpsStatus, type WorkerGpsStatus } from "@/lib/gps-status";
 import { deriveGpsFreshness, type GpsFreshness } from "@/lib/gps-freshness";
+import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function ProjectDetailRoutePage({
@@ -91,6 +92,27 @@ export default async function ProjectDetailRoutePage({
     }
   }
 
+  // Shift review — same read-only verdict pattern used on Overview, scoped
+  // to workers currently clocked in to THIS project. No payroll, no
+  // time_events writes, no auto-close. Only displays the manager-facing
+  // status badge so a forgotten checkout doesn't masquerade as a normal
+  // active shift on the project page.
+  const profilesByIdForReview = new Map(data.profiles.map((p) => [p.id, p]));
+  const shiftReviewByProfileId: Record<string, ShiftReview> = {};
+  for (const session of sessions) {
+    if (!session.isOpen || session.projectId !== id) continue;
+    const clockInEvent = clockInEventById.get(session.clockInEventId);
+    const profile = profilesByIdForReview.get(session.profileId);
+    shiftReviewByProfileId[session.profileId] = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: session.durationMinutes,
+      hadGpsAtClockIn: clockInEvent?.gps_point != null,
+      gpsFreshness: freshnessByProfileId[session.profileId] ?? null,
+      requireVideo: profile?.require_video ?? false,
+      videoStatus: "not_required",
+    });
+  }
+
   // Safety acknowledgements count for THIS project, today (worker local
   // midnight is not knowable server-side; use UTC midnight as the cutoff
   // — same convention used elsewhere when counting "today" rows).
@@ -125,6 +147,7 @@ export default async function ProjectDetailRoutePage({
       sessions={projectSessions}
       gpsStatusByProfileId={gpsStatusByProfileId}
       gpsFreshnessByProfileId={freshnessByProfileId}
+      shiftReviewByProfileId={shiftReviewByProfileId}
       safetyAcksToday={safetyAcksToday}
     />
   );

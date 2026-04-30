@@ -25,6 +25,12 @@ import {
   type GpsFreshness,
   type GpsFreshnessStatus,
 } from "@/lib/gps-freshness";
+import {
+  SHIFT_REVIEW_COLOR,
+  deriveShiftReview,
+  type ShiftReview,
+  type ShiftReviewStatus,
+} from "@/lib/shift-review";
 import { createClient } from "@/lib/supabase/server";
 
 // 0 = force-dynamic. F5 must always fetch the current state of time_events,
@@ -163,6 +169,40 @@ export default async function OverviewPage() {
     needs_review: t("gpsFresh.needsReview"),
     no_signal: t("gpsFresh.noSignal"),
   };
+
+  // Shift review — derive a single "is this active shift suspicious?" verdict
+  // for each open session by combining duration, the live GPS freshness above,
+  // and whether the original clock_in event recorded a gps_point. Read-only:
+  // does not change paid hours, write to time_events, or auto-close shifts.
+  const profilesByIdForReview = new Map(data.profiles.map((p) => [p.id, p]));
+  const shiftReviewByProfileId = new Map<string, ShiftReview>();
+  for (const session of onSiteSessions) {
+    const clockInEvent = clockInEventsById.get(session.clockInEventId);
+    const profile = profilesByIdForReview.get(session.profileId);
+    shiftReviewByProfileId.set(
+      session.profileId,
+      deriveShiftReview({
+        isOpen: true,
+        durationMinutes: session.todayMinutes,
+        hadGpsAtClockIn: clockInEvent?.gps_point != null,
+        gpsFreshness: freshnessByProfileId.get(session.profileId) ?? null,
+        requireVideo: profile?.require_video ?? false,
+        videoStatus: "not_required",
+      }),
+    );
+  }
+  const shiftReviewLabel: Record<ShiftReviewStatus, string> = {
+    normal: t("shiftReview.normal"),
+    long_shift: t("shiftReview.longShift"),
+    gps_stale: t("shiftReview.gpsStale"),
+    gps_lost: t("shiftReview.gpsLost"),
+    no_gps: t("shiftReview.noGps"),
+    needs_review: t("shiftReview.needsReview"),
+    video_missing: t("shiftReview.videoMissing"),
+  };
+  const needsReviewCount = [...shiftReviewByProfileId.values()].filter(
+    (r) => r.status === "needs_review",
+  ).length;
 
   const activeWorkerMarkers = onSiteSessions
     .map((session) => {
@@ -434,6 +474,18 @@ export default async function OverviewPage() {
             {t("overview.openTeam")}
           </Link>
         </div>
+        {needsReviewCount > 0 ? (
+          <div
+            className="mt-3 rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold"
+            style={{
+              borderColor: "rgba(212, 81, 94, 0.3)",
+              background: "rgba(212, 81, 94, 0.06)",
+              color: "var(--red)",
+            }}
+          >
+            {t("shiftReview.needsReviewCount").replace("{count}", String(needsReviewCount))}
+          </div>
+        ) : null}
         {onSiteSessions.length === 0 ? (
           <div className="mt-4 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
             {t("overview.nobodyClockedIn")}
@@ -452,6 +504,7 @@ export default async function OverviewPage() {
                   <th className="pb-3 pr-4 font-semibold">{t("overview.colHours")}</th>
                   <th className="pb-3 pr-4 font-semibold">{t("overview.colGps")}</th>
                   <th className="pb-3 pr-4 font-semibold">{t("gpsFresh.columnHeader")}</th>
+                  <th className="pb-3 pr-4 font-semibold">{t("shiftReview.columnHeader")}</th>
                   <th className="pb-3 font-semibold" />
                 </tr>
               </thead>
@@ -539,6 +592,48 @@ export default async function OverviewPage() {
                                 {formatGpsAge(fresh.ageMs)}
                               </span>
                             ) : null}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {(() => {
+                        const review =
+                          shiftReviewByProfileId.get(session.profileId) ??
+                          ({
+                            status: "normal",
+                            reasons: [],
+                            durationMinutes: session.todayMinutes,
+                            isOpen: true,
+                          } as ShiftReview);
+                        if (review.status === "normal") {
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
+                              style={{ color: "var(--text-muted)" }}
+                            >
+                              {t("shiftReview.normal")}
+                            </span>
+                          );
+                        }
+                        const reasonLabels = review.reasons
+                          .map((r) => shiftReviewLabel[r])
+                          .join(", ");
+                        const tooltip = t("shiftReview.tooltipReasons").replace(
+                          "{list}",
+                          reasonLabels,
+                        );
+                        return (
+                          <span
+                            title={tooltip}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
+                            style={{ color: SHIFT_REVIEW_COLOR[review.status] }}
+                          >
+                            <span
+                              className="inline-block h-2 w-2 rounded-full"
+                              style={{ background: SHIFT_REVIEW_COLOR[review.status] }}
+                            />
+                            {shiftReviewLabel[review.status]}
                           </span>
                         );
                       })()}

@@ -7,6 +7,8 @@ import {
   buildProfileSummaries,
   buildProjectSummaries,
 } from "@/lib/manager-utils";
+import { deriveGpsFreshness } from "@/lib/gps-freshness";
+import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
 import type { Media } from "@/types/database";
 
 // F5 must reflect the worker's latest shifts, tasks, and media.
@@ -121,6 +123,42 @@ export default async function TeamMemberRoutePage({
     ((exclusionRows ?? []) as Array<{ project_id: string }>).map((row) => row.project_id),
   );
 
+  // Shift review for this worker's currently-open session (if any). Pulls
+  // the same worker_live_locations freshness signal Overview uses, scoped
+  // to one worker. Read-only — does not write to time_events, change paid
+  // hours, or auto-close the shift.
+  const openSession = allWorkerSessions.find((session) => session.isOpen) ?? null;
+  let currentShiftReview: ShiftReview | null = null;
+  if (openSession) {
+    let lastUpdateAt: string | null = null;
+    try {
+      const { data: liveRows } = await supabase
+        .from("worker_live_locations")
+        .select("recorded_at")
+        .eq("worker_id", id)
+        .order("recorded_at", { ascending: false })
+        .limit(1);
+      const row = (liveRows ?? []) as Array<{ recorded_at: string }>;
+      lastUpdateAt = row[0]?.recorded_at ?? null;
+    } catch {
+      // Table missing or RLS hiccup — leave lastUpdateAt null so the
+      // freshness derivation falls through to "no_signal" gracefully.
+    }
+    const freshness = deriveGpsFreshness({
+      lastUpdateAt,
+      shiftStartAt: openSession.clockInTime,
+    });
+    const clockInEvent = clockInById.get(openSession.clockInEventId);
+    currentShiftReview = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: openSession.durationMinutes,
+      hadGpsAtClockIn: clockInEvent?.gps_point != null,
+      gpsFreshness: freshness,
+      requireVideo: profile.require_video,
+      videoStatus: "not_required",
+    });
+  }
+
   return (
     <TeamMemberPage
       orgId={data.manager.org_id}
@@ -137,6 +175,7 @@ export default async function TeamMemberRoutePage({
       weekNoGpsMinutes={weekNoGpsMinutes}
       dailyTotals={dailyTotals}
       excludedProjectIds={[...excludedProjectIds]}
+      currentShiftReview={currentShiftReview}
     />
   );
 }

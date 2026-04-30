@@ -20,6 +20,11 @@ import { DayDetailModal } from "@/components/manager/DayDetailModal";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { normalizeStoragePath } from "@/lib/task-attachments";
+import {
+  SHIFT_REVIEW_COLOR,
+  type ShiftReview,
+  type ShiftReviewStatus,
+} from "@/lib/shift-review";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -53,6 +58,7 @@ export function TeamMemberPage({
   weekNoGpsMinutes,
   dailyTotals,
   excludedProjectIds,
+  currentShiftReview,
 }: {
   orgId: string;
   managerId: string;
@@ -68,6 +74,7 @@ export function TeamMemberPage({
   weekNoGpsMinutes: number;
   dailyTotals: DailyTotal[];
   excludedProjectIds: string[];
+  currentShiftReview: ShiftReview | null;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -542,6 +549,46 @@ export function TeamMemberPage({
           {t("teamMember.description")}
         </p>
       </section>
+
+      {currentShiftReview && currentShiftReview.status !== "normal" ? (
+        (() => {
+          const reviewLabelMap: Record<ShiftReviewStatus, string> = {
+            normal: t("shiftReview.normal"),
+            long_shift: t("shiftReview.longShift"),
+            gps_stale: t("shiftReview.gpsStale"),
+            gps_lost: t("shiftReview.gpsLost"),
+            no_gps: t("shiftReview.noGps"),
+            needs_review: t("shiftReview.needsReview"),
+            video_missing: t("shiftReview.videoMissing"),
+          };
+          return (
+            <section
+              className="rounded-[var(--radius-md)] border px-3 py-3 text-sm"
+              style={{
+                borderColor: SHIFT_REVIEW_COLOR[currentShiftReview.status],
+                background: "rgba(212, 81, 94, 0.06)",
+              }}
+            >
+              <div
+                className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em]"
+                style={{ color: SHIFT_REVIEW_COLOR[currentShiftReview.status] }}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ background: SHIFT_REVIEW_COLOR[currentShiftReview.status] }}
+                />
+                {reviewLabelMap[currentShiftReview.status]}
+              </div>
+              <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                {t("shiftReview.tooltipReasons").replace(
+                  "{list}",
+                  currentShiftReview.reasons.map((r) => reviewLabelMap[r]).join(", "),
+                )}
+              </div>
+            </section>
+          );
+        })()
+      ) : null}
 
       {message ? (
         <div
