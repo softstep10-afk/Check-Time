@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { ShieldCheck, X } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import {
@@ -79,13 +80,22 @@ export function SafetyBriefModal({
   }, [open]);
 
   if (!open) return null;
+  // SSR safety — `"use client"` boundary still server-renders the initial
+  // tree, but because `open` starts false the early return above guards
+  // that path. Once we reach here we are in the browser.
+  if (typeof document === "undefined") return null;
 
   const rules = ruleKeys ?? DEFAULT_SAFETY_RULE_KEYS;
 
-  return (
+  // Render through a portal directly to <body> so the brief never gets
+  // containing-block trapped by an ancestor's transform / filter /
+  // contain — which is what was making `fixed inset-0` collapse to the
+  // worker shell's 500px column on production and leaving the brief
+  // looking like the old small modal.
+  return createPortal(
     <div
-      className="fixed inset-0 z-[60] flex flex-col"
-      style={{ background: "var(--bg-primary)" }}
+      className="fixed inset-0 z-[100] flex flex-col"
+      style={{ background: "var(--bg-primary)", height: "100dvh" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="safety-brief-title"
@@ -248,6 +258,7 @@ export function SafetyBriefModal({
           {busy ? t("safety.savingCta") : t("safety.confirmCta")}
         </button>
       </footer>
-    </div>
+    </div>,
+    document.body,
   );
 }

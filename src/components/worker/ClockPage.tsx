@@ -368,7 +368,7 @@ export function ClockPage() {
         </section>
       ) : null}
 
-      {shell.clockState.pendingCheckoutEventId ? (
+      {shell.clockState.pendingCheckoutEventId && shell.profile.require_video ? (
         <section className="surface-card p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
