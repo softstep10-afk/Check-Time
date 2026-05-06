@@ -4,20 +4,30 @@
  *
  * Storage model (no migration required):
  *   media.metadata is a JSONB column that already exists. This module
- *   reserves four optional keys inside that blob to coordinate with a
- *   future transcoding pipeline:
+ *   reads the following optional keys from that blob:
  *
- *     metadata.playback_path        — storage path of the H.264/MP4 copy
+ *     metadata.playback_path        — Supabase Storage path of an H.264/MP4
+ *                                     copy in the same bucket as the original.
  *     metadata.playback_mime_type   — typically "video/mp4"
+ *     metadata.mux_playback_id      — Mux playback ID; NOT a Storage path.
+ *                                     Consumed by a future Mux signed-URL
+ *                                     minting layer, not by `path` here.
  *     metadata.transcoding_status   — "pending" | "ready" | "failed" | "not_needed"
  *     metadata.transcoding_error    — human-readable error when status === "failed"
  *
  * Read order:
- *   1. If a playback copy exists, the manager Open button serves that path.
+ *   1. If a Storage-path playback copy exists and status is ready, the
+ *      manager Open button serves that path through the 'media' bucket.
  *   2. Otherwise the original `storage_path` is used (current behavior).
  *   3. The Download button always pulls the original file regardless of
  *      transcoding state — auditing and the manager's "save it for later"
  *      workflow must never lose access to the file the worker captured.
+ *
+ * IMPORTANT: a Mux playback ID must NEVER be written into playback_path.
+ * Doing so causes the Open button to sign a Mux ID through Supabase
+ * Storage, which fails. Mux IDs live in the separate mux_playback_id
+ * field and are surfaced through the `muxPlaybackId` return field below
+ * for callers that know how to mint a signed Mux URL.
  *
  * The helper is intentionally tolerant: any missing or malformed metadata
  * field falls through to "use the original," so partial pipeline failures
@@ -44,6 +54,13 @@ export interface MediaPlaybackInfo {
   transcodingStatus: TranscodingStatus | null;
   /** Human-readable error from a failed transcode attempt, or null. */
   transcodingError: string | null;
+  /**
+   * Mux playback ID, when present. Never a Supabase Storage path —
+   * callers must mint a Mux signed URL (or use Mux's player SDK) to
+   * actually stream this. UI surfaces that don't yet implement Mux
+   * signing should ignore this and continue serving `path`.
+   */
+  muxPlaybackId: string | null;
 }
 
 interface MediaLike {
@@ -77,6 +94,7 @@ export function selectMediaPlayback(media: MediaLike): MediaPlaybackInfo {
   const meta = media.metadata ?? null;
   const playbackPath = readString(meta, "playback_path");
   const playbackMime = readString(meta, "playback_mime_type");
+  const muxPlaybackId = readString(meta, "mux_playback_id");
   const status = readStatus(meta);
   const error = readString(meta, "transcoding_error");
 
@@ -87,6 +105,7 @@ export function selectMediaPlayback(media: MediaLike): MediaPlaybackInfo {
       isPlaybackVersion: true,
       transcodingStatus: "ready",
       transcodingError: null,
+      muxPlaybackId,
     };
   }
 
@@ -96,6 +115,7 @@ export function selectMediaPlayback(media: MediaLike): MediaPlaybackInfo {
     isPlaybackVersion: false,
     transcodingStatus: status,
     transcodingError: error,
+    muxPlaybackId,
   };
 }
 

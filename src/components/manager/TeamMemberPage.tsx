@@ -115,9 +115,13 @@ export function TeamMemberPage({
   // inside the click to dodge mobile popup blockers, then sign the path
   // against the private 'media' bucket and navigate the tab to it.
   //
-  // Playback path selection runs through selectMediaPlayback(): if a
-  // transcoded MP4/H.264 copy is ready in metadata.playback_path, we
-  // serve that; otherwise we serve the original. The Download button
+  // selectMediaPlayback only returns a Supabase Storage path in `path`:
+  // either the original or a transcoded H.264/MP4 copy under
+  // metadata.playback_path. Mux playback IDs live in
+  // metadata.mux_playback_id (exposed as playback.muxPlaybackId) and
+  // are NOT Storage paths — signing one through the 'media' bucket
+  // fails. We do not consume muxPlaybackId here yet; that will land
+  // alongside the Mux signed-URL minting layer. The Download button
   // intentionally bypasses this and always pulls the original.
   async function openMediaItem(item: WorkerMediaRow) {
     if (typeof window === "undefined") return;

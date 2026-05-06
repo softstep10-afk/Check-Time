@@ -1094,6 +1094,40 @@ export function WorkerShell({
       // "inside" a store after their shift ends.
       await closeOpenStoreVisits(supabase, shell.profile.id, timestamp);
 
+      // Link the worker's "before you leave" videos to this clock_out
+      // event. The video was inserted with time_event_id=null before
+      // the worker tapped Confirm; now that the clock_out row exists,
+      // we stamp the orphan rows so the manager-side shift-review can
+      // resolve checkout proof through the event.
+      //
+      // The actual UPDATE runs server-side at /api/worker/link-checkout-video
+      // because public.media has SELECT/INSERT policies but no
+      // worker-safe UPDATE policy — a direct supabase.from('media')
+      // .update() from this client returns success-with-zero-rows under
+      // RLS. The route uses the service-role admin client and re-asserts
+      // every constraint (uploaded_by, project, org, is_checkout,
+      // time_event_id null, today window) before writing.
+      //
+      // Best-effort: a non-2xx response here is logged but never
+      // unwinds the successful clock-out. The video stays as an orphan
+      // is_checkout=true row a future retry / sweep can pick up.
+      try {
+        const linkResp = await fetch("/api/worker/link-checkout-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ timeEventId: insertedEvent.id }),
+          keepalive: true,
+        });
+        if (!linkResp.ok) {
+          const detail = await linkResp.text().catch(() => "");
+          console.warn(
+            `[checkout-link] HTTP ${linkResp.status}: ${detail.slice(0, 200)}`,
+          );
+        }
+      } catch (linkErr) {
+        console.warn("[checkout-link] fetch threw:", linkErr);
+      }
+
       const nextSessions = shell.sessions.map((session) => {
         if (session.clockOutTime || session.clockInEventId !== shell.clockState.openEventId) {
           return session;
@@ -1308,11 +1342,14 @@ export function WorkerShell({
         }
 
         // Fire-and-forget Mux transcode kickoff for video uploads. iPhone
-        // captures land here as HEVC inside a .mov container, which Chrome
-        // / Edge / Firefox can't decode. The route creates a Mux asset
-        // from the original and writes the playback ID back into
-        // media.metadata; the read-side selectMediaPlayback() switches
-        // to the playback path once the webhook flips status to 'ready'.
+        // captures land here as HEVC inside a .mov container, which
+        // Chrome / Edge / Firefox can't decode. The route creates a Mux
+        // asset from the original and writes the Mux identifier into
+        // metadata.mux_playback_id (NOT metadata.playback_path —
+        // playback_path is reserved for a real Storage path of a
+        // transcoded copy and is signed through the 'media' bucket).
+        // selectMediaPlayback exposes the Mux ID separately as
+        // muxPlaybackId for any future signed-Mux-URL minting layer.
         // We do not await — checkout and journal upload UX must not be
         // blocked by Mux ingest latency.
         if (mediaType === "video") {

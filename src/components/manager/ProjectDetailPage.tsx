@@ -655,10 +655,13 @@ export function ProjectDetailPage({
       setMessage(t("projectDetail.mediaOpenFailed"));
       return;
     }
-    // selectMediaPlayback prefers a transcoded MP4/H.264 copy when one
-    // is ready in metadata.playback_path; otherwise falls through to the
-    // original. Forward-compatible with a future transcoding pipeline
-    // that writes playback metadata into the same JSONB column.
+    // selectMediaPlayback returns a Supabase Storage path in `path`:
+    // either the original upload, or a transcoded MP4/H.264 copy when
+    // one is ready under metadata.playback_path. The Mux pipeline
+    // writes its identifier to metadata.mux_playback_id (surfaced as
+    // playback.muxPlaybackId), which is NOT a Storage path and must
+    // never be signed through the 'media' bucket; that field stays
+    // unconsumed here until a separate Mux signed-URL flow exists.
     const playback = selectMediaPlayback(item as unknown as {
       storage_path: string;
       mime_type: string | null;

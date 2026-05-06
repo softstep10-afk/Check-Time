@@ -20,16 +20,20 @@ export const runtime = "nodejs";
  *   4. Generates a 24-hour signed URL for the original file so Mux can
  *      pull it from Supabase Storage.
  *   5. Calls the Mux REST API to create an asset with playback_policy=signed.
- *   6. Writes the resulting playback ID into media.metadata.playback_path
+ *   6. Writes the resulting playback ID into media.metadata.mux_playback_id
  *      and sets transcoding_status='pending'. The webhook route (separate
  *      task) is responsible for flipping status to 'ready' once Mux
  *      finishes encoding.
  *
  * The caller is expected to fire-and-forget this endpoint after the
- * media row insert completes. We intentionally do NOT modify the
- * existing read-side helper selectMediaPlayback — playback_path stays
- * null until this route finishes the Mux create call, and stays
- * unconsumed until status flips to 'ready'.
+ * media row insert completes.
+ *
+ * NOTE: mux_playback_id is a Mux identifier, NOT a Supabase Storage path.
+ * It must never be written into metadata.playback_path — selectMediaPlayback
+ * treats playback_path as a Storage path and signs it through the 'media'
+ * bucket. Conflating the two breaks the manager Open button. A future task
+ * that mints Mux signed playback URLs should consume mux_playback_id
+ * directly via the Mux JWT signing key, separate from selectMediaPlayback.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -181,8 +185,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           ...existingMetadata,
           mux_asset_id: assetId,
-          playback_path: playbackId,
-          playback_mime_type: "video/mp4",
+          mux_playback_id: playbackId,
           transcoding_status: "pending",
         },
       })

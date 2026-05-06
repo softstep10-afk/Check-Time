@@ -94,6 +94,39 @@ describe("selectMediaPlayback", () => {
     expect(r.path).toBe(baseOriginal.storage_path);
     expect(r.isPlaybackVersion).toBe(false);
   });
+
+  it("does NOT route a Mux playback ID into the Storage path", () => {
+    // Regression: an earlier transcode-route bug wrote the Mux playback ID
+    // into metadata.playback_path. Signing it through Supabase Storage
+    // failed for the manager Open button. The selector must keep
+    // mux_playback_id separate and continue to serve the original file
+    // until a Storage-path transcoded copy exists.
+    const r = selectMediaPlayback({
+      ...baseOriginal,
+      metadata: {
+        mux_asset_id: "asset_abc",
+        mux_playback_id: "mux-playback-xyz",
+        transcoding_status: "ready",
+      },
+    });
+    expect(r.path).toBe(baseOriginal.storage_path);
+    expect(r.isPlaybackVersion).toBe(false);
+    expect(r.muxPlaybackId).toBe("mux-playback-xyz");
+    expect(r.transcodingStatus).toBe("ready");
+  });
+
+  it("exposes mux_playback_id on the playback info", () => {
+    const r = selectMediaPlayback({
+      ...baseOriginal,
+      metadata: { mux_playback_id: "id_42" },
+    });
+    expect(r.muxPlaybackId).toBe("id_42");
+  });
+
+  it("returns muxPlaybackId=null when metadata omits it", () => {
+    const r = selectMediaPlayback({ ...baseOriginal, metadata: {} });
+    expect(r.muxPlaybackId).toBeNull();
+  });
 });
 
 describe("isBrowserUnsafeVideo", () => {
