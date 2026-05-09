@@ -25,6 +25,7 @@ export function SafetyBriefModal({
   workerName,
   ruleKeys,
   busy = false,
+  errorMessage = null,
   onConfirm,
   onCancel,
 }: {
@@ -35,6 +36,13 @@ export function SafetyBriefModal({
   ruleKeys?: TranslationKey[];
   /** True while the parent is writing the ack row. Disables Confirm. */
   busy?: boolean;
+  /**
+   * When set, the parent's last ack-write attempt failed. The modal
+   * stays open with this message rendered above the Confirm button so
+   * the worker can read the failure reason and retry. clockIn must
+   * NOT have run if errorMessage is set.
+   */
+  errorMessage?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -233,9 +241,23 @@ export function SafetyBriefModal({
       </main>
 
       <footer
-        className="flex flex-col-reverse gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end sm:px-6"
+        className="flex flex-col gap-2 border-t px-4 py-3 sm:px-6"
         style={{ borderColor: "var(--border-default)", background: "var(--bg-card)" }}
       >
+        {errorMessage ? (
+          <div
+            role="alert"
+            className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold sm:text-sm"
+            style={{
+              borderColor: "rgba(212, 81, 94, 0.4)",
+              background: "rgba(212, 81, 94, 0.08)",
+              color: "var(--red)",
+            }}
+          >
+            {t("safety.saveFailed")}: {errorMessage}
+          </div>
+        ) : null}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <button
           type="button"
           onClick={onCancel}
@@ -257,6 +279,7 @@ export function SafetyBriefModal({
         >
           {busy ? t("safety.savingCta") : t("safety.confirmCta")}
         </button>
+        </div>
       </footer>
     </div>,
     document.body,

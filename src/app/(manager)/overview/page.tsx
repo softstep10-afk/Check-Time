@@ -9,7 +9,9 @@ import {
   buildManagerSessions,
   buildProfileSummaries,
   buildProjectSummaries,
+  detectTransferGaps,
   getOverviewStats,
+  TRANSFER_GAP_COLOR,
 } from "@/lib/manager-utils";
 import { formatDurationCompact, formatEventTime, parseGeoPoint } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
@@ -49,6 +51,16 @@ const priorityRank = {
   medium: 2,
   low: 3,
 } as const;
+
+const reviewPriorityRank: Record<ShiftReviewStatus, number> = {
+  needs_review: 0,
+  video_missing: 1,
+  gps_lost: 2,
+  no_gps: 3,
+  gps_stale: 4,
+  long_shift: 5,
+  normal: 6,
+};
 
 function hoursColor(minutes: number): string {
   const h = minutes / 60;
@@ -92,6 +104,11 @@ export default async function OverviewPage() {
   const clockInEventsById = new Map(
     data.timeEvents
       .filter((e) => e.event_type === "clock_in")
+      .map((e) => [e.id, e]),
+  );
+  const clockOutEventsById = new Map(
+    data.timeEvents
+      .filter((e) => e.event_type === "clock_out" || e.event_type === "auto_out")
       .map((e) => [e.id, e]),
   );
   const onSiteSessions = sessions
@@ -204,6 +221,30 @@ export default async function OverviewPage() {
     (r) => r.status === "needs_review",
   ).length;
 
+  const closedShiftAlerts = sessions
+    .filter((session) => !session.isOpen)
+    .map((session) => {
+      const profile = profilesByIdForReview.get(session.profileId);
+      const clockInEvent = clockInEventsById.get(session.clockInEventId);
+      const review = deriveShiftReview({
+        isOpen: false,
+        durationMinutes: session.durationMinutes,
+        hadGpsAtClockIn: clockInEvent?.gps_point != null,
+        gpsFreshness: null,
+        requireVideo: profile?.require_video ?? false,
+        videoStatus: session.checkoutStatus,
+      });
+      return { ...session, review };
+    })
+    .filter((session) => session.review.status !== "normal")
+    .sort((left, right) => {
+      const statusGap =
+        reviewPriorityRank[left.review.status] - reviewPriorityRank[right.review.status];
+      if (statusGap !== 0) return statusGap;
+      return right.durationMinutes - left.durationMinutes;
+    })
+    .slice(0, 8);
+
   const activeWorkerMarkers = onSiteSessions
     .map((session) => {
       const clockInEvent = clockInEventsById.get(session.clockInEventId);
@@ -220,62 +261,22 @@ export default async function OverviewPage() {
     })
     .filter((w): w is NonNullable<typeof w> => w !== null);
 
-  // ── Travel gap detection: gaps > 60 min between clock_out → clock_in for same worker today ──
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayClockEvents = data.timeEvents
-    .filter((e) => {
-      if (e.event_type !== "clock_in" && e.event_type !== "clock_out") return false;
-      return new Date(e.event_time).getTime() >= todayStart.getTime();
-    })
-    .sort((a, b) => new Date(a.event_time).getTime() - new Date(b.event_time).getTime());
-
-  const eventsByWorker = new Map<string, typeof todayClockEvents>();
-  for (const e of todayClockEvents) {
-    const list = eventsByWorker.get(e.profile_id) ?? [];
-    list.push(e);
-    eventsByWorker.set(e.profile_id, list);
-  }
-
-  type TravelGap = {
-    id: string;
-    profileId: string;
-    workerName: string;
-    fromProject: string;
-    toProject: string;
-    gapMinutes: number;
-    outTime: string;
-    inTime: string;
-  };
-
-  const travelGaps: TravelGap[] = [];
-  for (const [profileId, events] of eventsByWorker) {
-    const profile = data.profiles.find((p) => p.id === profileId);
-    const workerName = profile?.name ?? "Unknown";
-    for (let i = 0; i < events.length - 1; i++) {
-      const out = events[i];
-      const next = events[i + 1];
-      if (out.event_type !== "clock_out" || next.event_type !== "clock_in") continue;
-      const gapMs = new Date(next.event_time).getTime() - new Date(out.event_time).getTime();
-      const gapMinutes = Math.round(gapMs / 60_000);
-      if (gapMinutes > 60) {
-        const fromProject = projectsById.get(out.project_id)?.name ?? "Unknown";
-        const toProject = projectsById.get(next.project_id)?.name ?? "Unknown";
-        travelGaps.push({
-          id: `${out.id}-${next.id}`,
-          profileId,
-          workerName,
-          fromProject,
-          toProject,
-          gapMinutes,
-          outTime: out.event_time,
-          inTime: next.event_time,
-        });
-      }
-    }
-  }
-  travelGaps.sort((a, b) => b.gapMinutes - a.gapMinutes);
-
+  // ── Project-transfer gap detection ──
+  // Today-only scope so the Overview's travel-gaps band shows what's
+  // actionable right now. detectTransferGaps applies the spec
+  // thresholds (>30 min warning, >90 min critical) and ignores
+  // same-project re-clocks (lunch breaks, etc).
+  const todayStartIso = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  })();
+  const travelGaps = detectTransferGaps({
+    timeEvents: data.timeEvents,
+    projects: data.projects,
+    profiles: data.profiles,
+    sinceIso: todayStartIso,
+  });
   const workersWithGaps = new Set(travelGaps.map((g) => g.profileId));
 
   // ── Unified event feed (last 15) ──
@@ -427,14 +428,20 @@ export default async function OverviewPage() {
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.todayHours.toFixed(2)}h</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.activeProjectCount} {t("overview.activeProjects")}</div>
         </div>
-        <div className="surface-card p-4">
+        <Link
+          href="/payroll"
+          className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+        >
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.unpaid")}</div>
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
             {currency.format(stats.unpaidAmount)}
           </div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.unpaidHours.toFixed(2)}{t("payroll.hPendingPayroll")}</div>
-        </div>
-        <div className="surface-card p-4">
+        </Link>
+        <Link
+          href="/projects"
+          className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+        >
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("overview.materials")}</div>
           <div
             className="mt-2 font-mono text-[28px] font-bold"
@@ -443,12 +450,15 @@ export default async function OverviewPage() {
             {currency.format(stats.receiptTotal)}
           </div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.materialsCaption")}</div>
-        </div>
-        <div className="surface-card p-4">
+        </Link>
+        <Link
+          href="/tasks"
+          className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+        >
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.tasks")}</div>
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.openTaskCount}</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.openFieldItems")}</div>
-        </div>
+        </Link>
       </section>
 
       <section className="surface-card p-4">
@@ -465,6 +475,83 @@ export default async function OverviewPage() {
         </div>
         <FullscreenMapWrapper projects={projectSummaries} activeWorkers={activeWorkerMarkers} />
       </section>
+
+      {closedShiftAlerts.length > 0 ? (
+        <section
+          className="rounded-[var(--radius-lg)] border p-4"
+          style={{
+            background: "rgba(212, 81, 94, 0.06)",
+            borderColor: "rgba(212, 81, 94, 0.24)",
+          }}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold" style={{ color: "var(--red)" }}>
+                {t("shiftReview.closedShiftAlerts")}
+              </h2>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                {t("shiftReview.closedShiftAlertsDesc")}
+              </p>
+            </div>
+            <Link href="/payroll" className="text-sm font-semibold text-[var(--brand-yellow)]">
+              {t("payroll.title")}
+            </Link>
+          </div>
+          <div className="mt-4 space-y-2">
+            {closedShiftAlerts.map((session) => {
+              const reasonLabels = session.review.reasons
+                .map((reason) => shiftReviewLabel[reason])
+                .join(", ");
+              const clockOutEvent = session.clockOutEventId
+                ? clockOutEventsById.get(session.clockOutEventId)
+                : null;
+              return (
+                <Link
+                  key={session.id}
+                  href={`/team/${session.profileId}`}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-2.5"
+                  style={{
+                    borderColor: "rgba(212, 81, 94, 0.22)",
+                    background: "rgba(15, 17, 23, 0.62)",
+                  }}
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-[var(--text-primary)]">
+                        {session.profileName}
+                      </span>
+                      <span className="text-xs text-[var(--text-secondary)]">
+                        {session.projectName}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--text-muted)]">
+                      {formatEventTime(session.clockInTime)}
+                      {clockOutEvent ? ` - ${formatEventTime(clockOutEvent.event_time)}` : ""}
+                      {" · "}
+                      {reasonLabels}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span
+                      className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
+                      style={{ color: SHIFT_REVIEW_COLOR[session.review.status] }}
+                    >
+                      <span
+                        className="inline-block h-2 w-2 rounded-full"
+                        style={{ background: SHIFT_REVIEW_COLOR[session.review.status] }}
+                      />
+                      {shiftReviewLabel[session.review.status]}
+                    </span>
+                    <span className="font-mono text-sm font-bold text-[var(--text-primary)]">
+                      {formatDurationCompact(session.durationMinutes)}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── Currently on site table ── */}
       <section className="surface-card p-4">
@@ -656,7 +743,11 @@ export default async function OverviewPage() {
         )}
       </section>
 
-      {/* ── Travel gaps ── */}
+      {/* ── Travel gaps ──
+          Severity per detectTransferGaps: warning > 30m, critical > 90m.
+          The card's outer color stays amber so the section title is
+          consistent regardless of the worst-case row inside, but each
+          row is tinted red when it crosses the critical threshold. */}
       <section
         className="rounded-[var(--radius-lg)] border p-4"
         style={{
@@ -678,38 +769,56 @@ export default async function OverviewPage() {
               {t("overview.noGaps")}
             </div>
           ) : (
-            travelGaps.map((gap) => (
-              <div
-                key={gap.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2.5"
-                style={{ background: "rgba(245, 158, 11, 0.08)" }}
-              >
-                <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                  <Link href={`/team/${gap.profileId}`} className="font-semibold text-[var(--text-primary)]">
-                    {gap.workerName}
-                  </Link>
-                  <span className="text-[var(--text-muted)]">&mdash;</span>
-                  <span className="text-[var(--text-secondary)]">
-                    {t("overview.gapFrom")} <span className="font-medium text-[var(--text-primary)]">{gap.fromProject}</span>
-                  </span>
-                  <span className="text-[var(--text-secondary)]">→</span>
-                  <span className="text-[var(--text-secondary)]">
-                    {t("overview.gapTo")} <span className="font-medium text-[var(--text-primary)]">{gap.toProject}</span>
-                  </span>
+            travelGaps.map((gap) => {
+              const isCritical = gap.severity === "critical";
+              const rowBg = isCritical
+                ? "rgba(212, 81, 94, 0.10)"
+                : "rgba(245, 158, 11, 0.08)";
+              const pillBg = isCritical
+                ? "rgba(212, 81, 94, 0.16)"
+                : "rgba(245, 158, 11, 0.18)";
+              const pillColor = TRANSFER_GAP_COLOR[gap.severity];
+              return (
+                <div
+                  key={gap.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2.5"
+                  style={{ background: rowBg }}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <Link href={`/team/${gap.profileId}`} className="font-semibold text-[var(--text-primary)]">
+                      {gap.workerName}
+                    </Link>
+                    <span className="text-[var(--text-muted)]">&mdash;</span>
+                    <span className="text-[var(--text-secondary)]">
+                      {t("overview.gapFrom")} <span className="font-medium text-[var(--text-primary)]">{gap.fromProject}</span>
+                    </span>
+                    <span className="text-[var(--text-secondary)]">→</span>
+                    <span className="text-[var(--text-secondary)]">
+                      {t("overview.gapTo")} <span className="font-medium text-[var(--text-primary)]">{gap.toProject}</span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="whitespace-nowrap font-mono text-xs text-[var(--text-muted)]">
+                      {formatEventTime(gap.outTime)} - {formatEventTime(gap.inTime)}
+                    </span>
+                    <span
+                      className="whitespace-nowrap rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.1em]"
+                      style={{ background: pillBg, color: pillColor }}
+                    >
+                      {isCritical
+                        ? t("overview.gapCriticalLabel")
+                        : t("overview.gapWarningLabel")}
+                    </span>
+                    <span
+                      className="whitespace-nowrap rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-semibold"
+                      style={{ background: pillBg, color: pillColor }}
+                    >
+                      {formatDurationCompact(gap.gapMinutes)} {t("overview.gapDuration")}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="whitespace-nowrap font-mono text-xs text-[var(--text-muted)]">
-                    {formatEventTime(gap.outTime)} - {formatEventTime(gap.inTime)}
-                  </span>
-                  <span
-                    className="whitespace-nowrap rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-semibold"
-                    style={{ background: "rgba(245, 158, 11, 0.18)", color: "#f59e0b" }}
-                  >
-                    {formatDurationCompact(gap.gapMinutes)} {t("overview.gapDuration")}
-                  </span>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </section>
@@ -821,30 +930,63 @@ export default async function OverviewPage() {
           </Link>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {busiestProjects.map((project) => (
-            <Link
-              key={project.id}
-              href={`/projects/${project.id}`}
-              className="block rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</div>
-                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                    {project.address ?? t("common.noAddress")}
+          {busiestProjects.map((project) => {
+            // Project workload severity:
+            //   • >=24h shift on this project → critical/red border + chip
+            //   • >=16h shift (and not extreme)   → warning/amber chip
+            // The "longestShift" detail comes from the same aggregation
+            // pass so the card surfaces the worker name + duration of
+            // the worst shift without leaving Overview.
+            const isCritical = project.extremeShiftCount > 0;
+            const isWarning = !isCritical && project.longShiftCount > 0;
+            const borderColor = isCritical
+              ? "rgba(212, 81, 94, 0.45)"
+              : isWarning
+                ? "rgba(245, 158, 11, 0.35)"
+                : "var(--border-default)";
+            return (
+              <Link
+                key={project.id}
+                href={`/projects/${project.id}`}
+                className="block rounded-[var(--radius-md)] border p-3"
+                style={{ borderColor }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text-primary)]">{project.name}</div>
+                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {project.address ?? t("common.noAddress")}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs text-[var(--text-secondary)]">
+                    <div>{project.onSiteWorkerCount} {t("common.live").toLowerCase()}</div>
+                    <div>{project.assignedWorkerCount} {t("overview.assigned")}</div>
                   </div>
                 </div>
-                <div className="text-right text-xs text-[var(--text-secondary)]">
-                  <div>{project.onSiteWorkerCount} {t("common.live").toLowerCase()}</div>
-                  <div>{project.assignedWorkerCount} {t("overview.assigned")}</div>
+                <div className="mt-3 flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
+                  <span className="font-mono">{formatDurationCompact(project.weekMinutes)} {t("common.thisWeek").toLowerCase()}</span>
+                  <span className="font-mono">{project.openTaskCount} {t("overview.openTasks")}</span>
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-3 text-xs text-[var(--text-secondary)]">
-                <span className="font-mono">{formatDurationCompact(project.weekMinutes)} {t("common.thisWeek").toLowerCase()}</span>
-                <span className="font-mono">{project.openTaskCount} {t("overview.openTasks")}</span>
-              </div>
-            </Link>
-          ))}
+                {(isCritical || isWarning) && project.longestShift ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                      style={
+                        isCritical
+                          ? { background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }
+                          : { background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }
+                      }
+                    >
+                      {isCritical ? t("shiftReview.needsReview") : t("shiftReview.longShift")}
+                    </span>
+                    <span className="text-xs text-[var(--text-secondary)]">
+                      {project.longestShift.workerName} · {formatDurationCompact(project.longestShift.durationMinutes)}
+                    </span>
+                  </div>
+                ) : null}
+              </Link>
+            );
+          })}
         </div>
       </section>
     </div>

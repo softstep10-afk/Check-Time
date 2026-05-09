@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
@@ -41,9 +42,17 @@ function inferPriority(row: { priority?: string | null; color?: string | null; m
 export function NotificationBell({
   profileId,
   onUrgentArrival,
+  unseenTaskCount = 0,
 }: {
   profileId?: string;
   onUrgentArrival?: (msg: AppMessage) => void;
+  /**
+   * Number of tasks the worker hasn't yet seen. Sourced from the
+   * worker shell's localStorage-backed lastSeenAt marker. Folded into
+   * the bell badge alongside unread messages so a single number
+   * communicates "something new for you".
+   */
+  unseenTaskCount?: number;
 }) {
   const { t, locale } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -86,11 +95,7 @@ export function NotificationBell({
 
   // Load messages
   useEffect(() => {
-    if (!profileId) {
-      setMessages([]);
-      setLoaded(true);
-      return;
-    }
+    if (!profileId) return;
 
     async function load() {
       const { data } = await supabase
@@ -126,6 +131,7 @@ export function NotificationBell({
           attachment: r.attachment
             ? {
                 url: (r.attachment as Record<string, string>).url ?? "",
+                storagePath: (r.attachment as Record<string, string>).storagePath ?? "",
                 filename: (r.attachment as Record<string, string>).filename ?? "",
                 type: ((r.attachment as Record<string, string>).type ?? "image") as "image" | "video" | "pdf",
                 size: Number((r.attachment as Record<string, number>).size ?? 0),
@@ -176,6 +182,11 @@ export function NotificationBell({
   }, [supabase, profileId, onUrgentArrival]);
 
   const unreadCount = messages.filter((m) => !m.read).length;
+  // Bell badge folds messages + unseen tasks into a single number so the
+  // worker can read "you have N things to look at" at a glance. The
+  // dropdown still discriminates the two — there's a "Tasks" link at the
+  // top when unseenTaskCount > 0, and the rest of the list is messages.
+  const totalBadge = unreadCount + unseenTaskCount;
 
   // Urgent first, then info/good/task; within each band newest first.
   const sortedMessages = useMemo(() => {
@@ -220,7 +231,7 @@ export function NotificationBell({
     }
   }, [open]);
 
-  if (!loaded) return null;
+  if (!profileId || !loaded) return null;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -236,12 +247,12 @@ export function NotificationBell({
         aria-label={t("messages.notifications")}
       >
         <Bell size={15} />
-        {unreadCount > 0 ? (
+        {totalBadge > 0 ? (
           <span
             className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
             style={{ background: "var(--red)" }}
           >
-            {unreadCount}
+            {totalBadge}
           </span>
         ) : null}
       </button>
@@ -270,8 +281,22 @@ export function NotificationBell({
               </button>
             ) : null}
           </div>
+          {unseenTaskCount > 0 ? (
+            <Link
+              href="/my-tasks"
+              onClick={() => setOpen(false)}
+              className="block border-b px-3 py-2.5 text-sm font-semibold"
+              style={{
+                borderColor: "var(--border-subtle)",
+                background: "rgba(191, 162, 52, 0.08)",
+                color: "var(--brand-yellow)",
+              }}
+            >
+              📋 {t("tasks.newTasksBellLink").replace("{count}", String(unseenTaskCount))}
+            </Link>
+          ) : null}
           <div className="max-h-[400px] overflow-y-auto">
-            {sortedMessages.length === 0 ? (
+            {sortedMessages.length === 0 && unseenTaskCount === 0 ? (
               <div className="p-4 text-center text-sm text-[var(--text-secondary)]">
                 {t("messages.noNew")}
               </div>

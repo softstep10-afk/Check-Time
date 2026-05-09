@@ -1,5 +1,5 @@
 /**
- * Shift review status — a single, prioritized "is this active shift suspicious?"
+ * Shift review status — a single, prioritized "is this shift suspicious?"
  * verdict for the manager-facing surfaces (Overview, Project Detail, Team
  * Member Page).
  *
@@ -15,6 +15,8 @@
  *
  * `needs_review` is a composite: a long-running open shift AND lost/missing
  * GPS. That combination is the strongest "go check on this person" signal.
+ * Closed shifts can still be actionable when their source facts are not
+ * payroll-safe, such as a missing checkout video or a 12h+ duration.
  */
 import type { GpsFreshness } from "@/lib/gps-freshness";
 
@@ -43,6 +45,44 @@ export interface ShiftReview {
  * so the two signals stay aligned.
  */
 export const LONG_SHIFT_MINUTES = 12 * 60;
+
+/**
+ * Visual closed-shift warning threshold (16h). Closed shifts at or above
+ * this length are highlighted amber in manager review surfaces — long
+ * enough to plausibly be a forgotten checkout but not yet automatic
+ * "needs_review" red. LONG_SHIFT_MINUTES (12h) is intentionally lower
+ * because that one is coupled to gps-freshness in the open-shift
+ * promotion logic; this constant is purely for closed-shift display.
+ */
+export const WARN_SHIFT_MINUTES = 16 * 60;
+
+/**
+ * Beyond 24h a shift is no longer "someone worked overtime" — it's
+ * almost certainly a forgotten clock-out, a corrupted clock_out event,
+ * or a real incident the owner has to look at by hand. We promote
+ * those to `needs_review` so the Overview chip turns red and they
+ * sort to the top of the closed-shift alerts. The amber `long_shift`
+ * still exists for the 12–24h window where overtime is plausible but
+ * worth a glance.
+ */
+export const EXTREME_SHIFT_MINUTES = 24 * 60;
+
+export type ShiftSeverity = "ok" | "warning" | "critical";
+
+/**
+ * Visual severity for a closed shift's duration. Used by the Overview
+ * closed-shift alerts band and the Team Member shift list to color-code
+ * rows without going through the full deriveShiftReview composite. Per
+ * the manager visibility spec:
+ *   > 24h         → critical (red)
+ *   > 16h, ≤ 24h  → warning  (amber)
+ *   otherwise     → ok       (no escalation)
+ */
+export function shiftDurationSeverity(durationMinutes: number): ShiftSeverity {
+  if (durationMinutes >= EXTREME_SHIFT_MINUTES) return "critical";
+  if (durationMinutes >= WARN_SHIFT_MINUTES) return "warning";
+  return "ok";
+}
 
 export function deriveShiftReview(args: {
   isOpen: boolean;
@@ -78,19 +118,31 @@ export function deriveShiftReview(args: {
       reasons.push("long_shift");
     }
   } else {
-    // Closed sessions: only flag if the worker should have uploaded a
-    // checkout video and didn't. Other historical anomalies (very long
-    // duration that was actually worked, GPS lost mid-shift but recovered,
-    // etc.) are not surfaced for closed shifts to avoid noise.
+    // Closed sessions still feed payroll. Surface the facts that require
+    // manager review before pay: missing checkout proof and unusually long
+    // duration. GPS freshness is intentionally active-only because live GPS
+    // pings stop after checkout.
     if (args.requireVideo && args.videoStatus === "pending") {
       reasons.push("video_missing");
+    }
+    if (args.durationMinutes >= LONG_SHIFT_MINUTES) {
+      reasons.push("long_shift");
     }
   }
 
   const has = (r: ShiftReviewStatus) => reasons.includes(r);
 
+  // Extreme-duration shifts (>=24h) are escalated to `needs_review`
+  // regardless of GPS / video reasons because at that point the duration
+  // alone is the dominant problem — e.g. a 144h "shift" caused by a
+  // forgotten clock-out. The reasons array still carries `long_shift`
+  // (and any other facts) so the per-shift tooltip stays informative.
+  const isExtreme = args.durationMinutes >= EXTREME_SHIFT_MINUTES;
+
   let status: ShiftReviewStatus;
-  if (has("long_shift") && (has("gps_lost") || has("no_gps"))) {
+  if (isExtreme) {
+    status = "needs_review";
+  } else if (has("long_shift") && (has("gps_lost") || has("no_gps"))) {
     status = "needs_review";
   } else if (has("video_missing")) {
     status = "video_missing";

@@ -27,6 +27,15 @@ export interface ClockOutEventLite {
   event_time: string;
 }
 
+/**
+ * Event types the linker is allowed to attach to. The route was born
+ * for clock_out only; we widened it to also accept clock_in so a
+ * worker's start-of-shift / "before work" video can be stamped against
+ * the matching clock_in time_event without duplicating the validator
+ * + audit chain.
+ */
+export type LinkableEventType = "clock_in" | "clock_out";
+
 export interface CandidateMediaRow {
   id: string;
   uploaded_by: string;
@@ -44,18 +53,27 @@ export type ValidateResult =
 
 /**
  * Window of acceptable skew between "now" (server clock when the route
- * fires) and the time_event's event_time. 24 hours is generous on
- * purpose: it covers a worker who clock_out's late at night and an
- * offline event drain that finally syncs the next morning, but rejects
- * an event from yesterday-the-week-before being weaponized to attach
- * fresh media to a long-closed shift.
+ * fires) and the time_event's event_time. Seven days covers the real
+ * field case where a forgotten checkout creates a multi-day shift and
+ * the worker later uploads the required video from Journal. Ownership,
+ * project/org matching, checkout-video filtering, and the media
+ * created-at window still prevent attaching arbitrary old files.
  */
-export const CHECKOUT_LINK_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const CHECKOUT_LINK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+export function checkoutMediaWindowStartIso(eventTimeIso: string): string {
+  const eventMs = new Date(eventTimeIso).getTime();
+  if (!Number.isFinite(eventMs)) {
+    return startOfTodayIso();
+  }
+  return new Date(eventMs - CHECKOUT_LINK_WINDOW_MS).toISOString();
+}
 
 export function validateClockOutEvent(
   event: ClockOutEventLite | null | undefined,
   callerProfileId: string,
   nowMs: number = Date.now(),
+  expectedTypes: readonly LinkableEventType[] = ["clock_out"],
 ): ValidateResult {
   if (!event) {
     return { ok: false, status: 404, error: "time_event not found" };
@@ -63,8 +81,16 @@ export function validateClockOutEvent(
   if (event.profile_id !== callerProfileId) {
     return { ok: false, status: 403, error: "Not your shift" };
   }
-  if (event.event_type !== "clock_out") {
-    return { ok: false, status: 400, error: "time_event is not a clock_out" };
+  if (!expectedTypes.includes(event.event_type as LinkableEventType)) {
+    // Error message reflects the *expected* type so the route's body
+    // stays self-describing for either /link-checkout-video or
+    // /link-checkin-video without further branching at the call site.
+    const expected = expectedTypes.join("/");
+    return {
+      ok: false,
+      status: 400,
+      error: `time_event is not a ${expected}`,
+    };
   }
   const eventMs = new Date(event.event_time).getTime();
   if (!Number.isFinite(eventMs)) {
@@ -83,8 +109,14 @@ export interface SelectLinkableOpts {
   projectId: string;
   /** org_id of the validated clock_out event. */
   orgId: string;
-  /** Lower bound on media.created_at — usually start of "today" in UTC. */
+  /** Lower bound on media.created_at — usually the event's repair-window start. */
   windowStartIso: string;
+  /**
+   * Optional. Defaults to true (the historical checkout linker behavior).
+   * Pass false to match clock_in / before_work videos which are
+   * uploaded with is_checkout=false.
+   */
+  isCheckoutMatch?: boolean;
 }
 
 /**
@@ -98,7 +130,7 @@ export interface SelectLinkableOpts {
  *   • media_type must be video — checkout proof cannot be a photo/PDF row.
  *   • is_checkout must be true — journal/photo uploads are off-limits.
  *   • time_event_id must be null — never overwrite an existing link.
- *   • created_at must be inside the window — old orphans stay orphans.
+ *   • created_at must be inside the repair window — old orphans stay orphans.
  */
 export function selectLinkableMediaIds(
   rows: CandidateMediaRow[],
@@ -106,6 +138,7 @@ export function selectLinkableMediaIds(
 ): string[] {
   const windowStart = new Date(opts.windowStartIso).getTime();
   if (!Number.isFinite(windowStart)) return [];
+  const expectIsCheckout = opts.isCheckoutMatch ?? true;
 
   return rows
     .filter((r) => {
@@ -113,7 +146,7 @@ export function selectLinkableMediaIds(
       if (r.project_id !== opts.projectId) return false;
       if (r.org_id !== opts.orgId) return false;
       if (r.media_type !== "video") return false;
-      if (r.is_checkout !== true) return false;
+      if (r.is_checkout !== expectIsCheckout) return false;
       if (r.time_event_id != null) return false;
       const createdMs = new Date(r.created_at).getTime();
       if (!Number.isFinite(createdMs)) return false;

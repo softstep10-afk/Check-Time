@@ -1,6 +1,8 @@
 import { ManagerTasksPage } from "@/components/manager/ManagerTasksPage";
 import { getProjectsPageData } from "@/lib/manager-data";
-import { getAttachmentMediaIds, type TaskAttachmentRef } from "@/lib/task-attachments";
+import { type TaskAttachmentRef } from "@/lib/task-attachments";
+import { collectTaskReferencedMediaIds } from "@/lib/task-media-hydration";
+import { getTaskCompletionAudit } from "@/lib/task-notifications";
 
 // F5 must reflect newly assigned/completed tasks immediately.
 export const revalidate = 0;
@@ -29,18 +31,19 @@ export default async function ManagerTasksRoutePage() {
 
   const tasks = data.tasks
     .filter((task) => !task.deleted_at)
-    .map((task) => ({
-      ...task,
-      projectName: task.project_id ? projectsById.get(task.project_id) ?? null : null,
-      assigneeName: task.assigned_to ? profilesById.get(task.assigned_to) ?? null : null,
-    }));
+    .map((task) => {
+      const completedById = getTaskCompletionAudit(task).completedById;
+      return {
+        ...task,
+        projectName: task.project_id ? projectsById.get(task.project_id) ?? null : null,
+        assigneeName: task.assigned_to ? profilesById.get(task.assigned_to) ?? null : null,
+        completedByName: completedById ? profilesById.get(completedById) ?? null : null,
+      };
+    });
 
-  // Slim down the org-wide media[] to only the rows referenced by any
-  // task's metadata.attachment_media_ids — keeps the client payload small.
-  const referencedIds = new Set<string>();
-  for (const task of tasks) {
-    for (const id of getAttachmentMediaIds(task)) referencedIds.add(id);
-  }
+  // Slim down the org-wide media[] to only rows referenced by task
+  // metadata: manager-supplied attachments and worker completion media.
+  const referencedIds = new Set(collectTaskReferencedMediaIds(tasks));
   const attachmentMedia: TaskAttachmentRef[] = data.media
     .filter((m) => referencedIds.has(m.id))
     .map((m) => ({

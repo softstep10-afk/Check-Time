@@ -4,15 +4,20 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatDateTime, formatDurationCompact } from "@/lib/worker-utils";
+import { formatDateTime, formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
   ManagerSession,
 } from "@/lib/manager-types";
+import {
+  TRANSFER_GAP_COLOR,
+  type TransferGap,
+} from "@/lib/manager-utils";
+import { deriveWorkerHourBuckets } from "@/lib/worker-hour-summary";
 import type { Media, ProjectAssignment, Task, UserRole } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
-import { Camera, Store } from "lucide-react";
+import { ArrowRight, Camera, Store } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
@@ -21,11 +26,17 @@ import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagMo
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { normalizeStoragePath } from "@/lib/task-attachments";
 import {
+  EXTREME_SHIFT_MINUTES,
+  LONG_SHIFT_MINUTES,
   SHIFT_REVIEW_COLOR,
   type ShiftReview,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
 import { selectMediaPlayback } from "@/lib/media-playback";
+import {
+  MediaGalleryDrawer,
+  type GalleryItem,
+} from "@/components/shared/MediaGalleryDrawer";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -60,6 +71,8 @@ export function TeamMemberPage({
   dailyTotals,
   excludedProjectIds,
   currentShiftReview,
+  transferGaps,
+  workerAdjustments,
 }: {
   orgId: string;
   managerId: string;
@@ -76,6 +89,13 @@ export function TeamMemberPage({
   dailyTotals: DailyTotal[];
   excludedProjectIds: string[];
   currentShiftReview: ShiftReview | null;
+  transferGaps: TransferGap[];
+  workerAdjustments: Array<{
+    eventTime: string;
+    minutes: number;
+    reason: string;
+    kind: string | null;
+  }>;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -89,6 +109,10 @@ export function TeamMemberPage({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
+  // Journal-timeline gallery drawer (open via "Open gallery" near the
+  // Journal entries header). Filters live inside the drawer; the page
+  // state only needs an open/closed flag.
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const { t } = useTranslation();
 
@@ -184,6 +208,70 @@ export function TeamMemberPage({
     return total;
   }, [sessions]);
   const unpaidHours = Math.round((unpaidMinutes / 60) * 100) / 100;
+  const closedProblemShifts = useMemo(
+    () =>
+      sessions.filter(
+        (session) =>
+          !session.isOpen &&
+          (session.durationMinutes >= LONG_SHIFT_MINUTES ||
+            session.checkoutStatus === "pending"),
+      ),
+    [sessions],
+  );
+
+  // Journal timeline drawer feed — same media rows that already power the
+  // existing "Journal entries" list, just shaped for the shared gallery
+  // component (project / uploader names resolved). All filtering happens
+  // inside the drawer.
+  const galleryItems = useMemo<GalleryItem[]>(
+    () =>
+      media.map((entry) => ({
+        id: entry.id,
+        project_id: entry.project_id,
+        uploaded_by: entry.uploaded_by ?? null,
+        media_type: entry.media_type,
+        storage_path: entry.storage_path,
+        filename: entry.filename ?? null,
+        mime_type: entry.mime_type ?? null,
+        caption: entry.caption ?? null,
+        is_checkout: Boolean(entry.is_checkout),
+        time_event_id: entry.time_event_id ?? null,
+        metadata: (entry.metadata ?? null) as Record<string, unknown> | null,
+        created_at: entry.created_at,
+        projectName: entry.projectName ?? null,
+        uploaderName: profile.name,
+      })),
+    [media, profile.name],
+  );
+
+  const galleryProjectOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const entry of media) {
+      if (entry.project_id && entry.projectName && !seen.has(entry.project_id)) {
+        seen.set(entry.project_id, entry.projectName);
+      }
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  }, [media]);
+
+  // Hour buckets for the new "Hour summary" panel below profile
+  // settings. Pulls from this worker's sessions + adjustments — the
+  // helper keeps the today / yesterday / week / month / month math in
+  // one tested place. We deliberately recompute on every render
+  // because the boundaries shift across midnight; the worker
+  // typically has at most ~20 sessions in scope.
+  const hourBuckets = useMemo(
+    () =>
+      deriveWorkerHourBuckets({
+        sessions: sessions.map((session) => ({
+          clockInTime: session.clockInTime,
+          clockOutTime: session.clockOutTime,
+          durationMinutes: session.durationMinutes,
+        })),
+        adjustments: workerAdjustments,
+      }),
+    [sessions, workerAdjustments],
+  );
 
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
   const activeProjects = projects.filter((project) => project.status !== "archived");
@@ -653,6 +741,7 @@ export function TeamMemberPage({
       ) : null}
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        <div className="space-y-4">
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.profileSettings")}</h2>
           <form className="mt-4 grid gap-3" onSubmit={handleUpdateProfile}>
@@ -749,6 +838,266 @@ export function TeamMemberPage({
           ) : null}
         </div>
 
+        {/* ── Operational summary ──
+            Fills the empty space below profile settings on wide screens.
+            Compact, click-through views of the worker's current load.
+            Detailed expanded sections still live further down the page. */}
+        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">
+            {t("teamMember.operationalSummary")}
+          </h2>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">
+            {t("teamMember.operationalSummaryHint")}
+          </p>
+
+          {/* Latest 5 closed shifts. Severity badge mirrors shift-review:
+              red ≥ 24h, amber 16h–24h, otherwise nothing. */}
+          <div className="mt-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("teamMember.recentShifts")}
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {sessions.length === 0 ? (
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                  {t("teamMember.noShifts")}
+                </div>
+              ) : (
+                sessions.slice(0, 5).map((session) => {
+                  const isExtreme = session.durationMinutes >= EXTREME_SHIFT_MINUTES;
+                  const isLong = session.durationMinutes >= LONG_SHIFT_MINUTES;
+                  const missingVideo = session.checkoutStatus === "pending";
+                  const noGps = !(hasGpsBySessionId[session.id] ?? false);
+                  return (
+                    <div
+                      key={`summary-${session.id}`}
+                      className="flex items-center justify-between gap-2 rounded-[var(--radius-md)] border px-2.5 py-1.5"
+                      style={{
+                        borderColor: isExtreme
+                          ? "rgba(212, 81, 94, 0.45)"
+                          : isLong
+                            ? "rgba(245, 158, 11, 0.35)"
+                            : "var(--border-default)",
+                      }}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                          {session.projectName}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">
+                          {formatEventTime(session.clockInTime)}
+                          {session.clockOutTime
+                            ? ` → ${formatEventTime(session.clockOutTime)}`
+                            : ` · ${t("common.live").toLowerCase()}`}
+                          {noGps ? ` · ${t("shiftReview.noGps")}` : ""}
+                          {missingVideo ? ` · ${t("shiftReview.videoMissing")}` : ""}
+                        </div>
+                      </div>
+                      <span
+                        className="shrink-0 whitespace-nowrap rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                        style={
+                          isExtreme
+                            ? { background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }
+                            : isLong
+                              ? { background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }
+                              : { background: "rgba(148, 163, 184, 0.10)", color: "var(--text-muted)" }
+                        }
+                      >
+                        {formatDurationCompact(session.durationMinutes)}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Open tasks — assigned to this worker. */}
+          <div className="mt-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("teamMember.assignedTasks")}
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {(() => {
+                const openTasks = tasks
+                  .filter(
+                    (task) => task.status !== "done" && task.status !== "cancelled",
+                  )
+                  .slice(0, 5);
+                if (openTasks.length === 0) {
+                  return (
+                    <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                      {t("teamMember.noTasks")}
+                    </div>
+                  );
+                }
+                return openTasks.map((task) => {
+                  const project = task.project_id
+                    ? projects.find((p) => p.id === task.project_id)
+                    : null;
+                  return (
+                    <div
+                      key={`summary-task-${task.id}`}
+                      className="flex items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                          {task.title}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-muted)]">
+                          {project?.name ?? t("common.generalTask")} · {task.status}
+                        </div>
+                      </div>
+                      <span
+                        className="shrink-0 whitespace-nowrap rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                        style={{
+                          background:
+                            task.priority === "urgent" || task.priority === "high"
+                              ? "rgba(239, 68, 68, 0.14)"
+                              : task.priority === "medium"
+                                ? "rgba(245, 158, 11, 0.14)"
+                                : "rgba(34, 197, 94, 0.14)",
+                          color:
+                            task.priority === "urgent" || task.priority === "high"
+                              ? "#ef4444"
+                              : task.priority === "medium"
+                                ? "#f59e0b"
+                                : "#22c55e",
+                        }}
+                      >
+                        {task.priority}
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+
+          {/* Recent uploads — quick visual confirmation of the worker's
+              activity without scrolling to the full Journal section. */}
+          <div className="mt-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("teamMember.recentMaterials")}
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {media.length === 0 ? (
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                  {t("teamMember.noJournal")}
+                </div>
+              ) : (
+                media.slice(0, 5).map((entry) => (
+                  <div
+                    key={`summary-media-${entry.id}`}
+                    className="flex items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-2.5 py-1.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={() => void openMediaItem(entry)}
+                        className="block w-full truncate text-left text-xs font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline focus:underline"
+                      >
+                        {entry.filename ?? entry.media_type}
+                      </button>
+                      <div className="text-[10px] text-[var(--text-muted)]">
+                        {entry.projectName ?? t("common.general")} · {formatEventTime(entry.created_at)}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => void openMediaItem(entry)}
+                        className="rounded-[var(--radius-sm)] border px-1.5 py-0.5 text-[10px] font-semibold"
+                        style={{
+                          borderColor: "rgba(191, 162, 52, 0.4)",
+                          color: "var(--brand-yellow)",
+                        }}
+                        title={t("messages.openFile")}
+                      >
+                        ↗
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void downloadMediaItem(entry)}
+                        className="rounded-[var(--radius-sm)] border px-1.5 py-0.5 text-[10px] font-semibold"
+                        style={{
+                          borderColor: "var(--border-default)",
+                          color: "var(--text-primary)",
+                        }}
+                        title={t("messages.downloadFile")}
+                      >
+                        ⬇
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Compact "journal" — last few activity facts. Sourced from
+              the same shift / media data already on the page; nothing
+              here writes back to the audit log. */}
+          <div className="mt-4">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("teamMember.activityJournal")}
+            </div>
+            <div className="mt-2 space-y-1">
+              {(() => {
+                type ActivityRow = {
+                  key: string;
+                  ts: string;
+                  text: string;
+                };
+                const rows: ActivityRow[] = [];
+                for (const session of sessions) {
+                  rows.push({
+                    key: `act-in-${session.id}`,
+                    ts: session.clockInTime,
+                    text: `${t("feed.clockIn")} · ${session.projectName}`,
+                  });
+                  if (session.clockOutTime) {
+                    rows.push({
+                      key: `act-out-${session.id}`,
+                      ts: session.clockOutTime,
+                      text: `${t("feed.clockOut")} · ${session.projectName}`,
+                    });
+                  }
+                }
+                for (const m of media) {
+                  rows.push({
+                    key: `act-media-${m.id}`,
+                    ts: m.created_at,
+                    text: `${t("feed.mediaUploaded")} · ${m.filename ?? m.media_type}`,
+                  });
+                }
+                rows.sort(
+                  (a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime(),
+                );
+                const top = rows.slice(0, 6);
+                if (top.length === 0) {
+                  return (
+                    <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                      {t("teamMember.noJournal")}
+                    </div>
+                  );
+                }
+                return top.map((row) => (
+                  <div
+                    key={row.key}
+                    className="flex items-baseline gap-2 px-2.5 py-1 text-xs"
+                  >
+                    <span className="shrink-0 font-mono text-[10px] text-[var(--text-muted)]">
+                      {formatEventTime(row.ts)}
+                    </span>
+                    <span className="truncate text-[var(--text-secondary)]">{row.text}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        </div>
+        </div>
+
         <div className="space-y-4">
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
             <div className="grid gap-3 sm:grid-cols-4">
@@ -828,6 +1177,114 @@ export function TeamMemberPage({
             ) : null}
             <div className="mt-4 text-sm text-[var(--text-secondary)]">
               {profile.currentProjectName ?? t("teamMember.noCurrentProject")}
+            </div>
+          </div>
+
+          {/* ── Hour summary buckets ──
+              Surfaces today / yesterday / current week / previous week /
+              current month, plus the paid-or-closed bucket the
+              "reset_to_zero" adjustment writes into. Without this card,
+              a worker like Vasya whose period was closed shows a 0m
+              "current week" with no explanation. */}
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("teamMember.hourSummary")}
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">
+              {t("teamMember.hourSummaryHint")}
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketToday")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  {formatDurationCompact(hourBuckets.todayMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketYesterday")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  {formatDurationCompact(hourBuckets.yesterdayMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketCurrentWeek")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  {formatDurationCompact(hourBuckets.currentWeekMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketPreviousWeek")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  {formatDurationCompact(hourBuckets.previousWeekMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketCurrentMonth")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  {formatDurationCompact(hourBuckets.currentMonthMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketTotalWorked")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  {formatDurationCompact(hourBuckets.totalWorkedMinutes)}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <div
+                className="rounded-[var(--radius-md)] p-3"
+                style={{ background: "rgba(15, 168, 120, 0.10)" }}
+              >
+                <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--green)" }}>
+                  {t("teamMember.bucketPaidClosed")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
+                  {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
+                </div>
+              </div>
+              <div
+                className="rounded-[var(--radius-md)] p-3"
+                style={{ background: "rgba(191, 162, 52, 0.10)" }}
+              >
+                <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--brand-yellow)" }}>
+                  {t("teamMember.bucketUnpaid")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
+                  {formatDurationCompact(hourBuckets.unpaidMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketAdjustments")}
+                </div>
+                <div
+                  className="mt-1 font-mono text-sm font-bold"
+                  style={{
+                    color:
+                      hourBuckets.adjustmentsTotalMinutes < 0
+                        ? "var(--red)"
+                        : hourBuckets.adjustmentsTotalMinutes > 0
+                          ? "var(--green)"
+                          : "var(--text-primary)",
+                  }}
+                >
+                  {hourBuckets.adjustmentsTotalMinutes >= 0 ? "+" : "−"}
+                  {formatDurationCompact(Math.abs(hourBuckets.adjustmentsTotalMinutes))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -971,6 +1428,83 @@ export function TeamMemberPage({
           </div>
         </div>
       </section>
+
+      {/* ── Transfer gaps ── Project-to-project move alerts for this
+          worker. detectTransferGaps already enforces severity thresholds
+          (>30m warning, >90m critical) so we just render. */}
+      {transferGaps.length > 0 ? (
+        <section
+          className="rounded-[var(--radius-lg)] border p-4"
+          style={{
+            background: "rgba(245, 158, 11, 0.06)",
+            borderColor: "rgba(245, 158, 11, 0.25)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <ArrowRight size={16} style={{ color: "#f59e0b" }} />
+            <h2 className="text-lg font-bold" style={{ color: "#f59e0b" }}>
+              {t("teamMember.transferGapsTitle")}
+            </h2>
+          </div>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
+            {t("teamMember.transferGapsHint")}
+          </p>
+          <div className="mt-4 space-y-2">
+            {transferGaps.map((gap) => {
+              const isCritical = gap.severity === "critical";
+              const rowBg = isCritical
+                ? "rgba(212, 81, 94, 0.10)"
+                : "rgba(245, 158, 11, 0.08)";
+              const pillBg = isCritical
+                ? "rgba(212, 81, 94, 0.16)"
+                : "rgba(245, 158, 11, 0.18)";
+              const pillColor = TRANSFER_GAP_COLOR[gap.severity];
+              return (
+                <div
+                  key={gap.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2.5"
+                  style={{ background: rowBg }}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <Link
+                      href={`/projects/${gap.fromProjectId}`}
+                      className="font-medium text-[var(--text-primary)]"
+                    >
+                      {gap.fromProject}
+                    </Link>
+                    <span className="text-[var(--text-secondary)]">→</span>
+                    <Link
+                      href={`/projects/${gap.toProjectId}`}
+                      className="font-medium text-[var(--text-primary)]"
+                    >
+                      {gap.toProject}
+                    </Link>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="whitespace-nowrap font-mono text-xs text-[var(--text-muted)]">
+                      {formatEventTime(gap.outTime)} - {formatEventTime(gap.inTime)}
+                    </span>
+                    <span
+                      className="whitespace-nowrap rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.1em]"
+                      style={{ background: pillBg, color: pillColor }}
+                    >
+                      {isCritical
+                        ? t("overview.gapCriticalLabel")
+                        : t("overview.gapWarningLabel")}
+                    </span>
+                    <span
+                      className="whitespace-nowrap rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-semibold"
+                      style={{ background: pillBg, color: pillColor }}
+                    >
+                      {formatDurationCompact(gap.gapMinutes)} {t("overview.gapDuration")}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── Adjust Hours ── */}
       <section>
@@ -1167,7 +1701,28 @@ export function TeamMemberPage({
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.recentShifts")}</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.recentShifts")}</h2>
+            {closedProblemShifts.length > 0 ? (
+              <span
+                className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]"
+                style={{ background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }}
+              >
+                {closedProblemShifts.length} {t("shiftReview.needsReview")}
+              </span>
+            ) : null}
+          </div>
+          {closedProblemShifts.length > 0 ? (
+            <div
+              className="mt-3 rounded-[var(--radius-md)] border px-3 py-2 text-xs text-[var(--text-secondary)]"
+              style={{
+                borderColor: "rgba(212, 81, 94, 0.24)",
+                background: "rgba(212, 81, 94, 0.06)",
+              }}
+            >
+              {t("teamMember.closedShiftWarning")}
+            </div>
+          ) : null}
           <div className="mt-4 space-y-3">
             {sessions.length === 0 ? (
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
@@ -1177,12 +1732,22 @@ export function TeamMemberPage({
               sessions.map((session) => {
                 const dayKey = session.clockInTime.slice(0, 10);
                 const hasGps = hasGpsBySessionId[session.id] ?? false;
+                const isLong = session.durationMinutes >= LONG_SHIFT_MINUTES;
+                const isExtreme = session.durationMinutes >= EXTREME_SHIFT_MINUTES;
+                const missingVideo = session.checkoutStatus === "pending";
+                // Extreme closed shifts (>= 24h) deserve a permanent red
+                // border so a 144h forgotten-clock-out doesn't look like
+                // a normal entry in the recent-shifts list.
+                const rowBorder = isExtreme
+                  ? "rgba(212, 81, 94, 0.45)"
+                  : "var(--border-default)";
                 return (
                   <button
                     key={session.id}
                     type="button"
                     onClick={() => setDayDetailDate(dayKey)}
-                    className="block w-full rounded-[var(--radius-md)] border border-[var(--border-default)] p-3 text-left transition-colors hover:border-[var(--brand-yellow)]"
+                    className="block w-full rounded-[var(--radius-md)] border p-3 text-left transition-colors hover:border-[var(--brand-yellow)]"
+                    style={{ borderColor: rowBorder }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1200,6 +1765,32 @@ export function TeamMemberPage({
                           {formatDateTime(session.clockInTime)}
                           {session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}
                         </div>
+                        {isLong || missingVideo ? (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {isLong ? (
+                              <span
+                                className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                                style={
+                                  isExtreme
+                                    ? { background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }
+                                    : { background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }
+                                }
+                              >
+                                {isExtreme
+                                  ? t("shiftReview.needsReview")
+                                  : t("shiftReview.longShift")}
+                              </span>
+                            ) : null}
+                            {missingVideo ? (
+                              <span
+                                className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                                style={{ background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }}
+                              >
+                                {t("shiftReview.videoMissing")}
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                       <div className="font-mono text-sm font-semibold text-[var(--text-primary)]">
                         {formatDurationCompact(session.durationMinutes)}
@@ -1303,11 +1894,26 @@ export function TeamMemberPage({
 
       <section>
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
-          <div className="flex items-center gap-2">
-            <Camera size={16} style={{ color: "var(--brand-yellow)" }} />
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">
-              {t("teamMember.journalEntries")}
-            </h2>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Camera size={16} style={{ color: "var(--brand-yellow)" }} />
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("teamMember.journalEntries")}
+              </h2>
+            </div>
+            {media.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setGalleryOpen(true)}
+                className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                style={{
+                  borderColor: "rgba(191, 162, 52, 0.4)",
+                  color: "var(--brand-yellow)",
+                }}
+              >
+                {t("gallery.openGallery")}
+              </button>
+            ) : null}
           </div>
           <div className="mt-4 space-y-2">
             {media.length === 0 ? (
@@ -1486,6 +2092,14 @@ export function TeamMemberPage({
         viewerId={managerId}
         onClose={() => setFlagModalMediaId(null)}
         onMutate={() => void refreshOpenFlags()}
+      />
+
+      <MediaGalleryDrawer
+        open={galleryOpen}
+        title={profile.name}
+        items={galleryItems}
+        projectOptions={galleryProjectOptions}
+        onClose={() => setGalleryOpen(false)}
       />
     </div>
   );

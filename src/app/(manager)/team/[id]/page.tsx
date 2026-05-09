@@ -6,6 +6,7 @@ import {
   buildManagerSessions,
   buildProfileSummaries,
   buildProjectSummaries,
+  detectTransferGaps,
 } from "@/lib/manager-utils";
 import { deriveGpsFreshness } from "@/lib/gps-freshness";
 import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
@@ -113,6 +114,35 @@ export default async function TeamMemberRoutePage({
     projectName: m.project_id ? projectsById.get(m.project_id) ?? null : null,
   }));
 
+  // Project-transfer gaps for this worker — read-only manager review
+  // signal. Scope to the same 7-day window the rest of the page uses
+  // so a worker with no recent activity doesn't show stale alerts.
+  const transferGaps = detectTransferGaps({
+    timeEvents: data.timeEvents,
+    projects: data.projects,
+    profiles: data.profiles,
+    profileId: id,
+    sinceIso: new Date(sevenDaysAgo).toISOString(),
+  });
+
+  // Worker adjustments — every event_type='adjust' row for this worker
+  // shaped for the deriveWorkerHourBuckets helper. Surfaces the
+  // "Period closed, hours paid" reset (Vasya regression) as a paid /
+  // closed bucket so the manager can see it instead of staring at a
+  // 0m current-week and wondering where the hours went.
+  const workerAdjustments = data.timeEvents
+    .filter((event) => event.event_type === "adjust" && event.profile_id === id)
+    .map((event) => {
+      const meta = (event.metadata ?? {}) as Record<string, unknown>;
+      const minutes = Number(meta.adjustMinutes ?? 0);
+      return {
+        eventTime: event.event_time,
+        minutes: Number.isFinite(minutes) ? minutes : 0,
+        reason: typeof meta.reason === "string" ? meta.reason : "",
+        kind: typeof meta.kind === "string" ? meta.kind : null,
+      };
+    });
+
   // Migration 00018 — current exclusion rows for this worker. Empty when
   // the worker is in 'list' mode or the migration hasn't run yet.
   const { data: exclusionRows } = await supabase
@@ -176,6 +206,8 @@ export default async function TeamMemberRoutePage({
       dailyTotals={dailyTotals}
       excludedProjectIds={[...excludedProjectIds]}
       currentShiftReview={currentShiftReview}
+      transferGaps={transferGaps}
+      workerAdjustments={workerAdjustments}
     />
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CHECKOUT_LINK_WINDOW_MS,
+  checkoutMediaWindowStartIso,
   selectLinkableMediaIds,
   startOfTodayIso,
   validateClockOutEvent,
@@ -85,8 +86,8 @@ describe("validateClockOutEvent", () => {
     }
   });
 
-  it("rejects an event from yesterday-the-week-before", () => {
-    const ancient = new Date(nowMs - 5 * 24 * 60 * 60 * 1000).toISOString();
+  it("rejects an event older than the repair window", () => {
+    const ancient = new Date(nowMs - 8 * 24 * 60 * 60 * 1000).toISOString();
     const result = validateClockOutEvent(
       buildEvent({ event_time: ancient }),
       callerId,
@@ -98,7 +99,7 @@ describe("validateClockOutEvent", () => {
     }
   });
 
-  it("accepts an event right at the 24h window edge", () => {
+  it("accepts an event right at the repair window edge", () => {
     const edge = new Date(nowMs - CHECKOUT_LINK_WINDOW_MS).toISOString();
     const result = validateClockOutEvent(
       buildEvent({ event_time: edge }),
@@ -190,6 +191,19 @@ describe("selectLinkableMediaIds", () => {
     expect(ids).toEqual([]);
   });
 
+  it("links older before_leave media when the caller uses a wider repair window", () => {
+    const ids = selectLinkableMediaIds(
+      [
+        buildMedia({
+          id: "multi-day-shift-proof",
+          created_at: "2026-05-01T18:00:00.000Z",
+        }),
+      ],
+      { ...opts, windowStartIso: checkoutMediaWindowStartIso(now.toISOString()) },
+    );
+    expect(ids).toEqual(["multi-day-shift-proof"]);
+  });
+
   it("returns multiple ids when several videos qualify (multi-clip checkout)", () => {
     const ids = selectLinkableMediaIds(
       [
@@ -241,5 +255,13 @@ describe("startOfTodayIso", () => {
     // produces an ISO string parseable by Date.
     expect(new Date(iso).getTime()).toBeLessThanOrEqual(reference.getTime());
     expect(iso).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+});
+
+describe("checkoutMediaWindowStartIso", () => {
+  it("returns seven days before the time_event as ISO", () => {
+    expect(checkoutMediaWindowStartIso("2026-05-06T18:00:00.000Z")).toBe(
+      "2026-04-29T18:00:00.000Z",
+    );
   });
 });

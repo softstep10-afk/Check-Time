@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analyzePhotoEvidence } from "@/lib/ai/service";
-import { getManagerWorkspaceData, requireManagerContext } from "@/lib/manager-data";
+import { getManagerWorkspaceData } from "@/lib/manager-data";
+import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Media } from "@/types/database";
@@ -14,7 +15,10 @@ function assertNoError(error: { message: string } | null, label: string) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    await requireManagerContext(supabase);
+    const auth = await resolveAiApiContext(supabase);
+    if (auth.kind === "unauthenticated") {
+      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+    }
     const body = (await request.json()) as Record<string, unknown>;
     const mediaId = typeof body.mediaId === "string" ? body.mediaId : "";
 
@@ -22,20 +26,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Media id is required." }, { status: 400 });
     }
 
-    const mediaResult = await supabase
-      .from("media")
-      .select("*")
-      .eq("id", mediaId)
-      .single<Media>();
+    let media: Media | null = null;
+    if (auth.kind === "preview") {
+      media = auth.managerData.media.find((item) => item.id === mediaId) ?? null;
+    } else {
+      const mediaResult = await supabase
+        .from("media")
+        .select("*")
+        .eq("id", mediaId)
+        .single<Media>();
 
-    assertNoError(mediaResult.error, "Media query failed");
+      assertNoError(mediaResult.error, "Media query failed");
+      media = mediaResult.data ?? null;
+    }
 
-    if (!mediaResult.data) {
+    if (!media) {
       return NextResponse.json({ error: "Media not found." }, { status: 404 });
     }
 
-    const data = await getManagerWorkspaceData();
-    const media = mediaResult.data;
+    const data =
+      auth.kind === "preview" ? auth.managerData : await getManagerWorkspaceData();
     const projectName =
       media.project_id
         ? data.projects.find((project) => project.id === media.project_id)?.name ?? "Unknown project"
@@ -62,7 +72,7 @@ export async function POST(request: NextRequest) {
     // gated the request to manager / admin / owner — workers cannot
     // call this endpoint and trigger an analyze on a foreign-project
     // media row.
-    const adminClient = createAdminClient();
+    const adminClient = auth.kind === "authenticated" ? createAdminClient() : null;
 
     if (adminClient) {
       const persistResult = await adminClient

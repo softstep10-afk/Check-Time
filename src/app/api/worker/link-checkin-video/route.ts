@@ -3,32 +3,34 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { runLinkCheckoutVideo } from "@/lib/checkout-link-server";
+import {
+  LINK_CHECKIN_AUDIT_ACTION,
+  runLinkCheckoutVideo,
+} from "@/lib/checkout-link-server";
 
 export const runtime = "nodejs";
 
 /**
- * POST /api/worker/link-checkout-video
+ * POST /api/worker/link-checkin-video
  *
  * Body: { timeEventId: string }
  *
- * Stamps the worker's "before you leave" videos with the time_event_id
- * of the clock_out row that just closed their shift. The worker's
- * RLS-scoped Supabase client cannot perform this UPDATE — the live
- * public.media table has SELECT/INSERT policies but zero UPDATE
- * policies, so a worker-client UPDATE silently affects zero rows.
- * This route runs through the service-role admin client after
- * re-validating that the time_event belongs to the caller and is a
- * recent clock_out.
+ * Sister of /api/worker/link-checkout-video. Same orchestration —
+ * predicate-narrowed UPDATE under the service-role admin client, audit
+ * row, time_events.video_status flip — but for the START-of-shift video
+ * (a "before work" upload). The only differences from the checkout
+ * surface are:
  *
- * The route itself is intentionally thin: the orchestration lives in
- * runLinkCheckoutVideo so the security predicates can be unit-tested
- * end-to-end without booting Next.js.
+ *   • expectedEventType is "clock_in" instead of "clock_out".
+ *   • candidate media must have is_checkout=false. A clock_in video is
+ *     proof of arrival, not proof of departure; conflating the two flags
+ *     would let a checkout video accidentally back-fill a clock_in.
+ *   • the audit_log row uses LINK_CHECKIN_AUDIT_ACTION so an auditor
+ *     reading the table can split the surfaces by `action`.
  *
- * Best-effort: WorkerShell.clockOut never aborts a successful clock-out
- * on a non-2xx response. The worst-case outcome of a failed link is an
- * orphaned but non-destructive media row that a future retry can sweep
- * up — never a duplicated or lost video.
+ * The route stays thin on purpose: every predicate lives in
+ * runLinkCheckoutVideo so a regression on either surface fails
+ * the existing unit tests rather than a security review.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -65,6 +67,9 @@ export async function POST(request: NextRequest) {
       timeEventId,
       supabase,
       admin,
+      expectedEventType: "clock_in",
+      isCheckoutMatch: false,
+      auditAction: LINK_CHECKIN_AUDIT_ACTION,
     });
 
     return NextResponse.json(outcome.body, { status: outcome.status });

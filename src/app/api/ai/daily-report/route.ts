@@ -3,7 +3,7 @@ import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { generateDailyReport, formatOrgDateKey, getTodayInOrgTimeZone } from "@/lib/ai/service";
 import { buildManagerSessions } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
-import { requireManagerContext } from "@/lib/manager-data";
+import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import type { DailyReport } from "@/types/database";
 
 function assertNoError(error: { message: string } | null, label: string) {
@@ -15,13 +15,17 @@ function assertNoError(error: { message: string } | null, label: string) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { profile } = await requireManagerContext(supabase);
+    const auth = await resolveAiApiContext(supabase);
+    if (auth.kind === "unauthenticated") {
+      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+    }
     const body = (await request.json()) as Record<string, unknown>;
     const reportDate =
       typeof body.reportDate === "string" && body.reportDate ? body.reportDate : getTodayInOrgTimeZone();
     const projectId =
       typeof body.projectId === "string" && body.projectId ? body.projectId : null;
-    const data = await getManagerWorkspaceData();
+    const data =
+      auth.kind === "preview" ? auth.managerData : await getManagerWorkspaceData();
     const sessions = buildManagerSessions(data).filter((session) => {
       if (projectId && session.projectId !== projectId) {
         return false;
@@ -70,35 +74,39 @@ export async function POST(request: NextRequest) {
         .slice(0, 5),
     });
 
-    const reportInsert = await supabase
-      .from("daily_reports")
-      .insert({
-        org_id: profile.org_id,
-        project_id: projectId,
-        profile_id: null,
-        report_date: reportDate,
-        summary: report.summary,
-        hours_worked: report.laborSignal ? sessions.reduce((sum, session) => sum + session.durationMinutes, 0) / 60 : 0,
-        tasks_completed: completedTasks.length,
-        photos_taken: media.length,
-        ai_insights: report,
-        event_ids: sessions.flatMap((session) => session.eventIds),
-        media_ids: media.map((item) => item.id),
-        metadata: {
-          headline: report.headline,
-          nextActions: report.nextActions,
-          source: report.source,
-        },
-      })
-      .select("*")
-      .single<DailyReport>();
+    let savedReportId: string | null = null;
+    if (auth.kind === "authenticated") {
+      const reportInsert = await supabase
+        .from("daily_reports")
+        .insert({
+          org_id: auth.context.profile.org_id,
+          project_id: projectId,
+          profile_id: null,
+          report_date: reportDate,
+          summary: report.summary,
+          hours_worked: report.laborSignal ? sessions.reduce((sum, session) => sum + session.durationMinutes, 0) / 60 : 0,
+          tasks_completed: completedTasks.length,
+          photos_taken: media.length,
+          ai_insights: report,
+          event_ids: sessions.flatMap((session) => session.eventIds),
+          media_ids: media.map((item) => item.id),
+          metadata: {
+            headline: report.headline,
+            nextActions: report.nextActions,
+            source: report.source,
+          },
+        })
+        .select("*")
+        .single<DailyReport>();
 
-    assertNoError(reportInsert.error, "Daily report insert failed");
+      assertNoError(reportInsert.error, "Daily report insert failed");
+      savedReportId = reportInsert.data?.id ?? null;
+    }
 
     return NextResponse.json({
       ok: true,
       report,
-      savedReportId: reportInsert.data?.id ?? null,
+      savedReportId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";

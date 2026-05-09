@@ -1491,7 +1491,15 @@ export function ProjectsPage({
                       {formatDurationCompact(project.weekMinutes)}
                     </div>
                   </div>
-                  <div className="metric-panel rounded-[var(--radius-md)] p-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      router.push(`/projects/${project.id}#materials`);
+                    }}
+                    className="metric-panel rounded-[var(--radius-md)] p-2 text-left"
+                    aria-label={`${project.name} ${t("projects.materials")}`}
+                  >
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                       {t("projects.materials")}
                     </div>
@@ -1501,15 +1509,23 @@ export function ProjectsPage({
                     >
                       {currencyFormatter.format(project.receiptTotal)}
                     </div>
-                  </div>
-                  <div className="metric-panel rounded-[var(--radius-md)] p-2">
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      router.push(`/projects/${project.id}#tasks`);
+                    }}
+                    className="metric-panel rounded-[var(--radius-md)] p-2 text-left"
+                    aria-label={`${project.name} ${t("common.tasks")}`}
+                  >
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                       {t("common.tasks")}
                     </div>
                     <div className="mt-1 text-base font-bold text-[var(--text-primary)]">
                       {project.openTaskCount}
                     </div>
-                  </div>
+                  </button>
                 </div>
 
                 <InlineNotesEditor

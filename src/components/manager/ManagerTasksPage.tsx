@@ -10,12 +10,21 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
 import {
+  buildProfileNameMap,
+  getCompletionMediaIds,
+  getCompletionNote,
+  getFollowUpInfo,
+  getTaskCompletionAudit,
+} from "@/lib/task-notifications";
+import {
   getAttachmentMediaIds,
   linkMediaToTask,
   type TaskAttachmentRef,
   uploadTaskAttachment,
 } from "@/lib/task-attachments";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { formatDateTime } from "@/lib/worker-utils";
+import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import type {
   ProjectStatus,
   Task,
@@ -26,7 +35,11 @@ import type {
 
 type ProjectOption = { id: string; name: string; status: ProjectStatus };
 type WorkerOption = { id: string; name: string; role: UserRole };
-type TaskRow = Task & { projectName: string | null; assigneeName: string | null };
+type TaskRow = Task & {
+  projectName: string | null;
+  assigneeName: string | null;
+  completedByName?: string | null;
+};
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["low", "medium", "high", "urgent"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "done", "cancelled"];
@@ -67,7 +80,9 @@ export function ManagerTasksPage({
   const [tasks, setTasks] = useState<TaskRow[]>(initialTasks);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
+  const [messageTone, setMessageTone] = useState<"success" | "error" | "info">("success");
+  const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
+  const [pendingClearDone, setPendingClearDone] = useState(false);
 
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -77,6 +92,7 @@ export function ManagerTasksPage({
 
   const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
   const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers]);
+  const workerNameById = useMemo(() => buildProfileNameMap(workers), [workers]);
   const attachmentById = useMemo(
     () => new Map(attachmentMedia.map((m) => [m.id, m])),
     [attachmentMedia],
@@ -89,6 +105,10 @@ export function ManagerTasksPage({
       return true;
     });
   }, [tasks, filterProject, filterStatus]);
+  const completedTasks = useMemo(
+    () => tasks.filter((task) => task.status === "done"),
+    [tasks],
+  );
 
   function priorityLabel(priority: TaskPriority): string {
     if (priority === "urgent") return t("tasks.priorityUrgent");
@@ -214,6 +234,7 @@ export function ManagerTasksPage({
         ...data,
         projectName: projectId ? projectsById.get(projectId)?.name ?? null : null,
         assigneeName: assignedTo ? workersById.get(assignedTo)?.name ?? null : null,
+        completedByName: null,
       },
       ...prev,
     ]);
@@ -228,9 +249,11 @@ export function ManagerTasksPage({
   async function handleStatusChange(taskId: string, status: TaskStatus) {
     setBusyKey(`status-${taskId}`);
     const patch: Record<string, unknown> = { status };
+    const completedAt = status === "done" ? new Date().toISOString() : null;
+    const completedBy = status === "done" ? managerId : null;
     if (status === "done") {
-      patch.completed_at = new Date().toISOString();
-      patch.completed_by = managerId;
+      patch.completed_at = completedAt;
+      patch.completed_by = completedBy;
     } else {
       patch.completed_at = null;
       patch.completed_by = null;
@@ -245,14 +268,21 @@ export function ManagerTasksPage({
     setTasks((prev) =>
       prev.map((t) =>
         t.id === taskId
-          ? { ...t, status, completed_at: status === "done" ? new Date().toISOString() : null }
+          ? { ...t, status, completed_at: completedAt, completed_by: completedBy }
           : t,
       ),
     );
   }
 
   async function handleDelete(taskId: string) {
-    if (typeof window !== "undefined" && !window.confirm(t("trash.deleteConfirm"))) return;
+    if (pendingDeleteTaskId !== taskId) {
+      setPendingDeleteTaskId(taskId);
+      setPendingClearDone(false);
+      setMessage(t("tasks.deleteSecondClick"));
+      setMessageTone("info");
+      return;
+    }
+
     setBusyKey(`delete-${taskId}`);
     const { error } = await supabase
       .from("tasks")
@@ -264,8 +294,40 @@ export function ManagerTasksPage({
       setMessageTone("error");
       return;
     }
+    setPendingDeleteTaskId(null);
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setMessage(t("tasks.deleted"));
+    setMessageTone("success");
+  }
+
+  async function handleClearCompleted() {
+    const ids = completedTasks.map((task) => task.id);
+    if (ids.length === 0) return;
+
+    if (!pendingClearDone) {
+      setPendingClearDone(true);
+      setPendingDeleteTaskId(null);
+      setMessage(
+        t("tasks.clearCompletedSecondClick").replace("{count}", String(ids.length)),
+      );
+      setMessageTone("info");
+      return;
+    }
+
+    setBusyKey("clear-completed");
+    const { error } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .in("id", ids);
+    setBusyKey(null);
+    if (error) {
+      setMessage(error.message);
+      setMessageTone("error");
+      return;
+    }
+    setPendingClearDone(false);
+    setTasks((prev) => prev.filter((task) => task.status !== "done"));
+    setMessage(t("tasks.completedCleared").replace("{count}", String(ids.length)));
     setMessageTone("success");
   }
 
@@ -287,8 +349,18 @@ export function ManagerTasksPage({
         <div
           className="rounded-[var(--radius-md)] px-3 py-3 text-sm"
           style={{
-            background: messageTone === "error" ? "rgba(212, 81, 94, 0.12)" : "rgba(15, 168, 120, 0.16)",
-            color: messageTone === "error" ? "var(--red)" : "var(--green)",
+            background:
+              messageTone === "error"
+                ? "rgba(212, 81, 94, 0.12)"
+                : messageTone === "info"
+                  ? "rgba(191, 162, 52, 0.12)"
+                  : "rgba(15, 168, 120, 0.16)",
+            color:
+              messageTone === "error"
+                ? "var(--red)"
+                : messageTone === "info"
+                  ? "var(--brand-yellow)"
+                  : "var(--green)",
           }}
         >
           {message}
@@ -335,6 +407,22 @@ export function ManagerTasksPage({
               {t("tasks.allTasks")}
             </h2>
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleClearCompleted()}
+                disabled={completedTasks.length === 0 || busyKey === "clear-completed"}
+                className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{
+                  borderColor: pendingClearDone ? "rgba(212, 81, 94, 0.36)" : "var(--border-default)",
+                  color: pendingClearDone ? "var(--red)" : "var(--text-primary)",
+                }}
+              >
+                {busyKey === "clear-completed"
+                  ? t("common.saving")
+                  : pendingClearDone
+                    ? t("tasks.confirmClearCompleted")
+                    : t("tasks.clearCompleted")}
+              </button>
               <select
                 value={filterProject}
                 onChange={(e) => setFilterProject(e.target.value)}
@@ -372,6 +460,11 @@ export function ManagerTasksPage({
                 const accent = PRIORITY_COLORS[task.priority];
                 const statusColor = STATUS_COLORS[task.status];
                 const updating = busyKey === `status-${task.id}` || busyKey === `delete-${task.id}`;
+                const rowAudit = getManagerTaskRowAuditText(task, workerNameById, {
+                  unassigned: t("tasks.unassigned"),
+                  unknown: t("tasks.unknown"),
+                  formatCompletedAt: formatDateTime,
+                });
                 return (
                   <article
                     key={task.id}
@@ -399,15 +492,16 @@ export function ManagerTasksPage({
                             <span>{t("tasks.generalTask")}</span>
                           )}
                           <span>·</span>
+                          <span>{t("tasks.assignedToLabel")}:</span>
                           {task.assigned_to ? (
                             <Link
                               href={`/team/${task.assigned_to}`}
                               className="text-[var(--text-primary)]"
                             >
-                              {task.assigneeName ?? t("tasks.unassigned")}
+                              {rowAudit.assignedToText}
                             </Link>
                           ) : (
-                            <span>{t("tasks.unassigned")}</span>
+                            <span>{rowAudit.assignedToText}</span>
                           )}
                           {task.due_date ? (
                             <>
@@ -416,6 +510,22 @@ export function ManagerTasksPage({
                             </>
                           ) : null}
                         </div>
+                        {task.status === "done" ? (
+                          <div
+                            className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-[var(--text-primary)]"
+                            data-testid="manager-task-row-completion-audit"
+                          >
+                            <span>
+                              {t("tasks.rowAssignedLabel")}: {rowAudit.assignedToText}
+                            </span>
+                            <span>
+                              {t("tasks.rowCompletedByLabel")}: {rowAudit.completedByText}
+                            </span>
+                            <span>
+                              {t("tasks.rowCompletedAtLabel")}: {rowAudit.completedAtText}
+                            </span>
+                          </div>
+                        ) : null}
                         {task.description ? (
                           <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">
                             {task.description}
@@ -433,6 +543,91 @@ export function ManagerTasksPage({
                               </div>
                               <TaskAttachmentList items={refs} />
                             </>
+                          );
+                        })()}
+                        {(() => {
+                          // Worker completion evidence — same shape as
+                          // the Project Detail page panel, condensed for
+                          // the All Tasks list view.
+                          const completionNote = getCompletionNote(task);
+                          const followUp = getFollowUpInfo(task);
+                          const audit = getTaskCompletionAudit(task, workerNameById);
+                          const completionRefs = getCompletionMediaIds(task)
+                            .map((id) => attachmentById.get(id))
+                            .filter((m): m is TaskAttachmentRef => Boolean(m));
+                          const hasEvidence =
+                            Boolean(completionNote) ||
+                            followUp.required ||
+                            completionRefs.length > 0 ||
+                            audit.hasAudit;
+                          if (!hasEvidence) return null;
+                          return (
+                            <div
+                              className="mt-2 rounded-[var(--radius-md)] border p-2"
+                              style={{
+                                borderColor: followUp.required
+                                  ? "rgba(245, 158, 11, 0.35)"
+                                  : "rgba(15, 168, 120, 0.24)",
+                                background: followUp.required
+                                  ? "rgba(245, 158, 11, 0.06)"
+                                  : "rgba(15, 168, 120, 0.06)",
+                              }}
+                            >
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                                  {t("tasks.completionEvidenceHeader")}
+                                </span>
+                                {task.status === "done" ? (
+                                  <span
+                                    className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]"
+                                    style={{
+                                      background: "rgba(15, 168, 120, 0.16)",
+                                      color: "var(--green)",
+                                    }}
+                                  >
+                                    {statusLabel(task.status)}
+                                  </span>
+                                ) : null}
+                                {followUp.required ? (
+                                  <span
+                                    className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]"
+                                    style={{
+                                      background: "rgba(245, 158, 11, 0.16)",
+                                      color: "#f59e0b",
+                                    }}
+                                  >
+                                    {t("tasks.followUpBadge")}
+                                  </span>
+                                ) : null}
+                              </div>
+                              {audit.completedById ? (
+                                <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                                  {t("tasks.completionByLabel")}:{" "}
+                                  {audit.completedByName ?? audit.completedById}
+                                </div>
+                              ) : null}
+                              {audit.completedAt ? (
+                                <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                                  {t("tasks.completionAtLabel")}: {formatDateTime(audit.completedAt)}
+                                </div>
+                              ) : null}
+                              {completionNote ? (
+                                <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-primary)]">
+                                  {completionNote}
+                                </p>
+                              ) : null}
+                              {followUp.required && followUp.note ? (
+                                <div className="mt-1 text-[10px] text-[var(--text-secondary)]">
+                                  <span className="font-semibold">
+                                    {t("tasks.followUpNoteLabel")}:{" "}
+                                  </span>
+                                  {followUp.note}
+                                </div>
+                              ) : null}
+                              {completionRefs.length > 0 ? (
+                                <TaskAttachmentList items={completionRefs} />
+                              ) : null}
+                            </div>
                           );
                         })()}
                       </div>
@@ -457,7 +652,17 @@ export function ManagerTasksPage({
                           aria-label={t("team.actionRemove")}
                           title={t("team.actionRemove")}
                           className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
-                          style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                          style={{
+                            borderColor:
+                              pendingDeleteTaskId === task.id
+                                ? "var(--red)"
+                                : "rgba(212, 81, 94, 0.3)",
+                            color: "var(--red)",
+                            background:
+                              pendingDeleteTaskId === task.id
+                                ? "rgba(212, 81, 94, 0.12)"
+                                : "transparent",
+                          }}
                         >
                           <Trash2 size={12} />
                         </button>

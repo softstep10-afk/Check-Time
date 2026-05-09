@@ -42,6 +42,13 @@ export interface ManagerSession {
   checkoutStatus: "not_required" | "pending" | "uploaded" | "verified";
   isOpen: boolean;
   eventIds: string[];
+  /**
+   * Worker's free-form note typed in CheckoutModal, copied from
+   * `time_events.metadata.checkout_note` of the closing event. Null
+   * when the worker left it blank (the dominant case) or when the
+   * shift is still open.
+   */
+  checkoutNote: string | null;
 }
 
 export interface ManagerProjectSummary extends Project {
@@ -60,6 +67,25 @@ export interface ManagerProjectSummary extends Project {
     filename: string | null;
   }>;
   recentMediaTotal: number;
+  /**
+   * Number of shifts on this project where durationMinutes is in
+   * [WARN_SHIFT_MINUTES, EXTREME_SHIFT_MINUTES) — amber band.
+   */
+  longShiftCount: number;
+  /**
+   * Number of shifts where durationMinutes ≥ EXTREME_SHIFT_MINUTES (24h).
+   * Used to flip the project workload card into a critical/red state.
+   */
+  extremeShiftCount: number;
+  /**
+   * Single worst (longest) shift on the project, or null when none.
+   * Surfaced on the workload card so the manager sees worker name +
+   * duration without leaving the Overview.
+   */
+  longestShift: {
+    workerName: string;
+    durationMinutes: number;
+  } | null;
 }
 
 export interface ManagerProfileSummary extends Profile {

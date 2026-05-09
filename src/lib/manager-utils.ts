@@ -1,5 +1,11 @@
-import type { UserRole } from "@/types/database";
+import type { Profile, Project, TimeEvent, UserRole } from "@/types/database";
 import { parseGeoPoint } from "@/lib/worker-utils";
+import {
+  EXTREME_SHIFT_MINUTES,
+  WARN_SHIFT_MINUTES,
+  shiftDurationSeverity,
+  type ShiftSeverity,
+} from "@/lib/shift-review";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -42,9 +48,290 @@ function minutesBetween(start: Date, end: Date): number {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60_000));
 }
 
+/**
+ * Minutes of a single session that overlap a [windowStart, windowEnd)
+ * date range.
+ *
+ * Why this exists:
+ *   The Overview project-load card renders "X minutes this week" for
+ *   each project. The original aggregation pinned the entire shift to
+ *   the week of clockInTime, so a 144h shift that started last
+ *   Wednesday looked like 0m this week even though most of its hours
+ *   actually fell after Monday. Splitting by overlap fixes that.
+ *
+ * Open shifts have no clockOutTime; in that case `now` (parametrised
+ * for tests, defaults to wall-clock) is used as the upper bound.
+ *
+ * Returns 0 when the session does not overlap the window at all.
+ */
+export function sessionMinutesInWindow(args: {
+  clockInTime: string;
+  clockOutTime: string | null;
+  windowStart: Date;
+  windowEnd: Date;
+  now?: Date;
+}): number {
+  const start = new Date(args.clockInTime).getTime();
+  const end = args.clockOutTime
+    ? new Date(args.clockOutTime).getTime()
+    : (args.now ?? new Date()).getTime();
+  const winStart = args.windowStart.getTime();
+  const winEnd = args.windowEnd.getTime();
+  const effStart = Math.max(start, winStart);
+  const effEnd = Math.min(end, winEnd);
+  if (effEnd <= effStart) return 0;
+  return Math.round((effEnd - effStart) / 60_000);
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 export function isManagerRole(role: UserRole): boolean {
   return role === "owner" || role === "admin" || role === "manager" || role === "supervisor";
 }
+
+/**
+ * True for roles that should see financial / profitability data
+ * (labor cost, paid amounts, project payroll cost, profit estimates).
+ * Currently scoped to `owner` + `admin` — `manager` and `supervisor`
+ * see operational data only.
+ *
+ * Used as a UI gate, NOT as a security boundary. The DB is the source
+ * of truth for who can read which row; this helper just hides
+ * money-shaped numbers from manager-tier roles whose RLS already
+ * permits the read but whose product role does not.
+ */
+export function isOwnerRole(role: UserRole): boolean {
+  return role === "owner" || role === "admin";
+}
+
+export interface WorkerLabelInput {
+  id: string;
+  name: string;
+  role: UserRole;
+  email?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * Build a per-worker disambiguation suffix. When a name is unique
+ * across the supplied roster the suffix is empty; when more than one
+ * worker shares the same trimmed/lowercased name the suffix surfaces
+ * the first available identifier in this order:
+ *
+ *   1. role chip                — always available
+ *   2. email                    — when present + non-empty
+ *   3. phone                    — when present + non-empty
+ *   4. short id (first 6 chars) — last-resort fallback
+ *
+ * The role chip is included even when an email / phone is present so
+ * the UI can render `Oliver (worker · oliver@…)` and not lose the
+ * "what is this person?" context that managers use to triage.
+ *
+ * Returns the descriptor pieces — callers compose the final string,
+ * which keeps i18n out of the helper.
+ */
+export interface WorkerDisambiguation {
+  /** True when this worker shares a name with at least one other in the roster. */
+  isAmbiguous: boolean;
+  /** Role label, always present. */
+  role: UserRole;
+  /** Email if known and ambiguous, else null. */
+  email: string | null;
+  /** Phone if known and ambiguous, else null. */
+  phone: string | null;
+  /** Short id when neither email nor phone is available, else null. */
+  shortId: string | null;
+}
+
+export function buildWorkerDisambiguationMap<T extends WorkerLabelInput>(
+  workers: T[],
+): Map<string, WorkerDisambiguation> {
+  // Count names case-insensitively and trimmed so "Oliver" / "oliver "
+  // collide. The roster stays small (org-scoped) so a simple Map is fine.
+  const nameCounts = new Map<string, number>();
+  for (const worker of workers) {
+    const key = (worker.name ?? "").trim().toLowerCase();
+    if (!key) continue;
+    nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+  }
+
+  const out = new Map<string, WorkerDisambiguation>();
+  for (const worker of workers) {
+    const key = (worker.name ?? "").trim().toLowerCase();
+    const collisions = key ? nameCounts.get(key) ?? 0 : 0;
+    const isAmbiguous = collisions > 1;
+    const email = isAmbiguous && worker.email && worker.email.trim() ? worker.email.trim() : null;
+    const phone = !email && isAmbiguous && worker.phone && worker.phone.trim() ? worker.phone.trim() : null;
+    const shortId = !email && !phone && isAmbiguous ? worker.id.slice(0, 6) : null;
+    out.set(worker.id, {
+      isAmbiguous,
+      role: worker.role,
+      email,
+      phone,
+      shortId,
+    });
+  }
+  return out;
+}
+
+/**
+ * Compose the final display string. Always shows the worker's name;
+ * appends the disambiguation suffix only when needed.
+ *
+ *   "Oliver"
+ *   "Oliver (worker · oliver@example.com)"
+ *   "Oliver (worker · +1-555-…)"
+ *   "Oliver (worker · 7f8d2a)"
+ */
+export function formatWorkerDisplayLabel(
+  worker: WorkerLabelInput,
+  disambiguation: WorkerDisambiguation | undefined,
+): string {
+  const name = worker.name?.trim() || "Unknown";
+  if (!disambiguation || !disambiguation.isAmbiguous) {
+    return name;
+  }
+  const pieces: string[] = [disambiguation.role];
+  if (disambiguation.email) pieces.push(disambiguation.email);
+  else if (disambiguation.phone) pieces.push(disambiguation.phone);
+  else if (disambiguation.shortId) pieces.push(disambiguation.shortId);
+  return `${name} (${pieces.join(" · ")})`;
+}
+
+/**
+ * Project-transfer gap thresholds. A "transfer gap" is the wall-clock
+ * time between a worker's clock_out from project A and their next
+ * clock_in to a different project B. Same-project re-clocks are not
+ * gaps (worker stayed on site).
+ *
+ *   warning  > 30 minutes  — long enough to be more than a coffee break
+ *   critical > 90 minutes  — likely a real travel/dispute window the
+ *                            owner needs to look at by hand
+ *
+ * Read-only review signal. Does NOT block payroll, write to time_events,
+ * or auto-close shifts.
+ */
+export const TRANSFER_GAP_WARNING_MINUTES = 30;
+export const TRANSFER_GAP_CRITICAL_MINUTES = 90;
+
+export type TransferGapSeverity = "warning" | "critical";
+
+export interface TransferGap {
+  /** Stable composite id for React keys: outEventId-inEventId. */
+  id: string;
+  profileId: string;
+  workerName: string;
+  fromProjectId: string;
+  toProjectId: string;
+  fromProject: string;
+  toProject: string;
+  outTime: string;
+  inTime: string;
+  gapMinutes: number;
+  severity: TransferGapSeverity;
+}
+
+/**
+ * Detect project-transfer gaps across one or many workers.
+ *
+ * For each worker, sort their clock_in / clock_out events by time and
+ * scan adjacent pairs. A pair is a transfer gap when:
+ *   • the earlier event is a clock_out (or auto_out), AND
+ *   • the later event is a clock_in, AND
+ *   • the two events touch different projects, AND
+ *   • the wall-clock gap exceeds TRANSFER_GAP_WARNING_MINUTES.
+ *
+ * Same-project re-clocks (e.g. worker took a lunch break and came back)
+ * are intentionally ignored — they are not transfers.
+ */
+export function detectTransferGaps(args: {
+  timeEvents: TimeEvent[];
+  projects: Project[];
+  profiles: Profile[];
+  /** Optional ISO floor — events before this are skipped. */
+  sinceIso?: string;
+  /** Optional filter — only return gaps for this worker. */
+  profileId?: string;
+}): TransferGap[] {
+  const projectsById = new Map(args.projects.map((p) => [p.id, p]));
+  const profilesById = new Map(args.profiles.map((p) => [p.id, p]));
+  const sinceMs = args.sinceIso ? new Date(args.sinceIso).getTime() : null;
+
+  const events = args.timeEvents
+    .filter((e) => {
+      if (
+        e.event_type !== "clock_in" &&
+        e.event_type !== "clock_out" &&
+        e.event_type !== "auto_out"
+      ) {
+        return false;
+      }
+      if (args.profileId && e.profile_id !== args.profileId) return false;
+      if (sinceMs !== null && new Date(e.event_time).getTime() < sinceMs) {
+        return false;
+      }
+      return true;
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.event_time).getTime() - new Date(b.event_time).getTime(),
+    );
+
+  const byProfile = new Map<string, TimeEvent[]>();
+  for (const event of events) {
+    const list = byProfile.get(event.profile_id) ?? [];
+    list.push(event);
+    byProfile.set(event.profile_id, list);
+  }
+
+  const gaps: TransferGap[] = [];
+  for (const [profileId, list] of byProfile) {
+    for (let i = 0; i < list.length - 1; i++) {
+      const out = list[i];
+      const next = list[i + 1];
+      if (out.event_type !== "clock_out" && out.event_type !== "auto_out") {
+        continue;
+      }
+      if (next.event_type !== "clock_in") continue;
+      if (out.project_id === next.project_id) continue;
+
+      const gapMinutes = Math.round(
+        (new Date(next.event_time).getTime() -
+          new Date(out.event_time).getTime()) /
+          60_000,
+      );
+      if (gapMinutes <= TRANSFER_GAP_WARNING_MINUTES) continue;
+
+      const severity: TransferGapSeverity =
+        gapMinutes > TRANSFER_GAP_CRITICAL_MINUTES ? "critical" : "warning";
+
+      gaps.push({
+        id: `${out.id}-${next.id}`,
+        profileId,
+        workerName: profilesById.get(profileId)?.name ?? "Unknown",
+        fromProjectId: out.project_id,
+        toProjectId: next.project_id,
+        fromProject: projectsById.get(out.project_id)?.name ?? "Unknown",
+        toProject: projectsById.get(next.project_id)?.name ?? "Unknown",
+        outTime: out.event_time,
+        inTime: next.event_time,
+        gapMinutes,
+        severity,
+      });
+    }
+  }
+
+  return gaps.sort((a, b) => b.gapMinutes - a.gapMinutes);
+}
+
+export const TRANSFER_GAP_COLOR: Record<TransferGapSeverity, string> = {
+  warning: "#f59e0b",
+  critical: "var(--red)",
+};
 
 export interface OvertimeBreakdown {
   regularHours: number;
@@ -132,6 +419,14 @@ export function buildManagerSessions(data: ManagerWorkspaceData): ManagerSession
       const clockInTime = toDate(openClockIn.event_time);
       const clockOutTime = toDate(event.event_time);
 
+      const closingMeta = (event.metadata ?? null) as
+        | { checkout_note?: unknown }
+        | null;
+      const checkoutNote =
+        closingMeta && typeof closingMeta.checkout_note === "string"
+          ? closingMeta.checkout_note.trim() || null
+          : null;
+
       sessions.push({
         id: openClockIn.id,
         profileId: profile.id,
@@ -147,6 +442,7 @@ export function buildManagerSessions(data: ManagerWorkspaceData): ManagerSession
         checkoutStatus: event.video_status,
         isOpen: false,
         eventIds: [openClockIn.id, event.id],
+        checkoutNote,
       });
 
       openClockIn = null;
@@ -169,6 +465,7 @@ export function buildManagerSessions(data: ManagerWorkspaceData): ManagerSession
         checkoutStatus: "not_required",
         isOpen: true,
         eventIds: [openClockIn.id],
+        checkoutNote: null,
       });
     }
   }
@@ -183,10 +480,17 @@ export function buildProjectSummaries(
   sessions: ManagerSession[],
 ): ManagerProjectSummary[] {
   const weekStart = startOfWeek();
+  const weekEnd = addDays(weekStart, 7);
   const assignmentsByProject = new Map<string, Set<string>>();
   const openTasksByProject = new Map<string, number>();
   const onSiteByProject = new Map<string, Set<string>>();
   const weekMinutesByProject = new Map<string, number>();
+  const longShiftCountByProject = new Map<string, number>();
+  const extremeShiftCountByProject = new Map<string, number>();
+  const longestShiftByProject = new Map<
+    string,
+    { workerName: string; durationMinutes: number }
+  >();
   const receiptTotalByProject = new Map<string, number>();
 
   for (const item of data.media) {
@@ -233,11 +537,48 @@ export function buildProjectSummaries(
       onSiteByProject.set(session.projectId, ids);
     }
 
-    if (isSameOrAfter(toDate(session.clockInTime), weekStart)) {
+    // Count minutes that overlap the current week, NOT minutes whose
+    // clockInTime happens to fall in the current week. A shift that
+    // started last Wednesday and ended this Tuesday should contribute
+    // its Monday → Tuesday tail to "this week" without the Wed → Sun
+    // pre-week portion.
+    const overlap = sessionMinutesInWindow({
+      clockInTime: session.clockInTime,
+      clockOutTime: session.clockOutTime,
+      windowStart: weekStart,
+      windowEnd: weekEnd,
+    });
+    if (overlap > 0) {
       weekMinutesByProject.set(
         session.projectId,
-        (weekMinutesByProject.get(session.projectId) ?? 0) + session.durationMinutes,
+        (weekMinutesByProject.get(session.projectId) ?? 0) + overlap,
       );
+    }
+
+    // Abnormal-shift counters and "longest shift" detail are computed
+    // against the FULL session duration regardless of week overlap —
+    // the workload card needs to flag a 144h shift on the project even
+    // if only its tail crosses into the current week.
+    if (session.durationMinutes >= EXTREME_SHIFT_MINUTES) {
+      extremeShiftCountByProject.set(
+        session.projectId,
+        (extremeShiftCountByProject.get(session.projectId) ?? 0) + 1,
+      );
+    } else if (session.durationMinutes >= WARN_SHIFT_MINUTES) {
+      longShiftCountByProject.set(
+        session.projectId,
+        (longShiftCountByProject.get(session.projectId) ?? 0) + 1,
+      );
+    }
+    const currentLongest = longestShiftByProject.get(session.projectId);
+    if (
+      !currentLongest ||
+      session.durationMinutes > currentLongest.durationMinutes
+    ) {
+      longestShiftByProject.set(session.projectId, {
+        workerName: session.profileName,
+        durationMinutes: session.durationMinutes,
+      });
     }
   }
 
@@ -285,6 +626,9 @@ export function buildProjectSummaries(
         hasValidSiteCoordinates: Boolean(siteCoordinates),
         recentMedia: mediaByProject.get(project.id) ?? [],
         recentMediaTotal: mediaTotalByProject.get(project.id) ?? 0,
+        longShiftCount: longShiftCountByProject.get(project.id) ?? 0,
+        extremeShiftCount: extremeShiftCountByProject.get(project.id) ?? 0,
+        longestShift: longestShiftByProject.get(project.id) ?? null,
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));
@@ -328,15 +672,24 @@ export function buildProfileSummaries(
     );
   }
 
+  const weekEnd = addDays(weekStart, 7);
   for (const session of sessions) {
     if (session.isOpen) {
       openSessionsByProfile.set(session.profileId, session);
     }
 
-    if (isSameOrAfter(toDate(session.clockInTime), weekStart)) {
+    // Same overlap rule as buildProjectSummaries — a cross-week shift
+    // contributes only its current-week tail to weekMinutes.
+    const overlap = sessionMinutesInWindow({
+      clockInTime: session.clockInTime,
+      clockOutTime: session.clockOutTime,
+      windowStart: weekStart,
+      windowEnd: weekEnd,
+    });
+    if (overlap > 0) {
       weekMinutesByProfile.set(
         session.profileId,
-        (weekMinutesByProfile.get(session.profileId) ?? 0) + session.durationMinutes,
+        (weekMinutesByProfile.get(session.profileId) ?? 0) + overlap,
       );
     }
   }
@@ -559,5 +912,238 @@ export function computePayrollPreview(
     lineCount: lines.length,
     lines,
     workerTotals,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Payroll Draft / review helpers
+// ─────────────────────────────────────────────────────────────────────
+//
+// The pay_periods / pay_period_items model aggregates one row per worker
+// per period. The Payroll Draft review surface needs more granular
+// visibility — chronological shift rows under each worker, with review
+// flags. These helpers derive that shift-level view from the same
+// ManagerSession[] array we already build for the manager workspace,
+// so we don't change the persistence model and don't add a new query
+// path. Selection / approval still operates on per-worker pay_period_items;
+// shift rows are presentation only.
+
+export interface PayrollDraftRow {
+  /** ManagerSession.id — stable per shift across re-renders. */
+  sessionId: string;
+  profileId: string;
+  profileName: string;
+  projectId: string;
+  projectName: string;
+  /** ISO. Always populated. */
+  clockInTime: string;
+  /** ISO. Null on shifts that never recorded a checkout. */
+  clockOutTime: string | null;
+  /** Calendar day key (YYYY-MM-DD) for chronology grouping. */
+  dayKey: string;
+  durationMinutes: number;
+  hasGps: boolean;
+  /** True for shifts where the worker never clocked out. */
+  missingCheckout: boolean;
+  /** True when require_video=true and video_status=pending on close. */
+  missingVideo: boolean;
+  /** True when this clock_in is the to-side of a project transfer gap. */
+  hasTransferGap: boolean;
+  /** Severity from shiftDurationSeverity for this shift. */
+  shiftSeverity: ShiftSeverity;
+  /** Worker free-form note from CheckoutModal, or null. */
+  checkoutNote: string | null;
+}
+
+/**
+ * Project sessions onto a date window into shift-level draft rows. Sessions
+ * are kept whenever any portion of their range overlaps the window — the
+ * UI labels show the original clockInTime / clockOutTime so the manager
+ * can read the actual day. Use this for the "byWorker" and "chronology"
+ * payroll review surfaces.
+ *
+ * `requireVideoByProfileId` lets the helper raise `missingVideo` only on
+ * shifts whose worker has require_video=true; lets the call site reuse
+ * the same Profile[] it already has.
+ *
+ * `transferGaps` is optional — pass the same array you'd render in the
+ * Overview / TeamMember pages; rows whose clock_in matches a gap's
+ * `inTime` get `hasTransferGap=true`. Pass an empty array to skip.
+ */
+export function buildPayrollDraftRows(args: {
+  sessions: ManagerSession[];
+  hasGpsBySessionId: Record<string, boolean>;
+  requireVideoByProfileId: Record<string, boolean>;
+  /** Inclusive ISO date YYYY-MM-DD. */
+  startDate: string;
+  /** Inclusive ISO date YYYY-MM-DD. */
+  endDate: string;
+  /** Pre-detected transfer gaps (any window). Optional. */
+  transferGaps?: Pick<TransferGap, "profileId" | "inTime">[];
+  /** Restrict to one worker. */
+  profileId?: string;
+}): PayrollDraftRow[] {
+  const startMs = new Date(`${args.startDate}T00:00:00`).getTime();
+  const endMs = new Date(`${args.endDate}T23:59:59.999`).getTime();
+  const transferGapKeys = new Set(
+    (args.transferGaps ?? []).map((g) => `${g.profileId}|${g.inTime}`),
+  );
+
+  const rows: PayrollDraftRow[] = [];
+  for (const session of args.sessions) {
+    if (args.profileId && session.profileId !== args.profileId) continue;
+    const inMs = new Date(session.clockInTime).getTime();
+    const outMs = session.clockOutTime
+      ? new Date(session.clockOutTime).getTime()
+      : Date.now();
+    // Any overlap with the window keeps the shift visible.
+    if (outMs < startMs) continue;
+    if (inMs > endMs) continue;
+
+    rows.push({
+      sessionId: session.id,
+      profileId: session.profileId,
+      profileName: session.profileName,
+      projectId: session.projectId,
+      projectName: session.projectName,
+      clockInTime: session.clockInTime,
+      clockOutTime: session.clockOutTime,
+      dayKey: session.clockInTime.slice(0, 10),
+      durationMinutes: session.durationMinutes,
+      hasGps: Boolean(args.hasGpsBySessionId[session.id]),
+      missingCheckout: session.clockOutTime === null,
+      missingVideo:
+        Boolean(args.requireVideoByProfileId[session.profileId]) &&
+        session.checkoutStatus === "pending",
+      hasTransferGap: transferGapKeys.has(
+        `${session.profileId}|${session.clockInTime}`,
+      ),
+      shiftSeverity: shiftDurationSeverity(session.durationMinutes),
+      checkoutNote: session.checkoutNote,
+    });
+  }
+
+  rows.sort(
+    (a, b) =>
+      new Date(a.clockInTime).getTime() - new Date(b.clockInTime).getTime(),
+  );
+  return rows;
+}
+
+export interface PayrollWorkerGroup {
+  profileId: string;
+  profileName: string;
+  rows: PayrollDraftRow[];
+  totalMinutes: number;
+  noGpsMinutes: number;
+  longShiftCount: number;
+  extremeShiftCount: number;
+  missingCheckoutCount: number;
+  missingVideoCount: number;
+  transferGapCount: number;
+}
+
+/**
+ * Group draft rows by worker and aggregate review counts. Result is
+ * sorted alphabetically by worker name to match the existing payroll
+ * table convention.
+ *
+ * `chronological` controls intra-worker order:
+ *   - "newest"  → newest clock_in first  (default — payroll review)
+ *   - "oldest"  → oldest clock_in first
+ */
+export function groupPayrollRowsByWorker(
+  rows: PayrollDraftRow[],
+  options: { chronological?: "newest" | "oldest" } = {},
+): PayrollWorkerGroup[] {
+  const direction = options.chronological ?? "newest";
+  const map = new Map<string, PayrollWorkerGroup>();
+  for (const row of rows) {
+    const group =
+      map.get(row.profileId) ??
+      ({
+        profileId: row.profileId,
+        profileName: row.profileName,
+        rows: [],
+        totalMinutes: 0,
+        noGpsMinutes: 0,
+        longShiftCount: 0,
+        extremeShiftCount: 0,
+        missingCheckoutCount: 0,
+        missingVideoCount: 0,
+        transferGapCount: 0,
+      } as PayrollWorkerGroup);
+    group.rows.push(row);
+    group.totalMinutes += row.durationMinutes;
+    if (!row.hasGps) group.noGpsMinutes += row.durationMinutes;
+    if (row.durationMinutes >= EXTREME_SHIFT_MINUTES) {
+      group.extremeShiftCount += 1;
+    } else if (row.durationMinutes >= WARN_SHIFT_MINUTES) {
+      group.longShiftCount += 1;
+    }
+    if (row.missingCheckout) group.missingCheckoutCount += 1;
+    if (row.missingVideo) group.missingVideoCount += 1;
+    if (row.hasTransferGap) group.transferGapCount += 1;
+    map.set(row.profileId, group);
+  }
+
+  for (const group of map.values()) {
+    group.rows.sort((a, b) => {
+      const ta = new Date(a.clockInTime).getTime();
+      const tb = new Date(b.clockInTime).getTime();
+      return direction === "newest" ? tb - ta : ta - tb;
+    });
+  }
+
+  return [...map.values()].sort((a, b) =>
+    a.profileName.localeCompare(b.profileName),
+  );
+}
+
+export interface PayrollDayGroup {
+  dayKey: string;
+  rows: PayrollDraftRow[];
+  totalMinutes: number;
+}
+
+/**
+ * Group draft rows by calendar day for the chronology review surface.
+ * Rows inside a day are sorted by clockInTime ascending so the manager
+ * reads them in the order they happened. Days are sorted newest first.
+ */
+export function groupPayrollRowsByDay(rows: PayrollDraftRow[]): PayrollDayGroup[] {
+  const map = new Map<string, PayrollDayGroup>();
+  for (const row of rows) {
+    const group =
+      map.get(row.dayKey) ??
+      ({ dayKey: row.dayKey, rows: [], totalMinutes: 0 } as PayrollDayGroup);
+    group.rows.push(row);
+    group.totalMinutes += row.durationMinutes;
+    map.set(row.dayKey, group);
+  }
+
+  for (const group of map.values()) {
+    group.rows.sort(
+      (a, b) =>
+        new Date(a.clockInTime).getTime() - new Date(b.clockInTime).getTime(),
+    );
+  }
+
+  return [...map.values()].sort((a, b) => b.dayKey.localeCompare(a.dayKey));
+}
+
+/**
+ * Sum visible draft rows. "Visible" = whatever the caller has already
+ * filtered (worker selector, chronology range, etc). Returns hours
+ * rounded to two decimals so it can be displayed directly.
+ */
+export function sumDraftRowMinutes(rows: PayrollDraftRow[]): {
+  totalMinutes: number;
+  totalHours: number;
+} {
+  const totalMinutes = rows.reduce((sum, row) => sum + row.durationMinutes, 0);
+  return {
+    totalMinutes,
+    totalHours: roundCurrency(totalMinutes / 60),
   };
 }

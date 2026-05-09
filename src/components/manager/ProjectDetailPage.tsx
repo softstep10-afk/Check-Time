@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, X } from "lucide-react";
+import { Download, ExternalLink, FileVideo2, Pencil, Plus, Trash2, X } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
@@ -15,7 +15,19 @@ import {
   normalizeStoragePath,
   uploadTaskAttachment,
 } from "@/lib/task-attachments";
+import {
+  buildProfileNameMap,
+  getCompletionMediaIds,
+  getCompletionNote,
+  getFollowUpInfo,
+  getTaskCompletionAudit,
+} from "@/lib/task-notifications";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import {
+  MediaGalleryDrawer,
+  type GalleryItem,
+} from "@/components/shared/MediaGalleryDrawer";
+import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
@@ -40,7 +52,12 @@ import {
   type ShiftReview,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
-import { selectMediaPlayback } from "@/lib/media-playback";
+import {
+  MediaSignTimeoutError,
+  isBrowserUnsafeVideo,
+  selectMediaPlayback,
+  signWithTimeout,
+} from "@/lib/media-playback";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -104,6 +121,7 @@ export function ProjectDetailPage({
   project,
   assignedProfiles,
   availableProfiles,
+  completionProfiles,
   assignments,
   tasks,
   media,
@@ -118,6 +136,7 @@ export function ProjectDetailPage({
   project: ManagerProjectSummary;
   assignedProfiles: ManagerProfileSummary[];
   availableProfiles: ManagerProfileSummary[];
+  completionProfiles?: ManagerProfileSummary[];
   assignments: ProjectAssignment[];
   tasks: Task[];
   media: Media[];
@@ -140,6 +159,28 @@ export function ProjectDetailPage({
   const [addressLookupError, setAddressLookupError] = useState("");
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [removeAssignmentId, setRemoveAssignmentId] = useState<string | null>(null);
+  const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
+  // Drawer that surfaces every media row on this project — receipts,
+  // checkout videos, task attachments, journal photos. Filters and
+  // pagination live inside the drawer so the page stays light.
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  // Local optimistic copy of the task list. Soft-deletes drop the row
+  // here immediately so the manager doesn't see a flash before
+  // router.refresh repopulates from the server.
+  const [taskList, setTaskList] = useState<Task[]>(tasks);
+  useEffect(() => {
+    setTaskList(tasks);
+  }, [tasks]);
+  const [previewMedia, setPreviewMedia] = useState<{
+    item: Media;
+    signedUrl: string;
+    mimeType: string | null;
+    isPlaybackVersion: boolean;
+    /** True when the original is HEVC/.mov which most browsers can't decode. */
+    browserUnsafe: boolean;
+  } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
@@ -151,6 +192,10 @@ export function ProjectDetailPage({
   const mediaById = useMemo(
     () => new Map(media.map((m) => [m.id, m])),
     [media],
+  );
+  const profileNameById = useMemo(
+    () => buildProfileNameMap([...assignedProfiles, ...availableProfiles, ...(completionProfiles ?? [])]),
+    [assignedProfiles, availableProfiles, completionProfiles],
   );
 
   // 3-button project media upload (photo / video / pdf). Separate from
@@ -200,6 +245,97 @@ export function ProjectDetailPage({
     }
     return { photo, video, pdf, all: projectMediaItems.length };
   }, [projectMediaItems]);
+
+  // Gallery feed for the drawer — every media row on this project,
+  // including receipts / checkout / task attachments. The drawer
+  // filters, the page list above keeps showing only the
+  // "project_media" subset to match its existing semantics.
+  const galleryItems = useMemo<GalleryItem[]>(() => {
+    const profileNameById = new Map<string, string>();
+    for (const p of assignedProfiles) profileNameById.set(p.id, p.name);
+    for (const p of availableProfiles) profileNameById.set(p.id, p.name);
+    return media.map((entry) => ({
+      id: entry.id,
+      project_id: entry.project_id,
+      uploaded_by: entry.uploaded_by ?? null,
+      media_type: entry.media_type,
+      storage_path: entry.storage_path,
+      filename: entry.filename ?? null,
+      mime_type: entry.mime_type ?? null,
+      caption: entry.caption ?? null,
+      is_checkout: Boolean(entry.is_checkout),
+      time_event_id: entry.time_event_id ?? null,
+      metadata: (entry.metadata ?? null) as Record<string, unknown> | null,
+      created_at: entry.created_at,
+      projectName: project.name,
+      uploaderName: entry.uploaded_by ? profileNameById.get(entry.uploaded_by) ?? null : null,
+    }));
+  }, [media, assignedProfiles, availableProfiles, project.name]);
+
+  const galleryUploaderOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const item of galleryItems) {
+      if (item.uploaded_by && item.uploaderName && !seen.has(item.uploaded_by)) {
+        seen.set(item.uploaded_by, item.uploaderName);
+      }
+    }
+    return [...seen.entries()].map(([id, name]) => ({ id, name }));
+  }, [galleryItems]);
+
+  const checkoutMediaBySessionId = useMemo(() => {
+    const bySession = new Map<string, Media[]>();
+
+    for (const session of sessions) {
+      if (!session.clockOutTime) {
+        continue;
+      }
+
+      const clockInMs = new Date(session.clockInTime).getTime();
+      const clockOutMs = new Date(session.clockOutTime).getTime();
+      // Generous trailing window so a late upload still resolves to
+      // its shift. The previous 60-min cap dropped any video the
+      // worker uploaded the following morning, leaving the yellow
+      // "video missing" banner stuck on a shift whose video was
+      // already on disk. 24h is the same horizon the link route
+      // uses for its TOCTOU window.
+      const fallbackWindowEndMs = clockOutMs + 24 * 60 * 60 * 1000;
+      if (!Number.isFinite(clockInMs) || !Number.isFinite(clockOutMs)) {
+        continue;
+      }
+
+      const items = media
+        .filter((item) => {
+          if (item.deleted_at) return false;
+          if (!item.is_checkout) return false;
+          if (item.media_type !== "video") return false;
+          if (item.project_id !== session.projectId) return false;
+          if (item.uploaded_by !== session.profileId) return false;
+
+          if (
+            session.clockOutEventId &&
+            item.time_event_id === session.clockOutEventId
+          ) {
+            return true;
+          }
+
+          if (item.time_event_id !== null) return false;
+          const createdMs = new Date(item.created_at).getTime();
+          if (!Number.isFinite(createdMs)) return false;
+          return createdMs >= clockInMs && createdMs <= fallbackWindowEndMs;
+        })
+        .sort(
+          (left, right) =>
+            new Date(right.created_at).getTime() -
+            new Date(left.created_at).getTime(),
+        );
+
+      if (items.length > 0) {
+        bySession.set(session.id, items);
+      }
+    }
+
+    return bySession;
+  }, [media, sessions]);
 
   const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
 
@@ -641,43 +777,128 @@ export function ProjectDetailPage({
     router.refresh();
   }
 
-  // Inline click-to-open for the Project Media list. The list is rendered
-  // as bespoke JSX (not via TaskAttachmentList), so it doesn't inherit
-  // the shared component's signed-URL open handler — we replicate it
-  // here. Same pattern, same TTL, same private-bucket support.
+  // Click-to-open for the Project Media list.
+  //
+  // Videos and photos open in an in-page preview modal so the manager
+  // never has to download a file just to watch it. PDFs continue to
+  // open in a new tab — browsers handle PDF rendering natively, and
+  // an embedded <iframe> blocks the worker's signed-URL flow on
+  // tighter Content-Security-Policy setups.
+  //
+  // selectMediaPlayback decides what to sign:
+  //   • a transcoded H.264 MP4 under metadata.playback_path (when
+  //     transcoding_status === "ready"), OR
+  //   • the original storage_path otherwise.
+  //   • metadata.mux_playback_id is exposed for a future Mux signing
+  //     layer; we never feed that string through Supabase Storage.
   async function openProjectMediaItem(item: Media) {
     if (typeof window === "undefined") return;
-    // Sync tab open inside the click handler — see TaskAttachmentList
-    // for the iOS/Android popup-blocker rationale.
-    const tab = window.open("about:blank", "_blank");
-    if (!tab) {
-      console.warn("[project-media] popup blocked");
-      setMessage(t("projectDetail.mediaOpenFailed"));
-      return;
-    }
-    // selectMediaPlayback returns a Supabase Storage path in `path`:
-    // either the original upload, or a transcoded MP4/H.264 copy when
-    // one is ready under metadata.playback_path. The Mux pipeline
-    // writes its identifier to metadata.mux_playback_id (surfaced as
-    // playback.muxPlaybackId), which is NOT a Storage path and must
-    // never be signed through the 'media' bucket; that field stays
-    // unconsumed here until a separate Mux signed-URL flow exists.
+
     const playback = selectMediaPlayback(item as unknown as {
       storage_path: string;
       mime_type: string | null;
       metadata: Record<string, unknown> | null | undefined;
     });
+
+    // Documents/PDFs: external tab path is the safest UX, because a
+    // signed URL inside an iframe still has the same auth surface but
+    // the browser's PDF chrome (zoom, search, save) is much better
+    // than anything we'd build inline.
+    if (item.media_type === "pdf" || item.media_type === "document") {
+      const tab = window.open("about:blank", "_blank");
+      if (!tab) {
+        setMessage(t("projectDetail.mediaOpenFailed"));
+        return;
+      }
+      const normalized = normalizeStoragePath(playback.path);
+      const { data, error } = await supabase.storage
+        .from("media")
+        .createSignedUrl(normalized, 3600);
+      if (error || !data?.signedUrl) {
+        tab.close();
+        setMessage(t("projectDetail.mediaOpenFailed"));
+        return;
+      }
+      tab.location.href = data.signedUrl;
+      return;
+    }
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+    setPreviewMedia(null);
+    setMessage("");
+
     const normalized = normalizeStoragePath(playback.path);
+    // signWithTimeout caps the wait at MEDIA_SIGN_TIMEOUT_MS (9s) so
+    // a Supabase request that hangs at the transport layer (DNS stall,
+    // dev-server reverse-proxy bug, missing demo seed file) cannot
+    // strand the manager on a "Loading…" overlay — try/finally on a
+    // raw await wouldn't help, because `finally` only fires once the
+    // underlying promise settles.
+    try {
+      const signed = await signWithTimeout(
+        supabase.storage.from("media").createSignedUrl(normalized, 3600),
+      );
+      const { data, error } = signed;
+
+      if (error || !data?.signedUrl) {
+        const isTimeout = error instanceof MediaSignTimeoutError;
+        console.error("[project-media] failed to sign URL", error);
+        const userMessage = isTimeout
+          ? t("projectDetail.mediaOpenTimeout")
+          : t("projectDetail.mediaOpenFailed");
+        setPreviewError(userMessage);
+        setMessage(userMessage);
+        return;
+      }
+
+      setPreviewMedia({
+        item,
+        signedUrl: data.signedUrl,
+        mimeType: playback.mimeType,
+        isPlaybackVersion: playback.isPlaybackVersion,
+        browserUnsafe:
+          item.media_type === "video" &&
+          !playback.isPlaybackVersion &&
+          isBrowserUnsafeVideo(item as unknown as {
+            storage_path: string;
+            mime_type: string | null;
+            metadata: Record<string, unknown> | null | undefined;
+          }),
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    setPreviewMedia(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+  }
+
+  async function downloadProjectMediaItem(item: Pick<Media, "storage_path" | "filename">) {
+    if (typeof window === "undefined") return;
+    const normalized = normalizeStoragePath(item.storage_path);
+    const fallbackName = normalized.split("/").pop() ?? "download";
+    const downloadAs = (item.filename && item.filename.trim()) || fallbackName;
     const { data, error } = await supabase.storage
       .from("media")
-      .createSignedUrl(normalized, 3600);
+      .createSignedUrl(normalized, 3600, { download: downloadAs });
+
     if (error || !data?.signedUrl) {
-      console.error("[project-media] failed to sign URL", error);
-      tab.close();
+      console.error("[project-media] failed to sign download URL", error);
       setMessage(t("projectDetail.mediaOpenFailed"));
       return;
     }
-    tab.location.href = data.signedUrl;
+
+    const anchor = document.createElement("a");
+    anchor.href = data.signedUrl;
+    anchor.download = downloadAs;
+    anchor.rel = "noopener";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
   }
 
   async function handleProjectMediaUpload(
@@ -781,12 +1002,15 @@ export function ProjectDetailPage({
     setBusyKey(`task-${taskId}`);
     setMessage("");
 
+    const completedAt = nextStatus === "done" ? new Date().toISOString() : null;
+    const completedBy = nextStatus === "done" ? managerId : null;
+
     const { error } = await supabase
       .from("tasks")
       .update({
         status: nextStatus,
-        completed_at: nextStatus === "done" ? new Date().toISOString() : null,
-        completed_by: nextStatus === "done" ? managerId : null,
+        completed_at: completedAt,
+        completed_by: completedBy,
       })
       .eq("id", taskId);
 
@@ -796,8 +1020,51 @@ export function ProjectDetailPage({
       return;
     }
 
+    // Optimistic local update so the buttons re-render against the
+    // real status before router.refresh completes — without this the
+    // card would still offer "Start" until the next render even though
+    // the row in the DB is now done.
+    setTaskList((current) =>
+      current.map((task) =>
+        task.id === taskId
+          ? { ...task, status: nextStatus, completed_at: completedAt, completed_by: completedBy }
+          : task,
+      ),
+    );
+
     setBusyKey(null);
     setMessage(t("projectDetail.taskUpdated"));
+    router.refresh();
+  }
+
+  // Two-step soft-delete for project tasks. First click arms the
+  // confirmation; second click writes deleted_at. We never hard-delete
+  // — the row stays so /trash and audit_log keep their references.
+  async function handleDeleteTask(taskId: string) {
+    if (pendingDeleteTaskId !== taskId) {
+      setPendingDeleteTaskId(taskId);
+      setMessage(t("tasks.deleteSecondClick"));
+      return;
+    }
+
+    setBusyKey(`task-delete-${taskId}`);
+    setMessage("");
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", taskId);
+
+    if (error) {
+      setMessage(error.message);
+      setBusyKey(null);
+      return;
+    }
+
+    setTaskList((current) => current.filter((task) => task.id !== taskId));
+    setPendingDeleteTaskId(null);
+    setBusyKey(null);
+    setMessage(t("tasks.deleted"));
     router.refresh();
   }
 
@@ -878,7 +1145,7 @@ export function ProjectDetailPage({
               {t("common.tasks")}
             </div>
             <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-              {tasks.filter((task) => task.status !== "done" && task.status !== "cancelled").length}
+              {taskList.filter((task) => task.status !== "done" && task.status !== "cancelled").length}
             </div>
           </div>
           <div className="metric-panel rounded-[var(--radius-md)] p-3">
@@ -1261,7 +1528,7 @@ export function ProjectDetailPage({
         </div>
       </section>
 
-      <section className="flex flex-col gap-5">
+      <section id="tasks" className="flex scroll-mt-4 flex-col gap-5">
         <div className="surface-card p-4 order-2">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("common.tasks")}</h2>
           <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.tasksSubtitle")}</p>
@@ -1338,13 +1605,56 @@ export function ProjectDetailPage({
           </form>
 
           <div className="mt-5 space-y-3">
-            {tasks.map((task) => {
+            {taskList.map((task) => {
+              // Priority drives the LEFT accent stripe + the priority
+              // badge color. Status drives a separate badge so "urgent"
+              // (red) is never misread as "done" (green) — the bug we
+              // had before this fix.
               const prioColor =
                 task.priority === "urgent" || task.priority === "high"
                   ? "#ef4444"
                   : task.priority === "medium"
                     ? "#f59e0b"
                     : "#22c55e";
+              const statusColor =
+                task.status === "done"
+                  ? "var(--green)"
+                  : task.status === "in_progress"
+                    ? "var(--blue)"
+                    : task.status === "cancelled"
+                      ? "var(--red)"
+                      : "var(--text-muted)";
+              const statusLabelText =
+                task.status === "done"
+                  ? t("tasks.statusDone")
+                  : task.status === "in_progress"
+                    ? t("tasks.statusInProgress")
+                    : task.status === "cancelled"
+                      ? t("tasks.statusCancelled")
+                      : t("tasks.statusPending");
+              const canStart = task.status === "pending";
+              const canMarkDone = task.status === "pending" || task.status === "in_progress";
+              const canCancel = task.status !== "cancelled" && task.status !== "done";
+              const isPendingDelete = pendingDeleteTaskId === task.id;
+              const isBusy =
+                busyKey === `task-${task.id}` || busyKey === `task-delete-${task.id}`;
+              const rowAudit = getManagerTaskRowAuditText(
+                {
+                  ...task,
+                  assigneeName: task.assigned_to
+                    ? profileNameById.get(task.assigned_to) ?? null
+                    : null,
+                  completedByName: task.completed_by
+                    ? profileNameById.get(task.completed_by) ?? null
+                    : null,
+                },
+                profileNameById,
+                {
+                  unassigned: t("tasks.unassigned"),
+                  unknown: t("tasks.unknown"),
+                  formatCompletedAt: formatDateTime,
+                },
+              );
               return (
               <div
                 key={task.id}
@@ -1352,21 +1662,48 @@ export function ProjectDetailPage({
                 style={{ "--task-accent": prioColor } as React.CSSProperties}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
                     <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {assignedProfiles.find((worker) => worker.id === task.assigned_to)?.name ?? t("common.unassigned")} • {task.status}
+                      {rowAudit.assignedToText}
                     </div>
                   </div>
-                  <span
-                    className="shrink-0 rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                    style={{ background: `${prioColor}18`, color: prioColor }}
-                  >
-                    {task.priority}
-                  </span>
+                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                    <span
+                      className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                      style={{ background: `${prioColor}18`, color: prioColor }}
+                    >
+                      {task.priority}
+                    </span>
+                    <span
+                      className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                      style={{
+                        background: "rgba(148, 163, 184, 0.10)",
+                        color: statusColor,
+                      }}
+                    >
+                      {statusLabelText}
+                    </span>
+                  </div>
                 </div>
                 {task.description ? (
                   <p className="mt-3 text-sm text-[var(--text-secondary)]">{task.description}</p>
+                ) : null}
+                {task.status === "done" ? (
+                  <div
+                    className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-[var(--text-primary)]"
+                    data-testid="manager-project-task-row-completion-audit"
+                  >
+                    <span>
+                      {t("tasks.rowAssignedLabel")}: {rowAudit.assignedToText}
+                    </span>
+                    <span>
+                      {t("tasks.rowCompletedByLabel")}: {rowAudit.completedByText}
+                    </span>
+                    <span>
+                      {t("tasks.rowCompletedAtLabel")}: {rowAudit.completedAtText}
+                    </span>
+                  </div>
                 ) : null}
                 {(() => {
                   const refs = getAttachmentMediaIds(task)
@@ -1389,35 +1726,171 @@ export function ProjectDetailPage({
                     </>
                   );
                 })()}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {task.status !== "in_progress" ? (
+                {(() => {
+                  // Worker completion evidence — note, follow-up flag,
+                  // and any media the worker uploaded via the
+                  // completion modal. Drawn from tasks.metadata so an
+                  // archived task still surfaces the same panel after a
+                  // refresh — no separate fetch needed.
+                  const completionNote = getCompletionNote(task);
+                  const followUp = getFollowUpInfo(task);
+                  const audit = getTaskCompletionAudit(
+                    {
+                      ...task,
+                      completedByName: task.completed_by
+                        ? profileNameById.get(task.completed_by) ?? null
+                        : null,
+                    },
+                    profileNameById,
+                  );
+                  const completionRefs = getCompletionMediaIds(task)
+                    .map((id) => mediaById.get(id))
+                    .filter((m): m is NonNullable<typeof m> => Boolean(m))
+                    .map((m) => ({
+                      id: m.id,
+                      filename: m.filename,
+                      mime_type: m.mime_type,
+                      media_type: m.media_type,
+                      storage_path: m.storage_path,
+                    }));
+                  const hasAnyEvidence =
+                    Boolean(completionNote) ||
+                    followUp.required ||
+                    completionRefs.length > 0 ||
+                    audit.hasAudit;
+                  if (!hasAnyEvidence) return null;
+                  return (
+                    <div
+                      className="mt-3 rounded-[var(--radius-md)] border p-3"
+                      style={{
+                        borderColor: followUp.required
+                          ? "rgba(245, 158, 11, 0.35)"
+                          : "rgba(15, 168, 120, 0.24)",
+                        background: followUp.required
+                          ? "rgba(245, 158, 11, 0.06)"
+                          : "rgba(15, 168, 120, 0.06)",
+                      }}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                          {t("tasks.completionEvidenceHeader")}
+                        </div>
+                        {task.status === "done" ? (
+                          <span
+                            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                            style={{
+                              background: "rgba(15, 168, 120, 0.16)",
+                              color: "var(--green)",
+                            }}
+                          >
+                            {statusLabelText}
+                          </span>
+                        ) : null}
+                        {followUp.required ? (
+                          <span
+                            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                            style={{
+                              background: "rgba(245, 158, 11, 0.16)",
+                              color: "#f59e0b",
+                            }}
+                          >
+                            {t("tasks.followUpBadge")}
+                          </span>
+                        ) : null}
+                      </div>
+                      {audit.completedById ? (
+                        <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          {t("tasks.completionByLabel")}:{" "}
+                          {audit.completedByName ?? audit.completedById}
+                        </div>
+                      ) : null}
+                      {audit.completedAt ? (
+                        <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                          {t("tasks.completionAtLabel")}: {formatDateTime(audit.completedAt)}
+                        </div>
+                      ) : null}
+                      {completionNote ? (
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-primary)]">
+                          {completionNote}
+                        </p>
+                      ) : null}
+                      {followUp.required && followUp.note ? (
+                        <div className="mt-2 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2 text-xs text-[var(--text-secondary)]">
+                          <span className="font-semibold">{t("tasks.followUpNoteLabel")}: </span>
+                          {followUp.note}
+                        </div>
+                      ) : null}
+                      {completionRefs.length > 0 ? (
+                        <div className="mt-2">
+                          <TaskAttachmentList items={completionRefs} />
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })()}
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {canStart ? (
                     <button
                       type="button"
                       onClick={() => void handleUpdateTask(task.id, "in_progress")}
-                      disabled={busyKey === `task-${task.id}`}
+                      disabled={isBusy}
                       className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
                     >
                       {t("common.start")}
                     </button>
                   ) : null}
-                  {task.status !== "done" ? (
+                  {canMarkDone ? (
                     <button
                       type="button"
                       onClick={() => void handleUpdateTask(task.id, "done")}
-                      disabled={busyKey === `task-${task.id}`}
+                      disabled={isBusy}
                       className="button-base button-primary min-h-0 px-3 py-2 text-xs"
                     >
                       {t("common.done")}
                     </button>
                   ) : null}
-                  {task.status !== "cancelled" ? (
+                  {canCancel ? (
                     <button
                       type="button"
                       onClick={() => void handleUpdateTask(task.id, "cancelled")}
-                      disabled={busyKey === `task-${task.id}`}
+                      disabled={isBusy}
                       className="button-base button-danger-ghost min-h-0 px-3 py-2 text-xs"
                     >
                       {t("common.cancel")}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteTask(task.id)}
+                    disabled={isBusy}
+                    aria-label={t("common.remove")}
+                    title={t("common.remove")}
+                    className="ml-auto inline-flex items-center justify-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-semibold disabled:opacity-50"
+                    style={{
+                      borderColor: isPendingDelete
+                        ? "var(--red)"
+                        : "rgba(212, 81, 94, 0.3)",
+                      color: "var(--red)",
+                      background: isPendingDelete
+                        ? "rgba(212, 81, 94, 0.12)"
+                        : "transparent",
+                    }}
+                  >
+                    <Trash2 size={12} />
+                    {isPendingDelete ? t("common.yes") : null}
+                  </button>
+                  {isPendingDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPendingDeleteTaskId(null);
+                        setMessage("");
+                      }}
+                      disabled={isBusy}
+                      className="rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-semibold"
+                      style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                    >
+                      {t("common.no")}
                     </button>
                   ) : null}
                 </div>
@@ -1431,8 +1904,23 @@ export function ProjectDetailPage({
           <div className="surface-card p-4 order-1">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
-              <div className="text-xs font-mono text-[var(--text-secondary)] tabular-nums">
-                📷 {mediaCounts.photo}{"  "}🎥 {mediaCounts.video}{"  "}📄 {mediaCounts.pdf}
+              <div className="flex items-center gap-3">
+                <div className="text-xs font-mono text-[var(--text-secondary)] tabular-nums">
+                  📷 {mediaCounts.photo}{"  "}🎥 {mediaCounts.video}{"  "}📄 {mediaCounts.pdf}
+                </div>
+                {media.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setGalleryOpen(true)}
+                    className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                    style={{
+                      borderColor: "rgba(191, 162, 52, 0.4)",
+                      color: "var(--brand-yellow)",
+                    }}
+                  >
+                    {t("gallery.viewAll")}
+                  </button>
+                ) : null}
               </div>
             </div>
             <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.projectMediaSubtitle")}</p>
@@ -1592,7 +2080,17 @@ export function ProjectDetailPage({
                         className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
                         style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
                       >
-                        ↗ {t("messages.openFile")}
+                        <ExternalLink size={11} />
+                        {t("messages.openFile")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void downloadProjectMediaItem(item)}
+                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                        style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                      >
+                        <Download size={11} />
+                        {t("messages.downloadFile")}
                       </button>
                       <button
                         type="button"
@@ -1617,26 +2115,83 @@ export function ProjectDetailPage({
                   {t("projectDetail.noShifts")}
                 </div>
               ) : (
-                sessions.map((session) => (
-                  <div
-                    key={session.id}
-                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <Link href={`/team/${session.profileId}`} className="text-sm font-semibold text-[var(--text-primary)]">
-                          {session.profileName}
-                        </Link>
-                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                          {formatDateTime(session.clockInTime)}{session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}
+                sessions.map((session) => {
+                  const checkoutMedia = checkoutMediaBySessionId.get(session.id) ?? [];
+                  const shouldShowMissingVideo =
+                    session.checkoutStatus === "pending" && checkoutMedia.length === 0;
+
+                  return (
+                    <div
+                      key={session.id}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <Link href={`/team/${session.profileId}`} className="text-sm font-semibold text-[var(--text-primary)]">
+                            {session.profileName}
+                          </Link>
+                          <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                            {formatDateTime(session.clockInTime)}{session.clockOutTime ? ` - ${formatDateTime(session.clockOutTime)}` : ` - ${t("common.live").toLowerCase()}`}
+                          </div>
+                        </div>
+                        <div className="text-sm font-semibold text-[var(--text-primary)]">
+                          {formatDurationCompact(session.durationMinutes)}
                         </div>
                       </div>
-                      <div className="text-sm font-semibold text-[var(--text-primary)]">
-                        {formatDurationCompact(session.durationMinutes)}
-                      </div>
+
+                      {checkoutMedia.length > 0 ? (
+                        <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(15,168,120,0.28)] bg-[rgba(15,168,120,0.06)] p-2">
+                          <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--green)]">
+                            <FileVideo2 size={12} />
+                            {t("projectDetail.checkoutVideoEvidence")}
+                          </div>
+                          <div className="space-y-2">
+                            {checkoutMedia.map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-[rgba(15,17,23,0.45)] px-2 py-2"
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                                    {item.filename ?? t("journal.checkoutVideo")}
+                                  </div>
+                                  <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                                    {formatDateTime(item.created_at)}
+                                    {item.time_event_id ? "" : ` · ${t("projectDetail.unlinkedCheckoutVideo")}`}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => void openProjectMediaItem(item)}
+                                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                                    style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
+                                  >
+                                    <ExternalLink size={11} />
+                                    {t("messages.openFile")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void downloadProjectMediaItem(item)}
+                                    className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
+                                    style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                                  >
+                                    <Download size={11} />
+                                    {t("messages.downloadFile")}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : shouldShowMissingVideo ? (
+                        <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] px-3 py-2 text-xs font-semibold text-[#f59e0b]">
+                          {t("projectDetail.checkoutVideoMissing")}
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -1657,6 +2212,133 @@ export function ProjectDetailPage({
         onClose={() => setFlagModalMediaId(null)}
         onMutate={() => void refreshOpenFlags()}
       />
+
+      <MediaGalleryDrawer
+        open={galleryOpen}
+        title={project.name}
+        items={galleryItems}
+        showUploaderFilter
+        uploaderOptions={galleryUploaderOptions}
+        onClose={() => setGalleryOpen(false)}
+      />
+
+      {previewMedia ? (
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.7)", zIndex: 1000 }}
+          onClick={closePreview}
+        >
+          <div
+            className="surface-card w-full max-w-[900px] max-h-[90vh] overflow-y-auto p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="truncate text-base font-bold text-[var(--text-primary)]">
+                  {previewMedia.item.filename ?? previewMedia.item.media_type}
+                </h2>
+                <div className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  {formatDateTime(previewMedia.item.created_at)}
+                  {" · "}
+                  {previewMedia.item.media_type}
+                  {previewMedia.isPlaybackVersion ? (
+                    <span className="ml-2 rounded-[var(--radius-pill)] bg-[rgba(15,168,120,0.16)] px-1.5 py-0.5 font-semibold text-[var(--green)]">
+                      {t("projectDetail.mediaPlaybackVersion")}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closePreview}
+                aria-label={t("common.cancel")}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="mt-3 flex justify-center rounded-[var(--radius-md)] bg-black p-2">
+              {previewMedia.item.media_type === "video" ? (
+                <video
+                  key={previewMedia.signedUrl}
+                  src={previewMedia.signedUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="max-h-[70vh] w-full"
+                >
+                  {previewMedia.mimeType ? (
+                    <source src={previewMedia.signedUrl} type={previewMedia.mimeType} />
+                  ) : null}
+                </video>
+              ) : previewMedia.item.media_type === "photo" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewMedia.signedUrl}
+                  alt={previewMedia.item.filename ?? "media"}
+                  className="max-h-[70vh] w-auto object-contain"
+                />
+              ) : null}
+            </div>
+
+            {previewMedia.browserUnsafe ? (
+              <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] px-3 py-2 text-xs font-semibold text-[#f59e0b]">
+                {t("projectDetail.mediaBrowserUnsafe")}
+              </div>
+            ) : null}
+
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <a
+                href={previewMedia.signedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
+              >
+                <ExternalLink size={12} />
+                {t("messages.openFile")}
+              </a>
+              <button
+                type="button"
+                onClick={() => void downloadProjectMediaItem(previewMedia.item)}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+              >
+                <Download size={12} />
+                {t("messages.downloadFile")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {previewLoading && !previewMedia ? (
+        // Click-anywhere dismiss is a hard floor: if a future code path
+        // fails to clear `previewLoading`, the manager can still escape
+        // the overlay by tapping it. Belt-and-braces against the
+        // "stuck on Loading" report. Inline numeric z-index sidesteps
+        // any Tailwind arbitrary-value compile gap under Turbopack.
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4 text-sm font-semibold text-white"
+          style={{ background: "rgba(0,0,0,0.7)", zIndex: 990 }}
+          onClick={closePreview}
+        >
+          {t("common.loading")}
+        </div>
+      ) : null}
+
+      {previewError && !previewMedia ? (
+        <div
+          className="pointer-events-none fixed inset-x-0 top-4 flex justify-center"
+          style={{ zIndex: 1010 }}
+        >
+          <div className="rounded-[var(--radius-md)] bg-[rgba(212,81,94,0.14)] px-3 py-2 text-xs font-semibold text-[var(--red)]">
+            {previewError}
+          </div>
+        </div>
+      ) : null}
 
       {showEditModal ? (
         <div
@@ -2031,7 +2713,7 @@ function MaterialsSection({
   }
 
   return (
-    <section className="surface-card p-4">
+    <section id="materials" className="surface-card scroll-mt-4 p-4">
       <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("materials.title")}</h2>
 
       <form className="mt-4 flex flex-wrap gap-2" onSubmit={handleAdd}>

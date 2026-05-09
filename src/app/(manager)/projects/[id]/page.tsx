@@ -11,6 +11,12 @@ import { deriveWorkerGpsStatus, type WorkerGpsStatus } from "@/lib/gps-status";
 import { deriveGpsFreshness, type GpsFreshness } from "@/lib/gps-freshness";
 import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
 import { createClient } from "@/lib/supabase/server";
+import {
+  collectTaskReferencedMediaIds,
+  mergeMediaWithTaskReferences,
+} from "@/lib/task-media-hydration";
+import { getTaskCompletionAudit } from "@/lib/task-notifications";
+import type { Media } from "@/types/database";
 
 export default async function ProjectDetailRoutePage({
   params,
@@ -35,8 +41,70 @@ export default async function ProjectDetailRoutePage({
     return !assignedIds.has(profile.id) && profile.is_active && !isManagerRole(profile.role);
   });
   const tasks = data.tasks.filter((task) => task.project_id === id && !task.deleted_at).slice(0, 24);
-  const media = data.media.filter((item) => item.project_id === id).slice(0, 18);
+  const completionProfileIds = new Set(
+    tasks
+      .map((task) => getTaskCompletionAudit(task).completedById)
+      .filter((profileId): profileId is string => Boolean(profileId)),
+  );
+  const completionProfiles = profileSummaries.filter((profile) =>
+    completionProfileIds.has(profile.id),
+  );
   const projectSessions = sessions.filter((session) => session.projectId === id).slice(0, 18);
+  const projectMediaRows = data.media.filter((item) => item.project_id === id);
+  const clockOutEventIds = new Set(
+    projectSessions
+      .map((session) => session.clockOutEventId)
+      .filter((eventId): eventId is string => Boolean(eventId)),
+  );
+  const checkoutEvidenceMedia = projectMediaRows.filter((item) => {
+    if (item.deleted_at) return false;
+    if (!item.is_checkout) return false;
+    if (item.media_type !== "video") return false;
+    if (item.time_event_id && clockOutEventIds.has(item.time_event_id)) {
+      return true;
+    }
+
+    if (item.time_event_id !== null) return false;
+    const createdMs = new Date(item.created_at).getTime();
+    if (!Number.isFinite(createdMs)) return false;
+
+    return projectSessions.some((session) => {
+      if (!session.clockOutTime) return false;
+      if (item.uploaded_by !== session.profileId) return false;
+      const clockInMs = new Date(session.clockInTime).getTime();
+      const clockOutMs = new Date(session.clockOutTime).getTime();
+      if (!Number.isFinite(clockInMs) || !Number.isFinite(clockOutMs)) {
+        return false;
+      }
+      return createdMs >= clockInMs && createdMs <= clockOutMs + 24 * 60 * 60 * 1000;
+    });
+  });
+  const taskReferencedMediaIds = collectTaskReferencedMediaIds(tasks);
+  const knownMediaIds = new Set(data.media.map((item) => item.id));
+  const missingTaskMediaIds = taskReferencedMediaIds.filter((mediaId) => !knownMediaIds.has(mediaId));
+  let missingTaskMediaRows: Media[] = [];
+  if (missingTaskMediaIds.length > 0) {
+    const supabase = await createClient();
+    const { data: referencedMedia, error: referencedMediaError } = await supabase
+      .from("media")
+      .select("*")
+      .in("id", missingTaskMediaIds)
+      .eq("project_id", id)
+      .returns<Media[]>();
+    if (referencedMediaError) {
+      throw new Error(`Task media query failed: ${referencedMediaError.message}`);
+    }
+    missingTaskMediaRows = referencedMedia ?? [];
+  }
+
+  const media = mergeMediaWithTaskReferences(
+    [...projectMediaRows.slice(0, 18), ...checkoutEvidenceMedia],
+    [...data.media, ...missingTaskMediaRows],
+    taskReferencedMediaIds,
+  ).sort(
+    (left, right) =>
+      new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+  );
 
   const clockInEventById = new Map(
     data.timeEvents
@@ -141,6 +209,7 @@ export default async function ProjectDetailRoutePage({
       project={project}
       assignedProfiles={assignedProfiles}
       availableProfiles={availableProfiles}
+      completionProfiles={completionProfiles}
       assignments={assignments}
       tasks={tasks}
       media={media}

@@ -25,6 +25,7 @@ export const PRIORITY_EMOJI: Record<MessagePriority, string> = {
 
 export interface MessageAttachment {
   url: string;
+  storagePath?: string;
   filename: string;
   type: "image" | "video" | "pdf";
   size: number;

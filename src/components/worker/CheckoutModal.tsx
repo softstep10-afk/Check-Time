@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Check, X } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
+import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 
 function startOfTodayMs(): number {
   const d = new Date();
@@ -22,6 +23,7 @@ export function CheckoutModal({
   const { t } = useTranslation();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickedAt, setPickedAt] = useState<number | null>(null);
+  const [checkoutNote, setCheckoutNote] = useState("");
 
   // A "today's checkout video" is any media row marked is_checkout=true
   // for the current project, captured today.
@@ -42,6 +44,7 @@ export function CheckoutModal({
 
   function handleClose() {
     setPickedAt(null);
+    setCheckoutNote("");
     onClose();
   }
 
@@ -65,13 +68,19 @@ export function CheckoutModal({
   async function handlePick(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    await uploadMedia(files, "", "before_leave");
+    await uploadMedia(files, checkoutNote, "before_leave");
     setPickedAt(Date.now());
     if (fileRef.current) fileRef.current.value = "";
   }
 
   async function handleCheckOut() {
-    await clockOut();
+    // Pass the worker's note so the closing time_event captures it in
+    // metadata.checkout_note. The same string is also used as
+    // media.caption when a before-leave video is uploaded above —
+    // keeping both copies means the manager sees the note whether they
+    // open the shift via Day Detail (clock_out row) or open the video
+    // (caption under the player).
+    await clockOut({ note: checkoutNote });
     handleClose();
   }
 
@@ -148,6 +157,17 @@ export function CheckoutModal({
             </div>
           </div>
         ) : null}
+
+        <div className="mt-4">
+          <TextInputWithVoice
+            multiline
+            rows={3}
+            value={checkoutNote}
+            onChange={(event) => setCheckoutNote(event.target.value)}
+            placeholder={t("clock.checkoutNotePlaceholder")}
+            className="min-h-[88px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+          />
+        </div>
 
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button

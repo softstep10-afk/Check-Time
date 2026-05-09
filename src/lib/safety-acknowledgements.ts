@@ -52,10 +52,15 @@ export interface WriteSafetyAckParams {
 
 /**
  * Insert a single safety_acknowledgements row. Returns the new id on
- * success. Errors are returned, never thrown — the caller should still
- * proceed with clock-in if the ack write fails (network, RLS, table
- * not migrated yet) so a missing audit row never traps a worker on a
- * real construction site.
+ * success.
+ *
+ * The caller MUST treat a non-ok result as a hard failure and refuse
+ * to start the shift: the safety brief is the audit gate, and a shift
+ * that opens without a corresponding ack row in the database leaves
+ * the org with no defensible record that the worker saw the rules.
+ * Errors are returned (never thrown) so the caller can decide how to
+ * surface the message — but it must not silently fall through to
+ * clockIn the way the original best-effort wiring did.
  */
 export async function writeSafetyAck(
   supabase: SupabaseClient,

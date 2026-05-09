@@ -102,10 +102,9 @@ export function SendMessageForm({
       return null;
     }
 
-    const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-
     return {
-      url: urlData.publicUrl,
+      url: "",
+      storagePath: path,
       filename: file.name,
       type: classifyFile(file),
       size: file.size,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deriveShiftReview, isShiftActionable } from "@/lib/shift-review";
+import {
+  EXTREME_SHIFT_MINUTES,
+  WARN_SHIFT_MINUTES,
+  deriveShiftReview,
+  isShiftActionable,
+  shiftDurationSeverity,
+} from "@/lib/shift-review";
 import type { GpsFreshness } from "@/lib/gps-freshness";
 
 function fresh(status: GpsFreshness["status"]): GpsFreshness {
@@ -176,7 +182,7 @@ describe("deriveShiftReview — closed shifts", () => {
     expect(r.status).toBe("normal");
   });
 
-  it("does not flag closed shifts on duration alone", () => {
+  it("flags closed long shifts because payroll needs review before pay", () => {
     const r = deriveShiftReview({
       isOpen: false,
       durationMinutes: 18 * 60,
@@ -185,7 +191,88 @@ describe("deriveShiftReview — closed shifts", () => {
       requireVideo: false,
       videoStatus: "not_required",
     });
-    expect(r.status).toBe("normal");
+    expect(r.status).toBe("long_shift");
+    expect(r.reasons).toContain("long_shift");
+  });
+
+  it("keeps video_missing as the top closed-shift status while preserving long_shift as a reason", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 18 * 60,
+      hadGpsAtClockIn: false,
+      gpsFreshness: null,
+      requireVideo: true,
+      videoStatus: "pending",
+    });
+    expect(r.status).toBe("video_missing");
+    expect(r.reasons).toContain("video_missing");
+    expect(r.reasons).toContain("long_shift");
+  });
+
+  it("promotes a closed extreme shift (>=24h) to needs_review even with no other reasons", () => {
+    // The Vasiliy / Dom / 144h regression: a closed shift this long is
+    // indistinguishable from a forgotten clock-out and must surface in
+    // the Overview's red alerts band — not just appear quietly in the
+    // worker profile.
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 144 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("needs_review");
+    expect(r.reasons).toContain("long_shift");
+  });
+
+  it("also promotes a closed extreme shift when checkout video is missing", () => {
+    // video_missing alone normally wins over long_shift, but at extreme
+    // duration the duration is the dominant problem and the row should
+    // render red, not amber.
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 30 * 60,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: true,
+      videoStatus: "pending",
+    });
+    expect(r.status).toBe("needs_review");
+    expect(r.reasons).toContain("video_missing");
+    expect(r.reasons).toContain("long_shift");
+  });
+
+  it("keeps amber long_shift between 12h and the extreme threshold", () => {
+    // Just below the extreme cutoff: still long_shift, NOT needs_review.
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: EXTREME_SHIFT_MINUTES - 1,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("long_shift");
+  });
+});
+
+describe("shiftDurationSeverity", () => {
+  // Visual severity bands for closed shifts per the manager visibility
+  // spec: warning > 16h, critical > 24h. Below 16h is "ok" (no chip).
+  it("returns ok for short shifts", () => {
+    expect(shiftDurationSeverity(8 * 60)).toBe("ok");
+    expect(shiftDurationSeverity(WARN_SHIFT_MINUTES - 1)).toBe("ok");
+  });
+  it("returns warning at the 16h threshold and below 24h", () => {
+    expect(shiftDurationSeverity(WARN_SHIFT_MINUTES)).toBe("warning");
+    expect(shiftDurationSeverity(20 * 60)).toBe("warning");
+    expect(shiftDurationSeverity(EXTREME_SHIFT_MINUTES - 1)).toBe("warning");
+  });
+  it("returns critical at and beyond 24h", () => {
+    expect(shiftDurationSeverity(EXTREME_SHIFT_MINUTES)).toBe("critical");
+    // Vasia's 144h shift — must be critical, not warning.
+    expect(shiftDurationSeverity(144 * 60)).toBe("critical");
   });
 });
 

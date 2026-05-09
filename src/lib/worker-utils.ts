@@ -207,9 +207,45 @@ function getProjectName(projectsById: Map<string, WorkerProject>, projectId: str
   return projectsById.get(projectId)?.name ?? "Unknown project";
 }
 
+const CHECKOUT_ORPHAN_BEFORE_CLOCK_IN_GRACE_MS = 15 * 60 * 1000;
+const CHECKOUT_ORPHAN_AFTER_CLOCK_OUT_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function mediaTimeMs(item: WorkerMediaItem): number | null {
+  const value = new Date(item.created_at).getTime();
+  return Number.isFinite(value) ? value : null;
+}
+
+function findOrphanCheckoutMedia(
+  clockInEvent: TimeEvent,
+  clockOutEvent: TimeEvent,
+  orphanCheckoutMedia: WorkerMediaItem[],
+  usedOrphanMediaIds: Set<string>,
+): WorkerMediaItem | null {
+  const clockInMs = new Date(clockInEvent.event_time).getTime();
+  const clockOutMs = new Date(clockOutEvent.event_time).getTime();
+
+  if (!Number.isFinite(clockInMs) || !Number.isFinite(clockOutMs)) {
+    return null;
+  }
+
+  const windowStart = clockInMs - CHECKOUT_ORPHAN_BEFORE_CLOCK_IN_GRACE_MS;
+  const windowEnd = clockOutMs + CHECKOUT_ORPHAN_AFTER_CLOCK_OUT_GRACE_MS;
+
+  return (
+    orphanCheckoutMedia.find((item) => {
+      if (usedOrphanMediaIds.has(item.id)) return false;
+      if (item.project_id !== clockOutEvent.project_id) return false;
+      const createdMs = mediaTimeMs(item);
+      if (createdMs === null) return false;
+      return createdMs >= windowStart && createdMs <= windowEnd;
+    }) ?? null
+  );
+}
+
 function getCheckoutStatus(
   clockOutEvent: TimeEvent | null,
   checkoutMediaByEventId: Map<string, WorkerMediaItem>,
+  orphanCheckoutMedia?: WorkerMediaItem | null,
 ): WorkerSession["checkoutStatus"] {
   if (!clockOutEvent) {
     return "not_required";
@@ -224,7 +260,34 @@ function getCheckoutStatus(
     return "uploaded";
   }
 
+  if (orphanCheckoutMedia) {
+    return "uploaded";
+  }
+
   return clockOutEvent.video_status;
+}
+
+/**
+ * Mirror of getCheckoutStatus for the start-of-shift video. Sources
+ * the truth from `clock_in.video_status`. Falls back to "uploaded"
+ * when a matching `before_work` media row already exists locally so
+ * the warning clears optimistically while the linker route flips
+ * the event row server-side.
+ */
+function getStartVideoStatus(
+  clockInEvent: TimeEvent,
+  startMediaByEventId: Map<string, WorkerMediaItem>,
+): WorkerSession["startVideoStatus"] {
+  if (clockInEvent.video_status === "not_required") {
+    return "not_required";
+  }
+
+  const startMedia = startMediaByEventId.get(clockInEvent.id);
+  if (startMedia) {
+    return "uploaded";
+  }
+
+  return clockInEvent.video_status;
 }
 
 export function buildWorkerSessions(
@@ -239,6 +302,32 @@ export function buildWorkerSessions(
   const checkoutMediaByEventId = new Map(
     media
       .filter((item) => item.is_checkout && item.time_event_id)
+      .map((item) => [item.time_event_id as string, item]),
+  );
+  const orphanCheckoutMedia = media
+    .filter(
+      (item) =>
+        item.is_checkout &&
+        item.media_type === "video" &&
+        item.time_event_id === null,
+    )
+    .sort((left, right) => {
+      return (mediaTimeMs(left) ?? 0) - (mediaTimeMs(right) ?? 0);
+    });
+  const usedOrphanMediaIds = new Set<string>();
+  // Start-video proof: media tagged metadata.kind="before_work" and
+  // linked back to the clock_in event. Same shape as the checkout map,
+  // different filter so the two evidence streams never collide.
+  const startMediaByEventId = new Map(
+    media
+      .filter((item) => {
+        const meta = item.metadata as Record<string, unknown> | null;
+        return (
+          item.is_checkout === false &&
+          item.time_event_id !== null &&
+          meta?.kind === "before_work"
+        );
+      })
       .map((item) => [item.time_event_id as string, item]),
   );
   const sessions: WorkerSession[] = [];
@@ -267,6 +356,16 @@ export function buildWorkerSessions(
       ),
     );
 
+    const orphanProof = findOrphanCheckoutMedia(
+      openClockIn,
+      event,
+      orphanCheckoutMedia,
+      usedOrphanMediaIds,
+    );
+    if (orphanProof) {
+      usedOrphanMediaIds.add(orphanProof.id);
+    }
+
     sessions.push({
       id: openClockIn.id,
       projectId: openClockIn.project_id,
@@ -276,7 +375,8 @@ export function buildWorkerSessions(
       clockInTime: openClockIn.event_time,
       clockOutTime: event.event_time,
       durationMinutes,
-      checkoutStatus: getCheckoutStatus(event, checkoutMediaByEventId),
+      checkoutStatus: getCheckoutStatus(event, checkoutMediaByEventId, orphanProof),
+      startVideoStatus: getStartVideoStatus(openClockIn, startMediaByEventId),
     });
 
     openClockIn = null;
@@ -298,6 +398,7 @@ export function buildWorkerSessions(
       clockOutTime: null,
       durationMinutes,
       checkoutStatus: "not_required",
+      startVideoStatus: getStartVideoStatus(openClockIn, startMediaByEventId),
     });
   }
 
@@ -311,6 +412,11 @@ export function deriveClockState(sessions: WorkerSession[]): WorkerClockState {
   const pendingCheckout = sessions.find(
     (session) => session.clockOutTime && session.checkoutStatus === "pending",
   ) ?? null;
+  // Start-video gate is anchored to the open shift only — once a worker
+  // clocks out, the close-side flow takes over and a stale "start
+  // required" warning would just confuse them.
+  const pendingStartVideo =
+    openSession && openSession.startVideoStatus === "pending" ? openSession : null;
 
   return {
     isClockedIn: Boolean(openSession),
@@ -321,6 +427,9 @@ export function deriveClockState(sessions: WorkerSession[]): WorkerClockState {
     pendingCheckoutEventId: pendingCheckout?.clockOutEventId ?? null,
     pendingCheckoutProjectId: pendingCheckout?.projectId ?? null,
     pendingCheckoutProjectName: pendingCheckout?.projectName ?? null,
+    pendingStartVideoEventId: pendingStartVideo?.clockInEventId ?? null,
+    pendingStartVideoProjectId: pendingStartVideo?.projectId ?? null,
+    pendingStartVideoProjectName: pendingStartVideo?.projectName ?? null,
   };
 }
 
