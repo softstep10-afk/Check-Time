@@ -53,6 +53,16 @@ import {
   type QueuedTimeEventPayload,
 } from "@/lib/offline-time-events";
 import type { AppMessage } from "@/lib/message-types";
+import {
+  buildTaskCompletionMetadata,
+  countUnseenTasks,
+  isTaskVisibleToWorker,
+  loadTaskLastSeen,
+  saveTaskLastSeen,
+  shouldBlockCompletionFileUpload,
+} from "@/lib/task-notifications";
+import { uploadTaskAttachment } from "@/lib/task-attachments";
+import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
 
 const navItems = [
   { href: "/clock", icon: Timer, label: "Clock", labelKey: "worker.navClock" as TranslationKey },
@@ -67,9 +77,35 @@ type BannerState = {
   text: string;
 } | null;
 
-type UploadMode = "journal" | "checkout" | "before_leave";
+function checkoutLinkResponseHasProof(body: unknown): boolean {
+  if (!body || typeof body !== "object") return false;
+  const value = body as { linked?: unknown; mediaIds?: unknown };
+  if (typeof value.linked === "number" && value.linked > 0) return true;
+  return Array.isArray(value.mediaIds) && value.mediaIds.length > 0;
+}
 
-type ClockOptions = { skipGps?: boolean };
+type UploadMode = "journal" | "checkout" | "before_leave" | "before_work";
+
+type ClockOptions = {
+  skipGps?: boolean;
+  /**
+   * Original GPS error kind that drove the worker to choose "Start
+   * without GPS". When skipGps=true and gpsErrorKind is set, the
+   * value is stamped into time_events.metadata so manager review
+   * (shift-review, deriveShiftReview) can distinguish a denied
+   * permission from an unavailable signal from a hardware-less
+   * device. Optional — the existing "Skip" path on /clock that does
+   * not first surface the prompt simply omits this.
+   */
+  gpsErrorKind?: GpsErrorKind;
+  /**
+   * Worker-provided checkout note. Persisted to time_events.metadata
+   * so the manager Day Detail row can render it next to the closing
+   * event, even when no checkout video was attached (require_video=false
+   * shifts still benefit from "I left early because…" context).
+   */
+  note?: string;
+};
 
 type WorkerShellContextValue = {
   shell: WorkerShellData;
@@ -85,9 +121,33 @@ type WorkerShellContextValue = {
   clockIn: (projectId: string, options?: ClockOptions) => Promise<void>;
   clockOut: (options?: ClockOptions) => Promise<void>;
   uploadMedia: (files: FileList | File[], caption: string, mode: UploadMode) => Promise<void>;
-  updateTaskStatus: (taskId: string, nextStatus: TaskStatus) => Promise<void>;
+  updateTaskStatus: (
+    taskId: string,
+    nextStatus: TaskStatus,
+    options?: {
+      note?: string;
+      submittedFromCompletionModal?: true;
+      followUpRequired?: boolean;
+      followUpNote?: string;
+      files?: File[];
+      projectId?: string | null;
+      existingMetadata?: Record<string, unknown> | null;
+    },
+  ) => Promise<void>;
   toggleMute: () => void;
   drainOfflineQueue: () => Promise<void>;
+  /**
+   * Count of tasks that are visible to this worker AND newer than
+   * the locally-stored "last seen" timestamp. Drives the bell badge
+   * and the /my-tasks page banner. Cleared by markTasksSeen().
+   */
+  unseenTaskCount: number;
+  /**
+   * Stamp the worker's last-seen-tasks marker to "now" so the badge
+   * drops to zero. Called on /my-tasks mount; safe to call multiple
+   * times.
+   */
+  markTasksSeen: () => void;
 };
 
 const WorkerShellContext = createContext<WorkerShellContextValue | null>(null);
@@ -188,6 +248,7 @@ function applyQueuedEventsToShell(
           clockOutTime: null,
           durationMinutes: 0,
           checkoutStatus: "not_required",
+          startVideoStatus: item.payload.video_status,
         },
         ...working,
       ];
@@ -625,6 +686,131 @@ export function WorkerShell({
     };
   }, [supabase, router, shell.profile.id]);
 
+  // ── Task notifications (unseen badge + new-task banner) ─────────────
+  //
+  // localStorage stores the worker's last-seen-tasks ISO timestamp.
+  // Lazy-init: read once at mount, then update only via markTasksSeen
+  // or the seed-on-first-load effect below. The seed avoids a flood
+  // banner on a brand-new device where every existing task would
+  // otherwise look "new".
+  const [taskLastSeenAt, setTaskLastSeenAt] = useState<string | null>(() =>
+    loadTaskLastSeen(shell.profile.id),
+  );
+
+  // Project access set used to test whether a project-level task
+  // (assigned_to=null) is visible. Recomputed when the projects list
+  // churns; cheap.
+  const visibleProjectIds = useMemo(
+    () => new Set(shell.projects.map((p) => p.id)),
+    [shell.projects],
+  );
+
+  // Seed lastSeenAt to the most recent visible task on first load.
+  // Prevents the badge from showing every old task as "new" on a fresh
+  // device. Idempotent — only seeds when the value is still null.
+  useEffect(() => {
+    if (taskLastSeenAt) return;
+    const result = countUnseenTasks(shell.tasks, null, {
+      profileId: shell.profile.id,
+      visibleProjectIds,
+    });
+    if (!result.latestCreatedAt) return;
+    saveTaskLastSeen(shell.profile.id, result.latestCreatedAt);
+    setTaskLastSeenAt(result.latestCreatedAt);
+  }, [taskLastSeenAt, shell.tasks, shell.profile.id, visibleProjectIds]);
+
+  const unseenTaskCount = useMemo(() => {
+    return countUnseenTasks(shell.tasks, taskLastSeenAt, {
+      profileId: shell.profile.id,
+      visibleProjectIds,
+    }).count;
+  }, [shell.tasks, taskLastSeenAt, shell.profile.id, visibleProjectIds]);
+
+  const markTasksSeen = useCallback(() => {
+    const now = new Date().toISOString();
+    saveTaskLastSeen(shell.profile.id, now);
+    setTaskLastSeenAt(now);
+  }, [shell.profile.id]);
+
+  // ── Tasks realtime subscription ─────────────────────────────────────
+  //
+  // INSERT: a new task arriving for this worker (personal or project-
+  // level) refreshes the shell so it appears in shell.tasks, and if the
+  // row would be visible to this worker we also surface a banner +
+  // optional sound. UPDATE: just refresh — status changes shouldn't
+  // ping the banner.
+  //
+  // RLS on the tasks table already limits the broadcast payload to
+  // rows this user can see, so an unfiltered subscription is safe;
+  // the client-side visibility check is belt-and-suspenders for
+  // edge-cases (e.g. a row updated by a manager that the worker can
+  // see but didn't subscribe to project-wise).
+  useEffect(() => {
+    const channel = supabase
+      .channel(`worker-tasks-${shell.profile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "tasks",
+        },
+        (payload) => {
+          const row = payload.new as {
+            id: string;
+            assigned_to: string | null;
+            project_id: string | null;
+            status: string;
+            created_at: string;
+            deleted_at?: string | null;
+            title?: string | null;
+          } | null;
+          if (!row) return;
+          if (
+            !isTaskVisibleToWorker(row, {
+              profileId: shell.profile.id,
+              visibleProjectIds,
+            })
+          ) {
+            return;
+          }
+          // Surface the new task — banner + sound (unless muted) +
+          // shell refresh so it lands in shell.tasks.
+          const projectName = row.project_id
+            ? shell.projects.find((p) => p.id === row.project_id)?.name ?? null
+            : null;
+          const detail = projectName
+            ? `${t("tasks.newTaskBanner")} · ${projectName}`
+            : t("tasks.newTaskBanner");
+          setBanner({ tone: "info", text: detail });
+          if (!muted) {
+            // Reuse the clock-in chime — short, distinct enough from the
+            // checkout double-tone, and the AudioContext is already
+            // unlocked once the worker has interacted with the shell.
+            playClockInSound();
+          }
+          router.refresh();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tasks",
+        },
+        () => {
+          // No banner on edits / status changes — just keep the list
+          // fresh so the worker sees re-assignments and re-priorities.
+          router.refresh();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, router, shell.profile.id, visibleProjectIds, shell.projects, muted, t]);
+
   useEffect(() => {
     if (!mounted) return;
     if (!shell.clockState.isClockedIn || !shell.clockState.clockInTime) {
@@ -750,6 +936,28 @@ export function WorkerShell({
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 
+      // Reuse `profile.require_video` as the "video evidence" gate at
+      // both ends of a shift: when on, the worker must upload a clip
+      // before clock-in (start proof) AND before clock-out (end proof).
+      // The clock_in event is created with video_status="pending" so
+      // the manager-side review can flag a stuck warning until the
+      // /api/worker/link-checkin-video route stamps the orphan upload
+      // and flips video_status to "uploaded".
+      const startVideoStatus: "pending" | "not_required" =
+        shell.profile.require_video ? "pending" : "not_required";
+
+      // GPS-status fields surface to manager review via deriveShiftReview.
+      // When the worker explicitly opts to start without GPS via the
+      // prompt, options.gpsErrorKind carries the original failure reason
+      // (denied / unavailable / unsupported) so the shift can be marked
+      // gps_denied vs no_gps vs gps_unsupported in metadata. When the
+      // worker has GPS, the helper returns an empty object so the
+      // marker fields stay off entirely.
+      const noGpsMetadata = buildNoGpsMetadata({
+        skippedGps: !gps,
+        errorKind: options?.gpsErrorKind ?? null,
+      });
+
       const insertPayload: QueuedTimeEventPayload = {
         org_id: shell.profile.org_id,
         profile_id: shell.profile.id,
@@ -759,12 +967,12 @@ export function WorkerShell({
         gps_point: gps ? toSupabasePoint(gps) : null,
         gps_accuracy_m: gps ? gps.accuracy : null,
         gps_source: gps ? "device" : "unavailable",
-        video_status: "not_required",
+        video_status: startVideoStatus,
         metadata: {
           capturedBy: "worker-shell",
           gps,
           client_event_id,
-          ...(gps ? {} : { location_unverified: true }),
+          ...noGpsMetadata,
         },
       };
 
@@ -812,9 +1020,21 @@ export function WorkerShell({
 
       if (!insertedEvent && networkFailed) {
         // ── Offline path: queue locally, optimistic shell state, banner.
+        // Stamp gps_status=offline_pending_sync so the manager review
+        // surface can distinguish "no fix yet" from "couldn't reach the
+        // network" when the queue eventually drains.
+        const offlineMarkers = buildNoGpsMetadata({
+          skippedGps: !gps,
+          errorKind: options?.gpsErrorKind ?? null,
+          offlineQueued: true,
+        });
         const queuedPayload: QueuedTimeEventPayload = {
           ...insertPayload,
-          metadata: { ...insertPayload.metadata, queued_offline: true },
+          metadata: {
+            ...insertPayload.metadata,
+            queued_offline: true,
+            ...offlineMarkers,
+          },
         };
         queueOfflineEvent({
           client_event_id,
@@ -833,6 +1053,7 @@ export function WorkerShell({
           clockOutTime: null,
           durationMinutes: 0,
           checkoutStatus: "not_required" as const,
+          startVideoStatus: startVideoStatus,
         };
         const nextSessionsOffline = [optimisticSession, ...shell.sessions];
         const nextClockStateOffline = deriveClockState(nextSessionsOffline);
@@ -888,6 +1109,7 @@ export function WorkerShell({
           clockOutTime: null,
           durationMinutes: 0,
           checkoutStatus: "not_required" as const,
+          startVideoStatus: startVideoStatus,
         },
         ...shell.sessions,
       ];
@@ -966,6 +1188,7 @@ export function WorkerShell({
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 
+      const trimmedNote = options?.note?.trim() ?? "";
       const insertPayload: QueuedTimeEventPayload = {
         org_id: shell.profile.org_id,
         profile_id: shell.profile.id,
@@ -981,6 +1204,7 @@ export function WorkerShell({
           gps,
           client_event_id,
           ...(gps ? {} : { location_unverified: true }),
+          ...(trimmedNote ? { checkout_note: trimmedNote } : {}),
         },
       };
 
@@ -1106,11 +1330,14 @@ export function WorkerShell({
       // .update() from this client returns success-with-zero-rows under
       // RLS. The route uses the service-role admin client and re-asserts
       // every constraint (uploaded_by, project, org, is_checkout,
-      // time_event_id null, today window) before writing.
+      // repair window) before writing. It also recognizes checkout media
+      // already linked to this event, which lets a Journal retry clear
+      // video_status=pending without touching the original file.
       //
       // Best-effort: a non-2xx response here is logged but never
       // unwinds the successful clock-out. The video stays as an orphan
       // is_checkout=true row a future retry / sweep can pick up.
+      let linkedCheckoutProof = false;
       try {
         const linkResp = await fetch("/api/worker/link-checkout-video", {
           method: "POST",
@@ -1123,10 +1350,16 @@ export function WorkerShell({
           console.warn(
             `[checkout-link] HTTP ${linkResp.status}: ${detail.slice(0, 200)}`,
           );
+        } else {
+          const body = (await linkResp.json().catch(() => null)) as unknown;
+          linkedCheckoutProof = checkoutLinkResponseHasProof(body);
         }
       } catch (linkErr) {
         console.warn("[checkout-link] fetch threw:", linkErr);
       }
+
+      const resolvedCheckoutStatus: WorkerSession["checkoutStatus"] =
+        videoStatus === "pending" && linkedCheckoutProof ? "uploaded" : videoStatus;
 
       const nextSessions = shell.sessions.map((session) => {
         if (session.clockOutTime || session.clockInEventId !== shell.clockState.openEventId) {
@@ -1145,7 +1378,7 @@ export function WorkerShell({
           clockOutEventId: insertedEvent.id,
           clockOutTime: timestamp,
           durationMinutes,
-          checkoutStatus: videoStatus,
+          checkoutStatus: resolvedCheckoutStatus,
         };
       });
 
@@ -1168,7 +1401,9 @@ export function WorkerShell({
         text: !gps
           ? t("worker.closedWithoutGps")
           : shell.profile.require_video
-            ? "Shift closed. Checkout video is waiting in Journal."
+            ? linkedCheckoutProof
+              ? "Shift closed. Checkout video uploaded."
+              : "Shift closed. Checkout video is waiting in Journal."
             : "Clocked out.",
       });
       playSound("clock-out");
@@ -1274,7 +1509,9 @@ export function WorkerShell({
         ? "checkout-video"
         : mode === "before_leave"
           ? "before-leave-video"
-          : "journal-upload",
+          : mode === "before_work"
+            ? "before-work-video"
+            : "journal-upload",
     );
     setBanner(null);
 
@@ -1325,13 +1562,17 @@ export function WorkerShell({
             // before_leave videos are also "checkout proof" videos — the
             // worker just hasn't pressed Clock Out yet. Tagging them with
             // is_checkout lets the team page videoUploadedToday indicator
-            // and the gate logic both detect them.
+            // and the gate logic both detect them. before_work videos
+            // are the start-of-shift counterpart — is_checkout=false so
+            // the link-checkin-video route's predicate filter picks
+            // them up without colliding with checkout candidates.
             is_checkout: mode === "checkout" || mode === "before_leave",
             time_event_id:
               mode === "checkout" ? shell.clockState.pendingCheckoutEventId : null,
             metadata: {
               uploadedBy: "worker-shell",
               ...(mode === "before_leave" ? { kind: "before_leave" } : {}),
+              ...(mode === "before_work" ? { kind: "before_work" } : {}),
             },
           })
           .select("*")
@@ -1370,6 +1611,54 @@ export function WorkerShell({
         });
       }
 
+      if (mode === "checkout" && shell.clockState.pendingCheckoutEventId) {
+        try {
+          const linkResp = await fetch("/api/worker/link-checkout-video", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              timeEventId: shell.clockState.pendingCheckoutEventId,
+            }),
+            keepalive: true,
+          });
+          if (!linkResp.ok) {
+            const detail = await linkResp.text().catch(() => "");
+            console.warn(
+              `[checkout-link] post-checkout upload HTTP ${linkResp.status}: ${detail.slice(0, 200)}`,
+            );
+          }
+        } catch (linkErr) {
+          console.warn("[checkout-link] post-checkout upload threw:", linkErr);
+        }
+      }
+
+      // Sister of the checkout link above: fires the start-video
+      // linker so the worker's "before work" upload is stamped with
+      // the active clock_in's time_event_id and the event row's
+      // video_status flips from "pending" to "uploaded". Without this
+      // call, the manager's "start video required" banner stays stuck
+      // even after a successful upload.
+      if (mode === "before_work" && shell.clockState.pendingStartVideoEventId) {
+        try {
+          const linkResp = await fetch("/api/worker/link-checkin-video", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              timeEventId: shell.clockState.pendingStartVideoEventId,
+            }),
+            keepalive: true,
+          });
+          if (!linkResp.ok) {
+            const detail = await linkResp.text().catch(() => "");
+            console.warn(
+              `[checkin-link] post-checkin upload HTTP ${linkResp.status}: ${detail.slice(0, 200)}`,
+            );
+          }
+        } catch (linkErr) {
+          console.warn("[checkin-link] post-checkin upload threw:", linkErr);
+        }
+      }
+
       const nextSessions =
         mode === "checkout"
           ? shell.sessions.map((session) => {
@@ -1385,7 +1674,23 @@ export function WorkerShell({
 
               return session;
             })
-          : shell.sessions;
+          : mode === "before_work"
+            ? shell.sessions.map((session) => {
+                // Optimistically flip the open shift's start gate so
+                // the JournalPage warning clears immediately while the
+                // link route is still processing on the server.
+                if (
+                  session.clockInEventId &&
+                  session.clockInEventId === shell.clockState.pendingStartVideoEventId
+                ) {
+                  return {
+                    ...session,
+                    startVideoStatus: "uploaded" as const,
+                  };
+                }
+                return session;
+              })
+            : shell.sessions;
 
       const nextClockState = deriveClockState(nextSessions);
 
@@ -1400,7 +1705,9 @@ export function WorkerShell({
         text:
           mode === "checkout"
             ? "Checkout video uploaded."
-            : `${selectedFiles.length} journal ${selectedFiles.length === 1 ? "item" : "items"} saved.`,
+            : mode === "before_work"
+              ? t("journal.startVideoUploaded")
+              : `${selectedFiles.length} journal ${selectedFiles.length === 1 ? "item" : "items"} saved.`,
       });
       router.refresh();
     } catch (error) {
@@ -1411,20 +1718,94 @@ export function WorkerShell({
     }
   }
 
-  async function updateTaskStatus(taskId: string, nextStatus: TaskStatus) {
+  async function updateTaskStatus(
+    taskId: string,
+    nextStatus: TaskStatus,
+    options?: {
+      note?: string;
+      submittedFromCompletionModal?: true;
+      followUpRequired?: boolean;
+      followUpNote?: string;
+      files?: File[];
+      projectId?: string | null;
+      existingMetadata?: Record<string, unknown> | null;
+    },
+  ) {
     setBusyAction(`task-${taskId}`);
     setBanner(null);
 
     try {
+      if (nextStatus === "done" && !options?.submittedFromCompletionModal) {
+        throw new Error(t("tasks.completionModalRequired"));
+      }
+
       const completedAt = nextStatus === "done" ? new Date().toISOString() : null;
+      // Compose the completion-evidence payload before the metadata
+      // merge: files upload through the existing
+      // /lib/task-attachments.uploadTaskAttachment path, which already
+      // handles RLS + media-table inserts. The returned media.id values
+      // get stamped into tasks.metadata.completion_media_ids so the
+      // manager UI can resolve them via the existing task-attachments
+      // helpers.
+      const existing = shell.tasks.find((task) => task.id === taskId);
+      const taskProjectId = existing?.project_id ?? options?.projectId ?? null;
+      const existingMetadata = options?.existingMetadata ?? existing?.metadata ?? null;
+      const completionMediaIds: string[] = [];
+      if (
+        nextStatus === "done" &&
+        shouldBlockCompletionFileUpload({
+          projectId: taskProjectId,
+          fileCount: options?.files?.length ?? 0,
+        })
+      ) {
+        throw new Error(t("tasks.completionFilesNeedProject"));
+      }
+      if (
+        nextStatus === "done" &&
+        options?.files &&
+        options.files.length > 0 &&
+        taskProjectId
+      ) {
+        for (const file of options.files) {
+          const result = await uploadTaskAttachment(supabase, {
+            orgId: shell.profile.org_id,
+            projectId: taskProjectId,
+            uploadedBy: shell.profile.id,
+            file,
+          });
+          if (result.ok) {
+            completionMediaIds.push(result.mediaId);
+          } else {
+            // Surface the storage failure but keep going with whatever
+            // already uploaded — half-uploaded evidence is better than
+            // dropping the whole completion.
+            console.warn("[task-completion] file upload failed:", result.error);
+          }
+        }
+      }
+
+      const nextMetadata =
+        nextStatus === "done"
+          ? buildTaskCompletionMetadata(existingMetadata, {
+              note: options?.note ?? null,
+              followUpRequired: options?.followUpRequired ?? false,
+              followUpNote: options?.followUpNote ?? null,
+              completionMediaIds,
+              completedById: shell.profile.id,
+            })
+          : null;
+      const updatePayload: Record<string, unknown> = {
+        status: nextStatus,
+        completed_at: completedAt,
+        completed_by: nextStatus === "done" ? shell.profile.id : null,
+      };
+      if (nextMetadata !== null) {
+        updatePayload.metadata = nextMetadata;
+      }
 
       const { error } = await supabase
         .from("tasks")
-        .update({
-          status: nextStatus,
-          completed_at: completedAt,
-          completed_by: nextStatus === "done" ? shell.profile.id : null,
-        })
+        .update(updatePayload)
         .eq("id", taskId);
 
       if (error) {
@@ -1443,10 +1824,19 @@ export function WorkerShell({
             status: nextStatus,
             completed_at: completedAt,
             completed_by: nextStatus === "done" ? current.profile.id : null,
+            metadata: nextMetadata ?? task.metadata,
           };
         }),
       }));
-      setBanner({ tone: "success", text: "Task updated." });
+      const successMessage =
+        nextStatus === "done"
+          ? options?.followUpRequired
+            ? t("tasks.completedWithFollowUp")
+            : completionMediaIds.length > 0 || options?.note
+              ? t("tasks.completedWithEvidence")
+              : t("tasks.completedSimple")
+          : t("tasks.taskUpdated");
+      setBanner({ tone: "success", text: successMessage });
       router.refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Task update failed.";
@@ -1597,6 +1987,8 @@ export function WorkerShell({
     updateTaskStatus,
     toggleMute,
     drainOfflineQueue,
+    unseenTaskCount,
+    markTasksSeen,
   };
 
   return (
@@ -1651,6 +2043,7 @@ export function WorkerShell({
                 <NotificationBell
                   profileId={shell.profile.id}
                   onUrgentArrival={setOverlayMessage}
+                  unseenTaskCount={unseenTaskCount}
                 />
                 <LanguageSwitcher />
                 <button
@@ -1880,10 +2273,17 @@ export function WorkerShell({
                 onClick={() => {
                   const captured = gpsPrompt;
                   setGpsPrompt(null);
+                  // Forward the original errorKind so the time_event
+                  // metadata records WHY GPS was skipped (denied vs
+                  // unavailable vs unsupported). Manager review surfaces
+                  // pick the kind off metadata.gps_error_kind.
                   if (captured.kind === "clockIn") {
-                    void clockIn(captured.projectId, { skipGps: true });
+                    void clockIn(captured.projectId, {
+                      skipGps: true,
+                      gpsErrorKind: captured.errorKind,
+                    });
                   } else {
-                    void clockOut({ skipGps: true });
+                    void clockOut({ skipGps: true, gpsErrorKind: captured.errorKind });
                   }
                 }}
                 className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"

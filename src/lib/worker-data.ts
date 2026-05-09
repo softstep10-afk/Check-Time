@@ -10,6 +10,7 @@ import {
   fetchTaskAttachments,
   getAttachmentMediaIds,
 } from "@/lib/task-attachments";
+import { getCompletionMediaIds } from "@/lib/task-notifications";
 import type { WorkerMediaItem, WorkerShellData, WorkerTaskItem } from "@/lib/worker-types";
 import type { Media, Profile, Project, Task, TimeEvent } from "@/types/database";
 
@@ -103,7 +104,38 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   const assignments = assignmentsResult.data ?? [];
   const events = eventsResult.data ?? [];
   const personalTasks = tasksResult.data ?? [];
-  const media = mediaResult.data ?? [];
+  let media = mediaResult.data ?? [];
+
+  const earliestEventMs = events.reduce<number | null>((earliest, event) => {
+    const value = new Date(event.event_time).getTime();
+    if (!Number.isFinite(value)) return earliest;
+    return earliest === null ? value : Math.min(earliest, value);
+  }, null);
+  if (earliestEventMs !== null) {
+    const checkoutMediaWindowStart = new Date(
+      earliestEventMs - 15 * 60 * 1000,
+    ).toISOString();
+    const checkoutMediaResult = await supabase
+      .from("media")
+      .select("*")
+      .eq("uploaded_by", user.id)
+      .eq("is_checkout", true)
+      .eq("media_type", "video")
+      .gte("created_at", checkoutMediaWindowStart)
+      .order("created_at", { ascending: false })
+      .limit(160)
+      .returns<Media[]>();
+    assertNoError(checkoutMediaResult.error, "Checkout media query failed");
+
+    const mediaById = new Map(media.map((entry) => [entry.id, entry]));
+    for (const entry of checkoutMediaResult.data ?? []) {
+      mediaById.set(entry.id, entry);
+    }
+    media = [...mediaById.values()].sort(
+      (left, right) =>
+        new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+    );
+  }
 
   const projectIds = new Set<string>();
   const assignedAtByProjectId = new Map<string, string | null>();
@@ -220,9 +252,17 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   const projectsById = new Map(workerProjects.map((project) => [project.id, project]));
 
   // Eager-fetch attachment media rows referenced by any task.metadata.
-  // One round-trip; existing media RLS scopes results to this worker.
+  // Both `attachment_media_ids` (manager-supplied at task creation) and
+  // `completion_media_ids` (worker evidence at done-time) live in the
+  // same media table, so a single bulk fetch + lookup map covers both.
+  // RLS scopes results to this worker.
   const allAttachmentIds = Array.from(
-    new Set(tasks.flatMap((task) => getAttachmentMediaIds(task))),
+    new Set(
+      tasks.flatMap((task) => [
+        ...getAttachmentMediaIds(task),
+        ...getCompletionMediaIds(task),
+      ]),
+    ),
   );
   const attachmentMap = await fetchTaskAttachments(supabase, allAttachmentIds);
 
@@ -231,10 +271,15 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     const resolved = ids
       .map((id) => attachmentMap.get(id))
       .filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
+    const completionIds = getCompletionMediaIds(task);
+    const completionResolved = completionIds
+      .map((id) => attachmentMap.get(id))
+      .filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
     return {
       ...task,
       projectName: task.project_id ? projectsById.get(task.project_id)?.name ?? null : null,
       attachments: resolved.length > 0 ? resolved : undefined,
+      completionAttachments: completionResolved.length > 0 ? completionResolved : undefined,
     };
   });
   const mediaItems: WorkerMediaItem[] = media.map((entry) => ({

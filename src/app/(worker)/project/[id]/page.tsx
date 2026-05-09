@@ -1,10 +1,14 @@
 import { notFound, redirect } from "next/navigation";
+import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
+import { buildPreviewManagerWorkspaceData } from "@/lib/preview-data";
 import { createClient } from "@/lib/supabase/server";
 import {
   fetchTaskAttachments,
   getAttachmentMediaIds,
   type TaskAttachmentRef,
 } from "@/lib/task-attachments";
+import { getCompletionMediaIds } from "@/lib/task-notifications";
+import { isReceiptVisibleToWorker } from "@/lib/worker-receipt-visibility";
 import { WorkerProjectView } from "@/components/worker/WorkerProjectView";
 import type { Media, Project, Task } from "@/types/database";
 
@@ -19,7 +23,70 @@ export default async function WorkerProjectPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    if (!AUTH_BYPASS_ENABLED) redirect("/login");
+
+    const preview = buildPreviewManagerWorkspaceData();
+    const project = preview.projects.find((item) => item.id === id && !item.deleted_at);
+    const worker =
+      preview.profiles.find((profile) => profile.role === "worker") ??
+      preview.profiles[0];
+    if (!project || !worker) notFound();
+
+    const rawMedia = preview.media.filter(
+      (item) => item.project_id === id && !item.deleted_at,
+    );
+    const projectMedia: TaskAttachmentRef[] = rawMedia
+      .filter((item) => item.metadata?.kind === "project_media")
+      .map((item) => ({
+        id: item.id,
+        filename: item.filename,
+        mime_type: item.mime_type,
+        media_type: item.media_type,
+        storage_path: item.storage_path,
+      }));
+    const projectReceipts = rawMedia
+      .filter(
+        (item) =>
+          item.metadata?.kind === "receipt" ||
+          item.metadata?.category === "receipt",
+      )
+      .map((item) => ({
+        id: item.id,
+        filename: item.filename,
+        mime_type: item.mime_type,
+        media_type: item.media_type,
+        storage_path: item.storage_path,
+        created_at: item.created_at,
+        store_name:
+          typeof item.metadata?.store_name === "string"
+            ? item.metadata.store_name
+            : null,
+        amount:
+          typeof item.metadata?.amount === "number"
+            ? item.metadata.amount
+            : typeof item.metadata?.amount === "string"
+              ? Number.parseFloat(item.metadata.amount)
+              : null,
+      }));
+    const tasks = preview.tasks.filter(
+      (task) =>
+        task.project_id === id &&
+        !task.deleted_at &&
+        (task.assigned_to === worker.id || task.assigned_to === null),
+    );
+
+    return (
+      <WorkerProjectView
+        project={project}
+        projectMedia={projectMedia}
+        projectReceipts={projectReceipts}
+        tasks={tasks}
+        orgId={project.org_id}
+        profileId={worker.id}
+      />
+    );
+  }
 
   // Migration 00018 — visibility honors profile.project_access_mode.
   // Owners / managers should be using /projects/<id> (their own surface)
@@ -70,9 +137,14 @@ export default async function WorkerProjectPage({
   // We split client-side into project media vs receipts based on
   // metadata.kind so the worker view can render two separate sections.
   // Receipts and task attachments stay out of the "Project Media" list.
+  // We also pull `uploaded_by` so receipts can be filtered to the worker's
+  // own submissions — workers must not see other workers' receipts (which
+  // would leak project material cost).
   const { data: rawMedia } = await supabase
     .from("media")
-    .select("id, filename, mime_type, media_type, storage_path, metadata, created_at")
+    .select(
+      "id, filename, mime_type, media_type, storage_path, metadata, created_at, uploaded_by",
+    )
     .eq("project_id", id)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
@@ -89,14 +161,17 @@ export default async function WorkerProjectPage({
       storage_path: m.storage_path,
     }));
   const projectReceipts = (rawMedia ?? [])
-    .filter((m) => {
-      const meta = (m as unknown as Media).metadata as Record<string, unknown> | null;
-      // metadata.category="receipt" is the legacy worker upload path
-      // (WorkerProjectView WorkerReceiptUpload); metadata.kind="receipt"
-      // is the manager-side path (ProjectDetailPage ReceiptsSection).
-      // Accept both so neither side stays invisible.
-      return meta?.kind === "receipt" || meta?.category === "receipt";
-    })
+    // Worker view shows only the worker's own receipts. Manager / owner
+    // surfaces continue to see all receipts (those pages run their own
+    // queries). Without this filter a worker on a shared project would
+    // see every other worker's amounts and effectively the project's
+    // material cost — a leak the spec calls out.
+    .filter((m) =>
+      isReceiptVisibleToWorker(
+        m as unknown as { uploaded_by: string | null; metadata: Record<string, unknown> | null },
+        user.id,
+      ),
+    )
     .map((m) => {
       const meta = (m as unknown as Media).metadata as Record<string, unknown> | null;
       return {
@@ -128,7 +203,12 @@ export default async function WorkerProjectPage({
     .returns<Task[]>();
 
   const allAttachmentIds = Array.from(
-    new Set((tasks ?? []).flatMap((t) => getAttachmentMediaIds(t))),
+    new Set(
+      (tasks ?? []).flatMap((t) => [
+        ...getAttachmentMediaIds(t),
+        ...getCompletionMediaIds(t),
+      ]),
+    ),
   );
   const attachmentMap = await fetchTaskAttachments(supabase, allAttachmentIds);
 
@@ -136,7 +216,14 @@ export default async function WorkerProjectPage({
     const refs = getAttachmentMediaIds(task)
       .map((mid) => attachmentMap.get(mid))
       .filter((ref): ref is TaskAttachmentRef => Boolean(ref));
-    return { ...task, attachments: refs.length > 0 ? refs : undefined };
+    const completionRefs = getCompletionMediaIds(task)
+      .map((mid) => attachmentMap.get(mid))
+      .filter((ref): ref is TaskAttachmentRef => Boolean(ref));
+    return {
+      ...task,
+      attachments: refs.length > 0 ? refs : undefined,
+      completionAttachments: completionRefs.length > 0 ? completionRefs : undefined,
+    };
   });
 
   return (

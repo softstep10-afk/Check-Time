@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import Link from "next/link";
-import { Play, Square, Receipt as ReceiptIcon } from "lucide-react";
+import { Play, Plus, Square, Receipt as ReceiptIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
 import { validateUploadFile } from "@/lib/upload-limits";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
@@ -14,10 +17,20 @@ import {
   DEFAULT_SAFETY_VERSION,
   writeSafetyAck,
 } from "@/lib/safety-acknowledgements";
-import { normalizeStoragePath, type TaskAttachmentRef } from "@/lib/task-attachments";
-import type { Project, Task } from "@/types/database";
+import { type TaskAttachmentRef } from "@/lib/task-attachments";
+import { splitWorkerProjectTasks } from "@/lib/task-notifications";
+import {
+  openWorkerProjectTaskDetails,
+  submitWorkerTaskCompletion,
+  type WorkerTaskModalMode,
+} from "@/lib/worker-task-ui";
+import { MediaViewerModal } from "@/components/shared/MediaViewerModal";
+import type { Project, Task, TaskPriority, TaskStatus } from "@/types/database";
 
-type TaskWithAttachments = Task & { attachments?: TaskAttachmentRef[] };
+type TaskWithAttachments = Task & {
+  attachments?: TaskAttachmentRef[];
+  completionAttachments?: TaskAttachmentRef[];
+};
 
 type ReceiptItem = {
   id: string;
@@ -70,12 +83,163 @@ export function WorkerProjectView({
   profileId: string;
 }) {
   const { t } = useTranslation();
+  const { busyAction, updateTaskStatus } = useWorkerShell();
+  const [taskList, setTaskList] = useState<TaskWithAttachments[]>(tasks);
+  const [selectedTask, setSelectedTask] = useState<TaskWithAttachments | null>(null);
+  const [selectedTaskMode, setSelectedTaskMode] = useState<WorkerTaskModalMode>("details");
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [taskCreateBusy, setTaskCreateBusy] = useState(false);
+  const [taskCreateMessage, setTaskCreateMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
+  const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  useEffect(() => {
+    setTaskList(tasks);
+  }, [tasks]);
+
+  async function handleClaimTask(taskId: string) {
+    setClaimBusyTaskId(taskId);
+    setClaimMessage(null);
+    try {
+      const response = await fetch("/api/worker/claim-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        task?: Task;
+      };
+
+      if (!response.ok) {
+        const fallback =
+          response.status === 409
+            ? t("tasks.claimAlreadyAssigned")
+            : t("tasks.claimFailed");
+        setClaimMessage({ kind: "err", text: payload.error ?? fallback });
+        return;
+      }
+
+      const claimed = payload.task;
+      if (!claimed) {
+        setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+        return;
+      }
+
+      // Move the task into "mine" by stamping assigned_to locally —
+      // the server already wrote the same row. The Detail Modal will
+      // re-render with isMine=true, surfacing Start/Done.
+      setTaskList((current) =>
+        current.map((task) =>
+          task.id === claimed.id
+            ? {
+                ...task,
+                assigned_to: claimed.assigned_to,
+                metadata: claimed.metadata ?? task.metadata,
+              }
+            : task,
+        ),
+      );
+      setClaimMessage({ kind: "ok", text: t("tasks.claimed") });
+    } catch {
+      setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+    } finally {
+      setClaimBusyTaskId(null);
+    }
+  }
 
   // Split tasks into "mine" (assigned to this worker) vs "project-level"
   // (assigned_to IS NULL — visible to the whole crew). Both lists were
   // already loaded by the server route, just split here for display.
-  const mineTasks = tasks.filter((task) => task.assigned_to === profileId);
-  const projectLevelTasks = tasks.filter((task) => task.assigned_to === null);
+  const { mineTasks, projectLevelTasks, completedTasks } = splitWorkerProjectTasks(
+    taskList,
+    profileId,
+  );
+  // Refresh from the live taskList when we can so claim/status edits made
+  // while the modal is open are reflected. Fall back to the stored snapshot
+  // if the task is no longer in the list.
+  const liveSelectedTask = selectedTask
+    ? taskList.find((task) => task.id === selectedTask.id) ?? selectedTask
+    : null;
+
+  function openDetails(
+    task: TaskWithAttachments | null | undefined,
+    mode: WorkerTaskModalMode = "details",
+  ) {
+    if (!task) {
+      setOpenError(t("tasks.openDetailsFailed"));
+      return;
+    }
+    setOpenError(null);
+    setSelectedTaskMode(mode);
+    setSelectedTask(task);
+  }
+
+  function closeDetails() {
+    setSelectedTask(null);
+    setSelectedTaskMode("details");
+    setOpenError(null);
+  }
+
+  async function handleCreateProjectTask(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const title = formData.get("title")?.toString().trim() ?? "";
+    const description = formData.get("description")?.toString().trim() ?? "";
+    const priority = (formData.get("priority")?.toString() || "medium") as TaskPriority;
+
+    if (!title) {
+      setTaskCreateMessage({ kind: "err", text: t("projectDetail.taskTitleRequired") });
+      return;
+    }
+
+    setTaskCreateBusy(true);
+    setTaskCreateMessage(null);
+    const response = await fetch("/api/worker/project-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: project.id,
+        title,
+        description: description || null,
+        priority,
+      }),
+    });
+    const result = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      task?: Task;
+    };
+    setTaskCreateBusy(false);
+
+    const createdTask = result.task;
+    if (!response.ok || !createdTask) {
+      setTaskCreateMessage({
+        kind: "err",
+        text: result.error ?? t("tasks.createTaskFailed"),
+      });
+      return;
+    }
+
+    setTaskList((current) => [{ ...createdTask, attachments: undefined }, ...current]);
+    form.reset();
+    setTaskCreateMessage({ kind: "ok", text: t("tasks.workerTaskCreated") });
+  }
+
+  function markLocalTask(taskId: string, status: TaskStatus) {
+    setTaskList((current) =>
+      current.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status,
+              completed_at: status === "done" ? new Date().toISOString() : null,
+              completed_by: status === "done" ? profileId : null,
+            }
+          : task,
+      ),
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -153,7 +317,12 @@ export function WorkerProjectView({
         ) : (
           <div className="mt-3 space-y-3">
             {mineTasks.map((task) => (
-              <WorkerTaskCard key={task.id} task={task} t={t} />
+              <WorkerTaskCard
+                key={task.id}
+                task={task}
+                t={t}
+                onOpen={() => openWorkerProjectTaskDetails(task, openDetails)}
+              />
             ))}
           </div>
         )}
@@ -169,6 +338,55 @@ export function WorkerProjectView({
             {projectLevelTasks.length}
           </span>
         </div>
+        <form className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-default)] p-3" onSubmit={handleCreateProjectTask}>
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+            <Plus size={13} />
+            {t("tasks.addProjectTask")}
+          </div>
+          {taskCreateMessage ? (
+            <div
+              className="mb-2 text-xs font-semibold"
+              style={{ color: taskCreateMessage.kind === "ok" ? "var(--green)" : "var(--red)" }}
+            >
+              {taskCreateMessage.text}
+            </div>
+          ) : null}
+          <div className="grid gap-2">
+            <input
+              name="title"
+              placeholder={t("tasks.titlePlaceholder")}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+            />
+            <TextInputWithVoice
+              multiline
+              name="description"
+              rows={2}
+              placeholder={t("tasks.descriptionPlaceholder")}
+              className="min-h-[74px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+            />
+            <div className="flex flex-wrap gap-2">
+              <select
+                name="priority"
+                defaultValue="medium"
+                className="min-w-[150px] flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="low">{t("tasks.priorityLow")}</option>
+                <option value="medium">{t("tasks.priorityMedium")}</option>
+                <option value="high">{t("tasks.priorityHigh")}</option>
+                <option value="urgent">{t("tasks.priorityUrgent")}</option>
+              </select>
+              <button
+                type="submit"
+                disabled={taskCreateBusy}
+                className="inline-flex min-w-[130px] flex-1 items-center justify-center rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-semibold disabled:opacity-60"
+                style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+              >
+                {taskCreateBusy ? t("common.saving") : t("tasks.addProjectTaskCta")}
+              </button>
+            </div>
+          </div>
+        </form>
+
         {projectLevelTasks.length === 0 ? (
           <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
             {t("workerProject.tasksEmpty")}
@@ -176,11 +394,102 @@ export function WorkerProjectView({
         ) : (
           <div className="mt-3 space-y-3">
             {projectLevelTasks.map((task) => (
-              <WorkerTaskCard key={task.id} task={task} t={t} />
+              <WorkerTaskCard
+                key={task.id}
+                task={task}
+                t={t}
+                onOpen={() => openWorkerProjectTaskDetails(task, openDetails)}
+              />
             ))}
           </div>
         )}
       </section>
+
+      {/* Completed tasks stay visible for audit and evidence review. */}
+      <section className="surface-card surface-card--muted p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">
+            {t("tasks.completedSection")}
+          </h2>
+          <span className="rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+            {completedTasks.length}
+          </span>
+        </div>
+        {completedTasks.length === 0 ? (
+          <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
+            {t("tasks.completedWillLand")}
+          </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {completedTasks.map((task) => (
+              <WorkerTaskCard
+                key={task.id}
+                task={task}
+                t={t}
+                onOpen={() => openWorkerProjectTaskDetails(task, openDetails)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {claimMessage ? (
+        <div
+          className="rounded-[var(--radius-md)] px-3 py-2 text-xs font-semibold"
+          style={{
+            background:
+              claimMessage.kind === "ok"
+                ? "rgba(15, 168, 120, 0.16)"
+                : "rgba(212, 81, 94, 0.12)",
+            color: claimMessage.kind === "ok" ? "var(--green)" : "var(--red)",
+          }}
+        >
+          {claimMessage.text}
+        </div>
+      ) : null}
+
+      {openError ? (
+        <div
+          role="alert"
+          data-testid="worker-task-open-error"
+          className="rounded-[var(--radius-md)] px-3 py-2 text-xs font-semibold"
+          style={{ background: "rgba(212, 81, 94, 0.12)", color: "var(--red)" }}
+        >
+          {openError}
+        </div>
+      ) : null}
+
+      <WorkerTaskDetailModal
+        task={liveSelectedTask ? { ...liveSelectedTask, projectName: project.name } : null}
+        initialMode={selectedTaskMode}
+        profileId={profileId}
+        busy={
+          liveSelectedTask
+            ? busyAction === `task-${liveSelectedTask.id}` ||
+              claimBusyTaskId === liveSelectedTask.id
+            : false
+        }
+        onClose={closeDetails}
+        onStart={(taskId) => {
+          markLocalTask(taskId, "in_progress");
+          void updateTaskStatus(taskId, "in_progress");
+        }}
+        onDone={(taskId, payload) => {
+          markLocalTask(taskId, "done");
+          submitWorkerTaskCompletion(
+            (id, status, completionPayload) => {
+              void updateTaskStatus(id, status, {
+                ...completionPayload,
+                projectId: liveSelectedTask?.project_id ?? null,
+                existingMetadata: liveSelectedTask?.metadata ?? null,
+              });
+            },
+            taskId,
+            payload,
+          );
+        }}
+        onClaim={(taskId) => void handleClaimTask(taskId)}
+      />
     </div>
   );
 }
@@ -188,47 +497,112 @@ export function WorkerProjectView({
 function WorkerTaskCard({
   task,
   t,
+  onOpen,
 }: {
   task: TaskWithAttachments;
   t: ReturnType<typeof useTranslation>["t"];
+  onOpen: () => void;
 }) {
+  // Priority pill is colored by importance (red/amber/green). Status
+  // pill is colored by lifecycle (muted/blue/green/red). Keeping them
+  // visually distinct matters because before this fix an urgent (red)
+  // task could be misread as a cancelled (red) task at a glance.
+  const prioColor =
+    task.priority === "urgent" || task.priority === "high"
+      ? "#ef4444"
+      : task.priority === "medium"
+        ? "#f59e0b"
+        : "#22c55e";
+  const statusColor =
+    task.status === "done"
+      ? "var(--green)"
+      : task.status === "in_progress"
+        ? "var(--blue)"
+        : task.status === "cancelled"
+          ? "var(--red)"
+          : "var(--text-muted)";
+  const statusLabelText =
+    task.status === "done"
+      ? t("tasks.statusDone")
+      : task.status === "in_progress"
+        ? t("tasks.statusInProgress")
+        : task.status === "cancelled"
+          ? t("tasks.statusCancelled")
+          : t("tasks.statusPending");
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    onOpen();
+  }
+
+  function openFromInner(event: MouseEvent) {
+    event.stopPropagation();
+    onOpen();
+  }
+
   return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3">
-      <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
-      <div className="mt-1 text-xs text-[var(--text-secondary)]">
-        {task.priority} • {task.status.replace("_", " ")}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={handleKeyDown}
+      data-testid="worker-project-task-card"
+      className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3 text-left outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+    >
+      <div
+        data-testid="worker-task-open-details"
+        className="text-left text-sm font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline"
+      >
+        {task.title}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        <span
+          className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+          style={{ background: `${prioColor}1f`, color: prioColor }}
+        >
+          {task.priority}
+        </span>
+        <span
+          className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+          style={{ background: "rgba(148, 163, 184, 0.10)", color: statusColor }}
+        >
+          {statusLabelText}
+        </span>
       </div>
       {task.description ? (
         <p className="mt-2 text-sm text-[var(--text-secondary)]">{task.description}</p>
       ) : null}
       {task.attachments && task.attachments.length > 0 ? (
-        <>
+        <div onClick={(event) => event.stopPropagation()}>
           <div className="mt-2 text-[10px] text-[var(--text-muted)]">
             📎 {task.attachments.length} {t("tasks.filesShort")}
           </div>
           <TaskAttachmentList items={task.attachments} />
-        </>
+        </div>
       ) : null}
+      <button
+        type="button"
+        onClick={openFromInner}
+        data-testid="worker-task-open-details"
+        className="mt-3 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+        style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+      >
+        {t("tasks.viewDetails")}
+      </button>
     </div>
   );
 }
 
 function ProjectReceiptsList({ items }: { items: ReceiptItem[] }) {
   const { t } = useTranslation();
-  const supabase = useMemo(() => createClient(), []);
+  const [viewerItem, setViewerItem] = useState<ReceiptItem | null>(null);
 
-  async function open(item: ReceiptItem) {
-    if (typeof window === "undefined") return;
-    const tab = window.open("about:blank", "_blank");
-    if (!tab) return;
-    const { data, error } = await supabase.storage
-      .from("media")
-      .createSignedUrl(normalizeStoragePath(item.storage_path), 3600);
-    if (error || !data?.signedUrl) {
-      tab.close();
-      return;
-    }
-    tab.location.href = data.signedUrl;
+  // Primary tap on a receipt opens the shared in-app viewer modal
+  // instead of redirecting a new browser tab. Photos render inline,
+  // PDFs render in an iframe, and the viewer offers a Download
+  // fallback for any preview that the browser cannot decode.
+  function open(item: ReceiptItem) {
+    setViewerItem(item);
   }
 
   return (
@@ -274,6 +648,21 @@ function ProjectReceiptsList({ items }: { items: ReceiptItem[] }) {
           ))}
         </div>
       )}
+      <MediaViewerModal
+        item={
+          viewerItem
+            ? {
+                id: viewerItem.id,
+                storage_path: viewerItem.storage_path,
+                filename: viewerItem.filename,
+                mime_type: viewerItem.mime_type,
+                media_type: viewerItem.media_type,
+                created_at: viewerItem.created_at,
+              }
+            : null
+        }
+        onClose={() => setViewerItem(null)}
+      />
     </section>
   );
 }
@@ -304,6 +693,7 @@ function ProjectClockControls({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
   const [savingAck, setSavingAck] = useState(false);
+  const [ackError, setAckError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
 
   const isClockedIn = shell.clockState.isClockedIn;
@@ -314,16 +704,19 @@ function ProjectClockControls({
   const startingShift = busyAction === "clock-in";
 
   function handleStart() {
+    setAckError(null);
     setSafetyOpen(true);
   }
 
   async function handleSafetyConfirm() {
-    // Show "Saving…" on Confirm while the ack row writes so the worker
-    // gets immediate feedback. Best-effort: never block clockIn on a
-    // missing audit row, supabase throw, or RLS hiccup — the brief
-    // happened, the ack write is the audit record, and the worker is
-    // standing on a real construction site waiting to start.
+    // The safety brief is the audit gate: the shift cannot open without
+    // a corresponding safety_acknowledgements row. If the insert fails
+    // (RLS denial, missing migration, network) we keep the modal open,
+    // surface the error, and refuse to clockIn. The worker can retry —
+    // tapping Confirm again re-attempts the write.
     setSavingAck(true);
+    setAckError(null);
+    let ackOk = false;
     try {
       const ackResult = await writeSafetyAck(supabase, {
         orgId: shell.profile.org_id,
@@ -331,13 +724,18 @@ function ProjectClockControls({
         projectId,
         safetyVersion: DEFAULT_SAFETY_VERSION,
       });
-      if (!ackResult.ok) {
-        console.warn("safety ack write failed:", ackResult.error);
+      if (ackResult.ok) {
+        ackOk = true;
+      } else {
+        setAckError(ackResult.error);
       }
     } catch (err) {
-      console.warn("safety ack threw:", err);
+      setAckError(err instanceof Error ? err.message : "Save failed");
     }
     setSavingAck(false);
+    if (!ackOk) {
+      return;
+    }
     setSafetyOpen(false);
     void clockIn(projectId);
   }
@@ -417,9 +815,13 @@ function ProjectClockControls({
         projectName={projectName}
         workerName={shell.profile.name}
         busy={savingAck}
+        errorMessage={ackError}
         onConfirm={() => void handleSafetyConfirm()}
         onCancel={() => {
-          if (!savingAck) setSafetyOpen(false);
+          if (!savingAck) {
+            setAckError(null);
+            setSafetyOpen(false);
+          }
         }}
       />
     </section>

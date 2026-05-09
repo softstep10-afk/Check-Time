@@ -28,6 +28,13 @@ export interface WorkerProject extends Project {
 export interface WorkerTaskItem extends Task {
   projectName: string | null;
   attachments?: TaskAttachmentRef[];
+  /**
+   * Resolved media rows referenced by `metadata.completion_media_ids`
+   * — the worker's completion-evidence files. Same shape as
+   * `attachments` so the task detail modal can render both with the
+   * same TaskAttachmentList component.
+   */
+  completionAttachments?: TaskAttachmentRef[];
 }
 
 export interface WorkerMediaItem extends Media {
@@ -44,6 +51,13 @@ export interface WorkerSession {
   clockOutTime: string | null;
   durationMinutes: number;
   checkoutStatus: "not_required" | "pending" | "uploaded" | "verified";
+  /**
+   * Mirrors the close-side checkoutStatus, but derived from the
+   * `clock_in` event's `video_status`. Lets the worker shell drive a
+   * "start/check-in video required" warning + upload affordance the
+   * same way the existing CheckoutModal drives the close-side gate.
+   */
+  startVideoStatus: "not_required" | "pending" | "uploaded" | "verified";
 }
 
 export interface WorkerClockState {
@@ -55,6 +69,16 @@ export interface WorkerClockState {
   pendingCheckoutEventId: string | null;
   pendingCheckoutProjectId: string | null;
   pendingCheckoutProjectName: string | null;
+  /**
+   * The open session's clock_in event id IF that event still has
+   * `video_status === "pending"` and no proof has been uploaded yet.
+   * Drives the JournalPage "Before You Start" upload affordance and
+   * lets WorkerShell.uploadMedia(before_work) link the proof back to
+   * the right time_event without re-deriving from sessions.
+   */
+  pendingStartVideoEventId: string | null;
+  pendingStartVideoProjectId: string | null;
+  pendingStartVideoProjectName: string | null;
 }
 
 export interface WorkerSummary {

@@ -1,67 +1,168 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Play } from "lucide-react";
+import { CheckCircle2, Eye, Play } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
+import {
+  applyClaimedTaskAssignment,
+  classifyTaskForWorker,
+  groupWorkerTasksByProject,
+} from "@/lib/task-notifications";
+import {
+  openWorkerTaskCompletion,
+  submitWorkerTaskCompletion,
+  type WorkerTaskModalMode,
+} from "@/lib/worker-task-ui";
 import type { WorkerTaskItem } from "@/lib/worker-types";
 
 type TaskFilter = "all" | "mine" | "urgent" | "today";
-
-const PRIORITY_ORDER: Record<string, number> = {
-  urgent: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-};
-
-type ProjectBucket = {
-  key: string;
-  name: string;
-  tasks: WorkerTaskItem[];
-};
-
-function groupByProject(
-  tasks: WorkerTaskItem[],
-  generalLabel: string,
-): ProjectBucket[] {
-  const map = new Map<string, ProjectBucket>();
-  for (const task of tasks) {
-    const key = task.project_id ?? "__noproject__";
-    const name = task.projectName ?? generalLabel;
-    const bucket = map.get(key) ?? { key, name, tasks: [] };
-    bucket.tasks.push(task);
-    map.set(key, bucket);
-  }
-  for (const bucket of map.values()) {
-    bucket.tasks.sort((a, b) => {
-      const pa = PRIORITY_ORDER[a.priority] ?? 99;
-      const pb = PRIORITY_ORDER[b.priority] ?? 99;
-      if (pa !== pb) return pa - pb;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
-  }
-  const entries = [...map.values()];
-  entries.sort((a, b) => {
-    if (a.key === "__noproject__") return 1;
-    if (b.key === "__noproject__") return -1;
-    return 0;
-  });
-  return entries;
-}
+// "" = all projects, "__current__" = the project the worker is clocked in
+// to right now (resolves at render time so a switch updates it),
+// otherwise a literal project_id. Stored as string for trivial <select>
+// binding.
+type ProjectFilter = string;
 
 export function TasksPage() {
-  const { shell, busyAction, updateTaskStatus } = useWorkerShell();
+  const { shell, busyAction, updateTaskStatus, markTasksSeen } = useWorkerShell();
   const { t } = useTranslation();
   const [bumpedTaskId, setBumpedTaskId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("all");
+  // "" = all projects, "__current__" = follow the live clock-in, else a project id.
+  const [projectFilter, setProjectFilter] = useState<ProjectFilter>("");
+  const [selectedTask, setSelectedTask] = useState<WorkerTaskItem | null>(null);
+  const [selectedTaskMode, setSelectedTaskMode] = useState<WorkerTaskModalMode>("details");
+  const [claimedTaskAssignees, setClaimedTaskAssignees] = useState<Map<string, string | null>>(
+    () => new Map(),
+  );
+  const [claimedTaskMetadata, setClaimedTaskMetadata] = useState<
+    Map<string, Record<string, unknown> | null>
+  >(() => new Map());
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
+  const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const todayIsoRef = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const currentProjectId = shell.clockState.currentProjectId;
+
+  // Visiting /my-tasks acknowledges all currently-pending task
+  // notifications. Stored in localStorage by markTasksSeen so future
+  // renders only flag genuinely-new tasks. Run once per mount —
+  // re-renders during the visit must not push the marker forward
+  // before the worker has a chance to look at the list.
+  useEffect(() => {
+    markTasksSeen();
+  }, [markTasksSeen]);
+
+  // Open the modal with the task object directly. Storing the object
+  // (not just the id) means clicks always render a visible modal even
+  // if the live task list churns mid-interaction.
+  function openDetails(
+    task: WorkerTaskItem | null | undefined,
+    mode: WorkerTaskModalMode = "details",
+  ) {
+    if (!task) {
+      setOpenError(t("tasks.openDetailsFailed"));
+      return;
+    }
+    setOpenError(null);
+    setSelectedTaskMode(mode);
+    setSelectedTask(task);
+  }
+
+  function closeDetails() {
+    setSelectedTask(null);
+    setSelectedTaskMode("details");
+    setOpenError(null);
+  }
+
+  function openCompletion(task: WorkerTaskItem) {
+    openWorkerTaskCompletion(task, openDetails);
+  }
+
+  // Claim a project-level (assigned_to=null) task from /my-tasks. The
+  // /api/worker/claim-task route does the RLS-bypassing UPDATE through
+  // the admin client (see WorkerProjectView for the same pattern). On
+  // success we mirror the new assigned_to into the local shell so the
+  // detail modal re-renders with isMine=true and the Start/Done
+  // buttons appear.
+  async function handleClaimTask(taskId: string) {
+    setClaimBusyTaskId(taskId);
+    setClaimMessage(null);
+    try {
+      const response = await fetch("/api/worker/claim-task", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        task?: {
+          id: string;
+          assigned_to: string | null;
+          metadata?: Record<string, unknown> | null;
+        };
+      };
+      if (!response.ok) {
+        const fallback =
+          response.status === 409
+            ? t("tasks.claimAlreadyAssigned")
+            : t("tasks.claimFailed");
+        setClaimMessage({ kind: "err", text: payload.error ?? fallback });
+        return;
+      }
+      const claimed = payload.task;
+      if (!claimed) {
+        setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+        return;
+      }
+      // Update the modal's task object too — the live lookup against
+      // shell.tasks will pick up the new assignment on the next
+      // render, but the snapshot needs to flip immediately so the
+      // Claim button hides without flicker.
+      setSelectedTask((current) =>
+        current && current.id === claimed.id
+          ? {
+              ...current,
+              assigned_to: claimed.assigned_to,
+              metadata: claimed.metadata ?? current.metadata,
+            }
+          : current,
+      );
+      setClaimedTaskAssignees((current) => {
+        const next = new Map(current);
+        next.set(claimed.id, claimed.assigned_to);
+        return next;
+      });
+      setClaimedTaskMetadata((current) => {
+        const next = new Map(current);
+        next.set(claimed.id, claimed.metadata ?? null);
+        return next;
+      });
+      setClaimMessage({ kind: "ok", text: t("tasks.claimed") });
+    } catch {
+      setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+    } finally {
+      setClaimBusyTaskId(null);
+    }
+  }
+
+  // Resolve the project filter into a concrete project_id (or null = all).
+  // "__current__" follows the live clock-in so the filter "tracks" as the
+  // worker switches projects.
+  const resolvedProjectId =
+    projectFilter === ""
+      ? null
+      : projectFilter === "__current__"
+        ? currentProjectId
+        : projectFilter;
 
   function filterMatch(task: WorkerTaskItem): boolean {
+    if (resolvedProjectId && task.project_id !== resolvedProjectId) return false;
     if (filter === "all") return true;
     if (filter === "mine") return task.assigned_to === shell.profile.id;
     if (filter === "urgent") return task.priority === "urgent" || task.priority === "high";
@@ -71,17 +172,45 @@ export function TasksPage() {
     return true;
   }
 
-  const activeTasks = shell.tasks
+  const taskList = useMemo(() => {
+    if (claimedTaskAssignees.size === 0 && claimedTaskMetadata.size === 0) {
+      return shell.tasks;
+    }
+    let next = shell.tasks;
+    for (const [taskId, assignedTo] of claimedTaskAssignees.entries()) {
+      next = applyClaimedTaskAssignment(next, taskId, assignedTo);
+    }
+    if (claimedTaskMetadata.size > 0) {
+      next = next.map((task) =>
+        claimedTaskMetadata.has(task.id)
+          ? { ...task, metadata: claimedTaskMetadata.get(task.id) ?? task.metadata }
+          : task,
+      );
+    }
+    return next;
+  }, [shell.tasks, claimedTaskAssignees, claimedTaskMetadata]);
+
+  const activeTasks = taskList
     .filter((task) => task.status !== "done" && task.status !== "cancelled")
     .filter(filterMatch);
-  const doneTasks = shell.tasks.filter((task) => task.status === "done");
+  const doneTasks = taskList
+    .filter((task) => task.status === "done")
+    .filter((task) =>
+      resolvedProjectId ? task.project_id === resolvedProjectId : true,
+    );
+  // Refresh from the live shell.tasks list when we can, so status/attachment
+  // edits made while the modal is open are reflected. Fall back to the
+  // stored snapshot if the task has been removed from the list.
+  const liveSelectedTask = selectedTask
+    ? taskList.find((task) => task.id === selectedTask.id) ?? selectedTask
+    : null;
 
   // Done-counts per project across ALL tasks (filter-independent) so the
   // progress bar's denominator reflects total project scope, not the
   // currently-visible slice.
   const projectCounts = useMemo(() => {
     const counts = new Map<string, { done: number; total: number }>();
-    for (const task of shell.tasks) {
+    for (const task of taskList) {
       const key = task.project_id ?? "__noproject__";
       const entry = counts.get(key) ?? { done: 0, total: 0 };
       entry.total += 1;
@@ -89,15 +218,23 @@ export function TasksPage() {
       counts.set(key, entry);
     }
     return counts;
-  }, [shell.tasks]);
+  }, [taskList]);
 
   const activeByProject = useMemo(
-    () => groupByProject(activeTasks, t("common.general")),
-    [activeTasks, t],
+    () =>
+      groupWorkerTasksByProject(activeTasks, {
+        currentProjectId,
+        generalLabel: t("common.general"),
+      }),
+    [activeTasks, currentProjectId, t],
   );
   const doneByProject = useMemo(
-    () => groupByProject(doneTasks, t("common.general")),
-    [doneTasks, t],
+    () =>
+      groupWorkerTasksByProject(doneTasks, {
+        currentProjectId,
+        generalLabel: t("common.general"),
+      }),
+    [doneTasks, currentProjectId, t],
   );
 
   function bumpTask(taskId: string) {
@@ -122,6 +259,7 @@ export function TasksPage() {
   function renderActiveCard(task: WorkerTaskItem) {
     const updating = busyAction === `task-${task.id}`;
     const accent = getPriorityAccent(task.priority);
+    const ownership = classifyTaskForWorker(task, shell.profile.id);
 
     return (
       <div
@@ -140,10 +278,30 @@ export function TasksPage() {
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="task-title text-sm font-semibold text-[var(--text-primary)]">
+            <button
+              type="button"
+              onClick={() => openDetails(task)}
+              data-testid="worker-task-open-details"
+              className="task-title text-left text-sm font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline focus:underline"
+            >
               {task.title}
-            </div>
+            </button>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+              {ownership === "personal" ? (
+                <span
+                  className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                  style={{ background: "rgba(191, 162, 52, 0.14)", color: "var(--brand-yellow)" }}
+                >
+                  {t("tasks.labelMyTask")}
+                </span>
+              ) : ownership === "project" ? (
+                <span
+                  className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                  style={{ background: "rgba(59, 130, 246, 0.14)", color: "#3b82f6" }}
+                >
+                  {t("tasks.labelProjectTask")}
+                </span>
+              ) : null}
               <span>{task.projectName ?? t("common.general")} • {task.status.replace("_", " ")}</span>
               {task.due_date ? (() => {
                 const dueIso = task.due_date.slice(0, 10);
@@ -206,6 +364,15 @@ export function TasksPage() {
         ) : null}
 
         <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => openDetails(task)}
+            data-testid="worker-task-open-details"
+            className="button-base button-secondary flex-1"
+          >
+            <Eye size={14} />
+            {t("tasks.viewDetails")}
+          </button>
           {task.status === "pending" ? (
             <button
               type="button"
@@ -219,11 +386,9 @@ export function TasksPage() {
           ) : null}
           <button
             type="button"
-            onClick={() => {
-              bumpTask(task.id);
-              void updateTaskStatus(task.id, "done");
-            }}
+            onClick={() => openCompletion(task)}
             disabled={updating}
+            data-testid="worker-task-mark-done-card"
             className="button-base button-primary flex-1"
           >
             <CheckCircle2 size={14} />
@@ -236,10 +401,13 @@ export function TasksPage() {
 
   function renderDoneCard(task: WorkerTaskItem) {
     return (
-      <div
+      <button
+        type="button"
+        onClick={() => openDetails(task)}
+        data-testid="worker-task-open-details"
         key={task.id}
         data-complete="true"
-        className="task-card surface-panel p-3"
+        className="task-card surface-panel block w-full p-3 text-left"
         style={{ "--task-accent": "var(--green)" } as CSSProperties}
       >
         <div className="task-title text-sm font-semibold text-[var(--text-primary)]">
@@ -248,7 +416,7 @@ export function TasksPage() {
         <div className="mt-1 text-xs text-[var(--text-secondary)]">
           {task.projectName ?? t("common.general")} • {t("tasks.done")}
         </div>
-      </div>
+      </button>
     );
   }
 
@@ -276,7 +444,7 @@ export function TasksPage() {
           <div className="text-lg font-bold text-[var(--text-primary)]">{t("common.open")}</div>
           <div className="text-xs text-[var(--text-muted)]">{activeTasks.length} {t("tasks.items")}</div>
         </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
           {(["all", "mine", "urgent", "today"] as const).map((key) => {
             const selected = filter === key;
             const label =
@@ -304,6 +472,26 @@ export function TasksPage() {
               </button>
             );
           })}
+          {/* Project filter — narrows the list and the chronology
+              grouping in lockstep. "Current project" tracks the live
+              clock-in so a worker who switches projects sees the new
+              tasks without re-selecting. */}
+          <select
+            value={projectFilter}
+            onChange={(event) => setProjectFilter(event.target.value)}
+            aria-label={t("tasks.projectFilterLabel")}
+            className="rounded-[var(--radius-pill)] border border-[var(--border-default)] bg-transparent px-3 py-1 text-xs font-semibold text-[var(--text-secondary)] outline-none"
+          >
+            <option value="">{t("tasks.projectFilterAll")}</option>
+            {currentProjectId ? (
+              <option value="__current__">{t("tasks.projectFilterCurrent")}</option>
+            ) : null}
+            {shell.projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="mt-4 space-y-5">
           {activeTasks.length === 0 ? (
@@ -369,6 +557,64 @@ export function TasksPage() {
           )}
         </div>
       </section>
+
+      {openError ? (
+        <div
+          role="alert"
+          data-testid="worker-task-open-error"
+          className="rounded-[var(--radius-md)] px-3 py-2 text-xs font-semibold"
+          style={{ background: "rgba(212, 81, 94, 0.12)", color: "var(--red)" }}
+        >
+          {openError}
+        </div>
+      ) : null}
+
+      {claimMessage ? (
+        <div
+          role="alert"
+          className="rounded-[var(--radius-md)] px-3 py-2 text-xs font-semibold"
+          style={{
+            background:
+              claimMessage.kind === "ok"
+                ? "rgba(15, 168, 120, 0.16)"
+                : "rgba(212, 81, 94, 0.12)",
+            color: claimMessage.kind === "ok" ? "var(--green)" : "var(--red)",
+          }}
+        >
+          {claimMessage.text}
+        </div>
+      ) : null}
+
+      <WorkerTaskDetailModal
+        task={liveSelectedTask}
+        initialMode={selectedTaskMode}
+        profileId={shell.profile.id}
+        busy={
+          liveSelectedTask
+            ? busyAction === `task-${liveSelectedTask.id}` ||
+              claimBusyTaskId === liveSelectedTask.id
+            : false
+        }
+        onClose={closeDetails}
+        onStart={(taskId) => {
+          void updateTaskStatus(taskId, "in_progress");
+        }}
+        onDone={(taskId, payload) => {
+          bumpTask(taskId);
+          submitWorkerTaskCompletion(
+            (id, status, completionPayload) => {
+              void updateTaskStatus(id, status, {
+                ...completionPayload,
+                projectId: liveSelectedTask?.project_id ?? null,
+                existingMetadata: liveSelectedTask?.metadata ?? null,
+              });
+            },
+            taskId,
+            payload,
+          );
+        }}
+        onClaim={(taskId) => void handleClaimTask(taskId)}
+      />
     </div>
   );
 }
