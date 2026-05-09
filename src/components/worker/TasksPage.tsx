@@ -605,6 +605,10 @@ export function TasksPage() {
             (id, status, completionPayload) => {
               void updateTaskStatus(id, status, {
                 ...completionPayload,
+                // The completion modal is the only legitimate caller for
+                // status="done" — the guard inside updateTaskStatus
+                // refuses any done-mutation that lacks this flag.
+                submittedFromCompletionModal: true,
                 projectId: liveSelectedTask?.project_id ?? null,
                 existingMetadata: liveSelectedTask?.metadata ?? null,
               });

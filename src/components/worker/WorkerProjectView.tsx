@@ -475,14 +475,26 @@ export function WorkerProjectView({
           void updateTaskStatus(taskId, "in_progress");
         }}
         onDone={(taskId, payload) => {
-          markLocalTask(taskId, "done");
+          // Defer the optimistic flip to "done" until updateTaskStatus
+          // actually returns ok. If the mutation throws (RLS denial,
+          // missing flag, network) we leave the card in its current
+          // section so the UI doesn't lie. router.refresh() inside
+          // updateTaskStatus will re-fetch tasks from SSR for the
+          // canonical state on the next render either way.
           submitWorkerTaskCompletion(
-            (id, status, completionPayload) => {
-              void updateTaskStatus(id, status, {
+            async (id, status, completionPayload) => {
+              const ok = await updateTaskStatus(id, status, {
                 ...completionPayload,
+                // The completion modal is the only legitimate caller
+                // for status="done" — the guard inside updateTaskStatus
+                // refuses any done-mutation that lacks this flag.
+                submittedFromCompletionModal: true,
                 projectId: liveSelectedTask?.project_id ?? null,
                 existingMetadata: liveSelectedTask?.metadata ?? null,
               });
+              if (ok) {
+                markLocalTask(id, "done");
+              }
             },
             taskId,
             payload,

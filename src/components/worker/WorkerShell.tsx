@@ -133,7 +133,7 @@ type WorkerShellContextValue = {
       projectId?: string | null;
       existingMetadata?: Record<string, unknown> | null;
     },
-  ) => Promise<void>;
+  ) => Promise<boolean>;
   toggleMute: () => void;
   drainOfflineQueue: () => Promise<void>;
   /**
@@ -1838,9 +1838,11 @@ export function WorkerShell({
           : t("tasks.taskUpdated");
       setBanner({ tone: "success", text: successMessage });
       router.refresh();
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Task update failed.";
       setBanner({ tone: "error", text: message });
+      return false;
     } finally {
       setBusyAction(null);
     }
