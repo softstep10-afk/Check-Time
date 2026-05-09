@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MediaSignTimeoutError,
   isBrowserUnsafeVideo,
   selectMediaPlayback,
+  signWithTimeout,
 } from "@/lib/media-playback";
 
 const baseOriginal = {
@@ -168,5 +170,56 @@ describe("isBrowserUnsafeVideo", () => {
         metadata: {},
       }),
     ).toBe(false);
+  });
+});
+
+describe("signWithTimeout", () => {
+  it("forwards a successful signing result unchanged", async () => {
+    const fast = Promise.resolve({
+      data: { signedUrl: "https://x/y" },
+      error: null,
+    });
+    const out = await signWithTimeout(fast, 200);
+    expect(out.error).toBeNull();
+    expect(out.data?.signedUrl).toBe("https://x/y");
+  });
+
+  it("forwards a rejection as a structured error rather than throwing", async () => {
+    // The whole point of the wrapper is that the caller never has to
+    // catch — a rejected supabase-js promise should arrive as
+    // {data: null, error: <thrown value>} so the UI's normal error
+    // branch handles it.
+    const slow = Promise.reject(new Error("network"));
+    const out = await signWithTimeout(slow, 200);
+    expect(out.data).toBeNull();
+    expect(out.error).toBeInstanceOf(Error);
+    expect((out.error as Error).message).toBe("network");
+  });
+
+  it("returns a MediaSignTimeoutError when the promise never settles", async () => {
+    // A promise that will never resolve simulates the
+    // dev-server-hangs-forever case. The wrapper must surface a
+    // clear timeout error so the UI can drop the Loading overlay
+    // and show "try Download instead".
+    const stuck = new Promise<{ data: null; error: unknown }>(() => {});
+    const out = await signWithTimeout(stuck, 50);
+    expect(out.data).toBeNull();
+    expect(out.error).toBeInstanceOf(MediaSignTimeoutError);
+  });
+
+  it("ignores a late resolution after the timeout has fired", async () => {
+    // The timer wins; the late resolution must NOT overwrite the
+    // outcome the caller already saw. Promise.race in JS already
+    // gives us this; the test pins the contract.
+    let resolveLate!: (v: { data: null; error: unknown }) => void;
+    const lateThenable = new Promise<{ data: null; error: unknown }>((r) => {
+      resolveLate = r;
+    });
+    const racePromise = signWithTimeout(lateThenable, 30);
+    const out = await racePromise;
+    expect(out.error).toBeInstanceOf(MediaSignTimeoutError);
+    // Resolving late after the race has ended should not throw or
+    // affect anything observable.
+    resolveLate({ data: null, error: { message: "too late" } });
   });
 });

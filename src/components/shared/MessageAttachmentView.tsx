@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { FileText, X } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+import { createClient } from "@/lib/supabase/client";
+import { normalizeStoragePath } from "@/lib/task-attachments";
 import type { MessageAttachment } from "@/lib/message-types";
 
 function formatFileSize(bytes: number): string {
@@ -18,9 +20,39 @@ export function MessageAttachmentView({
   attachment: MessageAttachment;
 }) {
   const { t } = useTranslation();
+  const supabase = useMemo(() => createClient(), []);
   const [lightbox, setLightbox] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState(attachment.url);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function resolveUrl() {
+      if (!attachment.storagePath) {
+        setResolvedUrl(attachment.url);
+        return;
+      }
+      const normalized = normalizeStoragePath(attachment.storagePath);
+      const { data, error } = await supabase.storage
+        .from("media")
+        .createSignedUrl(normalized, 3600);
+      if (!cancelled) {
+        setResolvedUrl(error || !data?.signedUrl ? attachment.url : data.signedUrl);
+      }
+    }
+    void resolveUrl();
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment.storagePath, attachment.url, supabase]);
 
   if (attachment.type === "image") {
+    if (!resolvedUrl) {
+      return (
+        <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2 text-xs text-[var(--text-secondary)]">
+          {attachment.filename}
+        </div>
+      );
+    }
     return (
       <>
         <button
@@ -29,7 +61,7 @@ export function MessageAttachmentView({
           className="mt-2 block overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-default)]"
         >
           <Image
-            src={attachment.url}
+            src={resolvedUrl}
             alt={attachment.filename}
             width={240}
             height={160}
@@ -50,7 +82,7 @@ export function MessageAttachmentView({
               <X size={18} />
             </button>
             <Image
-              src={attachment.url}
+              src={resolvedUrl}
               alt={attachment.filename}
               width={1200}
               height={800}
@@ -64,9 +96,16 @@ export function MessageAttachmentView({
   }
 
   if (attachment.type === "video") {
+    if (!resolvedUrl) {
+      return (
+        <div className="mt-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2 text-xs text-[var(--text-secondary)]">
+          {attachment.filename}
+        </div>
+      );
+    }
     return (
       <video
-        src={attachment.url}
+        src={resolvedUrl}
         controls
         playsInline
         preload="metadata"
@@ -78,7 +117,7 @@ export function MessageAttachmentView({
   // PDF
   return (
     <a
-      href={attachment.url}
+      href={resolvedUrl || "#"}
       target="_blank"
       rel="noopener noreferrer"
       className="mt-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2.5"

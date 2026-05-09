@@ -133,3 +133,54 @@ export function isBrowserUnsafeVideo(media: MediaLike): boolean {
   const path = media.storage_path.toLowerCase();
   return path.endsWith(".mov");
 }
+
+/**
+ * Hard upper bound for how long the manager UI is willing to wait for
+ * `supabase.storage.createSignedUrl()` to resolve before treating it
+ * as a failure. Without this, a request that hangs at the transport
+ * layer (DNS stall, TCP black-hole, dev server reverse-proxy bug)
+ * would leave the preview overlay spinning forever — try/finally
+ * around the await alone does not save us because `finally` only
+ * runs once the promise settles, which it never does in that case.
+ *
+ * 9s is long enough that a slow-but-working network on a coffee-shop
+ * Wi-Fi will still succeed, and short enough that the manager
+ * doesn't conclude the app is dead.
+ */
+export const MEDIA_SIGN_TIMEOUT_MS = 9000;
+
+export class MediaSignTimeoutError extends Error {
+  constructor() {
+    super("media sign timed out");
+    this.name = "MediaSignTimeoutError";
+  }
+}
+
+/**
+ * Wraps any signing promise in `Promise.race` against a manual
+ * timeout so the caller is guaranteed to see a resolution within
+ * MEDIA_SIGN_TIMEOUT_MS — either a real result, an error, or a
+ * MediaSignTimeoutError that the UI can map to "Could not load
+ * preview, please try Download". Returns the same `{data, error}`
+ * shape supabase-js uses so call sites stay close to the standard
+ * pattern.
+ */
+export async function signWithTimeout<T>(
+  task: Promise<{ data: T | null; error: unknown }>,
+  ms: number = MEDIA_SIGN_TIMEOUT_MS,
+): Promise<{ data: T | null; error: unknown }> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      task.then((value) => value).catch((caught) => ({ data: null, error: caught })),
+      new Promise<{ data: T | null; error: unknown }>((resolve) => {
+        timer = setTimeout(
+          () => resolve({ data: null, error: new MediaSignTimeoutError() }),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
