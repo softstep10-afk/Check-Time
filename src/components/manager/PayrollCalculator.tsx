@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Calculator, Download, Plus, X } from "lucide-react";
@@ -10,8 +10,19 @@ import { useTranslation } from "@/lib/i18n";
 import { DateField } from "@/components/shared/DateField";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { logAudit } from "@/lib/audit";
-import type { Profile } from "@/types/database";
+import {
+  buildPayrollDraftRows,
+  buildWorkerDisambiguationMap,
+  formatWorkerDisplayLabel,
+  groupPayrollRowsByDay,
+  groupPayrollRowsByWorker,
+  isOwnerRole,
+  sumDraftRowMinutes,
+  type PayrollDraftRow,
+} from "@/lib/manager-utils";
+import type { Profile, UserRole } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
+import { formatEventTime } from "@/lib/worker-utils";
 
 // ── Types ──
 
@@ -202,6 +213,134 @@ function generateCsv(period: PayPeriod): string {
   return [headers, ...rows].join("\n");
 }
 
+// ── Shift detail rendering ──
+
+// Row in the chronology + per-worker shift listing. Pure presentational —
+// review flags come prebuilt from buildPayrollDraftRows so this stays
+// trivial to reason about and easy to swap to compact / expanded modes
+// later. The same row markup is used for the Per-Worker expanded shift
+// list and the Chronology day buckets.
+function ShiftRow({
+  row,
+  t,
+  showWorker,
+}: {
+  row: PayrollDraftRow;
+  t: ReturnType<typeof useTranslation>["t"];
+  showWorker?: boolean;
+}) {
+  const isCritical = row.shiftSeverity === "critical";
+  const isWarning = row.shiftSeverity === "warning";
+  const flagBg = isCritical
+    ? "rgba(212, 81, 94, 0.06)"
+    : isWarning
+      ? "rgba(245, 158, 11, 0.06)"
+      : "transparent";
+  const flagBorder = isCritical
+    ? "rgba(212, 81, 94, 0.45)"
+    : isWarning
+      ? "rgba(245, 158, 11, 0.35)"
+      : "var(--border-default)";
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-2 px-2 py-2 text-xs"
+      style={{ background: flagBg, borderLeft: `3px solid ${flagBorder}` }}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {showWorker ? (
+            <span className="font-semibold text-[var(--text-primary)]">
+              {row.profileName}
+            </span>
+          ) : null}
+          <span className="text-[var(--text-secondary)]">{row.projectName}</span>
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-2 font-mono text-[10px] text-[var(--text-muted)]">
+          <span>{formatEventTime(row.clockInTime)}</span>
+          <span>→</span>
+          <span>
+            {row.clockOutTime
+              ? formatEventTime(row.clockOutTime)
+              : t("payroll.openShift")}
+          </span>
+          <span>·</span>
+          <span>{(row.durationMinutes / 60).toFixed(1)}h</span>
+        </div>
+        {row.checkoutNote ? (
+          <div className="mt-1 truncate text-[10px] italic text-[var(--text-secondary)]">
+            “{row.checkoutNote}”
+          </div>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        {isCritical ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }}
+          >
+            ≥24h
+          </span>
+        ) : isWarning ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
+          >
+            ≥16h
+          </span>
+        ) : null}
+        {!row.hasGps ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
+          >
+            {t("payroll.noGpsShort")}
+          </span>
+        ) : null}
+        {row.missingCheckout ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }}
+          >
+            {t("payroll.missingCheckoutShort")}
+          </span>
+        ) : null}
+        {row.missingVideo ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
+          >
+            {t("payroll.missingVideoShort")}
+          </span>
+        ) : null}
+        {row.hasTransferGap ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
+          >
+            {t("payroll.transferGapShort")}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function ShiftDetailList({
+  rows,
+  t,
+}: {
+  rows: PayrollDraftRow[];
+  t: ReturnType<typeof useTranslation>["t"];
+}) {
+  return (
+    <div className="divide-y divide-[var(--border-subtle)]">
+      {rows.map((row) => (
+        <ShiftRow key={row.sessionId} row={row} t={t} />
+      ))}
+    </div>
+  );
+}
+
 // ── Component ──
 
 export function PayrollCalculator({
@@ -231,6 +370,21 @@ export function PayrollCalculator({
   const [period, setPeriod] = useState<PayPeriod | null>(null);
   const [savedPeriods, setSavedPeriods] = useState<Array<{ id: string; label: string; status: string }>>([]);
   const [tab, setTab] = useState<"workers" | "projects">("workers");
+  // Review view mode for the workers tab. byWorker = grouped table with
+  // shift rows under each worker. chronology = a single day-grouped
+  // timeline across the filtered worker(s). Both surfaces use the same
+  // PayrollDraftRow[] derived from sessions + the period dates.
+  const [reviewMode, setReviewMode] = useState<"byWorker" | "chronology">(
+    "byWorker",
+  );
+  // Empty string = all workers. Anything else = a profile id. The filter
+  // narrows the displayed rows AND the visible selection / bulk-action
+  // surface; pay_period_items themselves are unchanged.
+  const [workerFilter, setWorkerFilter] = useState<string>("");
+  // Per-worker expand/collapse for the byWorker mode.
+  const [collapsedWorkerIds, setCollapsedWorkerIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -599,6 +753,76 @@ export function PayrollCalculator({
     });
   }
 
+  // Bridge between the two payroll models. pay_periods/pay_period_items is
+  // the canonical draft/approve/paid UI container; payroll_runs +
+  // payroll_closures is the immutable "paid through" anchor the overview's
+  // computePayrollPreview reads to drop already-paid hours from the
+  // unpaid totals. Without this bridge, marking a pay_period paid did not
+  // decrement the dashboard's unpaid-hours figure — the two models drifted
+  // and managers saw double-counted balances. Linking by metadata.pay_period_id
+  // lets repeat invocations (markAllPaid after processSelected, or two
+  // selects on different worker subsets) reuse the same payroll_runs row.
+  async function mirrorPaidToClosures(workerIds: string[]): Promise<string | null> {
+    if (AUTH_BYPASS_ENABLED) return null;
+    if (!period) return null;
+    if (workerIds.length === 0) return null;
+
+    const { data: existing } = await supabase
+      .from("payroll_runs")
+      .select("id")
+      .eq("org_id", orgId)
+      .filter("metadata->>pay_period_id", "eq", period.id)
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+
+    let runId = existing?.id ?? null;
+
+    if (!runId) {
+      const totals = period.lines.reduce(
+        (acc, l) => {
+          if (workerIds.includes(l.workerId)) {
+            acc.hours += l.regHours + l.otHours;
+            acc.amount += l.grossTotal;
+          }
+          return acc;
+        },
+        { hours: 0, amount: 0 },
+      );
+      const { data: inserted, error: runErr } = await supabase
+        .from("payroll_runs")
+        .insert({
+          org_id: orgId,
+          run_by: managerId,
+          period_start: period.startDate,
+          period_end: period.endDate,
+          status: "confirmed",
+          total_hours: r2(totals.hours),
+          total_amount: r2(totals.amount),
+          confirmed_at: new Date().toISOString(),
+          metadata: { pay_period_id: period.id, source: "pay_periods_bridge" },
+        })
+        .select("id")
+        .single<{ id: string }>();
+      if (runErr || !inserted) {
+        return runErr?.message ?? "payroll_runs insert returned no row";
+      }
+      runId = inserted.id;
+    }
+
+    const closedThrough = `${period.endDate}T23:59:59Z`;
+    const closureRows = workerIds.map((wid) => ({
+      org_id: orgId,
+      payroll_run_id: runId,
+      profile_id: wid,
+      closed_through: closedThrough,
+    }));
+
+    const { error: closeErr } = await supabase
+      .from("payroll_closures")
+      .insert(closureRows);
+    return closeErr?.message ?? null;
+  }
+
   async function markAllPaid() {
     if (!period) return;
     const previous = period;
@@ -620,6 +844,17 @@ export function PayrollCalculator({
         .update({ status: "paid" })
         .eq("pay_period_id", period.id);
       if (iErr) { setPeriod(previous); setError(iErr.message); return; }
+
+      // Mirror the paid transition into payroll_closures so the overview
+      // unpaid-hours computation sees the cutoff. A failure here is logged
+      // but not surfaced as a hard error — the pay_period is already paid
+      // in its own table, and a manager can re-trigger by tapping again.
+      const mirrorErr = await mirrorPaidToClosures(
+        period.lines.map((l) => l.workerId),
+      );
+      if (mirrorErr) {
+        console.warn("payroll_closures mirror failed:", mirrorErr);
+      }
     }
 
     void logAudit({
@@ -653,9 +888,13 @@ export function PayrollCalculator({
 
   async function processSelected() {
     if (!period) return;
-    if (selectedIds.size === 0) return;
+    // Per spec — never act outside what the manager can currently see.
+    // visibleSelectedIds is selectedIds ∩ visibleLines.workerId; we
+    // pass the intersection rather than selectedIds so a stale
+    // selection from a previous filter cannot leak through.
+    if (visibleSelectedIds.size === 0) return;
 
-    const ids = [...selectedIds];
+    const ids = [...visibleSelectedIds];
     const nextStatus: PeriodStatus = period.status === "draft" ? "approved" : "paid";
 
     if (!AUTH_BYPASS_ENABLED) {
@@ -668,6 +907,13 @@ export function PayrollCalculator({
         setError(itemErr.message);
         return;
       }
+
+      if (nextStatus === "paid") {
+        const mirrorErr = await mirrorPaidToClosures(ids);
+        if (mirrorErr) {
+          console.warn("payroll_closures mirror failed:", mirrorErr);
+        }
+      }
     }
 
     setPeriod((prev) =>
@@ -675,7 +921,9 @@ export function PayrollCalculator({
         ? {
             ...prev,
             lines: prev.lines.map((line) =>
-              selectedIds.has(line.workerId) ? { ...line, status: nextStatus } : line,
+              visibleSelectedIds.has(line.workerId)
+                ? { ...line, status: nextStatus }
+                : line,
             ),
           }
         : prev,
@@ -797,10 +1045,104 @@ export function PayrollCalculator({
     doc.save(`paystub_${safeName}_${period.startDate}_to_${period.endDate}.pdf`);
   }
 
-  const eligibleSelectableLines = useMemo(() => {
+  // Worker lines visible after the worker filter is applied. A blank
+  // filter shows everything. Selection / bulk actions are scoped to
+  // this slice — clicking "Select all" never reaches outside the
+  // currently-visible workers.
+  const visibleLines = useMemo(() => {
     if (!period) return [] as WorkerLine[];
-    return period.lines.filter((line) => line.hasHours && line.status !== "paid");
-  }, [period]);
+    if (!workerFilter) return period.lines;
+    return period.lines.filter((line) => line.workerId === workerFilter);
+  }, [period, workerFilter]);
+
+  const eligibleSelectableLines = useMemo(() => {
+    return visibleLines.filter(
+      (line) => line.hasHours && line.status !== "paid",
+    );
+  }, [visibleLines]);
+
+  // require_video is read once off the profiles array. The shift-row
+  // helper uses it to flag missing-checkout-video on close.
+  const requireVideoByProfileId = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const p of profiles) {
+      map[p.id] = Boolean(p.require_video);
+    }
+    return map;
+  }, [profiles]);
+
+  // Worker disambiguation map — flags name collisions (the "two
+  // Olivers" case) and supplies the role / id suffix so the worker
+  // filter, the per-row name, and any future selectors all show the
+  // same disambiguator instead of inventing their own.
+  const workerLabels = useMemo(
+    () =>
+      buildWorkerDisambiguationMap(
+        profiles.map((p) => ({
+          id: p.id,
+          name: p.name,
+          role: p.role,
+        })),
+      ),
+    [profiles],
+  );
+
+  // Owner-vs-manager separation. Pay/$ columns and totals are
+  // owner-only; manager-tier roles still see the operational
+  // (hours / review flag) columns. Falls back to the conservative
+  // "no money" path on any unexpected role string.
+  const showFinancialFields = isOwnerRole(managerRole as never);
+
+  // Shift-level rows derived from sessions + period dates + worker filter.
+  // pay_period_items model is per-worker; this derivation gives the
+  // review surface chronological visibility without changing persistence.
+  const draftRows = useMemo<PayrollDraftRow[]>(() => {
+    if (!period) return [];
+    return buildPayrollDraftRows({
+      sessions,
+      hasGpsBySessionId,
+      requireVideoByProfileId,
+      startDate: period.startDate,
+      endDate: period.endDate,
+      profileId: workerFilter || undefined,
+    });
+  }, [period, sessions, hasGpsBySessionId, requireVideoByProfileId, workerFilter]);
+
+  const workerGroups = useMemo(
+    () => groupPayrollRowsByWorker(draftRows),
+    [draftRows],
+  );
+
+  const dayGroups = useMemo(() => groupPayrollRowsByDay(draftRows), [draftRows]);
+
+  // Selected ids that are also currently visible after the worker
+  // filter. Per spec, bulk actions never reach outside what the manager
+  // can see — even if a stale selection persists when the filter
+  // changes, the "Process selected" button only counts/operates on the
+  // intersection.
+  const visibleSelectedIds = useMemo(() => {
+    if (selectedIds.size === 0) return new Set<string>();
+    const visibleSet = new Set(visibleLines.map((line) => line.workerId));
+    const next = new Set<string>();
+    for (const id of selectedIds) {
+      if (visibleSet.has(id)) next.add(id);
+    }
+    return next;
+  }, [selectedIds, visibleLines]);
+
+  // "Selected total hours" reads PayrollDraftRow durations for the
+  // currently-selected visible workers. Surfaces alongside the
+  // bulk-action button so the manager sees what they're about to act on.
+  const selectionSummary = useMemo(() => {
+    if (visibleSelectedIds.size === 0) {
+      return { count: 0, totalHours: 0 };
+    }
+    const filteredRows = draftRows.filter((row) =>
+      visibleSelectedIds.has(row.profileId),
+    );
+    const sum = sumDraftRowMinutes(filteredRows);
+    return { count: visibleSelectedIds.size, totalHours: sum.totalHours };
+  }, [draftRows, visibleSelectedIds]);
 
   const summary = useMemo(() => {
     if (!period) return null;
@@ -988,20 +1330,34 @@ export function PayrollCalculator({
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.otHours")}</div>
               <div className="mt-1 font-mono text-xl font-bold" style={{ color: summary.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{summary.otHours.toFixed(1)}h</div>
             </div>
-            <div className="surface-card p-3">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.grossPay")}</div>
-              <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">{currency.format(summary.grossTotal)}</div>
-            </div>
-            <div className="surface-card p-3">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.adjustments")}</div>
-              <div className="mt-1 font-mono text-xl font-bold" style={{ color: summary.adjustments !== 0 ? "var(--brand-yellow)" : "var(--text-primary)" }}>
-                {summary.adjustments >= 0 ? "+" : ""}{currency.format(summary.adjustments)}
+            {/* Financial summary cards — owner / admin only. Manager and
+                supervisor see the operational hours columns and the
+                review/status surface; the dollar totals are hidden behind
+                isOwnerRole(managerRole). The DB does not enforce this
+                gate (RLS lets manager-tier roles read the rows), so the
+                check is purely UI. */}
+            {showFinancialFields ? (
+              <>
+                <div className="surface-card p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.grossPay")}</div>
+                  <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">{currency.format(summary.grossTotal)}</div>
+                </div>
+                <div className="surface-card p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.adjustments")}</div>
+                  <div className="mt-1 font-mono text-xl font-bold" style={{ color: summary.adjustments !== 0 ? "var(--brand-yellow)" : "var(--text-primary)" }}>
+                    {summary.adjustments >= 0 ? "+" : ""}{currency.format(summary.adjustments)}
+                  </div>
+                </div>
+                <div className="surface-card p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.netPay")}</div>
+                  <div className="mt-1 font-mono text-xl font-bold text-[var(--brand-yellow)]">{currency.format(summary.netTotal)}</div>
+                </div>
+              </>
+            ) : (
+              <div className="surface-card flex items-center justify-center p-3 text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)] xl:col-span-3">
+                {t("payroll.financialOwnerOnly")}
               </div>
-            </div>
-            <div className="surface-card p-3">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.netPay")}</div>
-              <div className="mt-1 font-mono text-xl font-bold text-[var(--brand-yellow)]">{currency.format(summary.netTotal)}</div>
-            </div>
+            )}
           </section>
 
           {/* Bulk actions */}
@@ -1020,15 +1376,17 @@ export function PayrollCalculator({
               <button
                 type="button"
                 onClick={() => void processSelected()}
-                disabled={selectedIds.size === 0}
+                disabled={selectionSummary.count === 0}
                 className="rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold disabled:opacity-50"
                 style={{
-                  background: selectedIds.size === 0 ? "var(--border-default)" : "var(--brand-yellow)",
-                  color: selectedIds.size === 0 ? "var(--text-muted)" : "var(--text-inverse)",
+                  background: selectionSummary.count === 0 ? "var(--border-default)" : "var(--brand-yellow)",
+                  color: selectionSummary.count === 0 ? "var(--text-muted)" : "var(--text-inverse)",
                 }}
               >
                 {t("payroll.processSelected")}
-                {selectedIds.size > 0 ? ` · ${selectedIds.size}` : ""}
+                {selectionSummary.count > 0
+                  ? ` · ${selectionSummary.count} · ${selectionSummary.totalHours.toFixed(1)}h`
+                  : ""}
               </button>
             ) : null}
             <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}>
@@ -1048,111 +1406,382 @@ export function PayrollCalculator({
           </section>
 
           {tab === "workers" ? (
-            <section className="surface-card overflow-x-auto p-4">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
-                    <th className="pb-3 pr-2 font-semibold">
+            <>
+              {/* Worker filter + view-mode controls. Filter is a plain
+                  presentational narrowing — it never deletes or excludes
+                  pay_period_items, only what the manager sees. */}
+              <section className="surface-card flex flex-wrap items-center justify-between gap-3 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("payroll.workerFilterLabel")}
+                  </label>
+                  <select
+                    value={workerFilter}
+                    onChange={(event) => setWorkerFilter(event.target.value)}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+                    aria-label={t("payroll.workerFilterLabel")}
+                  >
+                    <option value="">{t("payroll.workerFilterAll")}</option>
+                    {period.lines
+                      .filter((line) => line.hasHours)
+                      .map((line) => (
+                        <option key={line.workerId} value={line.workerId}>
+                          {formatWorkerDisplayLabel(
+                            {
+                              id: line.workerId,
+                              name: line.workerName,
+                              role: line.workerRole as UserRole,
+                            },
+                            workerLabels.get(line.workerId),
+                          )}
+                        </option>
+                      ))}
+                  </select>
+                  {workerFilter ? (
+                    <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.12)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand-yellow)]">
+                      {t("payroll.workerFilterActive")}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setReviewMode("byWorker")}
+                    aria-pressed={reviewMode === "byWorker"}
+                    className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                    style={{
+                      background:
+                        reviewMode === "byWorker"
+                          ? "var(--brand-yellow)"
+                          : "transparent",
+                      color:
+                        reviewMode === "byWorker"
+                          ? "var(--text-inverse)"
+                          : "var(--text-secondary)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                  >
+                    {t("payroll.reviewModeByWorker")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReviewMode("chronology")}
+                    aria-pressed={reviewMode === "chronology"}
+                    className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+                    style={{
+                      background:
+                        reviewMode === "chronology"
+                          ? "var(--brand-yellow)"
+                          : "transparent",
+                      color:
+                        reviewMode === "chronology"
+                          ? "var(--text-inverse)"
+                          : "var(--text-secondary)",
+                      border: "1px solid var(--border-default)",
+                    }}
+                  >
+                    {t("payroll.reviewModeChronology")}
+                  </button>
+                </div>
+              </section>
+
+              {visibleLines.length === 0 ? (
+                <section className="surface-card p-6 text-center text-sm text-[var(--text-secondary)]">
+                  {workerFilter
+                    ? t("payroll.emptyWorkerInPeriod")
+                    : t("payroll.emptyPeriod")}
+                </section>
+              ) : reviewMode === "byWorker" ? (
+                <section className="surface-card overflow-x-auto p-4">
+                  {/* Aggregate per-worker line + a collapsible shift list
+                      under each worker for chronological review. */}
+                  <div className="flex items-center justify-between gap-3 pb-3">
+                    <div className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                       <input
                         type="checkbox"
                         aria-label={t("payroll.selectAll")}
                         checked={
                           eligibleSelectableLines.length > 0 &&
-                          selectedIds.size === eligibleSelectableLines.length
+                          visibleSelectedIds.size === eligibleSelectableLines.length
                         }
                         ref={(el) => {
                           if (!el) return;
                           el.indeterminate =
-                            selectedIds.size > 0 &&
-                            selectedIds.size < eligibleSelectableLines.length;
+                            visibleSelectedIds.size > 0 &&
+                            visibleSelectedIds.size < eligibleSelectableLines.length;
                         }}
                         onChange={() => toggleSelectAll(eligibleSelectableLines)}
                         disabled={eligibleSelectableLines.length === 0}
                         className="h-4 w-4 accent-[var(--brand-yellow)]"
                       />
-                    </th>
-                    <th className="pb-3 pr-3 font-semibold">{t("overview.colName")}</th>
-                    <th className="pb-3 pr-3 font-semibold">{t("payroll.regHours")}</th>
-                    <th className="pb-3 pr-3 font-semibold">{t("payroll.otHours")}</th>
-                    <th className="pb-3 pr-3 font-semibold">{t("payroll.noGpsHours")}</th>
-                    <th className="pb-3 pr-3 font-semibold">{t("common.rate")}</th>
-                    <th className="pb-3 pr-3 font-semibold">{t("payroll.grossPay")}</th>
-                    <th className="pb-3 pr-3 font-semibold">{t("payroll.adjustments")}</th>
-                    <th className="pb-3 pr-3 font-semibold">{t("payroll.netPay")}</th>
-                    <th className="pb-3 font-semibold" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {period.lines.map((line) => (
-                    <tr key={line.workerId} className="border-b border-[var(--border-subtle)]" style={{ opacity: line.hasHours ? 1 : 0.4 }}>
-                      <td className="py-3 pr-2">
-                        <input
-                          type="checkbox"
-                          aria-label={line.workerName}
-                          checked={selectedIds.has(line.workerId)}
-                          onChange={() => toggleSelect(line.workerId)}
-                          disabled={!line.hasHours || line.status === "paid"}
-                          className="h-4 w-4 accent-[var(--brand-yellow)]"
-                        />
-                      </td>
-                      <td className="py-3 pr-3">
-                        <div className="font-semibold text-[var(--text-primary)]">{line.workerName}</div>
-                        <span className="mt-0.5 inline-block rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ background: "rgba(191, 162, 52, 0.12)", color: "var(--brand-yellow)" }}>{line.workerRole}</span>
-                        {line.rate === 0 && line.hasHours ? <div className="mt-1 text-[10px] font-semibold" style={{ color: "#f59e0b" }}>{t("payroll.rateNotSet")}</div> : null}
-                        {!line.hasHours ? <div className="mt-1 text-[10px] text-[var(--text-muted)]">{t("payroll.noHours")}</div> : null}
-                      </td>
-                      <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-primary)]">{line.regHours.toFixed(1)}h</td>
-                      <td className="py-3 pr-3 whitespace-nowrap font-mono" style={{ color: line.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{line.otHours.toFixed(1)}h</td>
-                      <td
-                        className="py-3 pr-3 whitespace-nowrap font-mono"
-                        style={{ color: line.noGpsHours > 0 ? "#f59e0b" : "var(--text-muted)" }}
-                        title={line.itemId && line.noGpsHours === 0 ? t("payroll.noGpsHoursLoadedHint") : undefined}
-                      >
-                        {line.itemId && line.noGpsHours === 0
-                          ? "—"
-                          : `${line.noGpsHours.toFixed(1)}h`}
-                      </td>
-                      <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-secondary)]">${line.rate.toFixed(2)}</td>
-                      <td className="py-3 pr-3 whitespace-nowrap font-mono font-semibold text-[var(--text-primary)]">{currency.format(line.grossTotal)}</td>
-                      <td className="py-3 pr-3">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {line.adjustments.map((adj) => (
-                            <span key={adj.id} className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: adj.type === "deduction" ? "rgba(212, 81, 94, 0.12)" : "rgba(15, 168, 120, 0.12)", color: adj.type === "deduction" ? "var(--red)" : "var(--green)" }} title={adj.note}>
-                              {adj.type === "deduction" ? "-" : "+"}{currency.format(adj.amount)}
-                              {period.status === "draft" ? <button type="button" onClick={() => removeAdjustment(line.workerId, adj.id)} className="ml-0.5"><X size={10} /></button> : null}
-                            </span>
-                          ))}
-                          {period.status === "draft" ? (
-                            <button type="button" onClick={() => { setAdjWorker(line.workerId); setAdjType("bonus"); setAdjAmount(""); setAdjNote(""); }} className="inline-flex items-center gap-0.5 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(191, 162, 52, 0.08)", color: "var(--brand-yellow)" }}>
-                              <Plus size={10} />
-                            </button>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="py-3 pr-3 whitespace-nowrap font-mono font-bold text-[var(--brand-yellow)]">{currency.format(line.netTotal)}</td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={{ background: `color-mix(in srgb, ${statusColor(line.status)} 16%, transparent)`, color: statusColor(line.status) }}>
-                            {line.status}
-                          </span>
-                          {line.hasHours ? (
-                            <button
-                              type="button"
-                              onClick={() => void downloadPaystub(line)}
-                              title={t("payroll.viewPaystub")}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] border"
-                              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+                      <span>{t("payroll.selectAllVisible")}</span>
+                    </div>
+                  </div>
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
+                        <th className="pb-3 pr-2 font-semibold" />
+                        <th className="pb-3 pr-3 font-semibold">{t("overview.colName")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("payroll.regHours")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("payroll.otHours")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("payroll.noGpsHours")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("common.rate")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("payroll.grossPay")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("payroll.adjustments")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("payroll.netPay")}</th>
+                        <th className="pb-3 font-semibold" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleLines.map((line) => {
+                        const group = workerGroups.find(
+                          (g) => g.profileId === line.workerId,
+                        );
+                        const isCollapsed = collapsedWorkerIds.has(line.workerId);
+                        const reviewBlocked =
+                          group !== undefined &&
+                          (group.extremeShiftCount > 0 ||
+                            group.missingCheckoutCount > 0);
+                        const reviewWarn =
+                          group !== undefined &&
+                          (group.longShiftCount > 0 ||
+                            group.missingVideoCount > 0 ||
+                            group.transferGapCount > 0 ||
+                            group.noGpsMinutes > 0);
+                        const reviewState: "blocked" | "warn" | "clean" = reviewBlocked
+                          ? "blocked"
+                          : reviewWarn
+                            ? "warn"
+                            : "clean";
+                        return (
+                          <Fragment key={line.workerId}>
+                            <tr
+                              className="border-b border-[var(--border-subtle)]"
+                              style={{ opacity: line.hasHours ? 1 : 0.4 }}
                             >
-                              <Download size={11} />
-                            </button>
-                          ) : null}
+                              <td className="py-3 pr-2 align-top">
+                                <input
+                                  type="checkbox"
+                                  aria-label={line.workerName}
+                                  checked={selectedIds.has(line.workerId)}
+                                  onChange={() => toggleSelect(line.workerId)}
+                                  disabled={!line.hasHours || line.status === "paid"}
+                                  className="h-4 w-4 accent-[var(--brand-yellow)]"
+                                />
+                              </td>
+                              <td className="py-3 pr-3 align-top">
+                                <div className="flex items-center gap-2">
+                                  {group && group.rows.length > 0 ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCollapsedWorkerIds((prev) => {
+                                          const next = new Set(prev);
+                                          if (next.has(line.workerId))
+                                            next.delete(line.workerId);
+                                          else next.add(line.workerId);
+                                          return next;
+                                        });
+                                      }}
+                                      aria-label={
+                                        isCollapsed
+                                          ? t("payroll.expandShifts")
+                                          : t("payroll.collapseShifts")
+                                      }
+                                      className="inline-flex h-5 w-5 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)]"
+                                    >
+                                      {isCollapsed ? "▸" : "▾"}
+                                    </button>
+                                  ) : null}
+                                  <span className="font-semibold text-[var(--text-primary)]">
+                                    {formatWorkerDisplayLabel(
+                                      {
+                                        id: line.workerId,
+                                        name: line.workerName,
+                                        role: line.workerRole as UserRole,
+                                      },
+                                      workerLabels.get(line.workerId),
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  <span
+                                    className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                                    style={{
+                                      background: "rgba(191, 162, 52, 0.12)",
+                                      color: "var(--brand-yellow)",
+                                    }}
+                                  >
+                                    {line.workerRole}
+                                  </span>
+                                  <span
+                                    className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                                    style={
+                                      reviewState === "blocked"
+                                        ? { background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }
+                                        : reviewState === "warn"
+                                          ? { background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }
+                                          : { background: "rgba(15, 168, 120, 0.14)", color: "var(--green)" }
+                                    }
+                                    title={
+                                      reviewState === "blocked"
+                                        ? t("payroll.reviewBlockedHint")
+                                        : reviewState === "warn"
+                                          ? t("payroll.reviewWarnHint")
+                                          : t("payroll.reviewCleanHint")
+                                    }
+                                  >
+                                    {reviewState === "blocked"
+                                      ? t("payroll.reviewBlocked")
+                                      : reviewState === "warn"
+                                        ? t("payroll.reviewWarn")
+                                        : t("payroll.reviewClean")}
+                                  </span>
+                                  {group && group.extremeShiftCount > 0 ? (
+                                    <span
+                                      className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                                      style={{ background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }}
+                                    >
+                                      {group.extremeShiftCount} ≥24h
+                                    </span>
+                                  ) : null}
+                                  {group && group.longShiftCount > 0 ? (
+                                    <span
+                                      className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                                      style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
+                                    >
+                                      {group.longShiftCount} ≥16h
+                                    </span>
+                                  ) : null}
+                                  {group && group.missingCheckoutCount > 0 ? (
+                                    <span
+                                      className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                                      style={{ background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }}
+                                    >
+                                      {group.missingCheckoutCount} {t("payroll.missingCheckoutShort")}
+                                    </span>
+                                  ) : null}
+                                  {group && group.missingVideoCount > 0 ? (
+                                    <span
+                                      className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                                      style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
+                                    >
+                                      {group.missingVideoCount} {t("payroll.missingVideoShort")}
+                                    </span>
+                                  ) : null}
+                                  {group && group.transferGapCount > 0 ? (
+                                    <span
+                                      className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                                      style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
+                                    >
+                                      {group.transferGapCount} {t("payroll.transferGapShort")}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                {line.rate === 0 && line.hasHours ? <div className="mt-1 text-[10px] font-semibold" style={{ color: "#f59e0b" }}>{t("payroll.rateNotSet")}</div> : null}
+                                {!line.hasHours ? <div className="mt-1 text-[10px] text-[var(--text-muted)]">{t("payroll.noHours")}</div> : null}
+                              </td>
+                              <td className="py-3 pr-3 whitespace-nowrap align-top font-mono text-[var(--text-primary)]">{line.regHours.toFixed(1)}h</td>
+                              <td className="py-3 pr-3 whitespace-nowrap align-top font-mono" style={{ color: line.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{line.otHours.toFixed(1)}h</td>
+                              <td
+                                className="py-3 pr-3 whitespace-nowrap align-top font-mono"
+                                style={{ color: line.noGpsHours > 0 ? "#f59e0b" : "var(--text-muted)" }}
+                                title={line.itemId && line.noGpsHours === 0 ? t("payroll.noGpsHoursLoadedHint") : undefined}
+                              >
+                                {line.itemId && line.noGpsHours === 0
+                                  ? "—"
+                                  : `${line.noGpsHours.toFixed(1)}h`}
+                              </td>
+                              <td className="py-3 pr-3 whitespace-nowrap align-top font-mono text-[var(--text-secondary)]">${line.rate.toFixed(2)}</td>
+                              <td className="py-3 pr-3 whitespace-nowrap align-top font-mono font-semibold text-[var(--text-primary)]">{currency.format(line.grossTotal)}</td>
+                              <td className="py-3 pr-3 align-top">
+                                <div className="flex flex-wrap items-center gap-1">
+                                  {line.adjustments.map((adj) => (
+                                    <span key={adj.id} className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: adj.type === "deduction" ? "rgba(212, 81, 94, 0.12)" : "rgba(15, 168, 120, 0.12)", color: adj.type === "deduction" ? "var(--red)" : "var(--green)" }} title={adj.note}>
+                                      {adj.type === "deduction" ? "-" : "+"}{currency.format(adj.amount)}
+                                      {period.status === "draft" ? <button type="button" onClick={() => removeAdjustment(line.workerId, adj.id)} className="ml-0.5"><X size={10} /></button> : null}
+                                    </span>
+                                  ))}
+                                  {period.status === "draft" ? (
+                                    <button type="button" onClick={() => { setAdjWorker(line.workerId); setAdjType("bonus"); setAdjAmount(""); setAdjNote(""); }} className="inline-flex items-center gap-0.5 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold" style={{ background: "rgba(191, 162, 52, 0.08)", color: "var(--brand-yellow)" }}>
+                                      <Plus size={10} />
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td className="py-3 pr-3 whitespace-nowrap align-top font-mono font-bold text-[var(--brand-yellow)]">{currency.format(line.netTotal)}</td>
+                              <td className="py-3 align-top">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={{ background: `color-mix(in srgb, ${statusColor(line.status)} 16%, transparent)`, color: statusColor(line.status) }}>
+                                    {line.status}
+                                  </span>
+                                  {line.hasHours ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => void downloadPaystub(line)}
+                                      title={t("payroll.viewPaystub")}
+                                      className="inline-flex h-6 w-6 items-center justify-center rounded-[var(--radius-sm)] border"
+                                      style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+                                    >
+                                      <Download size={11} />
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                            {/* Shift detail rows under the worker. Hidden
+                                when collapsed; always rendered when the
+                                worker filter narrows to one person. */}
+                            {!isCollapsed && group && group.rows.length > 0 ? (
+                              <tr>
+                                <td colSpan={10} className="bg-[var(--bg-primary)] px-3 py-2">
+                                  <ShiftDetailList rows={group.rows} t={t} />
+                                </td>
+                              </tr>
+                            ) : null}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </section>
+              ) : (
+                /* Chronology mode — all visible shifts in one timeline,
+                   bucketed by day. Worker name shown on each row. */
+                <section className="surface-card p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("payroll.reviewModeChronology")}
+                  </div>
+                  {dayGroups.length === 0 ? (
+                    <div className="mt-4 text-sm text-[var(--text-secondary)]">
+                      {workerFilter
+                        ? t("payroll.emptyWorkerInPeriod")
+                        : t("payroll.emptyPeriod")}
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-4">
+                      {dayGroups.map((day) => (
+                        <div key={day.dayKey}>
+                          <div className="flex items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-1">
+                            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-secondary)]">
+                              {day.dayKey}
+                            </span>
+                            <span className="font-mono text-xs text-[var(--text-muted)]">
+                              {(day.totalMinutes / 60).toFixed(1)}h
+                            </span>
+                          </div>
+                          <div className="mt-1 divide-y divide-[var(--border-subtle)]">
+                            {day.rows.map((row) => (
+                              <ShiftRow key={row.sessionId} row={row} t={t} showWorker />
+                            ))}
+                          </div>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+                      ))}
+                    </div>
+                  )}
+                </section>
+              )}
+            </>
           ) : (
             <section className="surface-card p-4">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("payroll.byProject")}</h2>
