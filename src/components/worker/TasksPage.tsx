@@ -42,6 +42,17 @@ export function TasksPage() {
   const [claimedTaskMetadata, setClaimedTaskMetadata] = useState<
     Map<string, Record<string, unknown> | null>
   >(() => new Map());
+  // Tasks the worker just completed via the modal that returned ok=true.
+  // We override their status to "done" in the rendered list so the card
+  // moves into «Завершено» without waiting for the WorkerShell context
+  // re-render or an F5. Mirrors the claimedTaskAssignees / Metadata
+  // override-Map pattern already used here, and parallels
+  // WorkerProjectView's markLocalTask. Only populated AFTER
+  // updateTaskStatus resolves true — a failed mutation never lands here,
+  // so the UI never lies about completion.
+  const [locallyCompletedTaskIds, setLocallyCompletedTaskIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [openError, setOpenError] = useState<string | null>(null);
   const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
   const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -173,7 +184,11 @@ export function TasksPage() {
   }
 
   const taskList = useMemo(() => {
-    if (claimedTaskAssignees.size === 0 && claimedTaskMetadata.size === 0) {
+    if (
+      claimedTaskAssignees.size === 0 &&
+      claimedTaskMetadata.size === 0 &&
+      locallyCompletedTaskIds.size === 0
+    ) {
       return shell.tasks;
     }
     let next = shell.tasks;
@@ -187,8 +202,34 @@ export function TasksPage() {
           : task,
       );
     }
+    if (locallyCompletedTaskIds.size > 0) {
+      // Override status (and the canonical completed_* columns) for any
+      // task the worker just finished via the modal. We keep whatever
+      // shell.tasks already has if those columns are filled — they will
+      // be once the WorkerShell setShell propagates — and only synthesize
+      // a value when the row hasn't caught up yet. completed_by uses the
+      // current worker since this override only runs on success and the
+      // mutator stamped the same id.
+      const nowIso = new Date().toISOString();
+      next = next.map((task) =>
+        locallyCompletedTaskIds.has(task.id)
+          ? {
+              ...task,
+              status: "done",
+              completed_at: task.completed_at ?? nowIso,
+              completed_by: task.completed_by ?? shell.profile.id,
+            }
+          : task,
+      );
+    }
     return next;
-  }, [shell.tasks, claimedTaskAssignees, claimedTaskMetadata]);
+  }, [
+    shell.tasks,
+    claimedTaskAssignees,
+    claimedTaskMetadata,
+    locallyCompletedTaskIds,
+    shell.profile.id,
+  ]);
 
   const activeTasks = taskList
     .filter((task) => task.status !== "done" && task.status !== "cancelled")
@@ -602,8 +643,8 @@ export function TasksPage() {
         onDone={(taskId, payload) => {
           bumpTask(taskId);
           submitWorkerTaskCompletion(
-            (id, status, completionPayload) => {
-              void updateTaskStatus(id, status, {
+            async (id, status, completionPayload) => {
+              const ok = await updateTaskStatus(id, status, {
                 ...completionPayload,
                 // The completion modal is the only legitimate caller for
                 // status="done" — the guard inside updateTaskStatus
@@ -612,6 +653,18 @@ export function TasksPage() {
                 projectId: liveSelectedTask?.project_id ?? null,
                 existingMetadata: liveSelectedTask?.metadata ?? null,
               });
+              if (ok) {
+                // Successful DB write — record the id so the taskList
+                // useMemo overrides this row's status to "done" on the
+                // very next render. Mirrors WorkerProjectView's
+                // markLocalTask(id, "done"), gated on the same ok=true
+                // signal so a failed mutation never lies in the UI.
+                setLocallyCompletedTaskIds((prev) => {
+                  const nextSet = new Set(prev);
+                  nextSet.add(id);
+                  return nextSet;
+                });
+              }
             },
             taskId,
             payload,
