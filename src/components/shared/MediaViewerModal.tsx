@@ -13,7 +13,8 @@
  * sibling: one item in, one modal out, no list traversal.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from "react";
 import {
   Download,
   ExternalLink,
@@ -41,6 +42,61 @@ export interface ViewerMediaItem {
   projectName?: string | null;
   /** Pre-resolved uploader name for the header strip. */
   uploaderName?: string | null;
+}
+
+const DEFAULT_VIEWER_REOPEN_SUPPRESSION_MS = 350;
+
+export function useMediaViewerOpenGuard({
+  suppressionMs = DEFAULT_VIEWER_REOPEN_SUPPRESSION_MS,
+}: {
+  suppressionMs?: number;
+} = {}) {
+  const recentlyClosedRef = useRef<{
+    id: string;
+    until: number;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+
+  const clearSuppression = useCallback(() => {
+    const current = recentlyClosedRef.current;
+    if (current) {
+      clearTimeout(current.timer);
+      recentlyClosedRef.current = null;
+    }
+  }, []);
+
+  const suppressViewerItem = useCallback((itemId: string | null | undefined) => {
+    if (!itemId) return;
+
+    clearSuppression();
+    const until = Date.now() + suppressionMs;
+    const timer = setTimeout(() => {
+      const current = recentlyClosedRef.current;
+      if (current?.id === itemId && current.until <= Date.now()) {
+        recentlyClosedRef.current = null;
+      }
+    }, suppressionMs);
+
+    recentlyClosedRef.current = { id: itemId, until, timer };
+  }, [clearSuppression, suppressionMs]);
+
+  const canOpenViewerItem = useCallback((itemId: string | null | undefined) => {
+    if (!itemId) return true;
+
+    const current = recentlyClosedRef.current;
+    if (!current || current.id !== itemId) return true;
+
+    if (current.until <= Date.now()) {
+      clearSuppression();
+      return true;
+    }
+
+    return false;
+  }, [clearSuppression]);
+
+  useEffect(() => clearSuppression, [clearSuppression]);
+
+  return { canOpenViewerItem, suppressViewerItem };
 }
 
 function MediaTypeIcon({
@@ -145,18 +201,28 @@ function MediaViewerModalBody({
     anchor.remove();
   }
 
+  function handleCloseEvent(
+    event: ReactMouseEvent<HTMLElement> | ReactTouchEvent<HTMLElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  }
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       data-testid="media-viewer-modal"
-      className="fixed inset-0 z-[1000] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
       style={{ background: "rgba(0, 0, 0, 0.85)" }}
-      onClick={onClose}
+      onClick={handleCloseEvent}
+      onTouchEnd={handleCloseEvent}
     >
       <div
         className="flex max-h-full w-full max-w-[960px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)]"
         onClick={(event) => event.stopPropagation()}
+        onTouchEnd={(event) => event.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3">
           <div className="min-w-0">
@@ -180,7 +246,8 @@ function MediaViewerModalBody({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleCloseEvent}
+            onTouchEnd={handleCloseEvent}
             aria-label={t("common.cancel")}
             data-testid="media-viewer-close"
             className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)]"

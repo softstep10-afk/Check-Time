@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, FileText, Film, Image as ImageIcon, Paperclip } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeStoragePath, type TaskAttachmentRef } from "@/lib/task-attachments";
-import { MediaViewerModal } from "@/components/shared/MediaViewerModal";
+import { MediaViewerModal, useMediaViewerOpenGuard } from "@/components/shared/MediaViewerModal";
 
 function FileIcon({
   mediaType,
@@ -39,6 +39,7 @@ export function TaskAttachmentList({
   // longer opens a new browser tab — the spec calls that behaviour out
   // explicitly. Download remains as the fallback corner button.
   const [viewerItem, setViewerItem] = useState<TaskAttachmentRef | null>(null);
+  const { canOpenViewerItem, suppressViewerItem } = useMediaViewerOpenGuard();
   const supabase = useMemo(() => createClient(), []);
   // Eagerly batch-sign image paths so the worker/manager sees real
   // thumbnails instead of an icon placeholder. Videos and PDFs would
@@ -78,8 +79,15 @@ export function TaskAttachmentList({
   // encodings. Replaces the prior "open about:blank then redirect"
   // pattern that the spec asked us to drop.
   function open(item: TaskAttachmentRef) {
+    if (!canOpenViewerItem(item.id)) return;
     setOpenError(null);
     setViewerItem(item);
+  }
+
+  function closeViewer() {
+    const itemId = viewerItem?.id;
+    setViewerItem(null);
+    suppressViewerItem(itemId);
   }
 
   async function download(item: TaskAttachmentRef) {
@@ -209,7 +217,7 @@ export function TaskAttachmentList({
               }
             : null
         }
-        onClose={() => setViewerItem(null)}
+        onClose={closeViewer}
       />
     </div>
   );
