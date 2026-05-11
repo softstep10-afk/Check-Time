@@ -3,7 +3,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, ExternalLink, FileVideo2, Pencil, Plus, Receipt as ReceiptIcon, Trash2, X } from "lucide-react";
+import {
+  Download,
+  ExternalLink,
+  FileText,
+  FileVideo2,
+  Film,
+  Flag,
+  Image as ImageIcon,
+  Pencil,
+  Play,
+  Plus,
+  Receipt as ReceiptIcon,
+  Trash2,
+  X,
+} from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
@@ -113,6 +127,26 @@ function formatSectionCountSummary(
       : emptyLabel;
 
   return `${title}: ${body}`;
+}
+
+function ProjectMediaTypeIcon({
+  mediaType,
+  className,
+}: {
+  mediaType: Media["media_type"];
+  className?: string;
+}) {
+  if (mediaType === "photo") return <ImageIcon size={30} className={className} />;
+  if (mediaType === "video") return <Film size={30} className={className} />;
+  return <FileText size={30} className={className} />;
+}
+
+function projectMediaTypeLabel(mediaType: Media["media_type"]) {
+  if (mediaType === "photo") return "Photo";
+  if (mediaType === "video") return "Video";
+  if (mediaType === "pdf") return "PDF";
+  if (mediaType === "document") return "Doc";
+  return "File";
 }
 
 type MaterialUnitValue =
@@ -389,6 +423,63 @@ export function ProjectDetailPage({
     }
     return { photo, video, pdf, all: projectMediaItems.length };
   }, [projectMediaItems]);
+  const [projectMediaTileUrls, setProjectMediaTileUrls] = useState<Map<string, string>>(new Map());
+  const [projectMediaTileFailedIds, setProjectMediaTileFailedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const previewItems = projectMediaItems.filter(
+      (item) => item.media_type === "photo" || item.media_type === "video",
+    );
+    if (previewItems.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const previewPaths = previewItems.map((item) => {
+        const playback =
+          item.media_type === "video"
+            ? selectMediaPlayback(item as unknown as {
+                storage_path: string;
+                mime_type: string | null;
+                metadata: Record<string, unknown> | null | undefined;
+              })
+            : { path: item.storage_path };
+        return {
+          id: item.id,
+          path: normalizeStoragePath(playback.path),
+        };
+      });
+      const { data } = await supabase.storage
+        .from("media")
+        .createSignedUrls(previewPaths.map((item) => item.path), 3600);
+      if (cancelled || !data) return;
+
+      const nextUrls = new Map<string, string>();
+      const nextFailedIds = new Set<string>();
+      for (let i = 0; i < previewPaths.length; i += 1) {
+        const signedUrl = data[i]?.signedUrl;
+        if (signedUrl) {
+          nextUrls.set(previewPaths[i].id, signedUrl);
+        } else {
+          nextFailedIds.add(previewPaths[i].id);
+        }
+      }
+      setProjectMediaTileUrls(nextUrls);
+      setProjectMediaTileFailedIds(nextFailedIds);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectMediaItems, supabase]);
+
+  function markProjectMediaTileFailed(mediaId: string) {
+    setProjectMediaTileFailedIds((current) => {
+      if (current.has(mediaId)) return current;
+      const next = new Set(current);
+      next.add(mediaId);
+      return next;
+    });
+  }
 
   const checkoutMediaBySessionId = useMemo(() => {
     const bySession = new Map<string, Media[]>();
@@ -2224,7 +2315,7 @@ export function ProjectDetailPage({
                 })}
               </div>
             ) : null}
-            <div className="mt-4 space-y-3">
+            <div className="mt-4">
               {projectMediaItems.length === 0 ? (
                 <div className="surface-panel p-3 text-sm text-[var(--text-secondary)]">
                   {t("projectDetail.noMedia")}
@@ -2234,73 +2325,145 @@ export function ProjectDetailPage({
                   {t("projectDetail.noMediaForFilter")}
                 </div>
               ) : (
-                filteredMedia.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {filteredMedia.map((item) => {
+                    const previewUrl = projectMediaTileUrls.get(item.id);
+                    const previewFailed = projectMediaTileFailedIds.has(item.id);
+                    const tileLabel = item.filename ?? item.media_type;
+                    const isPreviewMedia = item.media_type === "photo" || item.media_type === "video";
+                    const isPreviewLoading = isPreviewMedia && !previewUrl && !previewFailed;
+
+                    return (
+                      <div key={item.id} className="min-w-0">
+                        <div
+                          className="relative aspect-square overflow-hidden rounded-[var(--radius-md)] border"
+                          style={{
+                            borderColor: "var(--border-default)",
+                            background: "var(--bg-primary)",
+                          }}
+                        >
                           <button
                             type="button"
                             onClick={() => void openProjectMediaItem(item)}
-                            className="text-left text-sm font-semibold text-[var(--text-primary)] underline-offset-2 hover:underline focus:underline"
+                            title={tileLabel}
+                            aria-label={`${t("messages.openFile")}: ${tileLabel}`}
+                            className="absolute inset-0 block w-full text-left"
                           >
-                            {item.filename ?? item.media_type}
+                            {item.media_type === "photo" && previewUrl && !previewFailed ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={previewUrl}
+                                alt={tileLabel}
+                                loading="lazy"
+                                className="absolute inset-0 h-full w-full object-cover"
+                                onError={() => markProjectMediaTileFailed(item.id)}
+                              />
+                            ) : item.media_type === "video" && previewUrl && !previewFailed ? (
+                              <>
+                                <video
+                                  src={previewUrl}
+                                  preload="metadata"
+                                  muted
+                                  playsInline
+                                  className="absolute inset-0 h-full w-full object-cover"
+                                  onError={() => markProjectMediaTileFailed(item.id)}
+                                />
+                                <span
+                                  className="absolute inset-0 flex items-center justify-center"
+                                  style={{ color: "white", background: "rgba(0, 0, 0, 0.16)" }}
+                                  aria-hidden="true"
+                                >
+                                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55">
+                                    <Play size={20} fill="currentColor" />
+                                  </span>
+                                </span>
+                              </>
+                            ) : isPreviewLoading ? (
+                              <div
+                                className="absolute inset-0 animate-pulse"
+                                style={{
+                                  background:
+                                    "linear-gradient(135deg, rgba(255,255,255,0.05), rgba(191,162,52,0.14), rgba(255,255,255,0.04))",
+                                }}
+                              />
+                            ) : (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5">
+                                <ProjectMediaTypeIcon
+                                  mediaType={item.media_type}
+                                  className="text-[var(--brand-yellow)]"
+                                />
+                                <span className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">
+                                  {projectMediaTypeLabel(item.media_type)}
+                                </span>
+                              </div>
+                            )}
+                            {item.caption ? (
+                              <span
+                                className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-[10px] font-medium text-white"
+                                style={{
+                                  background:
+                                    "linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.68) 100%)",
+                                }}
+                              >
+                                <span className="block truncate">{item.caption}</span>
+                              </span>
+                            ) : null}
                           </button>
                           {item.is_checkout ? (
                             <span
-                              className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                              className="absolute left-1 top-1 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase"
                               style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
                             >
                               {t("journal.checkout")}
                             </span>
                           ) : null}
+                          <div className="absolute right-1 top-1">
+                            <MediaFlagButton
+                              mediaId={item.id}
+                              hasOpenFlag={openFlagIds.has(item.id)}
+                              onClick={() => setFlagModalMediaId(item.id)}
+                            />
+                          </div>
                         </div>
-                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                          {formatDateTime(item.created_at)} • {item.media_type}
+                        <div className="mt-1.5 flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void openProjectMediaItem(item)}
+                            title={t("messages.openFile")}
+                            aria-label={`${t("messages.openFile")}: ${tileLabel}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border"
+                            style={{
+                              borderColor: "rgba(191, 162, 52, 0.4)",
+                              color: "var(--brand-yellow)",
+                            }}
+                          >
+                            <ExternalLink size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void downloadProjectMediaItem(item)}
+                            title={t("messages.downloadFile")}
+                            aria-label={`${t("messages.downloadFile")}: ${tileLabel}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border"
+                            style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                          >
+                            <Download size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFlagModalMediaId(item.id)}
+                            title={t("flags.flagForReview")}
+                            aria-label={`${t("flags.flagForReview")}: ${tileLabel}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border"
+                            style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+                          >
+                            <Flag size={16} />
+                          </button>
                         </div>
                       </div>
-                      <MediaFlagButton
-                        mediaId={item.id}
-                        hasOpenFlag={openFlagIds.has(item.id)}
-                        onClick={() => setFlagModalMediaId(item.id)}
-                      />
-                    </div>
-                    {item.caption ? (
-                      <p className="mt-3 text-sm text-[var(--text-secondary)]">{item.caption}</p>
-                    ) : null}
-                    <div className="mt-3 flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void openProjectMediaItem(item)}
-                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
-                        style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
-                      >
-                        <ExternalLink size={11} />
-                        {t("messages.openFile")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void downloadProjectMediaItem(item)}
-                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
-                        style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-                      >
-                        <Download size={11} />
-                        {t("messages.downloadFile")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setFlagModalMediaId(item.id)}
-                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[10px] font-semibold"
-                        style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
-                      >
-                        🚩 {t("flags.flagForReview")}
-                      </button>
-                    </div>
-                  </div>
-                ))
+                    );
+                  })}
+                </div>
               )}
             </div>
           </CollapsibleSection>
