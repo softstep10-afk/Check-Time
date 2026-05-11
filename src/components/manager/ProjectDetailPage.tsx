@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Download, ExternalLink, FileVideo2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Download, ExternalLink, FileVideo2, Pencil, Plus, Receipt as ReceiptIcon, Trash2, X } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
+import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
@@ -23,14 +24,10 @@ import {
   getTaskCompletionAudit,
 } from "@/lib/task-notifications";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
-import {
-  MediaGalleryDrawer,
-  type GalleryItem,
-} from "@/components/shared/MediaGalleryDrawer";
+import { MediaViewerModal, type ViewerMediaItem } from "@/components/shared/MediaViewerModal";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import { createClient } from "@/lib/supabase/client";
-import { useTranslation } from "@/lib/i18n";
-import { ProjectSiteMap } from "@/components/maps/ProjectSiteMap";
+import { type TranslationKey, useTranslation } from "@/lib/i18n";
 import {
   assessDeviceLocationAccuracy,
   type DeviceLocationAssessment,
@@ -104,6 +101,155 @@ type AddressLookupState = ProjectAddressGeocodeResult & {
   requestedAddress: string;
 };
 
+function formatSectionCountSummary(
+  title: string,
+  parts: Array<{ count: number; label: string; include?: boolean }>,
+  emptyLabel = "0",
+) {
+  const visibleParts = parts.filter((part) => part.include ?? true);
+  const body =
+    visibleParts.length > 0
+      ? visibleParts.map((part) => `${part.count} ${part.label}`).join(", ")
+      : emptyLabel;
+
+  return `${title}: ${body}`;
+}
+
+type MaterialUnitValue =
+  | "шт"
+  | "мешок"
+  | "упаковка"
+  | "м"
+  | "м²"
+  | "м³"
+  | "кг"
+  | "л"
+  | "лист"
+  | "other";
+
+type MaterialOrderDraftRow = {
+  id: string;
+  name: string;
+  quantity: string;
+  unit: MaterialUnitValue;
+  customUnit: string;
+};
+
+const MATERIAL_OTHER_UNIT_VALUE = "другое";
+
+const MATERIAL_UNIT_OPTIONS: Array<{ value: MaterialUnitValue; labelKey: TranslationKey }> = [
+  { value: "шт", labelKey: "materials.unitPieces" },
+  { value: "мешок", labelKey: "materials.unitBag" },
+  { value: "упаковка", labelKey: "materials.unitPack" },
+  { value: "м", labelKey: "materials.unitMeter" },
+  { value: "м²", labelKey: "materials.unitSquareMeter" },
+  { value: "м³", labelKey: "materials.unitCubicMeter" },
+  { value: "кг", labelKey: "materials.unitKg" },
+  { value: "л", labelKey: "materials.unitLiter" },
+  { value: "лист", labelKey: "materials.unitSheet" },
+  { value: "other", labelKey: "materials.unitOther" },
+];
+
+const MATERIAL_INPUT_STYLE = {
+  backgroundColor: "#0f1117",
+  color: "#e8eaf0",
+} satisfies React.CSSProperties;
+
+const MATERIAL_OPTION_STYLE = {
+  backgroundColor: "#0f1117",
+  color: "#e8eaf0",
+} satisfies React.CSSProperties;
+
+const PROFILE_ROLE_VALUES = new Set([
+  "worker",
+  "supervisor",
+  "driver",
+  "subcontractor",
+  "manager",
+  "admin",
+  "owner",
+]);
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isProfileId(value: unknown): value is string {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
+
+function normalizeProfileDisplayName(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || UUID_PATTERN.test(trimmed) || PROFILE_ROLE_VALUES.has(trimmed.toLowerCase())) {
+    return null;
+  }
+  return trimmed;
+}
+
+function createMaterialOrderRow(): MaterialOrderDraftRow {
+  return {
+    id: createClientUuid(),
+    name: "",
+    quantity: "",
+    unit: "шт",
+    customUnit: "",
+  };
+}
+
+function createClientUuid() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function parseMaterialQuantity(value: string) {
+  const parsed = Number.parseFloat(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMaterialQuantity(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) ? value.toString() : String(value);
+  }
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  return "";
+}
+
+function getMaterialPriorityColor(priority: string) {
+  if (priority === "urgent" || priority === "high") return "#ef4444";
+  if (priority === "medium") return "#f59e0b";
+  return "#22c55e";
+}
+
+function getMaterialPriorityLabel(priority: string, t: (key: TranslationKey) => string) {
+  if (priority === "urgent" || priority === "high") return t("materials.urgent");
+  if (priority === "low") return t("materials.notUrgent");
+  return t("materials.soon");
+}
+
+function formatMaterialDate(value: string | null | undefined) {
+  if (!value) return "";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
+}
+
+function formatMaterialPositionCount(count: number, t: (key: TranslationKey) => string) {
+  return t("materials.positionsCount").replace("{count}", String(count));
+}
+
 function setInputElementValue(
   input: HTMLInputElement | null,
   value: string,
@@ -150,6 +296,7 @@ export function ProjectDetailPage({
   const supabase = useMemo(() => createClient(), []);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [taskComposerOpen, setTaskComposerOpen] = useState(false);
   const [pickingLocation, setPickingLocation] = useState(false);
   const [geocodingAddress, setGeocodingAddress] = useState(false);
   const [fetchingAddressFromLocation, setFetchingAddressFromLocation] = useState(false);
@@ -160,10 +307,6 @@ export function ProjectDetailPage({
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [removeAssignmentId, setRemoveAssignmentId] = useState<string | null>(null);
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
-  // Drawer that surfaces every media row on this project — receipts,
-  // checkout videos, task attachments, journal photos. Filters and
-  // pagination live inside the drawer so the page stays light.
-  const [galleryOpen, setGalleryOpen] = useState(false);
   // Local optimistic copy of the task list. Soft-deletes drop the row
   // here immediately so the manager doesn't see a flash before
   // router.refresh repopulates from the server.
@@ -205,6 +348,7 @@ export function ProjectDetailPage({
   const photoMediaInputRef = useRef<HTMLInputElement | null>(null);
   const videoMediaInputRef = useRef<HTMLInputElement | null>(null);
   const pdfMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const quickProjectMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   // Strict separation: the Project Media panel must show only rows the
   // 3-button upload created (metadata.kind === "project_media").
@@ -245,42 +389,6 @@ export function ProjectDetailPage({
     }
     return { photo, video, pdf, all: projectMediaItems.length };
   }, [projectMediaItems]);
-
-  // Gallery feed for the drawer — every media row on this project,
-  // including receipts / checkout / task attachments. The drawer
-  // filters, the page list above keeps showing only the
-  // "project_media" subset to match its existing semantics.
-  const galleryItems = useMemo<GalleryItem[]>(() => {
-    const profileNameById = new Map<string, string>();
-    for (const p of assignedProfiles) profileNameById.set(p.id, p.name);
-    for (const p of availableProfiles) profileNameById.set(p.id, p.name);
-    return media.map((entry) => ({
-      id: entry.id,
-      project_id: entry.project_id,
-      uploaded_by: entry.uploaded_by ?? null,
-      media_type: entry.media_type,
-      storage_path: entry.storage_path,
-      filename: entry.filename ?? null,
-      mime_type: entry.mime_type ?? null,
-      caption: entry.caption ?? null,
-      is_checkout: Boolean(entry.is_checkout),
-      time_event_id: entry.time_event_id ?? null,
-      metadata: (entry.metadata ?? null) as Record<string, unknown> | null,
-      created_at: entry.created_at,
-      projectName: project.name,
-      uploaderName: entry.uploaded_by ? profileNameById.get(entry.uploaded_by) ?? null : null,
-    }));
-  }, [media, assignedProfiles, availableProfiles, project.name]);
-
-  const galleryUploaderOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const item of galleryItems) {
-      if (item.uploaded_by && item.uploaderName && !seen.has(item.uploaded_by)) {
-        seen.set(item.uploaded_by, item.uploaderName);
-      }
-    }
-    return [...seen.entries()].map(([id, name]) => ({ id, name }));
-  }, [galleryItems]);
 
   const checkoutMediaBySessionId = useMemo(() => {
     const bySession = new Map<string, Media[]>();
@@ -357,6 +465,57 @@ export function ProjectDetailPage({
   const [message, setMessage] = useState("");
   const site = project.siteCoordinates;
   const { t } = useTranslation();
+  const taskCounts = useMemo(() => {
+    let active = 0;
+    let completed = 0;
+
+    for (const task of taskList) {
+      if (task.status === "done") {
+        completed += 1;
+      } else if (task.status !== "cancelled") {
+        active += 1;
+      }
+    }
+
+    return { active, completed };
+  }, [taskList]);
+  const tasksFolderSummary = formatSectionCountSummary(t("common.tasks"), [
+    { count: taskCounts.active, label: t("projectDetail.tasksSummaryActive") },
+    {
+      count: taskCounts.completed,
+      label: t("projectDetail.tasksSummaryCompleted"),
+    },
+  ]);
+  const mediaFolderSummary = formatSectionCountSummary(
+    t("common.media"),
+    [
+      {
+        count: mediaCounts.photo,
+        label:
+          mediaCounts.photo === 1
+            ? t("projectDetail.mediaSummaryPhotoOne")
+            : t("projectDetail.mediaSummaryPhotoMany"),
+        include: mediaCounts.photo > 0,
+      },
+      {
+        count: mediaCounts.video,
+        label:
+          mediaCounts.video === 1
+            ? t("projectDetail.mediaSummaryVideoOne")
+            : t("projectDetail.mediaSummaryVideoMany"),
+        include: mediaCounts.video > 0,
+      },
+      {
+        count: mediaCounts.pdf,
+        label:
+          mediaCounts.pdf === 1
+            ? t("projectDetail.mediaSummaryPdfOne")
+            : t("projectDetail.mediaSummaryPdfMany"),
+        include: mediaCounts.pdf > 0,
+      },
+    ],
+    t("projectDetail.mediaSummaryEmpty"),
+  );
 
   function openEditModal() {
     setCoordinatesConfirmed(false);
@@ -947,7 +1106,7 @@ export function ProjectDetailPage({
 
     for (const file of list) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${orgId}/${project.id}/project-media/${Date.now()}-${safeName}`;
+      const path = `${orgId}/${project.id}/project-media/${createClientUuid()}-${safeName}`;
       const contentType =
         file.type ||
         (kind === "pdf" ? "application/pdf" : kind === "photo" ? "image/jpeg" : "video/mp4");
@@ -996,6 +1155,37 @@ export function ProjectDetailPage({
     setBusyKey(null);
     setMessage(t("projectDetail.mediaUploaded"));
     router.refresh();
+  }
+
+  async function handleQuickProjectMediaUpload(files: FileList | null) {
+    const list = files ? Array.from(files) : [];
+    if (list.length === 0) return;
+
+    const grouped: Record<"photo" | "video", File[]> = {
+      photo: [],
+      video: [],
+    };
+
+    for (const file of list) {
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        const attempted = "mime" in validation.error ? validation.error.mime : null;
+        setMessage(`validation: ${validation.error.reason}${attempted ? ` (${attempted})` : ""}`);
+        return;
+      }
+      if (validation.kind === "pdf") {
+        setMessage(t("projectDetail.mediaWrongKind"));
+        return;
+      }
+      grouped[validation.kind].push(file);
+    }
+
+    if (grouped.photo.length > 0) {
+      await handleProjectMediaUpload(grouped.photo, "photo");
+    }
+    if (grouped.video.length > 0) {
+      await handleProjectMediaUpload(grouped.video, "video");
+    }
   }
 
   async function handleUpdateTask(taskId: string, nextStatus: TaskStatus) {
@@ -1250,55 +1440,8 @@ export function ProjectDetailPage({
         </div>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-2">
+      <section className="space-y-4">
         <div className="surface-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.siteMap")}</h2>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                {t("projectDetail.siteMapDesc")}
-              </p>
-            </div>
-            <div className="status-pill" data-tone={site ? "warning" : "neutral"}>
-              {site ? `${project.radius_m}${t("clock.radiusM")}` : t("projectDetail.noGps")}
-            </div>
-          </div>
-          {site ? (
-            <div className="mt-4 h-[220px] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border-default)] md:h-[300px]">
-              <ProjectSiteMap site={site} radiusMeters={project.radius_m} />
-            </div>
-          ) : (
-            <div className="surface-panel mt-4 space-y-3 p-4">
-              <div
-                className="inline-flex items-center rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                style={{
-                  background: "rgba(245, 158, 11, 0.12)",
-                  color: "#f59e0b",
-                }}
-              >
-                {t("projects.gpsMissingBadge")}
-              </div>
-              <p className="text-sm text-[var(--text-secondary)]">
-                {t("projectDetail.addLatLng")}
-              </p>
-              <button
-                type="button"
-                onClick={openEditModal}
-                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                style={{
-                  borderColor: "#f59e0b",
-                  color: "#f59e0b",
-                  background: "rgba(245, 158, 11, 0.08)",
-                }}
-              >
-                <Pencil size={12} /> {t("projects.fixCoordinates")}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <div className="surface-card p-4">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.assignedCrew")}</h2>
               <div className="flex items-center gap-3">
@@ -1525,13 +1668,44 @@ export function ProjectDetailPage({
               })}
             </div>
           </div>
-        </div>
       </section>
 
-      <section id="tasks" className="flex scroll-mt-4 flex-col gap-5">
-        <div className="surface-card p-4 order-2">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("common.tasks")}</h2>
-          <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.tasksSubtitle")}</p>
+      <section className="flex flex-col gap-5">
+        <CollapsibleSection
+          id="tasks"
+          projectId={project.id}
+          defaultOpen={false}
+          dataTestid="manager-project-tasks-folder"
+          className="order-2 p-4"
+          summary={
+            <>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {tasksFolderSummary}
+              </h2>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                {t("projectDetail.tasksSubtitle")}
+              </p>
+            </>
+          }
+          headerAction={
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setTaskAttachmentFiles([]);
+                setTaskComposerOpen(true);
+              }}
+              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+              style={{
+                borderColor: "rgba(191, 162, 52, 0.4)",
+                color: "var(--brand-yellow)",
+              }}
+            >
+              <Plus size={13} />
+              {t("projectDetail.createTask")}
+            </button>
+          }
+        >
           <form className="mt-4 grid gap-3" onSubmit={handleCreateTask}>
             <TextInputWithVoice
               name="title"
@@ -1898,33 +2072,57 @@ export function ProjectDetailPage({
               );
             })}
           </div>
-        </div>
+        </CollapsibleSection>
 
         <div className="contents">
-          <div className="surface-card p-4 order-1">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentMedia")}</h2>
-              <div className="flex items-center gap-3">
-                <div className="text-xs font-mono text-[var(--text-secondary)] tabular-nums">
-                  📷 {mediaCounts.photo}{"  "}🎥 {mediaCounts.video}{"  "}📄 {mediaCounts.pdf}
-                </div>
-                {media.length > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setGalleryOpen(true)}
-                    className="rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
-                    style={{
-                      borderColor: "rgba(191, 162, 52, 0.4)",
-                      color: "var(--brand-yellow)",
-                    }}
-                  >
-                    {t("gallery.viewAll")}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-            <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.projectMediaSubtitle")}</p>
-
+          <CollapsibleSection
+            id="media"
+            projectId={project.id}
+            defaultOpen={false}
+            dataTestid="manager-project-media-folder"
+            className="order-1 p-4"
+            summary={
+              <>
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                  {mediaFolderSummary}
+                </h2>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  {t("projectDetail.projectMediaSubtitle")}
+                </p>
+              </>
+            }
+            headerAction={
+              <>
+                <input
+                  ref={quickProjectMediaInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => {
+                    void handleQuickProjectMediaUpload(event.target.files);
+                    event.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    quickProjectMediaInputRef.current?.click();
+                  }}
+                  disabled={busyKey === "project-media"}
+                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                  style={{
+                    borderColor: "rgba(191, 162, 52, 0.4)",
+                    color: "var(--brand-yellow)",
+                  }}
+                >
+                  <Plus size={13} />
+                  {t("projectDetail.addPhotoVideo")}
+                </button>
+              </>
+            }
+          >
             {/* 3-button upload triggers — photo / video / pdf. Local-device only. */}
             <div className="mt-3 flex flex-wrap gap-2">
               <input
@@ -2105,10 +2303,20 @@ export function ProjectDetailPage({
                 ))
               )}
             </div>
-          </div>
+          </CollapsibleSection>
 
-          <div className="surface-card p-4 order-3">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projectDetail.recentShifts")}</h2>
+          <CollapsibleSection
+            id="recent-shifts"
+            projectId={project.id}
+            defaultOpen={false}
+            dataTestid="manager-project-recent-shifts-folder"
+            className="order-3 p-4"
+            summary={
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("projectDetail.recentShifts")}: {sessions.length}
+              </h2>
+            }
+          >
             <div className="mt-4 space-y-3">
               {sessions.length === 0 ? (
                 <div className="surface-panel p-3 text-sm text-[var(--text-secondary)]">
@@ -2194,11 +2402,16 @@ export function ProjectDetailPage({
                 })
               )}
             </div>
-          </div>
+          </CollapsibleSection>
         </div>
       </section>
       {/* ── Materials & Deliveries ── */}
-      <MaterialsSection orgId={orgId} projectId={project.id} managerId={managerId} />
+      <MaterialsSection
+        orgId={orgId}
+        projectId={project.id}
+        managerId={managerId}
+        knownProfileNames={profileNameById}
+      />
       {/* ── Receipts ── */}
       <ReceiptsSection orgId={orgId} projectId={project.id} managerId={managerId} />
       {/* ── Store Visits ── */}
@@ -2213,14 +2426,101 @@ export function ProjectDetailPage({
         onMutate={() => void refreshOpenFlags()}
       />
 
-      <MediaGalleryDrawer
-        open={galleryOpen}
-        title={project.name}
-        items={galleryItems}
-        showUploaderFilter
-        uploaderOptions={galleryUploaderOptions}
-        onClose={() => setGalleryOpen(false)}
-      />
+      {taskComposerOpen ? (
+        <div
+          className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 sm:items-center"
+          onClick={() => setTaskComposerOpen(false)}
+        >
+          <div
+            className="surface-card w-full max-w-[720px] max-h-[90vh] overflow-y-auto p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("projectDetail.createTask")}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setTaskComposerOpen(false)}
+                aria-label={t("common.cancel")}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <form className="mt-4 grid gap-3" onSubmit={handleCreateTask}>
+              <TextInputWithVoice
+                name="title"
+                placeholder={t("projectDetail.taskTitle")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <TextInputWithVoice
+                multiline
+                name="description"
+                placeholder={t("projectDetail.taskDescription")}
+                className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <select
+                  name="assigned_to"
+                  defaultValue=""
+                  aria-label={t("projectDetail.assignToWorkerOptional")}
+                  title={t("projectDetail.assignToWorkerOptional")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="">{t("projectDetail.assignToWorkerOptional")}</option>
+                  {assignedProfiles.map((worker) => (
+                    <option key={worker.id} value={worker.id}>
+                      {worker.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  name="priority"
+                  defaultValue="medium"
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="low">{t("projectDetail.low")}</option>
+                  <option value="medium">{t("projectDetail.medium")}</option>
+                  <option value="high">{t("projectDetail.high")}</option>
+                  <option value="urgent">{t("projectDetail.urgent")}</option>
+                </select>
+                <DateField
+                  name="due_date"
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <input
+                  type="file"
+                  multiple
+                  accept={ACCEPT_ALL_UPLOADS}
+                  onChange={(event) =>
+                    setTaskAttachmentFiles(event.target.files ? Array.from(event.target.files) : [])
+                  }
+                  className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+                />
+                {taskAttachmentFiles.length > 0 ? (
+                  <div className="text-[10px] text-[var(--text-muted)]">
+                    {taskAttachmentFiles.length} {t("tasks.attachmentsCount")}
+                  </div>
+                ) : null}
+                <div className="text-[10px] font-semibold text-[var(--text-muted)]">
+                  {t("tasks.attachmentInlineLabel")}
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={busyKey === "create-task"}
+                className="button-base button-primary"
+              >
+                {busyKey === "create-task" ? t("common.creating") : t("projectDetail.createTask")}
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
 
       {previewMedia ? (
         <div
@@ -2604,187 +2904,812 @@ type MaterialItem = {
   id: string;
   name: string;
   quantity: string;
+  unit: string;
+  priority: TaskPriority;
+  status: TaskStatus;
   color: string;
   delivered: boolean;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  assignedById: string | null;
+  authorName: string;
+  deliveredById: string | null;
+  deliveredByName: string | null;
+  deliveredAt: string | null;
+  receiptId: string | null;
+  receiptAttachedById: string | null;
+  receiptAttachedByName: string | null;
+  receipt: ViewerMediaItem | null;
+};
+
+type MaterialOrderGroup = {
+  id: string;
+  orderId: string | null;
+  authorName: string;
+  createdAt: string;
+  priority: TaskPriority;
+  note: string;
+  items: MaterialItem[];
 };
 
 function MaterialsSection({
   orgId,
   projectId,
   managerId,
+  knownProfileNames,
 }: {
   orgId: string;
   projectId: string;
   managerId: string;
+  knownProfileNames: Map<string, string>;
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [items, setItems] = useState<MaterialItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [addMaterialOpen, setAddMaterialOpen] = useState(false);
+  const [orderRows, setOrderRows] = useState<MaterialOrderDraftRow[]>(() => [
+    createMaterialOrderRow(),
+  ]);
+  const [orderPriority, setOrderPriority] = useState<TaskPriority>("medium");
+  const [orderNote, setOrderNote] = useState("");
+  const [orderError, setOrderError] = useState("");
+  const [savingOrder, setSavingOrder] = useState(false);
+  const [deliveryTarget, setDeliveryTarget] = useState<MaterialItem | null>(null);
+  const [deliveryFile, setDeliveryFile] = useState<File | null>(null);
+  const [deliveryError, setDeliveryError] = useState("");
+  const [deliveryBusy, setDeliveryBusy] = useState(false);
+  const [receiptViewerItem, setReceiptViewerItem] = useState<ViewerMediaItem | null>(null);
+
+  const readMaterialItems = useCallback(async (): Promise<MaterialItem[]> => {
+    const { data } = await supabase
+      .from("tasks")
+      .select("id, title, priority, status, metadata, created_at, updated_at, assigned_by")
+      .eq("project_id", projectId)
+      .eq("metadata->>category", "material")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+
+    const rows = (data ?? []) as Array<{
+      id: string;
+      title: string;
+      priority: TaskPriority;
+      status: TaskStatus;
+      metadata: Record<string, unknown> | null;
+      created_at: string;
+      updated_at: string;
+      assigned_by: string | null;
+    }>;
+
+    const profileIds = new Set<string>();
+    const receiptIds = new Set<string>();
+    for (const row of rows) {
+      if (isProfileId(row.assigned_by)) profileIds.add(row.assigned_by);
+      const meta = row.metadata ?? {};
+      if (isProfileId(meta.delivered_by)) profileIds.add(meta.delivered_by);
+      if (isProfileId(meta.receipt_attached_by)) profileIds.add(meta.receipt_attached_by);
+      if (typeof meta.receipt_id === "string") receiptIds.add(meta.receipt_id);
+    }
+    profileIds.add(managerId);
+
+    let profileNameById = new Map<string, string>();
+    if (profileIds.size > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("id", [...profileIds]);
+      profileNameById = new Map(
+        ((profiles ?? []) as Array<{ id: string; name: string }>)
+          .map((profile) => [
+            profile.id,
+            normalizeProfileDisplayName(profile.name),
+          ])
+          .filter((entry): entry is [string, string] => Boolean(entry[1])),
+      );
+    }
+    for (const [id, name] of knownProfileNames) {
+      const displayName = normalizeProfileDisplayName(name);
+      if (isProfileId(id) && displayName) {
+        profileNameById.set(id, displayName);
+      }
+    }
+    const fallbackUserName = t("common.user");
+    const resolveProfileName = (profileIdValue: unknown) =>
+      isProfileId(profileIdValue)
+        ? profileNameById.get(profileIdValue) ?? fallbackUserName
+        : fallbackUserName;
+
+    let receiptById = new Map<string, ViewerMediaItem>();
+    if (receiptIds.size > 0) {
+      const { data: receipts } = await supabase
+        .from("media")
+        .select("id, storage_path, filename, mime_type, media_type, caption, created_at, metadata")
+        .in("id", [...receiptIds])
+        .is("deleted_at", null);
+      receiptById = new Map(
+        ((receipts ?? []) as ViewerMediaItem[]).map((receipt) => [receipt.id, receipt]),
+      );
+    }
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.title,
+      quantity: formatMaterialQuantity(row.metadata?.quantity),
+      unit: typeof row.metadata?.unit === "string" ? row.metadata.unit : "",
+      priority: row.priority,
+      status: row.status,
+      color: getMaterialPriorityColor(row.priority),
+      delivered: row.status === "done",
+      metadata: row.metadata ?? {},
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      assignedById: row.assigned_by,
+      authorName: isProfileId(row.assigned_by) ? resolveProfileName(row.assigned_by) : fallbackUserName,
+      deliveredById:
+        isProfileId(row.metadata?.delivered_by) ? row.metadata.delivered_by : null,
+      deliveredByName:
+        typeof row.metadata?.delivered_by === "string"
+          ? resolveProfileName(row.metadata.delivered_by)
+          : null,
+      deliveredAt:
+        typeof row.metadata?.delivered_at === "string" ? row.metadata.delivered_at : null,
+      receiptId: typeof row.metadata?.receipt_id === "string" ? row.metadata.receipt_id : null,
+      receiptAttachedById:
+        isProfileId(row.metadata?.receipt_attached_by)
+          ? row.metadata.receipt_attached_by
+          : null,
+      receiptAttachedByName:
+        typeof row.metadata?.receipt_attached_by === "string"
+          ? resolveProfileName(row.metadata.receipt_attached_by)
+          : null,
+      receipt:
+        typeof row.metadata?.receipt_id === "string"
+          ? receiptById.get(row.metadata.receipt_id) ?? null
+          : null,
+    }));
+  }, [supabase, projectId, managerId, knownProfileNames, t]);
+
+  async function refreshMaterials() {
+    setLoading(true);
+    setItems(await readMaterialItems());
+    setLoading(false);
+  }
 
   useEffect(() => {
+    let cancelled = false;
     async function load() {
-      const { data } = await supabase
-        .from("tasks")
-        .select("*")
-        .eq("project_id", projectId)
-        .eq("metadata->>category", "material")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: true });
-
-      const rows = (data ?? []) as Array<{
-        id: string;
-        title: string;
-        description: string | null;
-        priority: string;
-        status: string;
-        metadata: Record<string, unknown>;
-      }>;
-
-      setItems(
-        rows.map((row) => ({
-          id: row.id,
-          name: row.title,
-          quantity: (row.metadata?.quantity as string) ?? "",
-          color:
-            row.priority === "urgent" || row.priority === "high"
-              ? "#ef4444"
-              : row.priority === "medium"
-                ? "#f59e0b"
-                : "#22c55e",
-          delivered: row.status === "done",
-        })),
-      );
+      const nextItems = await readMaterialItems();
+      if (cancelled) return;
+      setItems(nextItems);
       setLoading(false);
     }
     void load();
-  }, [supabase, projectId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [readMaterialItems]);
 
-  async function handleAdd(event: React.FormEvent<HTMLFormElement>) {
+  const hasNamedOrderRow = orderRows.some((row) => row.name.trim().length > 0);
+
+  function resetOrderDraft() {
+    setOrderRows([createMaterialOrderRow()]);
+    setOrderPriority("medium");
+    setOrderNote("");
+    setOrderError("");
+  }
+
+  function openAddMaterialModal() {
+    resetOrderDraft();
+    setAddMaterialOpen(true);
+  }
+
+  function closeAddMaterialModal() {
+    if (savingOrder) return;
+    setAddMaterialOpen(false);
+  }
+
+  function updateOrderRow(
+    rowId: string,
+    patch: Partial<Omit<MaterialOrderDraftRow, "id">>,
+  ) {
+    setOrderRows((current) =>
+      current.map((row) => (row.id === rowId ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function addOrderRow() {
+    setOrderRows((current) => [...current, createMaterialOrderRow()]);
+  }
+
+  function removeOrderRow(rowId: string) {
+    setOrderRows((current) => {
+      const next = current.filter((row) => row.id !== rowId);
+      return next.length > 0 ? next : [createMaterialOrderRow()];
+    });
+  }
+
+  async function handleAddOrder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const fd = new FormData(form);
-    const name = fd.get("mat_name")?.toString().trim() ?? "";
-    const quantity = fd.get("mat_qty")?.toString().trim() ?? "";
-    const priority = fd.get("mat_priority")?.toString() ?? "medium";
-    if (!name) return;
+    const materialRows = orderRows
+      .map((row) => ({
+        name: row.name.trim(),
+        quantity: parseMaterialQuantity(row.quantity),
+        unit:
+          row.unit === "other"
+            ? row.customUnit.trim() || MATERIAL_OTHER_UNIT_VALUE
+            : row.unit,
+      }))
+      .filter((row) => row.name.length > 0);
 
-    const { data, error } = await supabase
+    if (materialRows.length === 0) return;
+
+    setSavingOrder(true);
+    setOrderError("");
+    const orderId = createClientUuid();
+    const trimmedOrderNote = orderNote.trim();
+    const { error } = await supabase
       .from("tasks")
-      .insert({
+      .insert(materialRows.map((row) => ({
         org_id: orgId,
         project_id: projectId,
         assigned_to: null,
         assigned_by: managerId,
-        title: name,
-        description: quantity ? `Qty: ${quantity}` : null,
-        priority,
+        title: row.name,
+        description: null,
+        priority: orderPriority,
         status: "pending",
         due_date: null,
-        metadata: { category: "material", quantity },
+        metadata: {
+          category: "material",
+          quantity: row.quantity,
+          unit: row.unit,
+          order_id: orderId,
+          order_note: trimmedOrderNote || null,
+          order_size: materialRows.length,
+        },
+      })));
+    setSavingOrder(false);
+
+    if (error) {
+      setOrderError(error.message);
+      return;
+    }
+
+    setAddMaterialOpen(false);
+    resetOrderDraft();
+    await refreshMaterials();
+  }
+
+  const materialGroups = useMemo<MaterialOrderGroup[]>(() => {
+    const grouped = new Map<string, MaterialOrderGroup>();
+    for (const item of items) {
+      const orderId = typeof item.metadata.order_id === "string" ? item.metadata.order_id : null;
+      const groupKey = orderId ?? `legacy-${item.id}`;
+      const note = typeof item.metadata.order_note === "string" ? item.metadata.order_note : "";
+      const current = grouped.get(groupKey);
+      if (current) {
+        current.items.push(item);
+        if (new Date(item.createdAt).getTime() < new Date(current.createdAt).getTime()) {
+          current.createdAt = item.createdAt;
+        }
+      } else {
+        grouped.set(groupKey, {
+          id: groupKey,
+          orderId,
+          authorName: item.authorName,
+          createdAt: item.createdAt,
+          priority: item.priority,
+          note,
+          items: [item],
+        });
+      }
+    }
+
+    return [...grouped.values()]
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort(
+          (left, right) =>
+            new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+        ),
+      }))
+      .sort(
+        (left, right) =>
+          new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+      );
+  }, [items]);
+
+  async function createDeliveryReceipt(file: File): Promise<ViewerMediaItem> {
+    const validation = validateUploadFile(file);
+    if (!validation.ok || validation.kind === "video") {
+      throw new Error(t("messages.uploadFailed"));
+    }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
+    const mimeType = file.type || "application/octet-stream";
+    const { error: uploadErr } = await supabase.storage
+      .from("media")
+      .upload(path, file, { upsert: false, cacheControl: "3600", contentType: mimeType });
+    if (uploadErr) throw new Error(uploadErr.message);
+
+    const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
+    const { data: row, error: insertErr } = await supabase
+      .from("media")
+      .insert({
+        org_id: orgId,
+        project_id: projectId,
+        uploaded_by: managerId,
+        media_type: mediaType,
+        storage_path: path,
+        filename: file.name,
+        file_size: file.size,
+        mime_type: mimeType,
+        caption: null,
+        is_checkout: false,
+        time_event_id: null,
+        metadata: {
+          kind: "receipt",
+          category: "receipt",
+          store_name: null,
+          amount: 0,
+          purchase_date: new Date().toISOString().slice(0, 10),
+          uploader_name: "Manager",
+        },
       })
-      .select("id")
-      .single();
-
-    if (error || !data) return;
-
-    const color =
-      priority === "urgent" || priority === "high"
-        ? "#ef4444"
-        : priority === "medium"
-          ? "#f59e0b"
-          : "#22c55e";
-
-    setItems((prev) => [
-      ...prev,
-      { id: data.id, name, quantity, color, delivered: false },
-    ]);
-    form.reset();
+      .select("id, storage_path, filename, mime_type, media_type, caption, created_at, metadata")
+      .single<ViewerMediaItem>();
+    if (insertErr || !row) throw new Error(insertErr?.message ?? t("messages.uploadFailed"));
+    return row;
   }
 
-  async function toggleDelivered(itemId: string, delivered: boolean) {
-    await supabase
+  function openDeliveryModal(item: MaterialItem) {
+    setDeliveryTarget(item);
+    setDeliveryFile(null);
+    setDeliveryError("");
+  }
+
+  function closeDeliveryModal() {
+    if (deliveryBusy) return;
+    setDeliveryTarget(null);
+    setDeliveryFile(null);
+    setDeliveryError("");
+  }
+
+  async function confirmDelivery() {
+    if (!deliveryTarget) return;
+    setDeliveryBusy(true);
+    setDeliveryError("");
+    try {
+      const now = new Date().toISOString();
+      const receipt = deliveryFile ? await createDeliveryReceipt(deliveryFile) : null;
+      const metadata = {
+        ...deliveryTarget.metadata,
+        delivered_by: isProfileId(deliveryTarget.metadata.delivered_by)
+          ? deliveryTarget.metadata.delivered_by
+          : managerId,
+        delivered_at:
+          typeof deliveryTarget.metadata.delivered_at === "string"
+            ? deliveryTarget.metadata.delivered_at
+            : now,
+        receipt_id: receipt?.id ?? null,
+        receipt_attached_by: receipt ? managerId : null,
+      };
+      const { error } = await supabase
+        .from("tasks")
+        .update({ status: "done", completed_at: now, metadata })
+        .eq("id", deliveryTarget.id);
+      if (error) throw new Error(error.message);
+      setDeliveryTarget(null);
+      setDeliveryFile(null);
+      await refreshMaterials();
+    } catch (error) {
+      setDeliveryError(error instanceof Error ? error.message : t("common.errorTryAgain"));
+    } finally {
+      setDeliveryBusy(false);
+    }
+  }
+
+  async function undoDelivery(item: MaterialItem) {
+    if (typeof window !== "undefined" && !window.confirm(t("materials.cancelDeliveryConfirm"))) {
+      return;
+    }
+    const metadata = { ...item.metadata };
+    delete metadata.delivered_by;
+    delete metadata.delivered_at;
+    delete metadata.receipt_id;
+    delete metadata.receipt_attached_by;
+    const { error } = await supabase
       .from("tasks")
-      .update({ status: delivered ? "done" : "pending", completed_at: delivered ? new Date().toISOString() : null })
-      .eq("id", itemId);
-    setItems((prev) =>
-      prev.map((it) => (it.id === itemId ? { ...it, delivered } : it)),
-    );
+      .update({ status: "pending", completed_at: null, metadata })
+      .eq("id", item.id);
+    if (error) {
+      setOrderError(error.message);
+      return;
+    }
+    await refreshMaterials();
   }
+
+  const materialsSummary = formatSectionCountSummary(t("materials.title"), [
+    { count: items.length, label: t("projectDetail.summaryItems") },
+  ]);
 
   return (
-    <section id="materials" className="surface-card scroll-mt-4 p-4">
-      <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("materials.title")}</h2>
-
-      <form className="mt-4 flex flex-wrap gap-2" onSubmit={handleAdd}>
-        <TextInputWithVoice
-          name="mat_name"
-          placeholder={t("materials.name")}
-          className="min-w-[180px] flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-        />
-        <input
-          name="mat_qty"
-          placeholder={t("materials.quantity")}
-          className="w-20 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-        />
-        <select
-          name="mat_priority"
-          defaultValue="medium"
-          className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-        >
-          <option value="urgent">{t("materials.urgent")}</option>
-          <option value="medium">{t("materials.soon")}</option>
-          <option value="low">{t("materials.notUrgent")}</option>
-        </select>
+    <>
+    <CollapsibleSection
+      id="materials"
+      projectId={projectId}
+      defaultOpen={false}
+      dataTestid="manager-project-materials-folder"
+      className="p-4"
+      summary={
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">
+          {materialsSummary}
+        </h2>
+      }
+      headerAction={
         <button
-          type="submit"
-          className="rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold"
-          style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            openAddMaterialModal();
+          }}
+          className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+          style={{
+            borderColor: "rgba(191, 162, 52, 0.4)",
+            color: "var(--brand-yellow)",
+          }}
         >
+          <Plus size={13} />
           {t("materials.addItem")}
         </button>
-      </form>
-
-      <div className="mt-4 space-y-2">
+      }
+    >
+      <div className="mt-3 space-y-3">
         {loading ? (
           <div className="text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
-        ) : items.length === 0 ? (
+        ) : materialGroups.length === 0 ? (
           <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
             {t("materials.empty")}
           </div>
         ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className="task-card flex items-center gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-              style={{ "--task-accent": item.color, opacity: item.delivered ? 0.55 : 1 } as React.CSSProperties}
-            >
-              <input
-                type="checkbox"
-                checked={item.delivered}
-                onChange={(e) => void toggleDelivered(item.id, e.target.checked)}
-                className="h-4 w-4 shrink-0"
-              />
-              <div className="min-w-0 flex-1">
-                <span
-                  className="text-sm font-semibold text-[var(--text-primary)]"
-                  style={{ textDecoration: item.delivered ? "line-through" : "none" }}
-                >
-                  {item.name}
-                </span>
-                {item.quantity ? (
-                  <span className="ml-2 text-xs text-[var(--text-muted)]">×{item.quantity}</span>
+          materialGroups.map((group) => {
+            const priorityColor = getMaterialPriorityColor(group.priority);
+            return (
+              <CollapsibleSection
+                key={group.id}
+                id={`materials-${group.id}`}
+                projectId={projectId}
+                defaultOpen={false}
+                className="border-[var(--border-default)] bg-[var(--bg-primary)] p-3"
+                contentClassName="mt-3"
+                summary={
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-bold text-[var(--text-primary)]">
+                        {group.authorName}
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)]">
+                        {formatMaterialDate(group.createdAt)}
+                      </span>
+                      <span className="rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+                        {formatMaterialPositionCount(group.items.length, t)}
+                      </span>
+                      <span
+                        className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                        style={{ background: `${priorityColor}1f`, color: priorityColor }}
+                      >
+                        {getMaterialPriorityLabel(group.priority, t)}
+                      </span>
+                    </div>
+                    {group.note ? (
+                      <p className="mt-1 truncate text-xs text-[var(--text-muted)]">
+                        {group.note}
+                      </p>
+                    ) : null}
+                  </div>
+                }
+              >
+                {group.note ? (
+                  <p className="mb-3 whitespace-pre-wrap rounded-[var(--radius-md)] bg-[var(--bg-card)] p-3 text-xs text-[var(--text-secondary)]">
+                    {group.note}
+                  </p>
                 ) : null}
-              </div>
-              <span
-                className="shrink-0 rounded-full"
-                style={{ width: 8, height: 8, background: item.color }}
-              />
-            </div>
-          ))
+                <div className="space-y-2">
+                  {group.items.map((item) => {
+                    const quantityLabel = item.quantity
+                      ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}`
+                      : "";
+                    const deliveredAt = item.deliveredAt ?? (item.delivered ? item.updatedAt : null);
+                    return (
+                      <div
+                        key={item.id}
+                        className="task-card rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                        style={
+                          {
+                            "--task-accent": item.color,
+                            opacity: item.delivered ? 0.7 : 1,
+                          } as React.CSSProperties
+                        }
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={item.delivered}
+                            onChange={(event) => {
+                              if (event.target.checked) {
+                                openDeliveryModal(item);
+                              } else {
+                                void undoDelivery(item);
+                              }
+                            }}
+                            className="mt-1 h-4 w-4 shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div>
+                              <span
+                                className="text-sm font-semibold text-[var(--text-primary)]"
+                                style={{ textDecoration: item.delivered ? "line-through" : "none" }}
+                              >
+                                {item.name}
+                              </span>
+                              {quantityLabel ? (
+                                <span className="ml-2 text-xs text-[var(--text-muted)]">
+                                  — {quantityLabel}
+                                </span>
+                              ) : null}
+                            </div>
+                            {item.delivered ? (
+                              <div className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
+                                <div>
+                                  {t("materials.deliveredByLabel")}{" "}
+                                  {item.deliveredByName ?? t("tasks.unknown")}
+                                  {deliveredAt ? ` · ${formatMaterialDate(deliveredAt)}` : ""}
+                                </div>
+                                {item.receiptId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (item.receipt) setReceiptViewerItem(item.receipt);
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--brand-yellow)] disabled:text-[var(--text-muted)]"
+                                    disabled={!item.receipt}
+                                  >
+                                    <ReceiptIcon size={12} />
+                                    {t("materials.receiptAttachedByLabel")}{" "}
+                                    {item.receiptAttachedByName ?? t("tasks.unknown")}
+                                  </button>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CollapsibleSection>
+            );
+          })
         )}
       </div>
-    </section>
+    </CollapsibleSection>
+    {addMaterialOpen ? (
+      <div
+        className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 sm:items-center"
+        onClick={closeAddMaterialModal}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div
+          className="surface-card max-h-[90vh] w-full max-w-[860px] overflow-y-auto p-4"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("materials.addItem")}
+            </h2>
+            <button
+              type="button"
+              onClick={closeAddMaterialModal}
+              aria-label={t("common.cancel")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              disabled={savingOrder}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {orderError ? (
+            <div className="mt-3 rounded-[var(--radius-md)] bg-red-500/10 px-3 py-2 text-xs font-semibold text-[var(--red)]">
+              {orderError}
+            </div>
+          ) : null}
+          <form className="mt-4 grid gap-4" onSubmit={handleAddOrder}>
+            <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
+              <select
+                value={orderPriority}
+                onChange={(event) => setOrderPriority(event.target.value as TaskPriority)}
+                aria-label={t("messages.priority")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="urgent">{t("materials.urgent")}</option>
+                <option value="medium">{t("materials.soon")}</option>
+                <option value="low">{t("materials.notUrgent")}</option>
+              </select>
+              <TextInputWithVoice
+                multiline
+                rows={2}
+                value={orderNote}
+                onChange={(event) => setOrderNote(event.target.value)}
+                placeholder={t("materials.orderNote")}
+                className="min-h-[82px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+            <div className="space-y-2">
+              {orderRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 sm:grid-cols-[minmax(0,1fr)_120px_minmax(180px,260px)_36px]"
+                >
+                  <TextInputWithVoice
+                    value={row.name}
+                    onChange={(event) => updateOrderRow(row.id, { name: event.target.value })}
+                    placeholder={t("materials.name")}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={row.quantity}
+                    onChange={(event) => updateOrderRow(row.id, { quantity: event.target.value })}
+                    placeholder={t("materials.quantity")}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                    style={MATERIAL_INPUT_STYLE}
+                  />
+                  <div className="flex min-w-0 gap-2">
+                    <select
+                      value={row.unit}
+                      onChange={(event) =>
+                        updateOrderRow(row.id, { unit: event.target.value as MaterialUnitValue })
+                      }
+                      className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                      style={MATERIAL_INPUT_STYLE}
+                    >
+                      {MATERIAL_UNIT_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value} style={MATERIAL_OPTION_STYLE}>
+                          {t(option.labelKey)}
+                        </option>
+                      ))}
+                    </select>
+                    {row.unit === "other" ? (
+                      <input
+                        value={row.customUnit}
+                        onChange={(event) =>
+                          updateOrderRow(row.id, { customUnit: event.target.value })
+                        }
+                        placeholder={t("materials.unitOther")}
+                        className="w-28 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                        style={MATERIAL_INPUT_STYLE}
+                      />
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeOrderRow(row.id)}
+                    aria-label={t("common.remove")}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)]"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={addOrderRow}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-semibold"
+                style={{
+                  borderColor: "rgba(191, 162, 52, 0.4)",
+                  color: "var(--brand-yellow)",
+                }}
+              >
+                <Plus size={14} />
+                {t("materials.addPosition")}
+              </button>
+              <button
+                type="submit"
+                disabled={!hasNamedOrderRow || savingOrder}
+                className="rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+                style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+              >
+                {savingOrder ? t("common.saving") : t("materials.saveOrder")}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    ) : null}
+    {deliveryTarget ? (
+      <div
+        className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-4 sm:items-center"
+        onClick={closeDeliveryModal}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div
+          className="surface-card w-full max-w-[520px] p-4"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("materials.markDeliveryTitle")}
+              </h2>
+              <p className="mt-1 truncate text-sm font-semibold text-[var(--text-primary)]">
+                {deliveryTarget.name}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={closeDeliveryModal}
+              aria-label={t("common.cancel")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              disabled={deliveryBusy}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-[var(--text-secondary)]">
+            {t("materials.deliveryReceiptReminder")}
+          </p>
+          {deliveryError ? (
+            <div className="mt-3 rounded-[var(--radius-md)] bg-red-500/10 px-3 py-2 text-xs font-semibold text-[var(--red)]">
+              {deliveryError}
+            </div>
+          ) : null}
+          <label className="mt-4 block text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+            {t("materials.attachReceiptOptional")}
+          </label>
+          <input
+            type="file"
+            accept="image/*,application/pdf"
+            onChange={(event) => setDeliveryFile(event.target.files?.[0] ?? null)}
+            className="mt-2 block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+          />
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={closeDeliveryModal}
+              disabled={deliveryBusy}
+              className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void confirmDelivery()}
+              disabled={deliveryBusy}
+              className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold disabled:opacity-50"
+              style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+            >
+              {deliveryBusy ? t("common.saving") : t("materials.confirmDelivery")}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    <MediaViewerModal
+      item={receiptViewerItem}
+      onClose={() => setReceiptViewerItem(null)}
+    />
+    </>
   );
 }
 
@@ -2828,6 +3753,8 @@ function ReceiptsSection({
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
+  const [receiptUploadOpen, setReceiptUploadOpen] = useState(false);
+  const [receiptUploadError, setReceiptUploadError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   // Mobile-first capture: separate hidden input with capture="environment"
   // so tapping the camera button on phone goes straight to the rear camera
@@ -2897,7 +3824,10 @@ function ReceiptsSection({
       fileRef.current?.files && fileRef.current.files.length > 0
         ? fileRef.current.files
         : cameraRef.current?.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      setReceiptUploadError(t("receipts.selectFiles"));
+      return;
+    }
 
     const storeName = fd.get("store")?.toString() ?? "";
     const otherStore = fd.get("store_other")?.toString().trim() ?? "";
@@ -2909,7 +3839,10 @@ function ReceiptsSection({
     // Receipt photo + amount remain mandatory. Store became optional —
     // many small purchases don't have a clean store identity (street
     // vendor, multi-stop trip, etc.). Empty store is stored as null.
-    if (!amount) return;
+    if (!amount) {
+      setReceiptUploadError(t("workerProject.receiptAmountRequired"));
+      return;
+    }
 
     // Wave 8 client validation against STORAGE_LIMITS_MB.
     for (const file of Array.from(files)) {
@@ -2923,9 +3856,13 @@ function ReceiptsSection({
               : error.kind === "video"
                 ? "uploads.tooLargeVideo"
                 : "uploads.tooLargePdf";
-          setMessage(t(key));
+          const text = t(key);
+          setMessage(text);
+          setReceiptUploadError(text);
         } else {
-          setMessage(t("uploads.unsupportedType").replace("{kind}", error.mime));
+          const text = t("uploads.unsupportedType").replace("{kind}", error.mime);
+          setMessage(text);
+          setReceiptUploadError(text);
         }
         return;
       }
@@ -2933,17 +3870,20 @@ function ReceiptsSection({
 
     setUploading(true);
     setMessage("");
+    setReceiptUploadError("");
 
     for (const file of Array.from(files)) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${orgId}/${projectId}/receipts/${Date.now()}-${safeName}`;
+      const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
 
       const { error: uploadErr } = await supabase.storage
         .from("media")
         .upload(path, file, { upsert: false, cacheControl: "3600" });
 
       if (uploadErr) {
-        setMessage(t("messages.uploadFailed"));
+        const text = t("messages.uploadFailed");
+        setMessage(text);
+        setReceiptUploadError(text);
         setUploading(false);
         return;
       }
@@ -2982,7 +3922,9 @@ function ReceiptsSection({
         .single();
 
       if (insertErr || !row) {
-        setMessage(t("messages.uploadFailed"));
+        const text = t("messages.uploadFailed");
+        setMessage(text);
+        setReceiptUploadError(text);
         setUploading(false);
         return;
       }
@@ -3008,9 +3950,12 @@ function ReceiptsSection({
     }
 
     setUploading(false);
+    setReceiptUploadOpen(false);
     form.reset();
     if (fileRef.current) fileRef.current.value = "";
     if (cameraRef.current) cameraRef.current.value = "";
+    setShowOther(false);
+    setReceiptUploadError("");
   }
 
   async function handleDelete(receipt: ReceiptItem) {
@@ -3025,18 +3970,46 @@ function ReceiptsSection({
 
   const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
   const [showOther, setShowOther] = useState(false);
+  const receiptsSummary = receipts.length > 0
+    ? `${formatSectionCountSummary(t("receipts.title"), [
+        { count: receipts.length, label: t("receipts.items") },
+      ])}, ${currency.format(total)}`
+    : formatSectionCountSummary(t("receipts.title"), [
+        { count: 0, label: t("receipts.items") },
+      ]);
 
   return (
-    <section className="surface-card p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("receipts.title")}</h2>
-        {receipts.length > 0 ? (
-          <div className="text-sm text-[var(--text-secondary)]">
-            {t("receipts.total")}: <span className="font-semibold text-[var(--brand-yellow)]">{currency.format(total)}</span>
-            {" "}<span className="text-[var(--text-muted)]">({receipts.length} {t("receipts.items")})</span>
-          </div>
-        ) : null}
-      </div>
+    <>
+    <CollapsibleSection
+      id="receipts"
+      projectId={projectId}
+      defaultOpen={false}
+      dataTestid="manager-project-receipts-folder"
+      className="p-4"
+      summary={
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">
+          {receiptsSummary}
+        </h2>
+      }
+      headerAction={
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setReceiptUploadError("");
+            setReceiptUploadOpen(true);
+          }}
+          className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+          style={{
+            borderColor: "rgba(191, 162, 52, 0.4)",
+            color: "var(--brand-yellow)",
+          }}
+        >
+          <Plus size={13} />
+          {t("receipts.addReceipt")}
+        </button>
+      }
+    >
       <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.receiptsSubtitle")}</p>
 
       {message ? (
@@ -3249,7 +4222,160 @@ function ReceiptsSection({
           />
         </div>
       ) : null}
-    </section>
+    </CollapsibleSection>
+    {receiptUploadOpen ? (
+      <div
+        className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 sm:items-center"
+        onClick={() => {
+          setReceiptUploadOpen(false);
+          setReceiptUploadError("");
+        }}
+      >
+        <div
+          className="surface-card max-h-[90vh] w-full max-w-[760px] overflow-y-auto p-4"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("receipts.addReceipt")}
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setReceiptUploadOpen(false);
+                setReceiptUploadError("");
+              }}
+              aria-label={t("common.cancel")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+            >
+              <X size={14} />
+            </button>
+          </div>
+          {receiptUploadError ? (
+            <div className="mt-3 rounded-[var(--radius-md)] bg-red-500/10 px-3 py-2 text-xs font-semibold text-[var(--red)]">
+              {receiptUploadError}
+            </div>
+          ) : null}
+          <form className="mt-4 grid gap-3" onSubmit={handleUpload}>
+            <div
+              className="relative rounded-[var(--radius-md)] border-2 border-dashed p-4 text-center transition-colors"
+              style={{
+                borderColor: dragging ? "var(--brand-yellow)" : "var(--border-default)",
+                background: dragging ? "rgba(191,162,52,0.06)" : "var(--bg-primary)",
+              }}
+              onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragging(false);
+                if (fileRef.current && event.dataTransfer.files.length) {
+                  fileRef.current.files = event.dataTransfer.files;
+                }
+              }}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/heic,application/pdf"
+                multiple
+                className="absolute inset-0 cursor-pointer opacity-0"
+                onChange={() => {/* just for re-render */}}
+              />
+              <div className="text-sm text-[var(--text-secondary)]">{t("receipts.selectFiles")}</div>
+              <div className="mt-1 text-[10px] text-[var(--text-muted)]">JPG, PNG, HEIC, PDF</div>
+              <div className="mt-0.5 text-[10px] font-semibold text-[var(--text-muted)]">
+                {t("receipts.inlineLabel")}
+              </div>
+            </div>
+
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={() => {/* just for re-render */}}
+            />
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)]"
+            >
+              {t("receipts.takePhoto")}
+            </button>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <select
+                name="store"
+                defaultValue=""
+                onChange={(event) => setShowOther(event.target.value === "__other")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="">{t("receipts.store")}</option>
+                {STORES.map((store) => (
+                  <option key={store} value={store}>{store}</option>
+                ))}
+                <option value="__other">{t("receipts.other")}</option>
+              </select>
+              {showOther ? (
+                <TextInputWithVoice
+                  name="store_other"
+                  placeholder={t("receipts.store")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                />
+              ) : (
+                <input
+                  name="amount"
+                  type="number"
+                  step="0.01"
+                  required
+                  placeholder={t("receipts.amount")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                />
+              )}
+            </div>
+
+            {showOther ? (
+              <input
+                name="amount"
+                type="number"
+                step="0.01"
+                required
+                placeholder={t("receipts.amount")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              />
+            ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <DateField
+                name="purchase_date"
+                defaultValue={new Date().toISOString().slice(0, 10)}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <TextInputWithVoice
+                name="note"
+                placeholder={t("receipts.note")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={uploading}
+              className="rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold"
+              style={{
+                background: uploading ? "var(--border-default)" : "var(--brand-yellow)",
+                color: uploading ? "var(--text-muted)" : "var(--text-inverse)",
+              }}
+            >
+              {uploading ? t("receipts.uploading") : t("receipts.upload")}
+            </button>
+          </form>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
 
