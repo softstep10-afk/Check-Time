@@ -4,6 +4,59 @@
 
 ---
 
+## 🎯 Состояние проекта (на 9 мая 2026)
+
+### Где код
+
+- **Текущая ветка:** `wip/uncommitted-recovery` (НЕ на `main`).
+- **Последний коммит:** `8877b94 chore(scripts): Vercel REST helpers for env push and SSO protection`.
+- **Опережает `main` на 7 коммитов:**
+  ```
+  8877b94 chore(scripts): Vercel REST helpers for env push and SSO protection
+  90adb9a feat(worker): instant flip Mark-Done card to «Завершено» on /my-tasks
+  c2af391 fix(worker): mark-done modal now actually persists to DB    ← на проде
+  cd29f5c wip: misc uncommitted changes (needs review)
+  73578df fix(media): RLS migration for all_active project access + worker receipt visibility
+  e2e5fd0 fix(payroll): RLS migration without recursion + calculator updates
+  d0caf76 feat(media): in-app viewer modal + gallery drawer + playback selection
+  3ddd68b feat(worker): completion modal + Russian voice dictation for Mark Done
+  267636a chore: gitignore certificates and .vercel artifacts
+  ```
+- **На `main` сейчас:** `9178945 Fix checkout video linking under RLS` (без новой работы).
+- **НЕ мержить `wip/uncommitted-recovery` в main** в новой сессии до того как пройти ревью каждого коммита. Особенно `cd29f5c wip: misc uncommitted changes (needs review)` — там 30+ файлов навалом, разобрать на отдельные коммиты разумнее **до** мержа.
+
+### Где прод
+
+- **Production URL:** `https://check-time-five.vercel.app` ← публичный, без Vercel-логина.
+- **Deployment:** `dpl_3Rhd6rfnP7AAEVBkh991xGNfwLjk` (target=production, READY на 9 мая 2026 00:02 PT).
+- **Что задеплоено:** working tree состояния `c2af391` плюс uncommitted-tweak `TasksPage.tsx` (instant-flip), который потом был закоммичен как `90adb9a`. То есть прод-бинарник ≡ HEAD ветки `c2af391..90adb9a` примерно по содержимому.
+- **Vercel SSO protection:** `ssoProtection: { deploymentType: "all_except_custom_domains" }` — preview-URL'ы за стеной, прод-алиас публичный.
+- **Env на Vercel Preview:** заполнены 5 из 7 (Supabase URL/anon/service-role, Google Maps key, AUTH_BYPASS=false). `ANTHROPIC_API_KEY` и `OPENAI_API_KEY` — в `.env.local` локально пустые, на Vercel не залиты. AI-роуты в рантайме без них вернут ошибку — пофиксить можно одной командой `node scripts/push-preview-env.mjs` после того как ключи появятся в `.env.local`.
+
+### Что подтверждено вручную (Андрей проверил на check-time-five.vercel.app)
+
+- Worker нажимает «Отметить готовым» на личной задаче → модалка → submit → задача в БД получает `status="done"`, `completed_at`, `completed_by`, `metadata.completion_note/media_ids/follow_up_*`.
+- F5 удерживает задачу в «Завершено» (баг ушёл).
+- Owner видит «Назначено / Выполнено / Когда / комментарий» в `/tasks` и в карточке проекта.
+- Общие задачи проекта — тот же flow с claim → start → modal → done.
+- Голосовой ввод (микрофон в textarea «Комментарий о выполнении») — работает в браузере с поддержкой Web Speech API на ru-RU.
+
+### Бэклог следующей сессии (приоритет сверху вниз)
+
+1. **Частичное выполнение задач + история** — двойная кнопка в модалке («Готово полностью» / «Сохранить отчёт»), много сабмитов на одной задаче, видны всем.  
+   → дизайн-документ: `PLAN_PARTIAL_COMPLETION.md`
+2. **Архив задач** — Owner-only архивация, отдельная страница `/archive` с фильтрами, восстановление.  
+   → дизайн-документ: `PLAN_TASK_ARCHIVE.md`
+3. **Worker receipts/sums privacy** — Vasya не должен видеть суммы по проекту и чужие чеки. Сейчас уже частично сделано (см. `src/lib/worker-receipt-visibility.ts` в коммите `73578df`), нужна проверка end-to-end и UI-полировка.
+4. **Компактные блоки медиа** на project page и worker views — текущий tile-grid слишком расходует экран на мобильном.
+5. **Сворачиваемая папка «Завершено»** в /my-tasks и worker project view — collapse по умолчанию, разворачивается одним тапом.
+6. **Реорганизация worker project page** — порядок: notes сверху, my+general tasks под проектом. Сейчас порядок другой.
+7. **Известный баг:** на worker project page при открытии медиа (фото/видео) виден flicker — UI дёргается на ~200ms. Воспроизводится стабильно. Связан с MediaViewerModal или TaskAttachmentList signing.
+
+Перед стартом каждого пункта 1–2 — Андрей отвечает на вопросы из соответствующего PLAN-документа.
+
+---
+
 ## 👤 Про Андрея
 
 - **Язык:** русский. Он владелец компании (Construction Clock — собственный продукт для стройки), не программист.

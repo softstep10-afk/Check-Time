@@ -81,6 +81,8 @@ seed_dev.sql                ← 1 org + Andrew owner + Test Site project + assig
 - `HANDOFF.md` и `ABOUT_ANDREW.md` — читать первыми в новой сессии
 - `PROGRESS_LOG.md` (этот файл)
 - `IMPLEMENTATION_PLAN.md` — детальные описания всех волн X1-X5
+- `PLAN_PARTIAL_COMPLETION.md` — дизайн «Частичное выполнение + история» (план)
+- `PLAN_TASK_ARCHIVE.md` — дизайн «Архив задач» (план)
 - `AUDIT_REPORT.md`, `OLD_APP_FINDINGS.md`
 - `docs/permissions.md` — матрица RBAC
 - `supabase/migrations/00099_wash_and_reset.sql` — если придётся сбрасывать ещё раз
@@ -88,4 +90,87 @@ seed_dev.sql                ← 1 org + Andrew owner + Test Site project + assig
 - `src/lib/auth-bypass.ts` — `AUTH_BYPASS_ENABLED`, `PREVIEW_OWNER_ID`
 - `src/proxy.ts` — Next 16 Proxy (auth gate, session refresh)
 - `.github/workflows/ci.yml` — CI pipeline
-- `tests/lib/` — vitest кейсы (34 штуки)
+- `tests/lib/` — vitest кейсы (354 штуки на 9 мая 2026)
+
+---
+
+## ✅ 9 мая 2026 — Mark Done bug, instant-flip, voice dictation, прод-деплой
+
+Длинная сессия восстановления и доводки фичи завершения задач. Итог — рабочий продакшен на `check-time-five.vercel.app`.
+
+### Найденный баг (root cause)
+
+В `WorkerShell.updateTaskStatus` стоял guard:
+```ts
+if (nextStatus === "done" && !options?.submittedFromCompletionModal) {
+  throw new Error(t("tasks.completionModalRequired"));
+}
+```
+Но флаг `submittedFromCompletionModal: true` **не устанавливал ни один caller** — ни модалка, ни обёртка в TasksPage/WorkerProjectView. То есть **100% попыток нажать «Отметить готовым» заканчивались исключением до записи в БД.** На UI это выглядело как «задача выполнена» (оптимистичный flip в `WorkerProjectView.markLocalTask`), но F5 возвращал её обратно в активные — потому что в БД `status` так и оставался `in_progress`.
+
+Диагностика подтверждена прямым SQL-запросом по таску «888888»: `status=in_progress`, `completed_at=null`, `metadata={}` после нескольких попыток «закрыть».
+
+### Фикс — коммит `c2af391`
+
+`fix(worker): mark-done modal now actually persists to DB`
+- В `TasksPage.tsx` и `WorkerProjectView.tsx` обёртки `onDone` теперь добавляют `submittedFromCompletionModal: true` в options к `updateTaskStatus`.
+- `updateTaskStatus` теперь возвращает `Promise<boolean>` (вместо `Promise<void>`), чтобы caller знал успех.
+- В `WorkerProjectView.tsx` `markLocalTask("done")` сдвинут **после** успешного await — на ошибке UI не врёт.
+- Guard оставлен на месте — он защищает от случайных done-мутаций мимо модалки.
+
+### Добавление instant-flip на /my-tasks — коммит `90adb9a`
+
+`feat(worker): instant flip Mark-Done card to «Завершено» on /my-tasks`
+- В `TasksPage.tsx` появился третий слой override-Map: `locallyCompletedTaskIds: Set<string>` рядом с существующими `claimedTaskAssignees` / `claimedTaskMetadata`.
+- После успешного `updateTaskStatus` id попадает в Set — `taskList` useMemo подменяет `status="done"` на этом id, карточка сразу едет в раздел «Завершено» без F5. На неудаче Set не пополняется и UI остаётся честным.
+
+### Голосовой ввод в модалке завершения
+
+В `WorkerTaskDetailModal.tsx` встроен локальный hook `useCompletionDictation` поверх Web Speech API (`window.SpeechRecognition`/`webkitSpeechRecognition`). Конфигурация: `lang="ru-RU"`, `continuous=true`, `interimResults=true`. Кнопка микрофона смонтирована в правый верхний угол textarea «Комментарий о выполнении». Финальные фразы дописываются в state с пробелом-разделителем; интерим-фразы показываются курсивом ниже, в state не пишутся. Если API недоступно — кнопка не рендерится. Если разрешение отклонено — инлайн-сообщение «Разрешите доступ к микрофону». Этот код уже был на диске когда я начинал сессию (chat-side hotfix), сегодня скоммичен в составе восстановления.
+
+### Восстановление 80+ незакоммиченных файлов
+
+На старте сессии в working tree висели сорок с лишним модифицированных файлов и тридцать новых — chat-side hotfix без коммитов. Разложено на ветке `wip/uncommitted-recovery`:
+
+```
+8877b94 chore(scripts): Vercel REST helpers for env push and SSO protection
+90adb9a feat(worker): instant flip Mark-Done card to «Завершено» on /my-tasks
+c2af391 fix(worker): mark-done modal now actually persists to DB        ← прод
+cd29f5c wip: misc uncommitted changes (needs review)
+73578df fix(media): RLS migration for all_active project access + worker receipt visibility
+e2e5fd0 fix(payroll): RLS migration without recursion + calculator updates
+d0caf76 feat(media): in-app viewer modal + gallery drawer + playback selection
+3ddd68b feat(worker): completion modal + Russian voice dictation for Mark Done
+267636a chore: gitignore certificates and .vercel artifacts
+9178945 Fix checkout video linking under RLS                              ← последний коммит main
+```
+
+Мусор (логи, .vercel.zip, скриншоты, .claude/) оставлен незакоммиченным намеренно.
+
+### Vercel — сетап, env, деплой
+
+- Установил `vercel CLI 53.2.0` глобально.
+- Залил 5 из 7 нужных env в Preview через REST (`scripts/push-preview-env.mjs`): Supabase URL/anon/service-role, Google Maps key, AUTH_BYPASS=false. ANTHROPIC_API_KEY и OPENAI_API_KEY в `.env.local` пустые — не залиты, но билд этого не требует (AI-роуты работают в рантайме).
+- Временно отключил Vercel SSO protection на preview, чтобы можно было открыть URL без логина (`scripts/toggle-preview-protection.mjs`). После прод-деплоя восстановил `ssoProtection: { deploymentType: "all_except_custom_domains" }` — preview URLs снова за стеной, прод-алиас публичный.
+
+### Производственный деплой
+
+- `vercel --prod --yes` собрал и задеплоил состояние working tree (включая uncommitted TasksPage tweak — тот же код, что прошёл preview-тест на `mk1wuk2iu`).
+- Deployment id: `dpl_3Rhd6rfnP7AAEVBkh991xGNfwLjk`.
+- Production URL: `https://check-time-five.vercel.app` (плюс два aliases).
+- Build status: READY, target=production.
+- Андрей вручную проверил: workflow «Mark Done» работает на личных задачах, на общих задачах проекта; модалка открывается; комментарий опциональный; owner видит «Назначено / Выполнено / Когда / комментарий» как в `/tasks`, так и в карточке проекта.
+
+### Что НЕ зафиксировано в main
+
+Ветка `wip/uncommitted-recovery` сейчас имеет 7 коммитов поверх главной (`9178945` — последний коммит main). До мержа в main стоит:
+1. Сделать ревью каждого из них в отдельности (особенно `cd29f5c wip: misc uncommitted changes (needs review)` — там 30+ файлов, помеченных «нужно разобрать»).
+2. Дождаться следующей сессии — Андрей мержит сам.
+
+### Бэклог — следующая сессия
+
+Приоритеты обсуждены ночью 9 мая, фиксированы в `HANDOFF.md`. Два главных фронта:
+1. **Частичное выполнение задач** — детальный дизайн в `PLAN_PARTIAL_COMPLETION.md`.
+2. **Архив задач** — детальный дизайн в `PLAN_TASK_ARCHIVE.md`.
+
+Плюс UX-полировка: приватность чеков работника, компактные блоки медиа, сворачиваемая «Завершено», переорганизация worker project page, фикс мерцания видео при открытии медиа.
