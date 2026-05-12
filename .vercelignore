@@ -1,0 +1,7 @@
+.claude/
+.next-dev.err.log
+.next-dev.out.log
+.vercel.zip
+CODEX.bat
+desktop.ini
+scripts/*.png
