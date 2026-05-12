@@ -1,4 +1,4 @@
-import type { Profile, Project, TimeEvent, UserRole } from "@/types/database";
+import type { Profile, Project, Task, TimeEvent, UserRole } from "@/types/database";
 import { parseGeoPoint } from "@/lib/worker-utils";
 import {
   EXTREME_SHIFT_MINUTES,
@@ -36,6 +36,14 @@ function startOfWeek(date = new Date()): Date {
   base.setHours(0, 0, 0, 0);
   base.setDate(base.getDate() + mondayOffset);
   return base;
+}
+
+export function isOpenTask(task: Pick<Task, "status" | "deleted_at">): boolean {
+  return !task.deleted_at && task.status !== "done" && task.status !== "cancelled";
+}
+
+export function isCompletedTask(task: Pick<Task, "status" | "deleted_at">): boolean {
+  return !task.deleted_at && task.status === "done";
 }
 
 function endOfDay(date = new Date()): Date {
@@ -524,7 +532,7 @@ export function buildProjectSummaries(
   }
 
   for (const task of data.tasks) {
-    if (!task.project_id || task.status === "done" || task.status === "cancelled") {
+    if (!task.project_id || !isOpenTask(task)) {
       continue;
     }
 
@@ -667,7 +675,7 @@ export function buildProfileSummaries(
   }
 
   for (const task of data.tasks) {
-    if (!task.assigned_to || task.status === "done" || task.status === "cancelled") {
+    if (!task.assigned_to || !isOpenTask(task)) {
       continue;
     }
 
@@ -780,9 +788,7 @@ export function getOverviewStats(
   return {
     onSiteCount: profileSummaries.filter((profile) => profile.isOnSite).length,
     activeProjectCount: projectSummaries.filter((project) => project.status === "active").length,
-    openTaskCount: data.tasks.filter(
-      (task) => task.status !== "done" && task.status !== "cancelled",
-    ).length,
+    openTaskCount: data.tasks.filter(isOpenTask).length,
     crewCount: data.profiles.length,
     todayHours: roundCurrency(todayMinutes / 60),
     unpaidHours: unpaidPreview?.totalHours ?? 0,

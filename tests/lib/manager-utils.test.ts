@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildPayrollDraftRows,
+  buildProfileSummaries,
   buildProjectSummaries,
   buildWorkerDisambiguationMap,
   computeOvertime,
@@ -10,6 +11,8 @@ import {
   formatWorkerDisplayLabel,
   groupPayrollRowsByDay,
   groupPayrollRowsByWorker,
+  getOverviewStats,
+  isOpenTask,
   isOwnerRole,
   isManagerRole,
   sessionMinutesInWindow,
@@ -24,6 +27,7 @@ import type {
   PayrollClosure,
   Profile,
   Project,
+  Task,
   TimeEvent,
 } from "@/types/database";
 
@@ -87,9 +91,30 @@ function makeEvent(overrides: Partial<TimeEvent> & Pick<TimeEvent, "id" | "profi
   };
 }
 
+function makeTask(overrides: Partial<Task> & Pick<Task, "id" | "title">): Task {
+  return {
+    org_id: "org",
+    project_id: null,
+    assigned_to: null,
+    assigned_by: "mgr",
+    description: null,
+    priority: "medium",
+    status: "pending",
+    due_date: null,
+    completed_at: null,
+    completed_by: null,
+    metadata: {},
+    deleted_at: null,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
 function makeWorkspace(opts: {
   profiles?: Profile[];
   projects?: Project[];
+  tasks?: Task[];
   timeEvents?: TimeEvent[];
   payrollClosures?: PayrollClosure[];
 }): ManagerWorkspaceData {
@@ -107,7 +132,7 @@ function makeWorkspace(opts: {
     profiles: opts.profiles ?? [],
     projects: opts.projects ?? [],
     assignments: [],
-    tasks: [],
+    tasks: opts.tasks ?? [],
     timeEvents: opts.timeEvents ?? [],
     media: [],
     payrollRuns: [],
@@ -314,6 +339,48 @@ describe("buildProjectSummaries", () => {
       lat: 37.7749,
       lng: -122.4194,
     });
+  });
+
+  it("excludes soft-deleted tasks from open task counts", () => {
+    const data = makeWorkspace({
+      profiles: [makeProfile({ id: "w1", name: "Worker 1" })],
+      projects: [makeProject({ id: "p1", name: "Project 1" })],
+      tasks: [
+        makeTask({
+          id: "open",
+          title: "Open task",
+          project_id: "p1",
+          assigned_to: "w1",
+          status: "pending",
+        }),
+        makeTask({
+          id: "deleted-open",
+          title: "Deleted open task",
+          project_id: "p1",
+          assigned_to: "w1",
+          status: "pending",
+          deleted_at: "2026-01-02T00:00:00Z",
+        }),
+        makeTask({
+          id: "done",
+          title: "Done task",
+          project_id: "p1",
+          assigned_to: "w1",
+          status: "done",
+          completed_at: "2026-01-02T00:00:00Z",
+        }),
+      ],
+    });
+
+    const projectSummaries = buildProjectSummaries(data, []);
+    const profileSummaries = buildProfileSummaries(data, []);
+    const stats = getOverviewStats(data, [], projectSummaries, profileSummaries);
+
+    expect(isOpenTask(data.tasks[0])).toBe(true);
+    expect(isOpenTask(data.tasks[1])).toBe(false);
+    expect(projectSummaries.find((project) => project.id === "p1")?.openTaskCount).toBe(1);
+    expect(profileSummaries.find((profile) => profile.id === "w1")?.openTaskCount).toBe(1);
+    expect(stats.openTaskCount).toBe(1);
   });
 });
 

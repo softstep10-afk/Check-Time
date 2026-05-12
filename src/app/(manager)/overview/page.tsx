@@ -11,6 +11,7 @@ import {
   buildProjectSummaries,
   detectTransferGaps,
   getOverviewStats,
+  isOpenTask,
   TRANSFER_GAP_COLOR,
 } from "@/lib/manager-utils";
 import { formatDurationCompact, formatEventTime, parseGeoPoint } from "@/lib/worker-utils";
@@ -89,7 +90,7 @@ export default async function OverviewPage() {
   });
   const liveProfiles = profileSummaries.filter((profile) => profile.isOnSite).slice(0, 6);
   const urgentTasks = [...data.tasks]
-    .filter((task) => task.status !== "done" && task.status !== "cancelled")
+    .filter(isOpenTask)
     .sort((left, right) => {
       const priorityGap = priorityRank[left.priority] - priorityRank[right.priority];
       if (priorityGap !== 0) {

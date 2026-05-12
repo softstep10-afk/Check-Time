@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { generateDailyReport, formatOrgDateKey, getTodayInOrgTimeZone } from "@/lib/ai/service";
-import { buildManagerSessions } from "@/lib/manager-utils";
+import { buildManagerSessions, isOpenTask } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import type { DailyReport } from "@/types/database";
@@ -41,6 +41,10 @@ export async function POST(request: NextRequest) {
       return formatOrgDateKey(item.created_at) === reportDate;
     });
     const completedTasks = data.tasks.filter((task) => {
+      if (task.deleted_at) {
+        return false;
+      }
+
       if (projectId && task.project_id !== projectId) {
         return false;
       }
@@ -52,7 +56,7 @@ export async function POST(request: NextRequest) {
         return false;
       }
 
-      return task.status !== "done" && task.status !== "cancelled";
+      return isOpenTask(task);
     });
     const projectName =
       projectId
