@@ -16,7 +16,8 @@ export type CapabilityKey =
   | "upload_receipts"
   | "view_all_projects_map"
   | "view_supply_stores"
-  | "flag_media";
+  | "flag_media"
+  | "finance_access";
 
 export interface CapabilityDescriptor {
   key: CapabilityKey;
@@ -54,6 +55,13 @@ export const CAPABILITIES: readonly CapabilityDescriptor[] = [
     label_ru: "Отметка медиа на проверку",
     description_en: "Lets the worker flag a photo, video, or PDF in the field for a manager to review.",
     description_ru: "Разрешает рабочему отмечать фото, видео или PDF для проверки менеджером.",
+  },
+  {
+    key: "finance_access",
+    label_en: "View finances",
+    label_ru: "Доступ к финансам",
+    description_en: "Allow this user to see all receipts and project totals across the org. Without this, the user only sees their own receipts.",
+    description_ru: "Разрешить пользователю видеть все чеки и итоги по проектам. Без этого — только свои чеки.",
   },
 ] as const;
 

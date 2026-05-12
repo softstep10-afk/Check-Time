@@ -637,6 +637,7 @@ export function buildProjectSummaries(
 export function buildProfileSummaries(
   data: ManagerWorkspaceData,
   sessions: ManagerSession[],
+  financeAccessUserIds?: ReadonlySet<string>,
 ): ManagerProfileSummary[] {
   const weekStart = startOfWeek();
   const todayStart = new Date();
@@ -698,6 +699,13 @@ export function buildProfileSummaries(
     .map((profile) => {
       const assignedProjectIds = assignmentsByProfile.get(profile.id) ?? [];
       const currentSession = openSessionsByProfile.get(profile.id) ?? null;
+      // Mirror migration 00022's receipt-branch USING clause: owner and
+      // admin always have finance access; everyone else needs an explicit
+      // user_capabilities grant.
+      const financeAccess =
+        profile.role === "owner" ||
+        profile.role === "admin" ||
+        (financeAccessUserIds?.has(profile.id) ?? false);
 
       return {
         ...profile,
@@ -713,6 +721,7 @@ export function buildProfileSummaries(
         isOnSite: Boolean(currentSession),
         currentSessionMinutes: currentSession?.durationMinutes ?? null,
         videoUploadedToday: videoUploadedTodayByProfile.has(profile.id),
+        financeAccess,
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));

@@ -10,6 +10,8 @@ import type { ManagerProfileSummary } from "@/lib/manager-types";
 import type { UserRole } from "@/types/database";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { toggleUserCapability } from "@/app/(manager)/admin/users/[id]/permissions/actions";
+import { ALWAYS_FINANCE_ROLES } from "@/lib/finance-access";
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -73,7 +75,44 @@ export function TeamPage({
   const [pinValue, setPinValue] = useState(() =>
     String(Math.floor(1000 + Math.random() * 9000)),
   );
+  // Optimistic override of profile.financeAccess, keyed by profile id.
+  // Successful toggles land in here and stay; router.refresh() repopulates
+  // initialProfiles with the same value, so effectiveFinanceAccess returns
+  // the right answer either way. The map grows at most one entry per
+  // toggled profile per session — negligible for a roster page.
+  const [financeOverrides, setFinanceOverrides] = useState<
+    Record<string, boolean>
+  >({});
   const { t } = useTranslation();
+
+  function effectiveFinanceAccess(profile: ManagerProfileSummary): boolean {
+    if (profile.id in financeOverrides) return financeOverrides[profile.id];
+    return profile.financeAccess;
+  }
+
+  async function handleFinanceToggle(
+    profile: ManagerProfileSummary,
+    next: boolean,
+  ) {
+    if (ALWAYS_FINANCE_ROLES.has(profile.role)) return;
+    const previous = effectiveFinanceAccess(profile);
+    setFinanceOverrides((prev) => ({ ...prev, [profile.id]: next }));
+    setBusyKey(`finance-${profile.id}`);
+    setMessage("");
+    const result = await toggleUserCapability({
+      userId: profile.id,
+      capability: "finance_access",
+      granted: next,
+    });
+    setBusyKey(null);
+    if (!result.ok) {
+      setFinanceOverrides((prev) => ({ ...prev, [profile.id]: previous }));
+      setMessage(result.message ?? t("team.financeToggleError"));
+      setMessageType("error");
+      return;
+    }
+    router.refresh();
+  }
 
   const totals = useMemo(() => {
     let minutes = 0;
@@ -323,6 +362,7 @@ export function TeamPage({
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colHours")}</th>
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colRate")}</th>
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colEarned")}</th>
+                  <th className="pb-3 pr-3 text-right font-semibold">{t("team.colFinance")}</th>
                   <th className="pb-3 text-right font-semibold">{t("team.colActions")}</th>
                 </tr>
               </thead>
@@ -386,6 +426,28 @@ export function TeamPage({
                       >
                         {currencyFmt.format(earned)}
                       </td>
+                      <td className="py-3 pr-3 text-right">
+                        {ALWAYS_FINANCE_ROLES.has(profile.role) ? (
+                          <span
+                            className="inline-flex items-center rounded-[var(--radius-pill)] px-2 py-0.5 text-[9px] font-bold uppercase"
+                            style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
+                            title={t("team.financeAlways")}
+                          >
+                            {t("team.financeAlways")}
+                          </span>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={effectiveFinanceAccess(profile)}
+                            onChange={(event) =>
+                              void handleFinanceToggle(profile, event.target.checked)
+                            }
+                            disabled={busyKey === `finance-${profile.id}`}
+                            aria-label={t("team.colFinance")}
+                            className="h-4 w-4 cursor-pointer"
+                          />
+                        )}
+                      </td>
                       <td className="py-3 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Link
@@ -441,6 +503,7 @@ export function TeamPage({
                   <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--green)" }}>
                     {currencyFmt.format(totals.earned)}
                   </td>
+                  <td className="py-3 pr-3" />
                   <td className="py-3 pr-3" />
                 </tr>
               </tfoot>
@@ -507,7 +570,30 @@ export function TeamPage({
                     </span>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-end gap-1">
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    {ALWAYS_FINANCE_ROLES.has(profile.role) ? (
+                      <span
+                        className="inline-flex items-center rounded-[var(--radius-pill)] px-2 py-0.5 text-[9px] font-bold uppercase"
+                        style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
+                        title={t("team.financeAlways")}
+                      >
+                        {t("team.colFinance")}: {t("team.financeAlways")}
+                      </span>
+                    ) : (
+                      <label className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+                        <input
+                          type="checkbox"
+                          checked={effectiveFinanceAccess(profile)}
+                          onChange={(event) =>
+                            void handleFinanceToggle(profile, event.target.checked)
+                          }
+                          disabled={busyKey === `finance-${profile.id}`}
+                          className="h-3.5 w-3.5 cursor-pointer"
+                        />
+                        {t("team.colFinance")}
+                      </label>
+                    )}
+                    <div className="inline-flex items-center gap-1">
                     <Link
                       href={`/team/${profile.id}`}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border"
@@ -534,6 +620,7 @@ export function TeamPage({
                     >
                       <Trash2 size={13} />
                     </button>
+                    </div>
                   </div>
                 </div>
               );

@@ -309,6 +309,7 @@ export function ProjectDetailPage({
   gpsFreshnessByProfileId,
   shiftReviewByProfileId,
   safetyAcksToday,
+  hasFinanceAccess,
 }: {
   orgId: string;
   managerId: string;
@@ -324,6 +325,7 @@ export function ProjectDetailPage({
   gpsFreshnessByProfileId: Record<string, GpsFreshness>;
   shiftReviewByProfileId: Record<string, ShiftReview>;
   safetyAcksToday: number;
+  hasFinanceAccess: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -2480,7 +2482,12 @@ export function ProjectDetailPage({
         knownProfileNames={profileNameById}
       />
       {/* ── Receipts ── */}
-      <ReceiptsSection orgId={orgId} projectId={project.id} managerId={managerId} />
+      <ReceiptsSection
+        orgId={orgId}
+        projectId={project.id}
+        managerId={managerId}
+        hasFinanceAccess={hasFinanceAccess}
+      />
       {/* ── Store Visits ── */}
       <StoreVisitsSection projectId={project.id} />
 
@@ -3698,10 +3705,12 @@ function ReceiptsSection({
   orgId,
   projectId,
   managerId,
+  hasFinanceAccess,
 }: {
   orgId: string;
   projectId: string;
   managerId: string;
+  hasFinanceAccess: boolean;
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -3721,13 +3730,20 @@ function ReceiptsSection({
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
+      // Without finance access the user is gated to their own receipts.
+      // RLS already enforces this — the client-side .eq() narrows the
+      // result set and keeps the UI honest (so the totals/count match
+      // what the user is actually entitled to see).
+      let query = supabase
         .from("media")
         .select("*")
         .eq("project_id", projectId)
         .eq("metadata->>category", "receipt")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+        .is("deleted_at", null);
+      if (!hasFinanceAccess) {
+        query = query.eq("uploaded_by", managerId);
+      }
+      const { data } = await query.order("created_at", { ascending: false });
 
       const rows = (data ?? []) as Array<Media & { metadata: Record<string, unknown> }>;
 
@@ -3766,7 +3782,7 @@ function ReceiptsSection({
       setLoading(false);
     }
     void load();
-  }, [supabase, projectId]);
+  }, [supabase, projectId, hasFinanceAccess, managerId]);
 
   const total = receipts.reduce((sum, r) => sum + r.amount, 0);
 
@@ -3927,10 +3943,18 @@ function ReceiptsSection({
 
   const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
   const [showOther, setShowOther] = useState(false);
+  // Project-wide totals are only meaningful when the viewer can see the
+  // whole project's receipts. Hide the dollar suffix for non-finance
+  // viewers — they'd only be summing their own receipts, which is a
+  // misleading line item.
   const receiptsSummary = receipts.length > 0
-    ? `${formatSectionCountSummary(t("receipts.title"), [
-        { count: receipts.length, label: t("receipts.items") },
-      ])}, ${currency.format(total)}`
+    ? hasFinanceAccess
+      ? `${formatSectionCountSummary(t("receipts.title"), [
+          { count: receipts.length, label: t("receipts.items") },
+        ])}, ${currency.format(total)}`
+      : formatSectionCountSummary(t("receipts.title"), [
+          { count: receipts.length, label: t("receipts.items") },
+        ])
     : formatSectionCountSummary(t("receipts.title"), [
         { count: 0, label: t("receipts.items") },
       ]);
@@ -3968,6 +3992,11 @@ function ReceiptsSection({
       }
     >
       <p className="mt-1 text-xs text-[var(--text-muted)]">{t("projectDetail.receiptsSubtitle")}</p>
+      {!hasFinanceAccess ? (
+        <p className="mt-1 text-xs font-semibold" style={{ color: "var(--brand-yellow)" }}>
+          {t("projectDetail.receiptsOwnOnly")}
+        </p>
+      ) : null}
 
       {message ? (
         <div className="mt-3 text-xs font-semibold" style={{ color: "var(--green)" }}>{message}</div>

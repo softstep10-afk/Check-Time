@@ -97,6 +97,18 @@ export interface ManagerProfileSummary extends Profile {
   isOnSite: boolean;
   currentSessionMinutes: number | null;
   videoUploadedToday: boolean;
+  /**
+   * Effective finance access for this profile, mirroring the receipt
+   * branch of migration 00022's media SELECT policy:
+   *   true  iff role ∈ {owner, admin}
+   *         OR user_capabilities has (user_id=profile.id,
+   *            capability='finance_access', granted=true).
+   *
+   * Callers of buildProfileSummaries() that don't pass the capability
+   * set get owner/admin → true and everyone else → false, which is the
+   * safe default (treat unknown as "no access").
+   */
+  financeAccess: boolean;
 }
 
 export interface ManagerTimelineItem extends TimeEvent {

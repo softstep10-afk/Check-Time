@@ -16,6 +16,7 @@ import {
   mergeMediaWithTaskReferences,
 } from "@/lib/task-media-hydration";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import type { Media } from "@/types/database";
 
 export default async function ProjectDetailRoutePage({
@@ -202,6 +203,13 @@ export default async function ProjectDetailRoutePage({
     // Table may not exist yet (migration 00019 not applied); fall through.
   }
 
+  // Owner/admin always pass; everyone else needs an explicit finance_access
+  // capability grant. Drives the receipts-section gate inside ProjectDetailPage.
+  const managerHasFinanceAccess = await hasFinanceAccess(supabase, {
+    id: data.manager.id,
+    role: data.manager.role,
+  });
+
   return (
     <ProjectDetailPage
       orgId={data.manager.org_id}
@@ -218,6 +226,7 @@ export default async function ProjectDetailRoutePage({
       gpsFreshnessByProfileId={freshnessByProfileId}
       shiftReviewByProfileId={shiftReviewByProfileId}
       safetyAcksToday={safetyAcksToday}
+      hasFinanceAccess={managerHasFinanceAccess}
     />
   );
 }
