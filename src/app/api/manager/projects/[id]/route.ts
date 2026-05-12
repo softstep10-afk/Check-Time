@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { requireManagerContext } from "@/lib/manager-data";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import {
   clampProjectGpsRadius,
   hasValidProjectSiteCoordinates,
@@ -115,6 +116,17 @@ export async function PATCH(
       rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)
         ? (rawBody as Record<string, unknown>)
         : {};
+    const canSetFinancials = await hasFinanceAccess(supabase, {
+      id: profile.id,
+      role: profile.role,
+    });
+
+    if (!canSetFinancials && Object.prototype.hasOwnProperty.call(body, "rate")) {
+      return NextResponse.json(
+        { error: "Finance access is required to update project rates." },
+        { status: 403 },
+      );
+    }
 
     const validation = validateProjectSaveBody(body, {
       allowBlankCoordinates: hasValidProjectSiteCoordinates(existingProject),

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { TeamMemberPage } from "@/components/manager/TeamMemberPage";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import { getTeamPageData } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -22,9 +23,16 @@ export default async function TeamMemberRoutePage({
 }) {
   const { id } = await params;
   const data = await getTeamPageData();
+  const supabase = await createClient();
+  const managerHasFinanceAccess = await hasFinanceAccess(supabase, {
+    id: data.manager.id,
+    role: data.manager.role,
+  });
   const sessions = buildManagerSessions(data);
   const profileSummaries = buildProfileSummaries(data, sessions);
-  const projectSummaries = buildProjectSummaries(data, sessions);
+  const projectSummaries = buildProjectSummaries(data, sessions, {
+    includeFinancials: managerHasFinanceAccess,
+  });
   const profile = profileSummaries.find((item) => item.id === id);
 
   if (!profile) {
@@ -100,7 +108,6 @@ export default async function TeamMemberRoutePage({
   // inline so the detail page still renders the journal without a broad
   // org-wide fetch.
   const projectsById = new Map(data.projects.map((p) => [p.id, p.name]));
-  const supabase = await createClient();
   const { data: workerMediaRows } = await supabase
     .from("media")
     .select("*")
@@ -193,6 +200,7 @@ export default async function TeamMemberRoutePage({
     <TeamMemberPage
       orgId={data.manager.org_id}
       managerId={data.manager.id}
+      hasFinanceAccess={managerHasFinanceAccess}
       profile={profile}
       projects={projectSummaries}
       assignments={assignments}

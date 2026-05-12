@@ -40,6 +40,8 @@ export function ClockPage() {
   const [justCheckedOut, setJustCheckedOut] = useState(false);
   useEffect(() => {
     if (wasClockedInRef.current && !shell.clockState.isClockedIn) {
+      // This effect intentionally reacts to a clock-state transition from WorkerShell.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setJustCheckedOut(true);
       const id = setTimeout(() => setJustCheckedOut(false), 3000);
       wasClockedInRef.current = shell.clockState.isClockedIn;

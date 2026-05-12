@@ -443,8 +443,10 @@ function getProjectTone(status: ProjectStatus) {
 
 export function ProjectsPage({
   initialProjects,
+  hasFinanceAccess,
 }: {
   initialProjects: ManagerProjectSummary[];
+  hasFinanceAccess: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -492,7 +494,7 @@ export function ProjectsPage({
       sorted.sort((a, b) => a.name.localeCompare(b.name));
     } else if (sortBy === "week") {
       sorted.sort((a, b) => b.weekMinutes - a.weekMinutes);
-    } else if (sortBy === "cost") {
+    } else if (sortBy === "cost" && hasFinanceAccess) {
       sorted.sort((a, b) => b.receiptTotal - a.receiptTotal);
     } else {
       // activity: live (on-site now) first, then most-recent, then stale.
@@ -512,7 +514,7 @@ export function ProjectsPage({
       });
     }
     return sorted;
-  }, [initialProjects, statusFilter, sortBy, searchQuery]);
+  }, [initialProjects, statusFilter, sortBy, searchQuery, hasFinanceAccess]);
   const projectsMissingCoordinatesCount = useMemo(() => {
     return initialProjects.filter((project) => !project.hasValidSiteCoordinates).length;
   }, [initialProjects]);
@@ -793,7 +795,9 @@ export function ProjectsPage({
     const name = formData.get("name")?.toString().trim() ?? "";
     const address = formData.get("address")?.toString().trim() ?? "";
     const notes = formData.get("notes")?.toString().trim() ?? "";
-    const rate = Number.parseFloat(formData.get("rate")?.toString() ?? "0");
+    const rate = hasFinanceAccess
+      ? Number.parseFloat(formData.get("rate")?.toString() ?? "0")
+      : null;
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? "200", 10);
     const gpsRadius = clampRadius(
       Number.parseInt(formData.get("gps_radius_m")?.toString() ?? `${GPS_RADIUS_DEFAULT}`, 10),
@@ -841,7 +845,9 @@ export function ProjectsPage({
         name,
         address: address || null,
         notes: notes || null,
-        rate: Number.isFinite(rate) ? rate : 25,
+        ...(hasFinanceAccess
+          ? { rate: typeof rate === "number" && Number.isFinite(rate) ? rate : 25 }
+          : {}),
         radius_m: Number.isFinite(radius) ? radius : 200,
         gps_radius_m: gpsRadius,
         lat: coordinates.point.lat,
@@ -875,7 +881,9 @@ export function ProjectsPage({
     const name = formData.get("name")?.toString().trim() ?? "";
     const address = formData.get("address")?.toString().trim() ?? "";
     const notes = formData.get("notes")?.toString().trim() ?? "";
-    const rate = Number.parseFloat(formData.get("rate")?.toString() ?? "0");
+    const rate = hasFinanceAccess
+      ? Number.parseFloat(formData.get("rate")?.toString() ?? "0")
+      : null;
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? "200", 10);
     const gpsRadius = clampRadius(
       Number.parseInt(formData.get("gps_radius_m")?.toString() ?? `${GPS_RADIUS_DEFAULT}`, 10),
@@ -917,7 +925,9 @@ export function ProjectsPage({
         name,
         address: address || null,
         notes: notes || null,
-        rate: Number.isFinite(rate) ? rate : 25,
+        ...(hasFinanceAccess
+          ? { rate: typeof rate === "number" && Number.isFinite(rate) ? rate : 25 }
+          : {}),
         radius_m: Number.isFinite(radius) ? radius : 200,
         gps_radius_m: gpsRadius,
         status,
@@ -1177,13 +1187,15 @@ export function ProjectsPage({
               </div>
             ) : null}
           </div>
-          <input
-            name="rate"
-            type="number"
-            step="0.01"
-            placeholder={t("projects.hourlyRate")}
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-          />
+          {hasFinanceAccess ? (
+            <input
+              name="rate"
+              type="number"
+              step="0.01"
+              placeholder={t("projects.hourlyRate")}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+          ) : null}
           <input
             name="radius_m"
             type="number"
@@ -1374,7 +1386,7 @@ export function ProjectsPage({
           <option value="activity">{t("projects.sortActivity")}</option>
           <option value="name">{t("projects.sortName")}</option>
           <option value="week">{t("projects.sortWeek")}</option>
-          <option value="cost">{t("projects.sortCost")}</option>
+          {hasFinanceAccess ? <option value="cost">{t("projects.sortCost")}</option> : null}
         </select>
         <input
           value={searchInput}
@@ -1505,9 +1517,14 @@ export function ProjectsPage({
                     </div>
                     <div
                       className="mt-1 font-mono text-sm font-bold"
-                      style={{ color: project.receiptTotal > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
+                      style={{
+                        color:
+                          hasFinanceAccess && project.receiptTotal > 0
+                            ? "var(--brand-yellow)"
+                            : "var(--text-muted)",
+                      }}
                     >
-                      {currencyFormatter.format(project.receiptTotal)}
+                      {hasFinanceAccess ? currencyFormatter.format(project.receiptTotal) : "--"}
                     </div>
                   </button>
                   <button
@@ -1683,13 +1700,15 @@ export function ProjectsPage({
                 ) : null}
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <input
-                  name="rate"
-                  type="number"
-                  step="0.01"
-                  defaultValue={editingProject.rate}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                />
+                {hasFinanceAccess ? (
+                  <input
+                    name="rate"
+                    type="number"
+                    step="0.01"
+                    defaultValue={editingProject.rate}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  />
+                ) : null}
                 <input
                   name="radius_m"
                   type="number"

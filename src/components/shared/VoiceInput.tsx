@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 
@@ -31,16 +31,19 @@ export function VoiceInput({
   onTranscript: (text: string) => void;
 }) {
   const { locale } = useTranslation();
-  const [supported, setSupported] = useState(false);
+  const supported = useSyncExternalStore(
+    () => () => {},
+    isSupported,
+    () => false,
+  );
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onTranscriptRef = useRef(onTranscript);
-  onTranscriptRef.current = onTranscript;
 
   useEffect(() => {
-    setSupported(isSupported());
-  }, []);
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
 
   const stopRecognition = useCallback(() => {
     if (timeoutRef.current) {

@@ -817,7 +817,9 @@ export function ProjectDetailPage({
     const name = formData.get("name")?.toString().trim() ?? project.name;
     const address = formData.get("address")?.toString().trim() ?? "";
     const notes = formData.get("notes")?.toString().trim() ?? "";
-    const rate = Number.parseFloat(formData.get("rate")?.toString() ?? `${project.rate}`);
+    const rate = hasFinanceAccess
+      ? Number.parseFloat(formData.get("rate")?.toString() ?? `${project.rate}`)
+      : null;
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? `${project.radius_m}`, 10);
     const status = (formData.get("status")?.toString() ?? project.status) as ProjectStatus;
     const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"), {
@@ -848,7 +850,14 @@ export function ProjectDetailPage({
         name,
         address: address || null,
         notes: notes || null,
-        rate: Number.isFinite(rate) ? rate : project.rate,
+        ...(hasFinanceAccess
+          ? {
+              rate:
+                typeof rate === "number" && Number.isFinite(rate)
+                  ? rate
+                  : project.rate,
+            }
+          : {}),
         radius_m: Number.isFinite(radius) ? radius : project.radius_m,
         status,
         lat: coordinates.point?.lat ?? null,
@@ -2689,13 +2698,15 @@ export function ProjectDetailPage({
                 ) : null}
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <input
-                  name="rate"
-                  type="number"
-                  step="0.01"
-                  defaultValue={project.rate}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                />
+                {hasFinanceAccess ? (
+                  <input
+                    name="rate"
+                    type="number"
+                    step="0.01"
+                    defaultValue={project.rate}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  />
+                ) : null}
                 <input
                   name="radius_m"
                   type="number"

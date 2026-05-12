@@ -95,6 +95,7 @@ export interface AssistantSnapshot {
   onSiteCount: number;
   activeProjectCount: number;
   openTaskCount: number;
+  hasFinanceAccess: boolean;
   unpaidHours: number;
   unpaidAmount: number;
   projects: SnapshotProject[];

@@ -56,10 +56,14 @@ function avatarColor(name: string): string {
 export function TeamPage({
   initialProfiles,
   hasAdminProvisioning,
+  hasFinanceAccess,
+  canManageFinanceAccess,
   managerId,
 }: {
   initialProfiles: ManagerProfileSummary[];
   hasAdminProvisioning: boolean;
+  hasFinanceAccess: boolean;
+  canManageFinanceAccess: boolean;
   managerId: string;
 }) {
   const router = useRouter();
@@ -95,6 +99,7 @@ export function TeamPage({
     next: boolean,
   ) {
     if (ALWAYS_FINANCE_ROLES.has(profile.role)) return;
+    if (!canManageFinanceAccess) return;
     const previous = effectiveFinanceAccess(profile);
     setFinanceOverrides((prev) => ({ ...prev, [profile.id]: next }));
     setBusyKey(`finance-${profile.id}`);
@@ -119,10 +124,12 @@ export function TeamPage({
     let earned = 0;
     for (const p of initialProfiles) {
       minutes += p.weekMinutes;
-      earned += earnedAmount(p);
+      if (hasFinanceAccess) {
+        earned += earnedAmount(p);
+      }
     }
     return { minutes, earned: Math.round(earned * 100) / 100 };
-  }, [initialProfiles]);
+  }, [initialProfiles, hasFinanceAccess]);
 
   const visibleProfiles = useMemo(() => {
     let filtered = initialProfiles;
@@ -200,7 +207,9 @@ export function TeamPage({
       name,
       pin,
       role: formData.get("role")?.toString() ?? "worker",
-      hourlyRate: formData.get("hourly_rate")?.toString().trim() ?? "",
+      hourlyRate: hasFinanceAccess
+        ? formData.get("hourly_rate")?.toString().trim() ?? ""
+        : "",
       requireVideo: formData.get("require_video") === "on",
     };
 
@@ -360,8 +369,12 @@ export function TeamPage({
                   <th className="pb-3 pr-3 font-semibold">{t("team.colCategory")}</th>
                   <th className="pb-3 pr-3 font-semibold">{t("team.colStatus")}</th>
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colHours")}</th>
-                  <th className="pb-3 pr-3 text-right font-semibold">{t("team.colRate")}</th>
-                  <th className="pb-3 pr-3 text-right font-semibold">{t("team.colEarned")}</th>
+                  {hasFinanceAccess ? (
+                    <>
+                      <th className="pb-3 pr-3 text-right font-semibold">{t("team.colRate")}</th>
+                      <th className="pb-3 pr-3 text-right font-semibold">{t("team.colEarned")}</th>
+                    </>
+                  ) : null}
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colFinance")}</th>
                   <th className="pb-3 text-right font-semibold">{t("team.colActions")}</th>
                 </tr>
@@ -414,18 +427,22 @@ export function TeamPage({
                       <td className="py-3 pr-3 text-right font-mono text-[var(--text-primary)]">
                         {formatDurationCompact(profile.weekMinutes)}
                       </td>
-                      <td
-                        className="py-3 pr-3 text-right font-mono"
-                        style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
-                      >
-                        ${rate.toFixed(2)}
-                      </td>
-                      <td
-                        className="py-3 pr-3 text-right font-mono"
-                        style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}
-                      >
-                        {currencyFmt.format(earned)}
-                      </td>
+                      {hasFinanceAccess ? (
+                        <>
+                          <td
+                            className="py-3 pr-3 text-right font-mono"
+                            style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
+                          >
+                            ${rate.toFixed(2)}
+                          </td>
+                          <td
+                            className="py-3 pr-3 text-right font-mono"
+                            style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}
+                          >
+                            {currencyFmt.format(earned)}
+                          </td>
+                        </>
+                      ) : null}
                       <td className="py-3 pr-3 text-right">
                         {ALWAYS_FINANCE_ROLES.has(profile.role) ? (
                           <span
@@ -442,7 +459,9 @@ export function TeamPage({
                             onChange={(event) =>
                               void handleFinanceToggle(profile, event.target.checked)
                             }
-                            disabled={busyKey === `finance-${profile.id}`}
+                            disabled={
+                              !canManageFinanceAccess || busyKey === `finance-${profile.id}`
+                            }
                             aria-label={t("team.colFinance")}
                             className="h-4 w-4 cursor-pointer"
                           />
@@ -499,10 +518,14 @@ export function TeamPage({
                   <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--brand-yellow)" }}>
                     {formatDurationCompact(totals.minutes)}
                   </td>
-                  <td className="py-3 pr-3" />
-                  <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--green)" }}>
-                    {currencyFmt.format(totals.earned)}
-                  </td>
+                  {hasFinanceAccess ? (
+                    <>
+                      <td className="py-3 pr-3" />
+                      <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--green)" }}>
+                        {currencyFmt.format(totals.earned)}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="py-3 pr-3" />
                   <td className="py-3 pr-3" />
                 </tr>
@@ -562,12 +585,16 @@ export function TeamPage({
                     <span className="font-mono text-[var(--text-primary)]">
                       {formatDurationCompact(profile.weekMinutes)}
                     </span>
-                    <span className="font-mono" style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}>
-                      ${rate.toFixed(2)}/h
-                    </span>
-                    <span className="font-mono font-semibold" style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}>
-                      {currencyFmt.format(earned)}
-                    </span>
+                    {hasFinanceAccess ? (
+                      <>
+                        <span className="font-mono" style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}>
+                          ${rate.toFixed(2)}/h
+                        </span>
+                        <span className="font-mono font-semibold" style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}>
+                          {currencyFmt.format(earned)}
+                        </span>
+                      </>
+                    ) : null}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-2">
@@ -587,7 +614,9 @@ export function TeamPage({
                           onChange={(event) =>
                             void handleFinanceToggle(profile, event.target.checked)
                           }
-                          disabled={busyKey === `finance-${profile.id}`}
+                          disabled={
+                            !canManageFinanceAccess || busyKey === `finance-${profile.id}`
+                          }
                           className="h-3.5 w-3.5 cursor-pointer"
                         />
                         {t("team.colFinance")}
@@ -637,9 +666,11 @@ export function TeamPage({
                 <span className="font-mono font-bold" style={{ color: "var(--brand-yellow)" }}>
                   {formatDurationCompact(totals.minutes)}
                 </span>
-                <span className="font-mono font-bold" style={{ color: "var(--green)" }}>
-                  {currencyFmt.format(totals.earned)}
-                </span>
+                {hasFinanceAccess ? (
+                  <span className="font-mono font-bold" style={{ color: "var(--green)" }}>
+                    {currencyFmt.format(totals.earned)}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -710,14 +741,16 @@ export function TeamPage({
                     ))}
                   </select>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                  <input
-                    name="hourly_rate"
-                    type="number"
-                    step="0.01"
-                    placeholder={t("projects.hourlyRate")}
-                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                  />
+                <div className={hasFinanceAccess ? "grid gap-3 sm:grid-cols-[1fr_auto]" : "grid gap-3"}>
+                  {hasFinanceAccess ? (
+                    <input
+                      name="hourly_rate"
+                      type="number"
+                      step="0.01"
+                      placeholder={t("projects.hourlyRate")}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                    />
+                  ) : null}
                   <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-sm text-[var(--text-primary)]">
                     <input type="checkbox" name="require_video" defaultChecked />
                     {t("team.requireCheckoutVideo")}

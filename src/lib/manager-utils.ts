@@ -478,7 +478,9 @@ export function buildManagerSessions(data: ManagerWorkspaceData): ManagerSession
 export function buildProjectSummaries(
   data: ManagerWorkspaceData,
   sessions: ManagerSession[],
+  options: { includeFinancials?: boolean } = {},
 ): ManagerProjectSummary[] {
+  const includeFinancials = options.includeFinancials ?? true;
   const weekStart = startOfWeek();
   const weekEnd = addDays(weekStart, 7);
   const assignmentsByProject = new Map<string, Set<string>>();
@@ -493,16 +495,18 @@ export function buildProjectSummaries(
   >();
   const receiptTotalByProject = new Map<string, number>();
 
-  for (const item of data.media) {
-    if (item.deleted_at || !item.project_id) continue;
-    const meta = item.metadata as Record<string, unknown>;
-    if (meta?.category !== "receipt") continue;
-    const amount = Number(meta.amount ?? 0);
-    if (!Number.isFinite(amount) || amount <= 0) continue;
-    receiptTotalByProject.set(
-      item.project_id,
-      roundCurrency((receiptTotalByProject.get(item.project_id) ?? 0) + amount),
-    );
+  if (includeFinancials) {
+    for (const item of data.media) {
+      if (item.deleted_at || !item.project_id) continue;
+      const meta = item.metadata as Record<string, unknown>;
+      if (meta?.category !== "receipt") continue;
+      const amount = Number(meta.amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      receiptTotalByProject.set(
+        item.project_id,
+        roundCurrency((receiptTotalByProject.get(item.project_id) ?? 0) + amount),
+      );
+    }
   }
 
   const lastActivityByProject = new Map<string, string>();
@@ -620,7 +624,7 @@ export function buildProjectSummaries(
         onSiteWorkerCount: onSiteByProject.get(project.id)?.size ?? 0,
         openTaskCount: openTasksByProject.get(project.id) ?? 0,
         weekMinutes: weekMinutesByProject.get(project.id) ?? 0,
-        receiptTotal: receiptTotalByProject.get(project.id) ?? 0,
+        receiptTotal: includeFinancials ? receiptTotalByProject.get(project.id) ?? 0 : 0,
         lastActivityTime: lastActivityByProject.get(project.id) ?? null,
         siteCoordinates,
         hasValidSiteCoordinates: Boolean(siteCoordinates),
@@ -753,10 +757,12 @@ export function getOverviewStats(
   sessions: ManagerSession[],
   projectSummaries: ManagerProjectSummary[],
   profileSummaries: ManagerProfileSummary[],
+  options: { includeFinancials?: boolean } = {},
 ) {
+  const includeFinancials = options.includeFinancials ?? true;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  const unpaidPreview = computePayrollPreview(data, sessions);
+  const unpaidPreview = includeFinancials ? computePayrollPreview(data, sessions) : null;
   const todayMinutes = sessions.reduce((sum, session) => {
     if (isSameOrAfter(toDate(session.clockInTime), todayStart)) {
       return sum + session.durationMinutes;
@@ -765,9 +771,11 @@ export function getOverviewStats(
     return sum;
   }, 0);
 
-  const receiptTotal = roundCurrency(
-    projectSummaries.reduce((sum, project) => sum + project.receiptTotal, 0),
-  );
+  const receiptTotal = includeFinancials
+    ? roundCurrency(
+        projectSummaries.reduce((sum, project) => sum + project.receiptTotal, 0),
+      )
+    : 0;
 
   return {
     onSiteCount: profileSummaries.filter((profile) => profile.isOnSite).length,
@@ -777,8 +785,8 @@ export function getOverviewStats(
     ).length,
     crewCount: data.profiles.length,
     todayHours: roundCurrency(todayMinutes / 60),
-    unpaidHours: unpaidPreview.totalHours,
-    unpaidAmount: unpaidPreview.totalAmount,
+    unpaidHours: unpaidPreview?.totalHours ?? 0,
+    unpaidAmount: unpaidPreview?.totalAmount ?? 0,
     receiptTotal,
   };
 }

@@ -25,7 +25,10 @@ export function useGpsTracking({
   const watchIdRef = useRef<number | null>(null);
   const lastSentRef = useRef<number>(0);
   const onPositionRef = useRef(onPosition);
-  onPositionRef.current = onPosition;
+
+  useEffect(() => {
+    onPositionRef.current = onPosition;
+  }, [onPosition]);
 
   const stop = useCallback(() => {
     if (watchIdRef.current !== null) {
@@ -37,6 +40,8 @@ export function useGpsTracking({
 
   useEffect(() => {
     if (!enabled) {
+      // This effect intentionally mirrors the external GPS watch lifecycle.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       stop();
       return;
     }

@@ -79,15 +79,15 @@ const ACTION_COLORS: Record<string, string> = {
 export default function AuditLogPage() {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [entries, setEntries] = useState<AuditEntry[]>(() =>
+    AUTH_BYPASS_ENABLED ? PREVIEW_ENTRIES : [],
+  );
+  const [loading, setLoading] = useState(!AUTH_BYPASS_ENABLED);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterAction, setFilterAction] = useState("");
 
   useEffect(() => {
     if (AUTH_BYPASS_ENABLED) {
-      setEntries(PREVIEW_ENTRIES);
-      setLoading(false);
       return;
     }
 

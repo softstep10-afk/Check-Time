@@ -53,6 +53,13 @@ export async function toggleUserCapability(args: {
     ) {
       return { ok: false, message: "Forbidden" };
     }
+    if (
+      args.capability === "finance_access" &&
+      actor.role !== "owner" &&
+      actor.role !== "admin"
+    ) {
+      return { ok: false, message: "Only owners/admins can change finance access." };
+    }
     actorId = user.id;
   }
 

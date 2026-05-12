@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -21,6 +22,17 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { profile, org } = await requireManagerContext(supabase);
+    const allowed = await hasFinanceAccess(supabase, {
+      id: profile.id,
+      role: profile.role,
+    });
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Finance access is required to run payroll." },
+        { status: 403 },
+      );
+    }
+
     const body = (await request.json()) as Record<string, unknown>;
     const periodEnd =
       typeof body.periodEnd === "string" && body.periodEnd ? body.periodEnd : undefined;

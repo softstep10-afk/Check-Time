@@ -52,6 +52,8 @@ export function SafetyBriefModal({
   // Reset the checkbox every time the screen re-opens so a previous
   // confirm doesn't pre-tick the new prompt.
   useEffect(() => {
+    // This effect intentionally resets local acknowledgement state on modal open.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) setAcknowledged(false);
   }, [open]);
 

@@ -58,6 +58,7 @@ type DailyTotal = {
 export function TeamMemberPage({
   orgId,
   managerId,
+  hasFinanceAccess,
   profile,
   projects,
   assignments,
@@ -76,6 +77,7 @@ export function TeamMemberPage({
 }: {
   orgId: string;
   managerId: string;
+  hasFinanceAccess: boolean;
   profile: ManagerProfileSummary;
   projects: ManagerProjectSummary[];
   assignments: ProjectAssignment[];
@@ -286,29 +288,17 @@ export function TeamMemberPage({
   const [excludedSet, setExcludedSet] = useState<Set<string>>(
     () => new Set(excludedProjectIds),
   );
-  // Controlled state for the two profile-edit toggles. Uncontrolled
-  // `defaultChecked` only takes effect on initial mount; after
-  // router.refresh() the input keeps whatever the user last toggled
-  // even if the new server prop disagrees. Mirror the prop so the UI
-  // always reflects the latest persisted profile.
-  const [requireVideoUi, setRequireVideoUi] = useState(profile.require_video);
-  const [isActiveUi, setIsActiveUi] = useState(profile.is_active);
-  useEffect(() => {
-    setRequireVideoUi(profile.require_video);
-  }, [profile.require_video]);
-  useEffect(() => {
-    setIsActiveUi(profile.is_active);
-  }, [profile.is_active]);
-
   async function handleUpdateProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const name = formData.get("name")?.toString().trim() ?? profile.name;
     const role = (formData.get("role")?.toString() ?? profile.role) as UserRole;
-    const hourlyRateRaw = formData.get("hourly_rate")?.toString().trim() ?? "";
+    const hourlyRateRaw = hasFinanceAccess
+      ? formData.get("hourly_rate")?.toString().trim() ?? ""
+      : "";
     const hourlyRate = hourlyRateRaw ? Number.parseFloat(hourlyRateRaw) : null;
-    const requireVideo = requireVideoUi;
-    const isActive = isActiveUi;
+    const requireVideo = formData.get("require_video") === "on";
+    const isActive = formData.get("is_active") === "on";
 
     setBusyKey("profile");
     setMessage("");
@@ -325,7 +315,14 @@ export function TeamMemberPage({
         role,
         require_video: requireVideo,
         is_active: isActive,
-        hourly_rate: Number.isFinite(hourlyRate) ? hourlyRate : null,
+        ...(hasFinanceAccess
+          ? {
+              hourly_rate:
+                typeof hourlyRate === "number" && Number.isFinite(hourlyRate)
+                  ? hourlyRate
+                  : null,
+            }
+          : {}),
       })
       .eq("id", profile.id)
       .select("require_video, is_active")
@@ -343,8 +340,6 @@ export function TeamMemberPage({
       return;
     }
 
-    setRequireVideoUi(updated.require_video);
-    setIsActiveUi(updated.is_active);
     setBusyKey(null);
     setMessage(t("teamMember.profileUpdated"));
     router.refresh();
@@ -762,31 +757,33 @@ export function TeamMemberPage({
                   </option>
                 ))}
               </select>
-              <input
-                name="hourly_rate"
-                type="number"
-                step="0.01"
-                defaultValue={profile.hourly_rate ?? ""}
-                placeholder={t("projects.hourlyRate")}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
+              {hasFinanceAccess ? (
+                <input
+                  name="hourly_rate"
+                  type="number"
+                  step="0.01"
+                  defaultValue={profile.hourly_rate ?? ""}
+                  placeholder={t("projects.hourlyRate")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+              ) : null}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-sm text-[var(--text-primary)]">
                 <input
+                  key={`require-video-${profile.id}-${profile.require_video ? "yes" : "no"}`}
                   type="checkbox"
                   name="require_video"
-                  checked={requireVideoUi}
-                  onChange={(event) => setRequireVideoUi(event.target.checked)}
+                  defaultChecked={profile.require_video}
                 />
                 {t("teamMember.requireCheckoutVideo")}
               </label>
               <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-sm text-[var(--text-primary)]">
                 <input
+                  key={`is-active-${profile.id}-${profile.is_active ? "yes" : "no"}`}
                   type="checkbox"
                   name="is_active"
-                  checked={isActiveUi}
-                  onChange={(event) => setIsActiveUi(event.target.checked)}
+                  defaultChecked={profile.is_active}
                 />
                 {t("teamMember.allowPinAccess")}
               </label>
@@ -1100,7 +1097,7 @@ export function TeamMemberPage({
 
         <div className="space-y-4">
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
-            <div className="grid gap-3 sm:grid-cols-4">
+            <div className={`grid gap-3 ${hasFinanceAccess ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.week")}</div>
                 <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">
@@ -1119,12 +1116,14 @@ export function TeamMemberPage({
                     : formatDurationCompact(profile.currentSessionMinutes)}
                 </div>
               </div>
-              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.rate")}</div>
-                <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                  ${Number(profile.hourly_rate ?? 0).toFixed(2)}
+              {hasFinanceAccess ? (
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.rate")}</div>
+                  <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">
+                    ${Number(profile.hourly_rate ?? 0).toFixed(2)}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
@@ -1244,28 +1243,32 @@ export function TeamMemberPage({
               </div>
             </div>
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              <div
-                className="rounded-[var(--radius-md)] p-3"
-                style={{ background: "rgba(15, 168, 120, 0.10)" }}
-              >
-                <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--green)" }}>
-                  {t("teamMember.bucketPaidClosed")}
-                </div>
-                <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
-                  {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
-                </div>
-              </div>
-              <div
-                className="rounded-[var(--radius-md)] p-3"
-                style={{ background: "rgba(191, 162, 52, 0.10)" }}
-              >
-                <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--brand-yellow)" }}>
-                  {t("teamMember.bucketUnpaid")}
-                </div>
-                <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
-                  {formatDurationCompact(hourBuckets.unpaidMinutes)}
-                </div>
-              </div>
+              {hasFinanceAccess ? (
+                <>
+                  <div
+                    className="rounded-[var(--radius-md)] p-3"
+                    style={{ background: "rgba(15, 168, 120, 0.10)" }}
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--green)" }}>
+                      {t("teamMember.bucketPaidClosed")}
+                    </div>
+                    <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
+                      {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
+                    </div>
+                  </div>
+                  <div
+                    className="rounded-[var(--radius-md)] p-3"
+                    style={{ background: "rgba(191, 162, 52, 0.10)" }}
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--brand-yellow)" }}>
+                      {t("teamMember.bucketUnpaid")}
+                    </div>
+                    <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
+                      {formatDurationCompact(hourBuckets.unpaidMinutes)}
+                    </div>
+                  </div>
+                </>
+              ) : null}
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {t("teamMember.bucketAdjustments")}
@@ -1624,67 +1627,68 @@ export function TeamMemberPage({
         </div>
       </section>
 
-      {/* ── Reset Hours to Zero ── */}
-      <section>
-        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+      {hasFinanceAccess ? (
+        <section>
+          <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                  {t("member.resetToZero")}
+                </h2>
+                <p className="mt-1 max-w-[60ch] text-sm text-[var(--text-secondary)]">
+                  {t("member.resetToZeroDesc")}
+                </p>
+              </div>
+              <span className="font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
+                {unpaidHours.toFixed(2)}h
+              </span>
+            </div>
+            {!showResetConfirm ? (
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(true)}
+                disabled={unpaidMinutes <= 0 || busyKey === "reset-zero"}
+                className="mt-4 rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
+              >
                 {t("member.resetToZero")}
-              </h2>
-              <p className="mt-1 max-w-[60ch] text-sm text-[var(--text-secondary)]">
-                {t("member.resetToZeroDesc")}
-              </p>
-            </div>
-            <span className="font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
-              {unpaidHours.toFixed(2)}h
-            </span>
+              </button>
+            ) : (
+              <div
+                className="mt-4 rounded-[var(--radius-md)] border p-3"
+                style={{ borderColor: "rgba(212, 81, 94, 0.3)", background: "rgba(212, 81, 94, 0.06)" }}
+              >
+                <div className="text-sm font-semibold text-[var(--text-primary)]">
+                  {t("member.resetConfirmHeadline").replace("{name}", profile.name)}
+                </div>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {t("member.resetConfirmBody").replace("{hours}", unpaidHours.toFixed(2))}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleResetToZero()}
+                    disabled={busyKey === "reset-zero"}
+                    className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold"
+                    style={{ background: "var(--red)", color: "white" }}
+                  >
+                    {busyKey === "reset-zero" ? t("common.saving") : t("member.resetConfirmCta")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(false)}
+                    disabled={busyKey === "reset-zero"}
+                    className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold"
+                    style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-          {!showResetConfirm ? (
-            <button
-              type="button"
-              onClick={() => setShowResetConfirm(true)}
-              disabled={unpaidMinutes <= 0 || busyKey === "reset-zero"}
-              className="mt-4 rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold disabled:opacity-50"
-              style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
-            >
-              {t("member.resetToZero")}
-            </button>
-          ) : (
-            <div
-              className="mt-4 rounded-[var(--radius-md)] border p-3"
-              style={{ borderColor: "rgba(212, 81, 94, 0.3)", background: "rgba(212, 81, 94, 0.06)" }}
-            >
-              <div className="text-sm font-semibold text-[var(--text-primary)]">
-                {t("member.resetConfirmHeadline").replace("{name}", profile.name)}
-              </div>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">
-                {t("member.resetConfirmBody").replace("{hours}", unpaidHours.toFixed(2))}
-              </p>
-              <div className="mt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleResetToZero()}
-                  disabled={busyKey === "reset-zero"}
-                  className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold"
-                  style={{ background: "var(--red)", color: "white" }}
-                >
-                  {busyKey === "reset-zero" ? t("common.saving") : t("member.resetConfirmCta")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowResetConfirm(false)}
-                  disabled={busyKey === "reset-zero"}
-                  className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold"
-                  style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-                >
-                  {t("common.cancel")}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {/* ── Send Message ── */}
       <section id="message">

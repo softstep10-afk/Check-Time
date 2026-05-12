@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 import {
@@ -17,13 +17,6 @@ export function FullscreenMapWrapper({
   activeWorkers?: ActiveWorkerMarker[];
 }) {
   const [fullscreen, setFullscreen] = useState(false);
-  const [portalReady, setPortalReady] = useState(false);
-
-  // document.body only exists client-side post-hydration. Gate the portal
-  // until mount so SSR doesn't try to read it.
-  useEffect(() => {
-    setPortalReady(true);
-  }, []);
 
   const filteredProjects = projects.filter((p) => p.status !== "completed");
 
@@ -98,7 +91,9 @@ export function FullscreenMapWrapper({
         </button>
       </div>
 
-      {fullscreen && portalReady ? createPortal(fullscreenOverlay, document.body) : null}
+      {fullscreen && typeof document !== "undefined"
+        ? createPortal(fullscreenOverlay, document.body)
+        : null}
     </>
   );
 }

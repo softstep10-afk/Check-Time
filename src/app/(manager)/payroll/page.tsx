@@ -1,7 +1,10 @@
+import { redirect } from "next/navigation";
 import { getPayrollPageData } from "@/lib/manager-data";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import { buildManagerSessions } from "@/lib/manager-utils";
 import { PayrollCalculator } from "@/components/manager/PayrollCalculator";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
+import { createClient } from "@/lib/supabase/server";
 
 export const revalidate = 30;
 
@@ -9,6 +12,13 @@ export default async function PayrollPage() {
   const locale = await getServerLocale();
   const t = (key: Parameters<typeof serverT>[1]) => serverT(locale, key);
   const data = await getPayrollPageData();
+  const supabase = await createClient();
+  const allowed = await hasFinanceAccess(supabase, {
+    id: data.manager.id,
+    role: data.manager.role,
+  });
+  if (!allowed) redirect("/overview");
+
   const sessions = buildManagerSessions(data);
 
   // Map session id → whether its clock_in event captured GPS. Lets the

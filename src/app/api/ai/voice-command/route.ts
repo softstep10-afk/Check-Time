@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { buildAssistantSnapshot, interpretVoiceCommand } from "@/lib/ai/service";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import type { DailyReport } from "@/types/database";
 
 function assertNoError(error: { message: string } | null, label: string) {
@@ -27,6 +28,13 @@ export async function POST(request: NextRequest) {
 
     const managerData =
       auth.kind === "preview" ? auth.managerData : await getManagerWorkspaceData();
+    const managerHasFinanceAccess =
+      auth.kind === "preview"
+        ? true
+        : await hasFinanceAccess(supabase, {
+            id: auth.context.profile.id,
+            role: auth.context.profile.role,
+          });
     let reports: DailyReport[];
     if (auth.kind === "preview") {
       reports = auth.reports;
@@ -41,7 +49,9 @@ export async function POST(request: NextRequest) {
       reports = reportsResult.data ?? [];
     }
 
-    const snapshot = buildAssistantSnapshot(managerData, reports);
+    const snapshot = buildAssistantSnapshot(managerData, reports, {
+      includeFinancials: managerHasFinanceAccess,
+    });
     const command = await interpretVoiceCommand(transcript, snapshot);
 
     return NextResponse.json({

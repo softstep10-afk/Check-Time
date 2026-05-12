@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -19,6 +20,18 @@ function assertNoError(error: { message: string } | null, label: string) {
 async function loadPreview(periodEnd?: string) {
   const supabase = await createClient();
   const { profile, org } = await requireManagerContext(supabase);
+  const allowed = await hasFinanceAccess(supabase, {
+    id: profile.id,
+    role: profile.role,
+  });
+  if (!allowed) {
+    return {
+      error: NextResponse.json(
+        { error: "Finance access is required to export payroll." },
+        { status: 403 },
+      ),
+    } as const;
+  }
 
   const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
     await Promise.all([
@@ -59,14 +72,15 @@ async function loadPreview(periodEnd?: string) {
 
   const sessions = buildManagerSessions(workspace);
   const preview = computePayrollPreview(workspace, sessions, periodEnd);
-  return { preview, orgName: org.name };
+  return { preview, orgName: org.name } as const;
 }
 
 function formatDate(iso: string): string {
   return iso.slice(0, 10);
 }
 
-type PayrollPreview = Awaited<ReturnType<typeof loadPreview>>["preview"];
+type LoadedPreview = Awaited<ReturnType<typeof loadPreview>>;
+type PayrollPreview = Extract<LoadedPreview, { preview: unknown }>["preview"];
 
 function buildCsv(preview: PayrollPreview): string {
   const rows: string[] = [
@@ -256,7 +270,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const format = searchParams.get("format") ?? "pdf";
     const periodEnd = searchParams.get("periodEnd") || undefined;
-    const { preview, orgName } = await loadPreview(periodEnd);
+    const loaded = await loadPreview(periodEnd);
+    if ("error" in loaded) {
+      return loaded.error;
+    }
+    const { preview, orgName } = loaded;
     const dateSuffix = formatDate(preview.periodEnd);
 
     if (format === "csv") {

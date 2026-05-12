@@ -1,6 +1,7 @@
 import { hash } from "@node-rs/argon2";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/database";
@@ -42,8 +43,22 @@ export async function POST(request: NextRequest) {
     const requireVideo = Boolean(body.requireVideo);
     const hourlyRateRaw =
       typeof body.hourlyRate === "string" ? body.hourlyRate.trim() : "";
+    const canSetFinancials = await hasFinanceAccess(supabase, {
+      id: profile.id,
+      role: profile.role,
+    });
+
+    if (!canSetFinancials && hourlyRateRaw.length > 0) {
+      return NextResponse.json(
+        { error: "Finance access is required to set hourly rates." },
+        { status: 403 },
+      );
+    }
+
     const hourlyRate =
-      hourlyRateRaw.length > 0 ? Number.parseFloat(hourlyRateRaw) : null;
+      canSetFinancials && hourlyRateRaw.length > 0
+        ? Number.parseFloat(hourlyRateRaw)
+        : null;
 
     if (!name) {
       return NextResponse.json({ error: "Name is required." }, { status: 400 });

@@ -26,8 +26,15 @@ export default async function ProjectDetailRoutePage({
 }) {
   const { id } = await params;
   const data = await getManagerWorkspaceData();
+  const supabase = await createClient();
+  const managerHasFinanceAccess = await hasFinanceAccess(supabase, {
+    id: data.manager.id,
+    role: data.manager.role,
+  });
   const sessions = buildManagerSessions(data);
-  const projectSummaries = buildProjectSummaries(data, sessions);
+  const projectSummaries = buildProjectSummaries(data, sessions, {
+    includeFinancials: managerHasFinanceAccess,
+  });
   const profileSummaries = buildProfileSummaries(data, sessions);
   const project = projectSummaries.find((item) => item.id === id);
 
@@ -85,7 +92,6 @@ export default async function ProjectDetailRoutePage({
   const missingTaskMediaIds = taskReferencedMediaIds.filter((mediaId) => !knownMediaIds.has(mediaId));
   let missingTaskMediaRows: Media[] = [];
   if (missingTaskMediaIds.length > 0) {
-    const supabase = await createClient();
     const { data: referencedMedia, error: referencedMediaError } = await supabase
       .from("media")
       .select("*")
@@ -129,7 +135,6 @@ export default async function ProjectDetailRoutePage({
   // each worker currently clocked in to THIS project. Empty for projects
   // with nobody on site. Wrapped in try/catch so a missing table or RLS
   // hiccup doesn't 500 the page.
-  const supabase = await createClient();
   const onSiteProfileIds = sessions
     .filter((s) => s.isOpen && s.projectId === id)
     .map((s) => s.profileId);
@@ -202,13 +207,6 @@ export default async function ProjectDetailRoutePage({
   } catch {
     // Table may not exist yet (migration 00019 not applied); fall through.
   }
-
-  // Owner/admin always pass; everyone else needs an explicit finance_access
-  // capability grant. Drives the receipts-section gate inside ProjectDetailPage.
-  const managerHasFinanceAccess = await hasFinanceAccess(supabase, {
-    id: data.manager.id,
-    role: data.manager.role,
-  });
 
   return (
     <ProjectDetailPage

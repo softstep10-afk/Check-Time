@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireManagerContext } from "@/lib/manager-data";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import type { Profile } from "@/types/database";
 
@@ -33,7 +35,12 @@ export default async function PayrollHistoryPage() {
   const t = (key: Parameters<typeof serverT>[1]) => serverT(locale, key);
 
   const supabase = await createClient();
-  const { org } = await requireManagerContext(supabase);
+  const { profile, org } = await requireManagerContext(supabase);
+  const allowed = await hasFinanceAccess(supabase, {
+    id: profile.id,
+    role: profile.role,
+  });
+  if (!allowed) redirect("/overview");
 
   const { data: periodRows } = await supabase
     .from("pay_periods")

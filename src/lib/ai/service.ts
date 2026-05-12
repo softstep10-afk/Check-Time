@@ -229,6 +229,26 @@ function findProjectRoute(
   return null;
 }
 
+function isFinancialQuestion(normalized: string): boolean {
+  return [
+    "payroll",
+    "unpaid",
+    "receipt",
+    "receipts",
+    "expense",
+    "expenses",
+    "spend",
+    "spending",
+    "cost",
+    "costs",
+    "profit",
+    "reimbursement",
+    "paid",
+    "gross",
+    "net",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
 function buildAssistantFallback(
   question: string,
   snapshot: AssistantSnapshot,
@@ -236,6 +256,20 @@ function buildAssistantFallback(
   const normalized = question.toLowerCase();
   const liveWorkerNames = snapshot.liveWorkers.map((worker) => worker.name);
   const projectRoute = findProjectRoute(question, snapshot);
+
+  if (!snapshot.hasFinanceAccess && isFinancialQuestion(normalized)) {
+    return {
+      answer:
+        "Financial details are restricted for this account. You can still review operational project status, tasks, media, and crew activity.",
+      bullets: [
+        `${snapshot.onSiteCount} workers are currently on site.`,
+        `${snapshot.openTaskCount} tasks remain open across the org.`,
+      ],
+      links: [{ label: "Open overview", href: "/overview" }],
+      confidence: 0.78,
+      source: "fallback",
+    };
+  }
 
   if (normalized.includes("who") && normalized.includes("site")) {
     return {
@@ -314,10 +348,15 @@ function buildAssistantFallback(
     answer:
       `${snapshot.orgName} has ${snapshot.onSiteCount} workers on site, ` +
       `${snapshot.activeProjectCount} active projects, and ${snapshot.openTaskCount} open tasks right now.`,
-    bullets: [
-      `${snapshot.unpaidHours.toFixed(2)} unpaid hours remain in the payroll preview.`,
-      snapshot.recentReports[0]?.summary ?? "No daily reports have been generated yet.",
-    ],
+    bullets: uniqueList(
+      [
+        snapshot.hasFinanceAccess
+          ? `${snapshot.unpaidHours.toFixed(2)} unpaid hours remain in the payroll preview.`
+          : "",
+        snapshot.recentReports[0]?.summary ?? "No daily reports have been generated yet.",
+      ],
+      2,
+    ),
     links: [
       { label: "Open overview", href: "/overview" },
       { label: "Open AI workspace", href: "/ai" },
@@ -348,6 +387,19 @@ function buildVoiceFallback(
   }
 
   if (normalized.includes("payroll")) {
+    if (!snapshot.hasFinanceAccess) {
+      return {
+        transcript,
+        normalized,
+        intent: "unknown",
+        answer: "Financial details are restricted for this account.",
+        actionLabel: null,
+        route: null,
+        confidence: 0.78,
+        source: "fallback",
+      };
+    }
+
     return {
       transcript,
       normalized,
@@ -547,17 +599,24 @@ export function coercePhotoAnalysis(value: unknown): PhotoAnalysisResult | null 
 export function buildAssistantSnapshot(
   data: ManagerWorkspaceData,
   dailyReports: DailyReport[],
+  options: { includeFinancials?: boolean } = {},
 ): AssistantSnapshot {
+  const includeFinancials = options.includeFinancials ?? true;
   const sessions = buildManagerSessions(data);
-  const projectSummaries = buildProjectSummaries(data, sessions);
+  const projectSummaries = buildProjectSummaries(data, sessions, {
+    includeFinancials,
+  });
   const profileSummaries = buildProfileSummaries(data, sessions);
-  const stats = getOverviewStats(data, sessions, projectSummaries, profileSummaries);
+  const stats = getOverviewStats(data, sessions, projectSummaries, profileSummaries, {
+    includeFinancials,
+  });
 
   return {
     orgName: data.org.name,
     onSiteCount: stats.onSiteCount,
     activeProjectCount: stats.activeProjectCount,
     openTaskCount: stats.openTaskCount,
+    hasFinanceAccess: includeFinancials,
     unpaidHours: stats.unpaidHours,
     unpaidAmount: stats.unpaidAmount,
     projects: projectSummaries.map((project) => ({
@@ -675,6 +734,19 @@ export async function answerManagerAssistant(
   snapshot: AssistantSnapshot,
 ): Promise<AssistantResult> {
   const fallback = buildAssistantFallback(question, snapshot);
+  if (!snapshot.hasFinanceAccess && isFinancialQuestion(question.toLowerCase())) {
+    return fallback;
+  }
+
+  const financialPromptLines = snapshot.hasFinanceAccess
+    ? [
+        `Unpaid hours: ${snapshot.unpaidHours.toFixed(2)}`,
+        `Unpaid amount: ${snapshot.unpaidAmount.toFixed(2)}`,
+      ]
+    : [
+        "Financial visibility: hidden for this user.",
+        "Do not mention payroll, receipt totals, costs, unpaid hours, unpaid amounts, profit, or financial summaries.",
+      ];
   const anthropicObject = await tryAnthropicObject(
     "You are a concise manager-side assistant for a construction workforce app. Return JSON only.",
     [
@@ -686,8 +758,7 @@ export async function answerManagerAssistant(
       `On site count: ${snapshot.onSiteCount}`,
       `Active projects: ${snapshot.activeProjectCount}`,
       `Open tasks: ${snapshot.openTaskCount}`,
-      `Unpaid hours: ${snapshot.unpaidHours.toFixed(2)}`,
-      `Unpaid amount: ${snapshot.unpaidAmount.toFixed(2)}`,
+      ...financialPromptLines,
       `Projects: ${snapshot.projects.map((project) => `${project.name} (${project.onSiteWorkerCount} live, ${project.openTaskCount} open tasks)`).join(" | ")}`,
       `Live workers: ${snapshot.liveWorkers.map((worker) => `${worker.name} on ${worker.projectName ?? "unknown project"}`).join(" | ") || "None"}`,
       `Recent reports: ${snapshot.recentReports.map((report) => `${report.projectName} ${report.reportDate}: ${report.summary ?? "No summary"}`).join(" | ") || "None"}`,

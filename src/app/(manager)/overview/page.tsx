@@ -34,6 +34,7 @@ import {
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
 import { createClient } from "@/lib/supabase/server";
+import { hasFinanceAccess } from "@/lib/finance-access";
 
 // 0 = force-dynamic. F5 must always fetch the current state of time_events,
 // projects, tasks, media; OverviewLiveIndicator still pushes router.refresh()
@@ -73,10 +74,19 @@ export default async function OverviewPage() {
   const locale = await getServerLocale();
   const t = (key: Parameters<typeof serverT>[1]) => serverT(locale, key);
   const data = await getManagerWorkspaceData();
+  const supabase = await createClient();
+  const managerHasFinanceAccess = await hasFinanceAccess(supabase, {
+    id: data.manager.id,
+    role: data.manager.role,
+  });
   const sessions = buildManagerSessions(data);
-  const projectSummaries = buildProjectSummaries(data, sessions);
+  const projectSummaries = buildProjectSummaries(data, sessions, {
+    includeFinancials: managerHasFinanceAccess,
+  });
   const profileSummaries = buildProfileSummaries(data, sessions);
-  const stats = getOverviewStats(data, sessions, projectSummaries, profileSummaries);
+  const stats = getOverviewStats(data, sessions, projectSummaries, profileSummaries, {
+    includeFinancials: managerHasFinanceAccess,
+  });
   const liveProfiles = profileSummaries.filter((profile) => profile.isOnSite).slice(0, 6);
   const urgentTasks = [...data.tasks]
     .filter((task) => task.status !== "done" && task.status !== "cancelled")
@@ -146,7 +156,6 @@ export default async function OverviewPage() {
   const freshnessByProfileId = new Map<string, GpsFreshness>();
   if (onSiteSessions.length > 0) {
     try {
-      const supabase = await createClient();
       const profileIds = onSiteSessions.map((s) => s.profileId);
       const { data: liveRows, error: liveErr } = await supabase
         .from("worker_live_locations")
@@ -417,7 +426,7 @@ export default async function OverviewPage() {
         </p>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className={`grid gap-3 sm:grid-cols-2 ${managerHasFinanceAccess ? "xl:grid-cols-5" : "xl:grid-cols-3"}`}>
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.onSite")}</div>
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.onSiteCount}</div>
@@ -428,29 +437,33 @@ export default async function OverviewPage() {
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.todayHours.toFixed(2)}h</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.activeProjectCount} {t("overview.activeProjects")}</div>
         </div>
-        <Link
-          href="/payroll"
-          className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
-        >
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.unpaid")}</div>
-          <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
-            {currency.format(stats.unpaidAmount)}
-          </div>
-          <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.unpaidHours.toFixed(2)}{t("payroll.hPendingPayroll")}</div>
-        </Link>
-        <Link
-          href="/projects"
-          className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
-        >
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("overview.materials")}</div>
-          <div
-            className="mt-2 font-mono text-[28px] font-bold"
-            style={{ color: "var(--brand-yellow)" }}
-          >
-            {currency.format(stats.receiptTotal)}
-          </div>
-          <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.materialsCaption")}</div>
-        </Link>
+        {managerHasFinanceAccess ? (
+          <>
+            <Link
+              href="/payroll"
+              className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+            >
+              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.unpaid")}</div>
+              <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
+                {currency.format(stats.unpaidAmount)}
+              </div>
+              <div className="mt-1 text-sm text-[var(--text-secondary)]">{stats.unpaidHours.toFixed(2)}{t("payroll.hPendingPayroll")}</div>
+            </Link>
+            <Link
+              href="/projects"
+              className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+            >
+              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("overview.materials")}</div>
+              <div
+                className="mt-2 font-mono text-[28px] font-bold"
+                style={{ color: "var(--brand-yellow)" }}
+              >
+                {currency.format(stats.receiptTotal)}
+              </div>
+              <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.materialsCaption")}</div>
+            </Link>
+          </>
+        ) : null}
         <Link
           href="/tasks"
           className="surface-card block p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"

@@ -40,11 +40,13 @@ export function LiveWorkerMarkers() {
   const supabase = useMemo(() => createClient(), []);
   const [positions, setPositions] = useState<LivePosition[]>([]);
   const [trails, setTrails] = useState<Map<string, Array<{ lat: number; lng: number }>>>(new Map());
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     async function poll() {
+      const pollTime = Date.now();
       // Latest position per currently-clocked-in worker.
       // profiles.current_project != null === clocked in. Join to
       // worker_live_locations for their last ping.
@@ -120,12 +122,15 @@ export function LiveWorkerMarkers() {
           project_name: profile.current_project ? (projectMap.get(profile.current_project) ?? null) : null,
           lat: loc?.lat ?? 0,
           lng: loc?.lng ?? 0,
-          recorded_at: loc?.recorded_at ?? new Date().toISOString(),
+          recorded_at: loc?.recorded_at ?? new Date(pollTime).toISOString(),
           consented,
         };
       }).filter((p) => p.lat !== 0 && p.lng !== 0); // Only show workers with a real recorded position
 
-      if (!cancelled) updatePositions(result);
+      if (!cancelled) {
+        setNow(pollTime);
+        updatePositions(result);
+      }
     }
 
     function updatePositions(next: LivePosition[]) {
@@ -165,8 +170,6 @@ export function LiveWorkerMarkers() {
       void supabase.removeChannel(channel);
     };
   }, [supabase]);
-
-  const now = Date.now();
 
   return (
     <>
