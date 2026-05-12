@@ -38,7 +38,11 @@ import {
   getTaskCompletionAudit,
 } from "@/lib/task-notifications";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
-import { MediaViewerModal, type ViewerMediaItem } from "@/components/shared/MediaViewerModal";
+import {
+  MediaViewerModal,
+  useMediaViewerOpenGuard,
+  type ViewerMediaItem,
+} from "@/components/shared/MediaViewerModal";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import { createClient } from "@/lib/supabase/client";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
@@ -63,12 +67,7 @@ import {
   type ShiftReview,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
-import {
-  MediaSignTimeoutError,
-  isBrowserUnsafeVideo,
-  selectMediaPlayback,
-  signWithTimeout,
-} from "@/lib/media-playback";
+import { selectMediaPlayback } from "@/lib/media-playback";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -348,16 +347,11 @@ export function ProjectDetailPage({
   useEffect(() => {
     setTaskList(tasks);
   }, [tasks]);
-  const [previewMedia, setPreviewMedia] = useState<{
-    item: Media;
-    signedUrl: string;
-    mimeType: string | null;
-    isPlaybackVersion: boolean;
-    /** True when the original is HEVC/.mov which most browsers can't decode. */
-    browserUnsafe: boolean;
-  } | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [mediaViewerItem, setMediaViewerItem] = useState<ViewerMediaItem | null>(null);
+  const {
+    canOpenViewerItem: canOpenMediaViewerItem,
+    suppressViewerItem: suppressMediaViewerItem,
+  } = useMediaViewerOpenGuard();
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
@@ -1027,104 +1021,14 @@ export function ProjectDetailPage({
     router.refresh();
   }
 
-  // Click-to-open for the Project Media list.
-  //
-  // Videos and photos open in an in-page preview modal so the manager
-  // never has to download a file just to watch it. PDFs continue to
-  // open in a new tab — browsers handle PDF rendering natively, and
-  // an embedded <iframe> blocks the worker's signed-URL flow on
-  // tighter Content-Security-Policy setups.
-  //
-  // selectMediaPlayback decides what to sign:
-  //   • a transcoded H.264 MP4 under metadata.playback_path (when
-  //     transcoding_status === "ready"), OR
-  //   • the original storage_path otherwise.
-  //   • metadata.mux_playback_id is exposed for a future Mux signing
-  //     layer; we never feed that string through Supabase Storage.
-  async function openProjectMediaItem(item: Media) {
-    if (typeof window === "undefined") return;
-
-    const playback = selectMediaPlayback(item as unknown as {
-      storage_path: string;
-      mime_type: string | null;
-      metadata: Record<string, unknown> | null | undefined;
-    });
-
-    // Documents/PDFs: external tab path is the safest UX, because a
-    // signed URL inside an iframe still has the same auth surface but
-    // the browser's PDF chrome (zoom, search, save) is much better
-    // than anything we'd build inline.
-    if (item.media_type === "pdf" || item.media_type === "document") {
-      const tab = window.open("about:blank", "_blank");
-      if (!tab) {
-        setMessage(t("projectDetail.mediaOpenFailed"));
-        return;
-      }
-      const normalized = normalizeStoragePath(playback.path);
-      const { data, error } = await supabase.storage
-        .from("media")
-        .createSignedUrl(normalized, 3600);
-      if (error || !data?.signedUrl) {
-        tab.close();
-        setMessage(t("projectDetail.mediaOpenFailed"));
-        return;
-      }
-      tab.location.href = data.signedUrl;
-      return;
-    }
-
-    setPreviewLoading(true);
-    setPreviewError(null);
-    setPreviewMedia(null);
-    setMessage("");
-
-    const normalized = normalizeStoragePath(playback.path);
-    // signWithTimeout caps the wait at MEDIA_SIGN_TIMEOUT_MS (9s) so
-    // a Supabase request that hangs at the transport layer (DNS stall,
-    // dev-server reverse-proxy bug, missing demo seed file) cannot
-    // strand the manager on a "Loading…" overlay — try/finally on a
-    // raw await wouldn't help, because `finally` only fires once the
-    // underlying promise settles.
-    try {
-      const signed = await signWithTimeout(
-        supabase.storage.from("media").createSignedUrl(normalized, 3600),
-      );
-      const { data, error } = signed;
-
-      if (error || !data?.signedUrl) {
-        const isTimeout = error instanceof MediaSignTimeoutError;
-        console.error("[project-media] failed to sign URL", error);
-        const userMessage = isTimeout
-          ? t("projectDetail.mediaOpenTimeout")
-          : t("projectDetail.mediaOpenFailed");
-        setPreviewError(userMessage);
-        setMessage(userMessage);
-        return;
-      }
-
-      setPreviewMedia({
-        item,
-        signedUrl: data.signedUrl,
-        mimeType: playback.mimeType,
-        isPlaybackVersion: playback.isPlaybackVersion,
-        browserUnsafe:
-          item.media_type === "video" &&
-          !playback.isPlaybackVersion &&
-          isBrowserUnsafeVideo(item as unknown as {
-            storage_path: string;
-            mime_type: string | null;
-            metadata: Record<string, unknown> | null | undefined;
-          }),
-      });
-    } finally {
-      setPreviewLoading(false);
-    }
-  }
-
-  function closePreview() {
-    setPreviewMedia(null);
-    setPreviewError(null);
-    setPreviewLoading(false);
+  // Click-to-open for the Project Media list. Photos, videos, PDFs,
+  // and documents all route through MediaViewerModal, which signs its
+  // own URL and renders <img>/<video>/<iframe> for the respective
+  // type. The reopen guard suppresses the touchend-then-click double
+  // fire that mobile browsers emit when the modal closes.
+  function openProjectMediaItem(item: Media) {
+    if (!canOpenMediaViewerItem(item.id)) return;
+    setMediaViewerItem(item as unknown as ViewerMediaItem);
   }
 
   async function downloadProjectMediaItem(item: Pick<Media, "storage_path" | "filename">) {
@@ -2685,124 +2589,6 @@ export function ProjectDetailPage({
         </div>
       ) : null}
 
-      {previewMedia ? (
-        <div
-          className="fixed inset-0 flex items-center justify-center p-4"
-          style={{ background: "rgba(0,0,0,0.7)", zIndex: 1000 }}
-          onClick={closePreview}
-        >
-          <div
-            className="surface-card w-full max-w-[900px] max-h-[90vh] overflow-y-auto p-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="truncate text-base font-bold text-[var(--text-primary)]">
-                  {previewMedia.item.filename ?? previewMedia.item.media_type}
-                </h2>
-                <div className="mt-1 text-[10px] text-[var(--text-muted)]">
-                  {formatDateTime(previewMedia.item.created_at)}
-                  {" · "}
-                  {previewMedia.item.media_type}
-                  {previewMedia.isPlaybackVersion ? (
-                    <span className="ml-2 rounded-[var(--radius-pill)] bg-[rgba(15,168,120,0.16)] px-1.5 py-0.5 font-semibold text-[var(--green)]">
-                      {t("projectDetail.mediaPlaybackVersion")}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={closePreview}
-                aria-label={t("common.cancel")}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
-                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <div className="mt-3 flex justify-center rounded-[var(--radius-md)] bg-black p-2">
-              {previewMedia.item.media_type === "video" ? (
-                <video
-                  key={previewMedia.signedUrl}
-                  src={previewMedia.signedUrl}
-                  controls
-                  playsInline
-                  preload="metadata"
-                  className="max-h-[70vh] w-full"
-                >
-                  {previewMedia.mimeType ? (
-                    <source src={previewMedia.signedUrl} type={previewMedia.mimeType} />
-                  ) : null}
-                </video>
-              ) : previewMedia.item.media_type === "photo" ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={previewMedia.signedUrl}
-                  alt={previewMedia.item.filename ?? "media"}
-                  className="max-h-[70vh] w-auto object-contain"
-                />
-              ) : null}
-            </div>
-
-            {previewMedia.browserUnsafe ? (
-              <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.08)] px-3 py-2 text-xs font-semibold text-[#f59e0b]">
-                {t("projectDetail.mediaBrowserUnsafe")}
-              </div>
-            ) : null}
-
-            <div className="mt-3 flex flex-wrap justify-end gap-2">
-              <a
-                href={previewMedia.signedUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
-              >
-                <ExternalLink size={12} />
-                {t("messages.openFile")}
-              </a>
-              <button
-                type="button"
-                onClick={() => void downloadProjectMediaItem(previewMedia.item)}
-                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
-                style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
-              >
-                <Download size={12} />
-                {t("messages.downloadFile")}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {previewLoading && !previewMedia ? (
-        // Click-anywhere dismiss is a hard floor: if a future code path
-        // fails to clear `previewLoading`, the manager can still escape
-        // the overlay by tapping it. Belt-and-braces against the
-        // "stuck on Loading" report. Inline numeric z-index sidesteps
-        // any Tailwind arbitrary-value compile gap under Turbopack.
-        <div
-          className="fixed inset-0 flex items-center justify-center p-4 text-sm font-semibold text-white"
-          style={{ background: "rgba(0,0,0,0.7)", zIndex: 990 }}
-          onClick={closePreview}
-        >
-          {t("common.loading")}
-        </div>
-      ) : null}
-
-      {previewError && !previewMedia ? (
-        <div
-          className="pointer-events-none fixed inset-x-0 top-4 flex justify-center"
-          style={{ zIndex: 1010 }}
-        >
-          <div className="rounded-[var(--radius-md)] bg-[rgba(212,81,94,0.14)] px-3 py-2 text-xs font-semibold text-[var(--red)]">
-            {previewError}
-          </div>
-        </div>
-      ) : null}
-
       {showEditModal ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -3057,6 +2843,14 @@ export function ProjectDetailPage({
           </div>
         </div>
       ) : null}
+      <MediaViewerModal
+        item={mediaViewerItem}
+        onClose={() => {
+          const itemId = mediaViewerItem?.id;
+          setMediaViewerItem(null);
+          suppressMediaViewerItem(itemId);
+        }}
+      />
     </div>
   );
 }
