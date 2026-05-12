@@ -288,6 +288,67 @@ export default async function OverviewPage() {
     sinceIso: todayStartIso,
   });
   const workersWithGaps = new Set(travelGaps.map((g) => g.profileId));
+  const actionItems = [
+    ...onSiteSessions
+      .map((session) => {
+        const review = shiftReviewByProfileId.get(session.profileId);
+        if (!review || review.status === "normal") return null;
+        const reasonLabels = review.reasons.map((reason) => shiftReviewLabel[reason]).join(", ");
+        const isCritical =
+          review.status === "needs_review" ||
+          review.status === "video_missing" ||
+          review.status === "gps_lost";
+        return {
+          id: `open-shift-${session.id}`,
+          label: t("overview.actionShift"),
+          title: session.profileName,
+          detail: `${session.projectName} · ${formatDurationCompact(session.todayMinutes)} · ${reasonLabels || shiftReviewLabel[review.status]}`,
+          href: `/team/${session.profileId}`,
+          severity: isCritical ? 0 : 1,
+          color: isCritical ? "var(--red)" : "#f59e0b",
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null),
+    ...closedShiftAlerts.map((session) => {
+      const reasonLabels = session.review.reasons
+        .map((reason) => shiftReviewLabel[reason])
+        .join(", ");
+      return {
+        id: `closed-shift-${session.id}`,
+        label: t("overview.actionShift"),
+        title: session.profileName,
+        detail: `${session.projectName} · ${formatDurationCompact(session.durationMinutes)} · ${reasonLabels}`,
+        href: `/team/${session.profileId}`,
+        severity: 0,
+        color: "var(--red)",
+      };
+    }),
+    ...travelGaps.map((gap) => ({
+      id: `gap-${gap.id}`,
+      label: t("overview.actionTravelGap"),
+      title: gap.workerName,
+      detail: `${gap.fromProject} → ${gap.toProject} · ${formatDurationCompact(gap.gapMinutes)}`,
+      href: `/team/${gap.profileId}`,
+      severity: gap.severity === "critical" ? 0 : 1,
+      color: TRANSFER_GAP_COLOR[gap.severity],
+    })),
+    ...urgentTasks
+      .filter((task) => task.priority === "urgent" || task.priority === "high")
+      .map((task) => {
+        const project = task.project_id ? projectsById.get(task.project_id) : null;
+        return {
+          id: `task-${task.id}`,
+          label: t("overview.actionTask"),
+          title: task.title,
+          detail: `${project?.name ?? t("common.generalTask")} · ${task.status}`,
+          href: task.project_id ? `/projects/${task.project_id}#tasks` : "/tasks",
+          severity: task.priority === "urgent" ? 0 : 1,
+          color: task.priority === "urgent" ? "var(--red)" : "#f59e0b",
+        };
+      }),
+  ]
+    .sort((left, right) => left.severity - right.severity)
+    .slice(0, 6);
 
   // ── Unified event feed (last 15) ──
   const profilesById = new Map(data.profiles.map((p) => [p.id, p]));
@@ -473,6 +534,62 @@ export default async function OverviewPage() {
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.openTaskCount}</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.openFieldItems")}</div>
         </Link>
+      </section>
+
+      <section className="surface-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("overview.actionQueue")}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {t("overview.actionQueueDesc")}
+            </p>
+          </div>
+          <Link href="/timeline" className="text-sm font-semibold text-[var(--brand-yellow)]">
+            {t("overview.fullTimeline")}
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-2 lg:grid-cols-2">
+          {actionItems.length === 0 ? (
+            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)] lg:col-span-2">
+              {t("overview.noActionItems")}
+            </div>
+          ) : (
+            actionItems.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                className="block rounded-[var(--radius-md)] border px-3 py-2.5 transition hover:border-[var(--brand-yellow)]"
+                style={{
+                  borderColor: "var(--border-default)",
+                  background: "rgba(15, 17, 23, 0.44)",
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div
+                      className="text-[10px] font-bold uppercase tracking-[0.14em]"
+                      style={{ color: item.color }}
+                    >
+                      {item.label}
+                    </div>
+                    <div className="mt-1 truncate text-sm font-semibold text-[var(--text-primary)]">
+                      {item.title}
+                    </div>
+                    <div className="mt-1 truncate text-xs text-[var(--text-secondary)]">
+                      {item.detail}
+                    </div>
+                  </div>
+                  <span
+                    className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: item.color, boxShadow: `0 0 8px ${item.color}` }}
+                  />
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="surface-card p-4">
