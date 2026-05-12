@@ -298,7 +298,7 @@ export default async function OverviewPage() {
     sinceIso: todayStartIso,
   });
   const workersWithGaps = new Set(travelGaps.map((g) => g.profileId));
-  const actionItems = [
+  const allActionItems = [
     ...onSiteSessions
       .map((session) => {
         const review = shiftReviewByProfileId.get(session.profileId);
@@ -357,8 +357,16 @@ export default async function OverviewPage() {
         };
       }),
   ]
-    .sort((left, right) => left.severity - right.severity)
-    .slice(0, 6);
+    .sort((left, right) => left.severity - right.severity);
+  const actionItems = allActionItems.slice(0, 6);
+  const criticalActionCount = allActionItems.filter((item) => item.severity === 0).length;
+  const highPriorityTaskCount = urgentTasks.filter((task) => (
+    task.priority === "urgent" || task.priority === "high"
+  )).length;
+  const projectsWithCrewCount = projectSummaries.filter((project) => (
+    project.onSiteWorkerCount > 0
+  )).length;
+  const primaryAction = allActionItems[0] ?? null;
 
   // ── Unified event feed (last 15) ──
   const profilesById = new Map(data.profiles.map((p) => [p.id, p]));
@@ -544,6 +552,94 @@ export default async function OverviewPage() {
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{stats.openTaskCount}</div>
           <div className="mt-1 text-sm text-[var(--text-secondary)]">{t("overview.openFieldItems")}</div>
         </Link>
+      </section>
+
+      <section className="surface-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("overview.commandCenterEyebrow")}
+            </p>
+            <h2 className="mt-1 text-xl font-bold text-[var(--text-primary)]">
+              {t("overview.commandCenterTitle")}
+            </h2>
+            <p className="mt-1 max-w-[70ch] text-sm leading-6 text-[var(--text-secondary)]">
+              {t("overview.commandCenterDesc")}
+            </p>
+          </div>
+          <Link
+            href={primaryAction?.href ?? "/timeline"}
+            className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold"
+            style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+          >
+            {primaryAction ? t("overview.openTopAction") : t("overview.fullTimeline")}
+          </Link>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-[var(--radius-md)] border p-3" style={{ borderColor: "var(--border-default)" }}>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("overview.commandNow")}
+            </div>
+            <div className="mt-2 flex items-end gap-2">
+              <span className="font-mono text-3xl font-bold text-[var(--text-primary)]">
+                {stats.onSiteCount}
+              </span>
+              <span className="pb-1 text-sm text-[var(--text-secondary)]">
+                {t("common.onSite").toLowerCase()}
+              </span>
+            </div>
+            <div className="mt-2 text-xs text-[var(--text-secondary)]">
+              {projectsWithCrewCount} {t("overview.commandProjectsWithCrew")} · {stats.todayHours.toFixed(1)}h {t("common.today").toLowerCase()}
+            </div>
+          </div>
+
+          <div className="rounded-[var(--radius-md)] border p-3" style={{ borderColor: criticalActionCount > 0 ? "rgba(212, 81, 94, 0.45)" : "var(--border-default)" }}>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("overview.commandRisk")}
+            </div>
+            <div className="mt-2 flex items-end gap-2">
+              <span
+                className="font-mono text-3xl font-bold"
+                style={{ color: criticalActionCount > 0 ? "var(--red)" : "var(--green)" }}
+              >
+                {criticalActionCount}
+              </span>
+              <span className="pb-1 text-sm text-[var(--text-secondary)]">
+                {t("overview.commandCritical")}
+              </span>
+            </div>
+            <div className="mt-2 text-xs text-[var(--text-secondary)]">
+              {travelGaps.length} {t("overview.actionTravelGap").toLowerCase()} · {highPriorityTaskCount} {t("overview.commandPriorityTasks")}
+            </div>
+          </div>
+
+          <div className="rounded-[var(--radius-md)] border p-3" style={{ borderColor: "var(--border-default)" }}>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("overview.commandNext")}
+            </div>
+            {primaryAction ? (
+              <Link href={primaryAction.href} className="mt-2 block">
+                <div
+                  className="text-[10px] font-bold uppercase tracking-[0.14em]"
+                  style={{ color: primaryAction.color }}
+                >
+                  {primaryAction.label}
+                </div>
+                <div className="mt-1 truncate text-sm font-semibold text-[var(--text-primary)]">
+                  {primaryAction.title}
+                </div>
+                <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--text-secondary)]">
+                  {primaryAction.detail}
+                </div>
+              </Link>
+            ) : (
+              <div className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                {t("overview.noActionItems")}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="surface-card p-4">
