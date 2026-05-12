@@ -4,17 +4,23 @@
 
 ---
 
-## 🎯 Состояние проекта (на 9 мая 2026)
+## 🎯 Состояние проекта (на 12 мая 2026)
 
 ### Где код
 
 - **Текущая ветка:** `wip/uncommitted-recovery` (НЕ на `main`).
-- **Последний коммит:** `8877b94 chore(scripts): Vercel REST helpers for env push and SSO protection`.
-- **Опережает `main` на 7 коммитов:**
+- **Последний коммит:** `006076c feat(project): manager media folder as thumbnail grid`.
+- **Опережает `main` много коммитов** (ветка давно разошлась с `main`, сверху — наиболее свежие из последних двух сессий):
   ```
+  006076c feat(project): manager media folder as thumbnail grid        ← на проде (12 мая)
+  234f412 docs: session plans and handoff
+  f77d3a5 fix(receipt-modal): close on save
+  212995b fix(media-viewer): close loop on mobile
+  0def241 feat(materials): multi-item orders + delivery tracking
+  098304d feat(project): collapsible folders + header actions
   8877b94 chore(scripts): Vercel REST helpers for env push and SSO protection
   90adb9a feat(worker): instant flip Mark-Done card to «Завершено» on /my-tasks
-  c2af391 fix(worker): mark-done modal now actually persists to DB    ← на проде
+  c2af391 fix(worker): mark-done modal now actually persists to DB
   cd29f5c wip: misc uncommitted changes (needs review)
   73578df fix(media): RLS migration for all_active project access + worker receipt visibility
   e2e5fd0 fix(payroll): RLS migration without recursion + calculator updates
@@ -22,14 +28,14 @@
   3ddd68b feat(worker): completion modal + Russian voice dictation for Mark Done
   267636a chore: gitignore certificates and .vercel artifacts
   ```
-- **На `main` сейчас:** `9178945 Fix checkout video linking under RLS` (без новой работы).
-- **НЕ мержить `wip/uncommitted-recovery` в main** в новой сессии до того как пройти ревью каждого коммита. Особенно `cd29f5c wip: misc uncommitted changes (needs review)` — там 30+ файлов навалом, разобрать на отдельные коммиты разумнее **до** мержа.
+- **На `main` сейчас:** не сверял в этой сессии — фактическое состояние смотреть через `git log main -1`. Майская запись о `9178945` могла устареть.
+- **НЕ мержить `wip/uncommitted-recovery` в main** в новой сессии до ревью каждого коммита. Особенно `cd29f5c wip: misc uncommitted changes (needs review)` — там 30+ файлов навалом, разобрать на отдельные коммиты разумнее **до** мержа.
 
 ### Где прод
 
 - **Production URL:** `https://check-time-five.vercel.app` ← публичный, без Vercel-логина.
-- **Deployment:** `dpl_3Rhd6rfnP7AAEVBkh991xGNfwLjk` (target=production, READY на 9 мая 2026 00:02 PT).
-- **Что задеплоено:** working tree состояния `c2af391` плюс uncommitted-tweak `TasksPage.tsx` (instant-flip), который потом был закоммичен как `90adb9a`. То есть прод-бинарник ≡ HEAD ветки `c2af391..90adb9a` примерно по содержимому.
+- **Deployment:** `dpl_2AsXTLqZG3EjSuJhT92y2ocaKUgL` (target=production, READY на 12 мая 2026 01:00 PT).
+- **Что задеплоено:** HEAD ветки `006076c` — включает шесть фич из сессии 12 мая (см. соответствующий раздел в `PROGRESS_LOG.md`). Все uncommitted-изменения зафиксированы перед `vercel --prod`.
 - **Vercel SSO protection:** `ssoProtection: { deploymentType: "all_except_custom_domains" }` — preview-URL'ы за стеной, прод-алиас публичный.
 - **Env на Vercel Preview:** заполнены 5 из 7 (Supabase URL/anon/service-role, Google Maps key, AUTH_BYPASS=false). `ANTHROPIC_API_KEY` и `OPENAI_API_KEY` — в `.env.local` локально пустые, на Vercel не залиты. AI-роуты в рантайме без них вернут ошибку — пофиксить можно одной командой `node scripts/push-preview-env.mjs` после того как ключи появятся в `.env.local`.
 
@@ -43,17 +49,17 @@
 
 ### Бэклог следующей сессии (приоритет сверху вниз)
 
-1. **Частичное выполнение задач + история** — двойная кнопка в модалке («Готово полностью» / «Сохранить отчёт»), много сабмитов на одной задаче, видны всем.  
-   → дизайн-документ: `PLAN_PARTIAL_COMPLETION.md`
-2. **Архив задач** — Owner-only архивация, отдельная страница `/archive` с фильтрами, восстановление.  
-   → дизайн-документ: `PLAN_TASK_ARCHIVE.md`
-3. **Worker receipts/sums privacy** — Vasya не должен видеть суммы по проекту и чужие чеки. Сейчас уже частично сделано (см. `src/lib/worker-receipt-visibility.ts` в коммите `73578df`), нужна проверка end-to-end и UI-полировка.
-4. **Компактные блоки медиа** на project page и worker views — текущий tile-grid слишком расходует экран на мобильном.
-5. **Сворачиваемая папка «Завершено»** в /my-tasks и worker project view — collapse по умолчанию, разворачивается одним тапом.
-6. **Реорганизация worker project page** — порядок: notes сверху, my+general tasks под проектом. Сейчас порядок другой.
-7. **Известный баг:** на worker project page при открытии медиа (фото/видео) виден flicker — UI дёргается на ~200ms. Воспроизводится стабильно. Связан с MediaViewerModal или TaskAttachmentList signing.
+1. **Видео и PDF открываются в новой вкладке вместо `MediaViewerModal`** — должны работать через in-app viewer как фотографии. Подтвердить: регрессия от tile-grid (`006076c`) или pre-existing. Если регрессия — фикс там же, в `ProjectDetailPage.tsx` (handler `openProjectMediaItem` для не-photo медиа). Если pre-existing — диагностировать `MediaViewerModal` и/или ветку signing для не-image MIME.
+2. **Частичное выполнение задач + история** — двойная кнопка в модалке («Готово полностью» / «Сохранить отчёт»), много submit'ов на одной задаче, видны всем.  
+   → дизайн-документ: `PLAN_PARTIAL_COMPLETION.md` (есть открытый schema-вопрос — ждём решения Андрея).
+3. **Архив задач** — Owner-only архивация, отдельная страница `/archive` с фильтрами, восстановление.  
+   → дизайн-документ: `PLAN_TASK_ARCHIVE.md` (есть открытый schema-вопрос — ждём решения Андрея).
+4. **Worker receipts privacy** — Vasya должен видеть **только свои** чеки, никогда не суммы по проекту и не чеки других работников. Сейчас частично сделано (`src/lib/worker-receipt-visibility.ts` в `73578df`), нужна end-to-end проверка и UI-полировка.
+5. **Реорганизация worker project page** — заметки проекта закреплены сверху, далее my+general tasks. Сейчас порядок другой.
+6. **RLS audit** — по миграциям в репозитории INSERT в `tasks` доступен только manager+. Наблюдается: worker успешно вставляет materials. Подтверждённое расхождение — реальный RLS на сервере, видимо, отъехал от того, что описано в файлах. Нужна проверка `pg_policies` против `supabase/migrations/`.
+7. **Per-tile timestamp в Manager Media grid** (низкий приоритет, не блокер). Андрей отметил, что времени создания на тайлах больше нет; ок как есть, но возможно добавит позже.
 
-Перед стартом каждого пункта 1–2 — Андрей отвечает на вопросы из соответствующего PLAN-документа.
+Перед стартом пунктов 2–3 — Андрей отвечает на вопросы из соответствующего PLAN-документа.
 
 ---
 

@@ -174,3 +174,33 @@ d0caf76 feat(media): in-app viewer modal + gallery drawer + playback selection
 2. **Архив задач** — детальный дизайн в `PLAN_TASK_ARCHIVE.md`.
 
 Плюс UX-полировка: приватность чеков работника, компактные блоки медиа, сворачиваемая «Завершено», переорганизация worker project page, фикс мерцания видео при открытии медиа.
+
+---
+
+## ✅ 12 мая 2026 — Materials/orders, collapsible folders, media tile grid, прод-деплой
+
+Шесть фич уехали в прод через ветку `wip/uncommitted-recovery`. Все коммиты атомарные, по одному логическому изменению на коммит.
+
+### Что было сделано
+
+- **Многострочные сворачиваемые «+ кнопки» на папках project page** — Tasks, Materials, Receipts, Media (`098304d feat(project): collapsible folders + header actions`). Уплотнили header проекта; кнопки добавления переехали в саму папку, состояние свёрнутости индивидуальное по папке.
+- **Материалы переработаны в multi-item заказы** (`0def241 feat(materials): multi-item orders + delivery tracking`). Позиции одного заказа группируются по `metadata.order_id`, отображение единым блоком на project page.
+- **Трекинг доставки + опциональный чек** (тот же коммит `0def241`). На материале хранятся `delivered_by`, `delivered_at`, `receipt_id`, `receipt_attached_by`. Чек прикрепляется отдельным действием уже после доставки — не блокирует сохранение до этого момента.
+- **Mobile media viewer reopen-loop fix** (`212995b fix(media-viewer): close loop on mobile`). На мобильном после закрытия модалки viewer мгновенно переоткрывался. Лечится `preventDefault` + `stopPropagation` на close-action + 350ms guard от мгновенного re-open + поднятие z-index до 1100.
+- **Модалка чека auto-close on save** (`f77d3a5 fix(receipt-modal): close on save`). Раньше оставалась открытой после сохранения — пользователь не понимал, прошёл ли submit.
+- **Manager Media папка → thumbnail grid** (`006076c feat(project): manager media folder as thumbnail grid`). Вертикальный список текстовых строк заменён на 2/3/4-колоночную сетку с превью фото и видео. Signed URLs батчем, shimmer loader, fallback icon, play-overlay поверх видео. Per-tile actions (open viewer / download / flag) сохранены, checkout/flag бейджи переехали в углы тайла.
+
+### Производственный деплой
+
+- `vercel --prod --yes` собрал и задеплоил HEAD `006076c` (включая все шесть коммитов выше плюс docs-коммит `234f412 docs: session plans and handoff`).
+- Deployment id: `dpl_2AsXTLqZG3EjSuJhT92y2ocaKUgL`, target=production, READY.
+- Production URL: `https://check-time-five.vercel.app` (плюс два aliases).
+- Vercel SSO protection возвращена в `{ deploymentType: "all_except_custom_domains" }` — preview-URL'ы за стеной, прод-алиас публичный.
+
+### Что НЕ зафиксировано в main
+
+Ветка `wip/uncommitted-recovery` имеет много коммитов поверх старой базы (от `267636a` 9 мая через `c2af391` до сегодняшнего `006076c`), и теперь ушла в прод. Мерж в main отложен до следующей сессии — Андрей мержит сам.
+
+### Бэклог — следующая сессия
+
+Зафиксирован в `HANDOFF.md` (7 пунктов в порядке приоритета). Первый — баг с открытием видео/PDF в новой вкладке вместо `MediaViewerModal`: подозрение на регрессию от tile-grid (`006076c`), возможно pre-existing — нужно подтвердить в первую очередь.
