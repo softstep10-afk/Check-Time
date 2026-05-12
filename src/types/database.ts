@@ -78,6 +78,10 @@ export interface Project {
   settings: Record<string, unknown>;
   timeline_status: ProjectTimelineStatus | null;
   budget_status: ProjectBudgetStatus | null;
+  // Migration 00023 — Archive metadata. Older environments without the
+  // migration read these as undefined, so archive UI falls back to updated_at.
+  archived_at?: string | null;
+  archived_by?: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;

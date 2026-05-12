@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ProjectDetailPage } from "@/components/manager/ProjectDetailPage";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import {
@@ -40,6 +40,9 @@ export default async function ProjectDetailRoutePage({
 
   if (!project) {
     notFound();
+  }
+  if (project.status === "archived") {
+    redirect(`/archive/projects/${project.id}`);
   }
 
   const assignments = data.assignments.filter((assignment) => assignment.project_id === id);

@@ -1,4 +1,9 @@
 import { ManagerTasksPage } from "@/components/manager/ManagerTasksPage";
+import {
+  buildActiveProjectIdSet,
+  getActiveOperationalProjects,
+  isTaskInActiveOperations,
+} from "@/lib/archive-utils";
 import { getProjectsPageData } from "@/lib/manager-data";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
 import { collectTaskReferencedMediaIds } from "@/lib/task-media-hydration";
@@ -10,8 +15,10 @@ export const revalidate = 0;
 export default async function ManagerTasksRoutePage() {
   const data = await getProjectsPageData();
 
-  const projects = data.projects
-    .filter((project) => !project.deleted_at)
+  const activeProjects = getActiveOperationalProjects(data.projects);
+  const activeProjectIds = buildActiveProjectIdSet(data.projects);
+
+  const projects = activeProjects
     .map((project) => ({
       id: project.id,
       name: project.name,
@@ -30,7 +37,7 @@ export default async function ManagerTasksRoutePage() {
   const profilesById = new Map(data.profiles.map((p) => [p.id, p.name]));
 
   const tasks = data.tasks
-    .filter((task) => !task.deleted_at)
+    .filter((task) => isTaskInActiveOperations(task, activeProjectIds))
     .map((task) => {
       const completedById = getTaskCompletionAudit(task).completedById;
       return {

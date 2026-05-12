@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
 import { TeamMemberPage } from "@/components/manager/TeamMemberPage";
+import {
+  buildActiveProjectIdSet,
+  getActiveOperationalProjects,
+  getActiveOperationalTasks,
+} from "@/lib/archive-utils";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { getTeamPageData } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
@@ -29,10 +34,12 @@ export default async function TeamMemberRoutePage({
     role: data.manager.role,
   });
   const sessions = buildManagerSessions(data);
-  const profileSummaries = buildProfileSummaries(data, sessions);
-  const projectSummaries = buildProjectSummaries(data, sessions, {
+  const activeProjectIds = buildActiveProjectIdSet(data.projects);
+  const activeSessions = sessions.filter((session) => activeProjectIds.has(session.projectId));
+  const profileSummaries = buildProfileSummaries(data, activeSessions);
+  const projectSummaries = getActiveOperationalProjects(buildProjectSummaries(data, activeSessions, {
     includeFinancials: managerHasFinanceAccess,
-  });
+  }));
   const profile = profileSummaries.find((item) => item.id === id);
 
   if (!profile) {
@@ -43,8 +50,10 @@ export default async function TeamMemberRoutePage({
   }
 
   const assignments = data.assignments.filter((assignment) => assignment.profile_id === id);
-  const tasks = data.tasks.filter((task) => task.assigned_to === id && !task.deleted_at).slice(0, 20);
-  const allWorkerSessions = sessions.filter((session) => session.profileId === id);
+  const tasks = getActiveOperationalTasks(data.tasks, data.projects)
+    .filter((task) => task.assigned_to === id)
+    .slice(0, 20);
+  const allWorkerSessions = activeSessions.filter((session) => session.profileId === id);
   const workerSessions = allWorkerSessions.slice(0, 20);
 
   // Build clock_in event lookup (events come from getTeamPageData — last 14 days).
@@ -116,17 +125,19 @@ export default async function TeamMemberRoutePage({
     .order("created_at", { ascending: false })
     .limit(20)
     .returns<Media[]>();
-  const workerMedia = (workerMediaRows ?? []).map((m) => ({
-    ...m,
-    projectName: m.project_id ? projectsById.get(m.project_id) ?? null : null,
-  }));
+  const workerMedia = (workerMediaRows ?? [])
+    .filter((m) => !m.project_id || activeProjectIds.has(m.project_id))
+    .map((m) => ({
+      ...m,
+      projectName: m.project_id ? projectsById.get(m.project_id) ?? null : null,
+    }));
 
   // Project-transfer gaps for this worker — read-only manager review
   // signal. Scope to the same 7-day window the rest of the page uses
   // so a worker with no recent activity doesn't show stale alerts.
   const transferGaps = detectTransferGaps({
-    timeEvents: data.timeEvents,
-    projects: data.projects,
+    timeEvents: data.timeEvents.filter((event) => activeProjectIds.has(event.project_id)),
+    projects: getActiveOperationalProjects(data.projects),
     profiles: data.profiles,
     profileId: id,
     sinceIso: new Date(sevenDaysAgo).toISOString(),

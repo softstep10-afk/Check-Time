@@ -27,6 +27,7 @@ import type {
   PayrollClosure,
   Profile,
   Project,
+  ProjectAssignment,
   Task,
   TimeEvent,
 } from "@/types/database";
@@ -114,6 +115,7 @@ function makeTask(overrides: Partial<Task> & Pick<Task, "id" | "title">): Task {
 function makeWorkspace(opts: {
   profiles?: Profile[];
   projects?: Project[];
+  assignments?: ProjectAssignment[];
   tasks?: Task[];
   timeEvents?: TimeEvent[];
   payrollClosures?: PayrollClosure[];
@@ -131,7 +133,7 @@ function makeWorkspace(opts: {
     org,
     profiles: opts.profiles ?? [],
     projects: opts.projects ?? [],
-    assignments: [],
+    assignments: opts.assignments ?? [],
     tasks: opts.tasks ?? [],
     timeEvents: opts.timeEvents ?? [],
     media: [],
@@ -381,6 +383,47 @@ describe("buildProjectSummaries", () => {
     expect(projectSummaries.find((project) => project.id === "p1")?.openTaskCount).toBe(1);
     expect(profileSummaries.find((profile) => profile.id === "w1")?.openTaskCount).toBe(1);
     expect(stats.openTaskCount).toBe(1);
+  });
+
+  it("keeps archived project names out of active profile summaries", () => {
+    const activeProject = makeProject({ id: "active", name: "Active" });
+    const archivedProject = makeProject({
+      id: "archived",
+      name: "Archived",
+      status: "archived",
+    });
+    const data = makeWorkspace({
+      profiles: [
+        makeProfile({
+          id: "w1",
+          name: "Worker 1",
+          current_project: archivedProject.id,
+        }),
+      ],
+      projects: [activeProject, archivedProject],
+      assignments: [
+        {
+          id: "a1",
+          org_id: "org",
+          profile_id: "w1",
+          project_id: activeProject.id,
+          assigned_at: "2026-01-01T00:00:00Z",
+        },
+        {
+          id: "a2",
+          org_id: "org",
+          profile_id: "w1",
+          project_id: archivedProject.id,
+          assigned_at: "2026-01-01T00:00:00Z",
+        },
+      ],
+    });
+
+    const summary = buildProfileSummaries(data, []).find((profile) => profile.id === "w1");
+
+    expect(summary?.assignedProjectIds).toEqual([activeProject.id]);
+    expect(summary?.assignedProjectNames).toEqual([activeProject.name]);
+    expect(summary?.currentProjectName).toBeNull();
   });
 });
 

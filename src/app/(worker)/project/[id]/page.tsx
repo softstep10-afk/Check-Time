@@ -27,7 +27,9 @@ export default async function WorkerProjectPage({
     if (!AUTH_BYPASS_ENABLED) redirect("/login");
 
     const preview = buildPreviewManagerWorkspaceData();
-    const project = preview.projects.find((item) => item.id === id && !item.deleted_at);
+    const project = preview.projects.find(
+      (item) => item.id === id && !item.deleted_at && item.status !== "archived",
+    );
     const worker =
       preview.profiles.find((profile) => profile.role === "worker") ??
       preview.profiles[0];
@@ -98,7 +100,7 @@ export default async function WorkerProjectPage({
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle<Project>();
-  if (!project) notFound();
+  if (!project || project.status === "archived") notFound();
 
   const { data: profileRow } = await supabase
     .from("profiles")

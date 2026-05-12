@@ -103,6 +103,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Org mismatch." }, { status: 403 });
     }
 
+    const { data: taskProject } = await supabase
+      .from("projects")
+      .select("id, status")
+      .eq("id", task.project_id)
+      .is("deleted_at", null)
+      .maybeSingle<{ id: string; status: string }>();
+    if (!taskProject || taskProject.status === "archived") {
+      return NextResponse.json(
+        { error: "Project is not available to this worker." },
+        { status: 403 },
+      );
+    }
+
     // Reuse the same project-access predicate the worker project page
     // and project-tasks POST route apply: 'list' mode requires an
     // assignment row, 'all_active' mode requires no exclusion against
@@ -119,13 +132,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       allowed = Boolean(assignment);
     } else {
-      const { data: project } = await supabase
-        .from("projects")
-        .select("id, status")
-        .eq("id", task.project_id)
-        .is("deleted_at", null)
-        .maybeSingle<{ id: string; status: string }>();
-      if (project && project.status === "active") {
+      if (taskProject.status === "active") {
         const { data: exclusion, error: exclusionError } = await supabase
           .from("project_exclusions")
           .select("id")

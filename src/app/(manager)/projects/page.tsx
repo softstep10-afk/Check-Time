@@ -1,4 +1,5 @@
 import { ProjectsPage } from "@/components/manager/ProjectsPage";
+import { getActiveOperationalProjects } from "@/lib/archive-utils";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { getProjectsPageData } from "@/lib/manager-data";
 import { buildManagerSessions, buildProjectSummaries } from "@/lib/manager-utils";
@@ -18,10 +19,11 @@ export default async function ProjectsRoutePage() {
   const projectSummaries = buildProjectSummaries(data, sessions, {
     includeFinancials: managerHasFinanceAccess,
   });
+  const activeProjectSummaries = getActiveOperationalProjects(projectSummaries);
 
   return (
     <ProjectsPage
-      initialProjects={projectSummaries}
+      initialProjects={activeProjectSummaries}
       hasFinanceAccess={managerHasFinanceAccess}
     />
   );

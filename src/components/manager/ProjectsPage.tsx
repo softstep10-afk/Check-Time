@@ -983,16 +983,19 @@ export function ProjectsPage({
     setBusyKey(`archive-${projectId}`);
     setMessage("");
 
-    const { error } = await supabase
-      .from("projects")
-      .update({
-        status: "archived",
-        deleted_at: new Date().toISOString(),
-      })
-      .eq("id", projectId);
+    const response = await fetch(`/api/manager/projects/${projectId}/archive`, {
+      method: "POST",
+    });
 
-    if (error) {
-      setMessage(error.message);
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: unknown }
+        | null;
+      const errorMessage =
+        payload && typeof payload.error === "string" && payload.error.trim()
+          ? payload.error
+          : `Request failed (${response.status})`;
+      setMessage(errorMessage);
       setBusyKey(null);
       return;
     }

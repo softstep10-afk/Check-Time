@@ -1,9 +1,14 @@
 import Link from "next/link";
-import { ProjectsStatusMap } from "@/components/maps/ProjectsStatusMap";
 import { FullscreenMapWrapper } from "@/components/maps/FullscreenMapWrapper";
 import { ForceCheckoutButton } from "@/components/manager/ForceCheckoutButton";
 import { EventFeed, type FeedEvent } from "@/components/manager/EventFeed";
 import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
+import {
+  buildActiveProjectIdSet,
+  getActiveOperationalMedia,
+  getActiveOperationalProjects,
+  getActiveOperationalTasks,
+} from "@/lib/archive-utils";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import {
   buildManagerSessions,
@@ -81,15 +86,20 @@ export default async function OverviewPage() {
     role: data.manager.role,
   });
   const sessions = buildManagerSessions(data);
-  const projectSummaries = buildProjectSummaries(data, sessions, {
+  const activeProjectIds = buildActiveProjectIdSet(data.projects);
+  const activeSessions = sessions.filter((session) => activeProjectIds.has(session.projectId));
+  const activeTasks = getActiveOperationalTasks(data.tasks, data.projects);
+  const activeMedia = getActiveOperationalMedia(data.media, data.projects);
+  const activeProjects = getActiveOperationalProjects(data.projects);
+  const projectSummaries = getActiveOperationalProjects(buildProjectSummaries(data, activeSessions, {
     includeFinancials: managerHasFinanceAccess,
-  });
-  const profileSummaries = buildProfileSummaries(data, sessions);
-  const stats = getOverviewStats(data, sessions, projectSummaries, profileSummaries, {
+  }));
+  const profileSummaries = buildProfileSummaries(data, activeSessions);
+  const stats = getOverviewStats(data, activeSessions, projectSummaries, profileSummaries, {
     includeFinancials: managerHasFinanceAccess,
   });
   const liveProfiles = profileSummaries.filter((profile) => profile.isOnSite).slice(0, 6);
-  const urgentTasks = [...data.tasks]
+  const urgentTasks = [...activeTasks]
     .filter(isOpenTask)
     .sort((left, right) => {
       const priorityGap = priorityRank[left.priority] - priorityRank[right.priority];
@@ -122,7 +132,7 @@ export default async function OverviewPage() {
       .filter((e) => e.event_type === "clock_out" || e.event_type === "auto_out")
       .map((e) => [e.id, e]),
   );
-  const onSiteSessions = sessions
+  const onSiteSessions = activeSessions
     .filter((s) => s.isOpen)
     .map((session) => {
       const project = projectsById.get(session.projectId);
@@ -231,7 +241,7 @@ export default async function OverviewPage() {
     (r) => r.status === "needs_review",
   ).length;
 
-  const closedShiftAlerts = sessions
+  const closedShiftAlerts = activeSessions
     .filter((session) => !session.isOpen)
     .map((session) => {
       const profile = profilesByIdForReview.get(session.profileId);
@@ -282,8 +292,8 @@ export default async function OverviewPage() {
     return d.toISOString();
   })();
   const travelGaps = detectTransferGaps({
-    timeEvents: data.timeEvents,
-    projects: data.projects,
+    timeEvents: data.timeEvents.filter((event) => activeProjectIds.has(event.project_id)),
+    projects: activeProjects,
     profiles: data.profiles,
     sinceIso: todayStartIso,
   });
@@ -380,7 +390,7 @@ export default async function OverviewPage() {
   }
 
   // Tasks → assigned, started, completed
-  for (const task of data.tasks) {
+  for (const task of activeTasks) {
     if (!task.deleted_at) {
       const project = task.project_id ? projectsById.get(task.project_id) : null;
 
@@ -432,7 +442,7 @@ export default async function OverviewPage() {
   }
 
   // Media → uploaded
-  for (const m of data.media) {
+  for (const m of activeMedia) {
     const actor = m.uploaded_by ? profilesById.get(m.uploaded_by) : null;
     const project = m.project_id ? projectsById.get(m.project_id) : null;
     feedEvents.push({

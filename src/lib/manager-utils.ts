@@ -1,4 +1,8 @@
 import type { Profile, Project, Task, TimeEvent, UserRole } from "@/types/database";
+import {
+  buildActiveProjectIdSet,
+  isTaskInActiveOperations,
+} from "@/lib/archive-utils";
 import { parseGeoPoint } from "@/lib/worker-utils";
 import {
   EXTREME_SHIFT_MINUTES,
@@ -659,6 +663,7 @@ export function buildProfileSummaries(
   const weekMinutesByProfile = new Map<string, number>();
   const openSessionsByProfile = new Map<string, ManagerSession>();
   const projectsById = new Map(data.projects.map((project) => [project.id, project]));
+  const activeProjectIds = buildActiveProjectIdSet(data.projects);
   const videoUploadedTodayByProfile = new Set<string>();
 
   for (const item of data.media) {
@@ -669,13 +674,14 @@ export function buildProfileSummaries(
   }
 
   for (const assignment of data.assignments) {
+    if (!activeProjectIds.has(assignment.project_id)) continue;
     const ids = assignmentsByProfile.get(assignment.profile_id) ?? [];
     ids.push(assignment.project_id);
     assignmentsByProfile.set(assignment.profile_id, ids);
   }
 
   for (const task of data.tasks) {
-    if (!task.assigned_to || !isOpenTask(task)) {
+    if (!task.assigned_to || !isOpenTask(task) || !isTaskInActiveOperations(task, activeProjectIds)) {
       continue;
     }
 
@@ -725,7 +731,7 @@ export function buildProfileSummaries(
         assignedProjectNames: assignedProjectIds
           .map((projectId) => projectsById.get(projectId)?.name)
           .filter((value): value is string => Boolean(value)),
-        currentProjectName: profile.current_project
+        currentProjectName: profile.current_project && activeProjectIds.has(profile.current_project)
           ? projectsById.get(profile.current_project)?.name ?? null
           : null,
         openTaskCount: openTasksByProfile.get(profile.id) ?? 0,
@@ -784,11 +790,14 @@ export function getOverviewStats(
         projectSummaries.reduce((sum, project) => sum + project.receiptTotal, 0),
       )
     : 0;
+  const activeProjectIds = buildActiveProjectIdSet(data.projects);
 
   return {
     onSiteCount: profileSummaries.filter((profile) => profile.isOnSite).length,
     activeProjectCount: projectSummaries.filter((project) => project.status === "active").length,
-    openTaskCount: data.tasks.filter(isOpenTask).length,
+    openTaskCount: data.tasks.filter((task) => (
+      isOpenTask(task) && isTaskInActiveOperations(task, activeProjectIds)
+    )).length,
     crewCount: data.profiles.length,
     todayHours: roundCurrency(todayMinutes / 60),
     unpaidHours: unpaidPreview?.totalHours ?? 0,

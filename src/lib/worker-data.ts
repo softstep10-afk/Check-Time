@@ -162,6 +162,23 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
         allowedProjectIds.add(assignment.project_id);
       }
     }
+    if (allowedProjectIds.size > 0) {
+      const { data: visibleAssignedProjects, error } = await supabase
+        .from("projects")
+        .select("id")
+        .in("id", [...allowedProjectIds])
+        .neq("status", "archived")
+        .is("deleted_at", null)
+        .returns<Array<{ id: string }>>();
+      assertNoError(error, "Assigned projects visibility query failed");
+      const visibleIds = new Set((visibleAssignedProjects ?? []).map((project) => project.id));
+      for (const projectId of [...allowedProjectIds]) {
+        if (!visibleIds.has(projectId)) {
+          allowedProjectIds.delete(projectId);
+          projectIds.delete(projectId);
+        }
+      }
+    }
   } else {
     const [activeProjectsResult, exclusionsResult] = await Promise.all([
       supabase
@@ -211,7 +228,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   // Merge personal + project-level, dedupe by id (covers the edge case of
   // a project-level task that was later assigned to this worker explicitly).
   const seenIds = new Set(personalTasks.map((t) => t.id));
-  const tasks: Task[] = [
+  let tasks: Task[] = [
     ...personalTasks,
     ...projectLevelTasks.filter((t) => !seenIds.has(t.id)),
   ];
@@ -245,11 +262,16 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       .returns<Project[]>();
 
     assertNoError(projectsResult.error, "Projects query failed");
-    projects = projectsResult.data ?? [];
+    projects = (projectsResult.data ?? []).filter(
+      (project) => !project.deleted_at && project.status !== "archived",
+    );
   }
 
   const workerProjects = enrichProjects(projects, assignedAtByProjectId);
   const projectsById = new Map(workerProjects.map((project) => [project.id, project]));
+  const visibleProjectIds = new Set(workerProjects.map((project) => project.id));
+  tasks = tasks.filter((task) => !task.project_id || visibleProjectIds.has(task.project_id));
+  media = media.filter((entry) => !entry.project_id || visibleProjectIds.has(entry.project_id));
 
   // Eager-fetch attachment media rows referenced by any task.metadata.
   // Both `attachment_media_ids` (manager-supplied at task creation) and

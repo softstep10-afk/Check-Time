@@ -847,6 +847,7 @@ export const translations = {
 
   // ── Nav extras ──
   "nav.managers": { en: "Managers", ru: "Менеджеры" },
+  "nav.archive": { en: "Archive", ru: "Архив" },
   "nav.trash": { en: "Trash", ru: "Корзина" },
 
   // ── Managers Page ──

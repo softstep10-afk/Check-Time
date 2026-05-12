@@ -276,7 +276,7 @@ export function TeamMemberPage({
   );
 
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
-  const activeProjects = projects.filter((project) => project.status !== "archived");
+  const activeProjects = projects.filter((project) => !project.deleted_at && project.status !== "archived");
 
   // Migration 00018 — per-worker visibility mode. Default to 'list' for
   // legacy / unmigrated rows so behavior matches today.

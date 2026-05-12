@@ -66,6 +66,9 @@ export async function POST(request: NextRequest) {
         { status: 404 },
       );
     }
+    if (project.status === "archived") {
+      return NextResponse.json({ error: "Project is archived." }, { status: 403 });
+    }
 
     const accessMode = profile.project_access_mode === "all_active" ? "all_active" : "list";
     let allowed = false;

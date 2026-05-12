@@ -6,11 +6,13 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { buildPreviewManagerWorkspaceData } from "@/lib/preview-data";
 import { createClient } from "@/lib/supabase/server";
 import { isManagerRole } from "@/lib/manager-utils";
+import type { PayPeriodItemRow, PayPeriodRow } from "@/lib/archive-utils";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import type {
   Media,
   Organization,
   PayrollClosure,
+  PayrollLineItem,
   PayrollRun,
   Profile,
   Project,
@@ -19,6 +21,12 @@ import type {
   TimeEvent,
 } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
+
+export interface ArchivePageData extends ManagerWorkspaceData {
+  payPeriods: PayPeriodRow[];
+  payPeriodItems: PayPeriodItemRow[];
+  payrollLineItems: PayrollLineItem[];
+}
 
 type ServerSupabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -298,6 +306,124 @@ export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData>
     payrollRuns: [],
     payrollClosures: [],
     storeVisits: [],
+  };
+});
+
+export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
+  const resolved = await resolveContextOrPreview();
+  if (resolved.preview) {
+    return {
+      ...resolved.preview,
+      payPeriods: [],
+      payPeriodItems: [],
+      payrollLineItems: [],
+    };
+  }
+  const { supabase, context } = resolved;
+
+  const [
+    profilesResult,
+    projectsResult,
+    assignmentsResult,
+    tasksResult,
+    mediaResult,
+    timeEventsResult,
+    payrollRunsResult,
+    payrollLineItemsResult,
+    payrollClosuresResult,
+    payPeriodsResult,
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
+    supabase
+      .from("project_assignments")
+      .select("*")
+      .order("assigned_at", { ascending: false })
+      .returns<ProjectAssignment[]>(),
+    supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(0, 9999)
+      .returns<Task[]>(),
+    supabase
+      .from("media")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(0, 9999)
+      .returns<Media[]>(),
+    supabase
+      .from("time_events")
+      .select("*")
+      .order("event_time", { ascending: false })
+      .range(0, 9999)
+      .returns<TimeEvent[]>(),
+    supabase
+      .from("payroll_runs")
+      .select("*")
+      .order("period_end", { ascending: false })
+      .range(0, 999)
+      .returns<PayrollRun[]>(),
+    supabase
+      .from("payroll_line_items")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(0, 9999)
+      .returns<PayrollLineItem[]>(),
+    supabase
+      .from("payroll_closures")
+      .select("*")
+      .order("closed_through", { ascending: false })
+      .range(0, 9999)
+      .returns<PayrollClosure[]>(),
+    supabase
+      .from("pay_periods")
+      .select("id, org_id, label, start_date, end_date, status, approved_by, paid_at, metadata, created_at")
+      .eq("org_id", context.org.id)
+      .order("end_date", { ascending: false })
+      .range(0, 999)
+      .returns<PayPeriodRow[]>(),
+  ]);
+
+  assertNoError(profilesResult.error, "Profiles query failed");
+  assertNoError(projectsResult.error, "Projects query failed");
+  assertNoError(assignmentsResult.error, "Assignments query failed");
+  assertNoError(tasksResult.error, "Tasks query failed");
+  assertNoError(mediaResult.error, "Media query failed");
+  assertNoError(timeEventsResult.error, "Time events query failed");
+  assertNoError(payrollRunsResult.error, "Payroll runs query failed");
+  assertNoError(payrollLineItemsResult.error, "Payroll line items query failed");
+  assertNoError(payrollClosuresResult.error, "Payroll closures query failed");
+  assertNoError(payPeriodsResult.error, "Pay periods query failed");
+
+  const periodIds = (payPeriodsResult.data ?? []).map((period) => period.id);
+  const payPeriodItemsResult = periodIds.length > 0
+    ? await supabase
+        .from("pay_period_items")
+        .select("id, pay_period_id, worker_id, rate, regular_hours, overtime_hours, gross_total, net_total, status, created_at")
+        .in("pay_period_id", periodIds)
+        .order("created_at", { ascending: false })
+        .range(0, 9999)
+        .returns<PayPeriodItemRow[]>()
+    : { data: [] as PayPeriodItemRow[], error: null };
+
+  assertNoError(payPeriodItemsResult.error, "Pay period items query failed");
+
+  return {
+    manager: context.profile,
+    org: context.org,
+    profiles: profilesResult.data ?? [],
+    projects: projectsResult.data ?? [],
+    assignments: assignmentsResult.data ?? [],
+    tasks: tasksResult.data ?? [],
+    timeEvents: timeEventsResult.data ?? [],
+    media: mediaResult.data ?? [],
+    payrollRuns: payrollRunsResult.data ?? [],
+    payrollClosures: payrollClosuresResult.data ?? [],
+    storeVisits: [],
+    payPeriods: payPeriodsResult.data ?? [],
+    payPeriodItems: payPeriodItemsResult.data ?? [],
+    payrollLineItems: payrollLineItemsResult.data ?? [],
   };
 });
 
