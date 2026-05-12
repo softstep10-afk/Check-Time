@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildArchivedProjectRows,
   buildPaidPayrollArchive,
+  filterArchivedProjectsByDateRange,
+  filterPayrollArchiveByDateRange,
   getActiveOperationalMedia,
   getActiveOperationalTasks,
 } from "@/lib/archive-utils";
@@ -311,5 +313,95 @@ describe("archive helpers", () => {
     expect(hidden.totalGrossPaid).toBe(0);
     expect(hidden.rows[0].grossPaid).toBe(0);
     expect(hidden.rows[0].periods[0].grossPaid).toBe(0);
+  });
+
+  it("filters archived projects by archived date with updated_at fallback", () => {
+    const rows = buildArchivedProjectRows({
+      projects: [
+        project({
+          id: "jan",
+          name: "January",
+          status: "archived",
+          archived_at: "2026-01-15T12:00:00Z",
+        }),
+        project({
+          id: "feb",
+          name: "February fallback",
+          status: "archived",
+          updated_at: "2026-02-10T12:00:00Z",
+        }),
+      ],
+      tasks: [],
+      media: [],
+      sessions: [],
+      assignments: [],
+      includeFinancials: true,
+    });
+
+    expect(filterArchivedProjectsByDateRange(rows, {
+      fromDate: "2026-02-01",
+      toDate: "2026-02-28",
+    }).map((row) => row.id)).toEqual(["feb"]);
+  });
+
+  it("filters payroll archive periods by overlapping date range and recalculates totals", () => {
+    const worker = profile({ id: "worker", name: "Worker" });
+    const archive = buildPaidPayrollArchive(
+      {
+        profiles: [worker],
+        projects: [],
+        payPeriods: [
+          {
+            id: "april",
+            label: "April",
+            start_date: "2026-04-01",
+            end_date: "2026-04-15",
+            status: "paid",
+            paid_at: "2026-04-16T00:00:00Z",
+          },
+          {
+            id: "may",
+            label: "May",
+            start_date: "2026-05-01",
+            end_date: "2026-05-15",
+            status: "paid",
+            paid_at: "2026-05-16T00:00:00Z",
+          },
+        ],
+        payPeriodItems: [
+          {
+            id: "april-item",
+            pay_period_id: "april",
+            worker_id: worker.id,
+            regular_hours: 10,
+            overtime_hours: 0,
+            gross_total: 400,
+            status: "paid",
+          },
+          {
+            id: "may-item",
+            pay_period_id: "may",
+            worker_id: worker.id,
+            regular_hours: 5,
+            overtime_hours: 1,
+            gross_total: 300,
+            status: "paid",
+          },
+        ],
+        payrollRuns: [],
+        payrollLineItems: [],
+      },
+      { includeFinancials: true },
+    );
+
+    const filtered = filterPayrollArchiveByDateRange(archive, {
+      fromDate: "2026-04-10",
+      toDate: "2026-04-30",
+    });
+
+    expect(filtered.rows).toHaveLength(1);
+    expect(filtered.rows[0].periods.map((period) => period.label)).toEqual(["April"]);
+    expect(filtered.totalPaidHours).toBe(10);
+    expect(filtered.totalGrossPaid).toBe(400);
   });
 });

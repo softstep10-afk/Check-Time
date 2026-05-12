@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
 
 const DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
@@ -88,6 +88,7 @@ export function MapProvider({
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
   });
+  const mergedOptions = useMemo(() => ({ ...DEFAULT_OPTIONS, ...options }), [options]);
 
   const handleLoad = useCallback(
     (map: google.maps.Map) => {
@@ -134,7 +135,7 @@ export function MapProvider({
       mapContainerStyle={CONTAINER_STYLE}
       center={center}
       zoom={zoom}
-      options={{ ...DEFAULT_OPTIONS, ...options }}
+      options={mergedOptions}
       onLoad={handleLoad}
     >
       {children}

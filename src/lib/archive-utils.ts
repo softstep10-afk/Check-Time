@@ -85,6 +85,11 @@ export type PayrollArchiveSummary = {
   totalGrossPaid: number;
 };
 
+export type ArchiveDateRange = {
+  fromDate?: string | null;
+  toDate?: string | null;
+};
+
 function toNumber(value: unknown): number {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
@@ -107,8 +112,93 @@ function yearFromDate(value: string | null | undefined): number | null {
   return date.getUTCFullYear();
 }
 
+function dayBoundary(value: string | null | undefined, endOfDay: boolean): number | null {
+  if (!value) return null;
+  const suffix = endOfDay ? "T23:59:59.999" : "T00:00:00.000";
+  const date = new Date(`${value}${suffix}`);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function rangeBounds(range: ArchiveDateRange): { fromMs: number | null; toMs: number | null } {
+  return {
+    fromMs: dayBoundary(range.fromDate, false),
+    toMs: dayBoundary(range.toDate, true),
+  };
+}
+
+function dateValueInRange(value: string | null | undefined, range: ArchiveDateRange): boolean {
+  const { fromMs, toMs } = rangeBounds(range);
+  if (fromMs === null && toMs === null) return true;
+  if (!value) return false;
+  const ms = new Date(value).getTime();
+  if (Number.isNaN(ms)) return false;
+  if (fromMs !== null && ms < fromMs) return false;
+  if (toMs !== null && ms > toMs) return false;
+  return true;
+}
+
+function dateSpanOverlapsRange(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+  range: ArchiveDateRange,
+): boolean {
+  const { fromMs, toMs } = rangeBounds(range);
+  if (fromMs === null && toMs === null) return true;
+  const startMs = dayBoundary(startDate, false);
+  const endMs = dayBoundary(endDate ?? startDate, true);
+  if (startMs === null || endMs === null) return false;
+  if (fromMs !== null && endMs < fromMs) return false;
+  if (toMs !== null && startMs > toMs) return false;
+  return true;
+}
+
 function sortedNames(values: Set<string>): string[] {
   return [...values].sort((left, right) => left.localeCompare(right));
+}
+
+export function summarizePayrollArchiveRows(
+  rows: PayrollArchiveWorkerYear[],
+): PayrollArchiveSummary {
+  return {
+    rows,
+    years: [...new Set(rows.map((row) => row.year))].sort((left, right) => right - left),
+    totalPaidHours: round2(rows.reduce((sum, row) => sum + row.paidHours, 0)),
+    totalGrossPaid: round2(rows.reduce((sum, row) => sum + row.grossPaid, 0)),
+  };
+}
+
+export function filterArchivedProjectsByDateRange<T extends ArchivedProjectRow>(
+  projects: T[],
+  range: ArchiveDateRange,
+): T[] {
+  return projects.filter((project) => dateValueInRange(
+    project.archivedAt ?? project.updatedAt,
+    range,
+  ));
+}
+
+export function filterPayrollArchiveByDateRange(
+  summary: PayrollArchiveSummary,
+  range: ArchiveDateRange,
+): PayrollArchiveSummary {
+  const rows = summary.rows
+    .map((row) => {
+      const periods = row.periods.filter((period) => (
+        dateSpanOverlapsRange(period.startDate, period.endDate, range)
+      ));
+      if (periods.length === 0) return null;
+      return {
+        ...row,
+        paidHours: round2(periods.reduce((sum, period) => sum + period.hours, 0)),
+        grossPaid: round2(periods.reduce((sum, period) => sum + period.grossPaid, 0)),
+        periodCount: periods.length,
+        projectNames: sortedNames(new Set(periods.flatMap((period) => period.projectNames))),
+        periods,
+      };
+    })
+    .filter((row): row is PayrollArchiveWorkerYear => row !== null);
+
+  return summarizePayrollArchiveRows(rows);
 }
 
 export function isArchivedProject(
@@ -390,12 +480,6 @@ export function buildPaidPayrollArchive(
     });
   }
 
-  return {
-    rows: resultRows,
-    years: [...new Set(resultRows.map((row) => row.year))].sort((left, right) => right - left),
-    totalPaidHours: round2(resultRows.reduce((sum, row) => sum + row.paidHours, 0)),
-    totalGrossPaid: includeFinancials
-      ? round2(resultRows.reduce((sum, row) => sum + row.grossPaid, 0))
-      : 0,
-  };
+  const summary = summarizePayrollArchiveRows(resultRows);
+  return includeFinancials ? summary : { ...summary, totalGrossPaid: 0 };
 }

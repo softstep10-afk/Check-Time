@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { InfoWindow, Marker } from "@react-google-maps/api";
 import { MapProvider } from "@/components/maps/GoogleMaps";
 import { LiveWorkerMarkers } from "@/components/maps/LiveWorkerMarkers";
-import { StoreMarkers } from "@/components/maps/StoreMarkers";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
 import type { WorkerGeoPoint } from "@/lib/worker-types";
 import { parseGeoPoint } from "@/lib/worker-utils";
@@ -27,6 +26,8 @@ const MAP_COLORS = {
   gray: "#6B7280",
 } as const;
 
+type ProjectMarkerTone = keyof typeof MAP_COLORS;
+
 export type ActiveWorkerMarker = {
   id: string;
   name: string;
@@ -36,17 +37,17 @@ export type ActiveWorkerMarker = {
   lng: number;
 };
 
-function getProjectMarkerColor(project: {
+function getProjectMarkerTone(project: {
   status: string;
   onSiteWorkerCount: number;
-}) {
+}): ProjectMarkerTone {
   if (project.status === "paused" || project.status === "archived") {
-    return MAP_COLORS.gray;
+    return "gray";
   }
   if (project.onSiteWorkerCount > 0) {
-    return MAP_COLORS.green;
+    return "green";
   }
-  return MAP_COLORS.gold;
+  return "gold";
 }
 
 function makeProjectIcon(color: string, scale = 9) {
@@ -123,6 +124,34 @@ export function ProjectsStatusMap({
     [mappedProjects, activeWorkers],
   );
   const initialZoom = pickInitialMapZoom(totalPoints);
+  const projectIcons = useMemo(() => ({
+    gold: makeProjectIcon(MAP_COLORS.gold),
+    green: makeProjectIcon(MAP_COLORS.green),
+    gray: makeProjectIcon(MAP_COLORS.gray),
+  }), []);
+  const roleIcons = useMemo(() => ({
+    driver: makeRoleIcon("driver"),
+    supervisor: makeRoleIcon("supervisor"),
+    worker: makeRoleIcon("worker"),
+  }), []);
+  const mapOptions = useMemo<google.maps.MapOptions>(() => ({
+    minZoom: ACTIVE_MAP_MIN_ZOOM,
+    maxZoom: ACTIVE_MAP_MAX_ZOOM,
+    clickableIcons: false,
+    restriction: {
+      latLngBounds: {
+        // Restrict panning to a generous Pacific Northwest window so
+        // the manager can't accidentally drift the map onto an empty
+        // ocean / global view. The window is wider than the state so
+        // a slight overscroll still feels natural.
+        north: WASHINGTON_BOUNDS.north + 1.5,
+        south: WASHINGTON_BOUNDS.south - 1.5,
+        east: WASHINGTON_BOUNDS.east + 2,
+        west: WASHINGTON_BOUNDS.west - 2,
+      },
+      strictBounds: false,
+    },
+  }), []);
 
   const handleLoad = useCallback(
     (map: google.maps.Map) => {
@@ -162,32 +191,16 @@ export function ProjectsStatusMap({
     <MapProvider
       center={center}
       zoom={initialZoom}
-      options={{
-        minZoom: ACTIVE_MAP_MIN_ZOOM,
-        maxZoom: ACTIVE_MAP_MAX_ZOOM,
-        restriction: {
-          latLngBounds: {
-            // Restrict panning to a generous Pacific Northwest window so
-            // the manager can't accidentally drift the map onto an empty
-            // ocean / global view. The window is wider than the state so
-            // a slight overscroll still feels natural.
-            north: WASHINGTON_BOUNDS.north + 1.5,
-            south: WASHINGTON_BOUNDS.south - 1.5,
-            east: WASHINGTON_BOUNDS.east + 2,
-            west: WASHINGTON_BOUNDS.west - 2,
-          },
-          strictBounds: false,
-        },
-      }}
+      options={mapOptions}
       onLoad={handleLoad}
     >
       {mappedProjects.map((project) => {
-        const color = getProjectMarkerColor(project);
+        const tone = getProjectMarkerTone(project);
         return (
           <Marker
             key={project.id}
             position={{ lat: project.site.lat, lng: project.site.lng }}
-            icon={makeProjectIcon(color)}
+            icon={projectIcons[tone]}
             title={project.name}
             onClick={() => setSelectedProjectId(project.id)}
           />
@@ -199,7 +212,7 @@ export function ProjectsStatusMap({
           <Marker
             key={`active-${worker.id}`}
             position={{ lat: worker.lat, lng: worker.lng }}
-            icon={makeRoleIcon(role)}
+            icon={roleIcons[role]}
             title={
               worker.projectName
                 ? `${worker.name} — ${worker.projectName}`
@@ -266,7 +279,6 @@ export function ProjectsStatusMap({
         </InfoWindow>
       ) : null}
       <LiveWorkerMarkers />
-      <StoreMarkers />
     </MapProvider>
   );
 }

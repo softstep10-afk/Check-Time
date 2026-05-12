@@ -2,8 +2,13 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { Archive, Download, FolderKanban, Lock, Search, Wallet } from "lucide-react";
-import type {
+import { Archive, CalendarDays, Download, FolderKanban, Lock, Search, Wallet, X } from "lucide-react";
+import { DateField } from "@/components/shared/DateField";
+import {
+  filterArchivedProjectsByDateRange,
+  filterPayrollArchiveByDateRange,
+  summarizePayrollArchiveRows,
+  type ArchiveDateRange,
   ArchivedProjectRow,
   PayrollArchiveSummary,
   PayrollArchiveWorkerYear,
@@ -73,20 +78,33 @@ export function ArchivePage({
   const [tab, setTab] = useState<"projects" | "payroll">("projects");
   const [query, setQuery] = useState("");
   const [year, setYear] = useState<string>("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const normalizedQuery = query.trim().toLowerCase();
+  const hasDateRange = Boolean(fromDate || toDate);
+  const dateRange = useMemo<ArchiveDateRange>(() => ({
+    fromDate: fromDate || null,
+    toDate: toDate || null,
+  }), [fromDate, toDate]);
+
   const filteredProjects = useMemo(() => {
-    if (!normalizedQuery) return archivedProjects;
-    return archivedProjects.filter((project) => {
+    const dateFiltered = filterArchivedProjectsByDateRange(archivedProjects, dateRange);
+    if (!normalizedQuery) return dateFiltered;
+    return dateFiltered.filter((project) => {
       return (
         project.name.toLowerCase().includes(normalizedQuery) ||
         (project.address ?? "").toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [archivedProjects, normalizedQuery]);
+  }, [archivedProjects, dateRange, normalizedQuery]);
+
+  const dateFilteredPayroll = useMemo(() => (
+    filterPayrollArchiveByDateRange(payrollArchive, dateRange)
+  ), [dateRange, payrollArchive]);
 
   const filteredPayroll = useMemo(() => {
-    return payrollArchive.rows.filter((row) => {
+    return dateFilteredPayroll.rows.filter((row) => {
       if (year !== "all" && row.year !== Number(year)) return false;
       if (!normalizedQuery) return true;
       return (
@@ -94,7 +112,16 @@ export function ArchivePage({
         row.projectNames.some((name) => name.toLowerCase().includes(normalizedQuery))
       );
     });
-  }, [payrollArchive.rows, normalizedQuery, year]);
+  }, [dateFilteredPayroll.rows, normalizedQuery, year]);
+
+  const visiblePayrollSummary = useMemo(() => (
+    summarizePayrollArchiveRows(filteredPayroll)
+  ), [filteredPayroll]);
+
+  function clearDateRange() {
+    setFromDate("");
+    setToDate("");
+  }
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
@@ -146,17 +173,54 @@ export function ArchivePage({
             Payroll / Workers
           </button>
         </div>
-        <label className="flex min-w-[260px] items-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-sm"
-          style={{ borderColor: "var(--border-default)", background: "var(--bg-primary)" }}
-        >
-          <Search size={16} className="shrink-0 text-[var(--text-muted)]" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={tab === "projects" ? "Search project or address" : "Search worker or project"}
-            className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
-          />
-        </label>
+        <div className="flex flex-1 flex-wrap items-end justify-end gap-2">
+          <label className="flex min-w-[260px] items-center gap-2 rounded-[var(--radius-md)] border px-3 py-2 text-sm"
+            style={{ borderColor: "var(--border-default)", background: "var(--bg-primary)" }}
+          >
+            <Search size={16} className="shrink-0 text-[var(--text-muted)]" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={tab === "projects" ? "Search project or address" : "Search worker or project"}
+              className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
+            />
+          </label>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border text-[var(--text-muted)]"
+              style={{ borderColor: "var(--border-default)", background: "var(--bg-primary)" }}
+            >
+              <CalendarDays size={16} />
+            </div>
+            <div className="w-[140px]">
+              <DateField
+                label="From"
+                showHint={false}
+                value={fromDate}
+                onChange={(event) => setFromDate(event.target.value)}
+                className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+            <div className="w-[140px]">
+              <DateField
+                label="To"
+                showHint={false}
+                value={toDate}
+                onChange={(event) => setToDate(event.target.value)}
+                className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+            {hasDateRange ? (
+              <button
+                type="button"
+                onClick={clearDateRange}
+                className="button-base button-secondary h-10 px-3 text-xs"
+              >
+                <X size={14} />
+                Clear dates
+              </button>
+            ) : null}
+          </div>
+        </div>
       </section>
 
       {tab === "projects" ? (
@@ -164,24 +228,24 @@ export function ArchivePage({
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Archived projects</div>
-              <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{archivedProjects.length}</div>
+              <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{filteredProjects.length}</div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Tasks preserved</div>
               <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
-                {archivedProjects.reduce((sum, project) => sum + project.taskCount, 0)}
+                {filteredProjects.reduce((sum, project) => sum + project.taskCount, 0)}
               </div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Media preserved</div>
               <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
-                {archivedProjects.reduce((sum, project) => sum + project.mediaCount, 0)}
+                {filteredProjects.reduce((sum, project) => sum + project.mediaCount, 0)}
               </div>
             </div>
             <div className="surface-card p-4">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Worker hours</div>
               <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
-                {archivedProjects.reduce((sum, project) => sum + project.hours, 0).toFixed(1)}h
+                {filteredProjects.reduce((sum, project) => sum + project.hours, 0).toFixed(1)}h
               </div>
             </div>
           </div>
@@ -283,15 +347,15 @@ export function ArchivePage({
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="surface-card p-4">
                   <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Paid hours</div>
-                  <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{payrollArchive.totalPaidHours.toFixed(1)}h</div>
+                  <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{visiblePayrollSummary.totalPaidHours.toFixed(1)}h</div>
                 </div>
                 <div className="surface-card p-4">
                   <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Gross paid</div>
-                  <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{currency.format(payrollArchive.totalGrossPaid)}</div>
+                  <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{currency.format(visiblePayrollSummary.totalGrossPaid)}</div>
                 </div>
                 <div className="surface-card p-4">
                   <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Worker years</div>
-                  <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{payrollArchive.rows.length}</div>
+                  <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{visiblePayrollSummary.rows.length}</div>
                 </div>
               </div>
 
