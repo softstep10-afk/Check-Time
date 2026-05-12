@@ -10,9 +10,99 @@ import { getArchivePageData } from "@/lib/manager-data";
 import { buildManagerSessions } from "@/lib/manager-utils";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { createClient } from "@/lib/supabase/server";
+import { getServerLocale } from "@/lib/i18n/server";
 import { formatDurationCompact } from "@/lib/worker-utils";
 
 export const revalidate = 0;
+
+const COPY = {
+  en: {
+    back: "Back to Archive",
+    eyebrow: "Archived Project",
+    noAddress: "No address",
+    archived: "archived",
+    noArchiveDate: "date not recorded",
+    readOnly: "Read-only history",
+    workers: "Workers",
+    sessions: "Sessions",
+    hours: "Hours",
+    files: "Files",
+    noWorkers: "No workers recorded.",
+    workSessions: "Work Sessions",
+    noSessions: "No sessions recorded.",
+    worker: "Worker",
+    clockIn: "Clock in",
+    clockOut: "Clock out",
+    checkout: "Checkout",
+    open: "Open",
+    tasks: "Tasks",
+    noTasks: "No tasks recorded.",
+    task: "Task",
+    status: "Status",
+    assigned: "Assigned",
+    completedBy: "Completed by",
+    completed: "Completed",
+    unknown: "Unknown",
+    notCompleted: "Not completed",
+    unassigned: "Unassigned",
+    mediaTitle: "Media, Checkout Proof, PDFs, Receipts",
+    taskStatus: {
+      pending: "Pending",
+      in_progress: "In progress",
+      done: "Done",
+      cancelled: "Cancelled",
+    } as Record<string, string>,
+    checkoutStatus: {
+      not_required: "Not required",
+      pending: "Pending",
+      uploaded: "Uploaded",
+      verified: "Verified",
+    } as Record<string, string>,
+  },
+  ru: {
+    back: "Назад в архив",
+    eyebrow: "Архивный проект",
+    noAddress: "Адрес не указан",
+    archived: "архивирован",
+    noArchiveDate: "дата не записана",
+    readOnly: "История только для просмотра",
+    workers: "Рабочие",
+    sessions: "Смены",
+    hours: "Часы",
+    files: "Файлы",
+    noWorkers: "Рабочие не записаны.",
+    workSessions: "Рабочие смены",
+    noSessions: "Смены не записаны.",
+    worker: "Рабочий",
+    clockIn: "Начало",
+    clockOut: "Конец",
+    checkout: "Выход",
+    open: "Открыта",
+    tasks: "Задачи",
+    noTasks: "Задачи не записаны.",
+    task: "Задача",
+    status: "Статус",
+    assigned: "Назначено",
+    completedBy: "Выполнил",
+    completed: "Завершено",
+    unknown: "Неизвестно",
+    notCompleted: "Не завершено",
+    unassigned: "Не назначено",
+    mediaTitle: "Медиа, подтверждения выхода, PDF и чеки",
+    taskStatus: {
+      pending: "Ожидает",
+      in_progress: "В работе",
+      done: "Готово",
+      cancelled: "Отменена",
+    } as Record<string, string>,
+    checkoutStatus: {
+      not_required: "Не требуется",
+      pending: "Ожидает",
+      uploaded: "Загружено",
+      verified: "Проверено",
+    } as Record<string, string>,
+  },
+} as const;
 
 function receiptAmount(metadata: Record<string, unknown>): number | null {
   const value = metadata.amount;
@@ -46,6 +136,9 @@ export default async function ArchivedProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const locale = await getServerLocale();
+  const text = COPY[locale];
+  const dateLocale = locale === "ru" ? "ru-RU" : "en-US";
   const data = await getArchivePageData();
   const project = data.projects.find((item) => item.id === id && isArchivedProject(item));
   if (!project) notFound();
@@ -95,52 +188,52 @@ export default async function ArchivedProjectDetailPage({
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
         <Link href="/archive" className="text-sm font-semibold text-[var(--brand-yellow)]">
-          Back to Archive
+          {text.back}
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-              Archived Project
+              {text.eyebrow}
             </p>
             <h1 className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{project.name}</h1>
             <p className="mt-1 max-w-[72ch] text-sm leading-6 text-[var(--text-secondary)]">
-              {project.address ?? "No address"} · archived {project.archived_at ? new Date(project.archived_at).toLocaleDateString() : "date not recorded"}
+              {project.address ?? text.noAddress} · {text.archived} {project.archived_at ? new Date(project.archived_at).toLocaleDateString(dateLocale) : text.noArchiveDate}
             </p>
           </div>
           <span
             className="rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em]"
             style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
           >
-            Read-only history
+            {text.readOnly}
           </span>
         </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="surface-card p-4">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Workers</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.workers}</div>
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{workers.length}</div>
         </div>
         <div className="surface-card p-4">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Sessions</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.sessions}</div>
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{sessions.length}</div>
         </div>
         <div className="surface-card p-4">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Hours</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.hours}</div>
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
             {(sessions.reduce((sum, session) => sum + session.durationMinutes, 0) / 60).toFixed(1)}h
           </div>
         </div>
         <div className="surface-card p-4">
-          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Files</div>
+          <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.files}</div>
           <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{mediaItems.length}</div>
         </div>
       </section>
 
       <section className="surface-card p-4">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">Workers</h2>
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.workers}</h2>
         {workers.length === 0 ? (
-          <div className="mt-4 text-sm text-[var(--text-secondary)]">No workers recorded.</div>
+          <div className="mt-4 text-sm text-[var(--text-secondary)]">{text.noWorkers}</div>
         ) : (
           <div className="mt-4 flex flex-wrap gap-2">
             {workers.map((worker) => (
@@ -158,18 +251,18 @@ export default async function ArchivedProjectDetailPage({
       </section>
 
       <section className="surface-card overflow-x-auto p-4">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">Work Sessions</h2>
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.workSessions}</h2>
         {sessions.length === 0 ? (
-          <div className="mt-4 text-sm text-[var(--text-secondary)]">No sessions recorded.</div>
+          <div className="mt-4 text-sm text-[var(--text-secondary)]">{text.noSessions}</div>
         ) : (
           <table className="mt-4 w-full text-left text-sm">
             <thead>
               <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
-                <th className="pb-3 pr-3 font-semibold">Worker</th>
-                <th className="pb-3 pr-3 font-semibold">Clock in</th>
-                <th className="pb-3 pr-3 font-semibold">Clock out</th>
-                <th className="pb-3 pr-3 font-semibold">Hours</th>
-                <th className="pb-3 font-semibold">Checkout</th>
+                <th className="pb-3 pr-3 font-semibold">{text.worker}</th>
+                <th className="pb-3 pr-3 font-semibold">{text.clockIn}</th>
+                <th className="pb-3 pr-3 font-semibold">{text.clockOut}</th>
+                <th className="pb-3 pr-3 font-semibold">{text.hours}</th>
+                <th className="pb-3 font-semibold">{text.checkout}</th>
               </tr>
             </thead>
             <tbody>
@@ -181,15 +274,15 @@ export default async function ArchivedProjectDetailPage({
                     </Link>
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                    {new Date(session.clockInTime).toLocaleString()}
+                    {new Date(session.clockInTime).toLocaleString(dateLocale)}
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                    {session.clockOutTime ? new Date(session.clockOutTime).toLocaleString() : "Open"}
+                    {session.clockOutTime ? new Date(session.clockOutTime).toLocaleString(dateLocale) : text.open}
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-primary)]">
                     {formatDurationCompact(session.durationMinutes)}
                   </td>
-                  <td className="py-3 text-[var(--text-secondary)]">{session.checkoutStatus}</td>
+                  <td className="py-3 text-[var(--text-secondary)]">{text.checkoutStatus[session.checkoutStatus] ?? session.checkoutStatus}</td>
                 </tr>
               ))}
             </tbody>
@@ -198,25 +291,25 @@ export default async function ArchivedProjectDetailPage({
       </section>
 
       <section className="surface-card overflow-x-auto p-4">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">Tasks</h2>
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.tasks}</h2>
         {projectTasks.length === 0 ? (
-          <div className="mt-4 text-sm text-[var(--text-secondary)]">No tasks recorded.</div>
+          <div className="mt-4 text-sm text-[var(--text-secondary)]">{text.noTasks}</div>
         ) : (
           <table className="mt-4 w-full text-left text-sm">
             <thead>
               <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
-                <th className="pb-3 pr-3 font-semibold">Task</th>
-                <th className="pb-3 pr-3 font-semibold">Status</th>
-                <th className="pb-3 pr-3 font-semibold">Assigned</th>
-                <th className="pb-3 pr-3 font-semibold">Completed by</th>
-                <th className="pb-3 font-semibold">Completed</th>
+                <th className="pb-3 pr-3 font-semibold">{text.task}</th>
+                <th className="pb-3 pr-3 font-semibold">{text.status}</th>
+                <th className="pb-3 pr-3 font-semibold">{text.assigned}</th>
+                <th className="pb-3 pr-3 font-semibold">{text.completedBy}</th>
+                <th className="pb-3 font-semibold">{text.completed}</th>
               </tr>
             </thead>
             <tbody>
               {projectTasks.map((task) => {
                 const audit = getTaskCompletionAudit(task);
                 const completedById = task.completed_by ?? audit.completedById;
-                const completedBy = completedById ? profilesById.get(completedById)?.name ?? "Unknown" : "Not completed";
+                const completedBy = completedById ? profilesById.get(completedById)?.name ?? text.unknown : text.notCompleted;
                 return (
                   <tr key={task.id} className="border-b border-[var(--border-subtle)]">
                     <td className="py-3 pr-3">
@@ -225,13 +318,13 @@ export default async function ArchivedProjectDetailPage({
                         <div className="mt-0.5 text-xs text-[var(--text-secondary)]">{task.description}</div>
                       ) : null}
                     </td>
-                    <td className="py-3 pr-3 text-[var(--text-secondary)]">{task.status}</td>
+                    <td className="py-3 pr-3 text-[var(--text-secondary)]">{text.taskStatus[task.status] ?? task.status}</td>
                     <td className="py-3 pr-3 text-[var(--text-secondary)]">
-                      {task.assigned_to ? profilesById.get(task.assigned_to)?.name ?? "Unknown" : "Unassigned"}
+                      {task.assigned_to ? profilesById.get(task.assigned_to)?.name ?? text.unknown : text.unassigned}
                     </td>
                     <td className="py-3 pr-3 text-[var(--text-secondary)]">{completedBy}</td>
                     <td className="py-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                      {task.completed_at ? new Date(task.completed_at).toLocaleString() : "Not completed"}
+                      {task.completed_at ? new Date(task.completed_at).toLocaleString(dateLocale) : text.notCompleted}
                     </td>
                   </tr>
                 );
@@ -242,7 +335,7 @@ export default async function ArchivedProjectDetailPage({
       </section>
 
       <section className="surface-card p-4">
-        <h2 className="text-lg font-bold text-[var(--text-primary)]">Media, Checkout Proof, PDFs, Receipts</h2>
+        <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.mediaTitle}</h2>
         <div className="mt-4">
           <ArchiveProjectMediaList
             items={mediaItems}

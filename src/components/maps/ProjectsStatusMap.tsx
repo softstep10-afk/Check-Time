@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { InfoWindow, Marker } from "@react-google-maps/api";
 import { MapProvider } from "@/components/maps/GoogleMaps";
 import { LiveWorkerMarkers } from "@/components/maps/LiveWorkerMarkers";
+import { useTranslation } from "@/lib/i18n";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
 import type { WorkerGeoPoint } from "@/lib/worker-types";
 import { parseGeoPoint } from "@/lib/worker-utils";
@@ -24,6 +25,19 @@ const MAP_COLORS = {
   gold: "#BFA234",
   green: "#2EA67A",
   gray: "#6B7280",
+} as const;
+
+const COPY = {
+  en: {
+    onSite: "On site:",
+    openTasks: "Open tasks:",
+    openProject: "Open project →",
+  },
+  ru: {
+    onSite: "На объекте:",
+    openTasks: "Открытые задачи:",
+    openProject: "Открыть проект →",
+  },
 } as const;
 
 type ProjectMarkerTone = keyof typeof MAP_COLORS;
@@ -100,6 +114,8 @@ export function ProjectsStatusMap({
   activeWorkers?: ActiveWorkerMarker[];
 }) {
   const router = useRouter();
+  const { locale } = useTranslation();
+  const text = COPY[locale];
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Filter archived/deleted/completed projects out of the active map so
@@ -251,11 +267,11 @@ export function ProjectsStatusMap({
             ) : null}
             <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
               <span>
-                <span style={{ color: "#9ca3af" }}>On site:</span>{" "}
+                <span style={{ color: "#9ca3af" }}>{text.onSite}</span>{" "}
                 <strong>{selectedProject.onSiteWorkerCount}</strong>
               </span>
               <span>
-                <span style={{ color: "#9ca3af" }}>Open tasks:</span>{" "}
+                <span style={{ color: "#9ca3af" }}>{text.openTasks}</span>{" "}
                 <strong>{selectedProject.openTaskCount}</strong>
               </span>
             </div>
@@ -273,7 +289,7 @@ export function ProjectsStatusMap({
                 fontSize: 12,
               }}
             >
-              Open project →
+              {text.openProject}
             </button>
           </div>
         </InfoWindow>

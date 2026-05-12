@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Archive, CalendarDays, Download, FolderKanban, Lock, Search, Wallet, X } from "lucide-react";
 import { DateField } from "@/components/shared/DateField";
+import { useTranslation } from "@/lib/i18n";
 import {
   filterArchivedProjectsByDateRange,
   filterPayrollArchiveByDateRange,
@@ -19,21 +20,99 @@ const currency = new Intl.NumberFormat("en-US", {
   currency: "USD",
 });
 
-function formatDate(value: string | null): string {
-  if (!value) return "Not recorded";
+const COPY = {
+  en: {
+    notRecorded: "Not recorded",
+    csvHeaders: ["Worker", "Role", "Year", "Paid hours", "Gross paid", "Payroll periods", "Projects"],
+    eyebrow: "Operations History",
+    title: "Archive",
+    description: "Historical projects and paid payroll records. Deleted items stay in Trash.",
+    openTrash: "Open Trash",
+    projectsTab: "Projects",
+    payrollTab: "Payroll / Workers",
+    searchProjects: "Search project or address",
+    searchPayroll: "Search worker or project",
+    from: "From",
+    to: "To",
+    clearDates: "Clear dates",
+    archivedProjects: "Archived projects",
+    tasksPreserved: "Tasks preserved",
+    mediaPreserved: "Media preserved",
+    workerHours: "Worker hours",
+    noProjects: "No archived projects found.",
+    project: "Project",
+    archived: "Archived",
+    work: "Work",
+    tasks: "Tasks",
+    media: "Media",
+    history: "History",
+    noAddress: "No address",
+    workers: "workers",
+    receipts: "receipts",
+    open: "Open",
+    payrollLockedTitle: "Payroll archive is finance-only",
+    payrollLockedDesc: "Archived project history stays visible here, but gross paid, payroll periods, rates, and paid totals require owner/admin or finance access.",
+    allYears: "All years",
+    paidHours: "Paid hours",
+    grossPaid: "Gross paid",
+    workerYears: "Worker years",
+    noPayroll: "No paid payroll rows found.",
+    worker: "Worker",
+    year: "Year",
+    periods: "Periods",
+    noProjectSplit: "No project split recorded",
+    footer: "Archive preserves linked history. Trash is only for deleted rows that can be restored or permanently removed.",
+  },
+  ru: {
+    notRecorded: "Не записано",
+    csvHeaders: ["Рабочий", "Роль", "Год", "Оплаченные часы", "Начислено", "Периоды зарплаты", "Проекты"],
+    eyebrow: "История работ",
+    title: "Архив",
+    description: "Здесь хранятся архивные проекты и оплаченная зарплата. Удалённые элементы остаются в Корзине.",
+    openTrash: "Открыть корзину",
+    projectsTab: "Проекты",
+    payrollTab: "Зарплата / Рабочие",
+    searchProjects: "Поиск по проекту или адресу",
+    searchPayroll: "Поиск по рабочему или проекту",
+    from: "От",
+    to: "До",
+    clearDates: "Сбросить даты",
+    archivedProjects: "Проектов в архиве",
+    tasksPreserved: "Задач сохранено",
+    mediaPreserved: "Файлов сохранено",
+    workerHours: "Часы рабочих",
+    noProjects: "Архивные проекты не найдены.",
+    project: "Проект",
+    archived: "Архивирован",
+    work: "Работа",
+    tasks: "Задачи",
+    media: "Файлы",
+    history: "История",
+    noAddress: "Адрес не указан",
+    workers: "рабочих",
+    receipts: "чеков",
+    open: "Открыть",
+    payrollLockedTitle: "Архив зарплаты доступен только финансам",
+    payrollLockedDesc: "История архивных проектов остаётся видимой, но начисления, периоды зарплаты, ставки и суммы доступны только владельцу, администратору или пользователю с финансовым доступом.",
+    allYears: "Все годы",
+    paidHours: "Оплаченные часы",
+    grossPaid: "Начислено",
+    workerYears: "Рабочие по годам",
+    noPayroll: "Оплаченные строки зарплаты не найдены.",
+    worker: "Рабочий",
+    year: "Год",
+    periods: "Периоды",
+    noProjectSplit: "Разбивка по проектам не записана",
+    footer: "Архив сохраняет связанную историю. Корзина только для удалённых строк, которые можно восстановить или удалить навсегда.",
+  },
+} as const;
+
+function formatDate(value: string | null, fallback: string): string {
+  if (!value) return fallback;
   return new Date(value).toLocaleDateString();
 }
 
-function makePayrollCsv(rows: PayrollArchiveWorkerYear[]): string {
-  const header = [
-    "Worker",
-    "Role",
-    "Year",
-    "Paid hours",
-    "Gross paid",
-    "Payroll periods",
-    "Projects",
-  ];
+function makePayrollCsv(rows: PayrollArchiveWorkerYear[], header: readonly string[]): string {
   const body = rows.map((row) => [
     row.workerName,
     row.workerRole,
@@ -53,8 +132,8 @@ function makePayrollCsv(rows: PayrollArchiveWorkerYear[]): string {
     .join("\n");
 }
 
-function exportPayrollCsv(rows: PayrollArchiveWorkerYear[]) {
-  const csv = makePayrollCsv(rows);
+function exportPayrollCsv(rows: PayrollArchiveWorkerYear[], header: readonly string[]) {
+  const csv = makePayrollCsv(rows, header);
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -80,6 +159,8 @@ export function ArchivePage({
   const [year, setYear] = useState<string>("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const { locale } = useTranslation();
+  const text = COPY[locale];
 
   const normalizedQuery = query.trim().toLowerCase();
   const hasDateRange = Boolean(fromDate || toDate);
@@ -127,13 +208,13 @@ export function ArchivePage({
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          Operations History
+          {text.eyebrow}
         </p>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 className="text-[28px] font-bold text-[var(--text-primary)]">Archive</h1>
+            <h1 className="text-[28px] font-bold text-[var(--text-primary)]">{text.title}</h1>
             <p className="mt-1 max-w-[72ch] text-sm leading-6 text-[var(--text-secondary)]">
-              Historical projects and paid payroll records. Deleted items stay in Trash.
+              {text.description}
             </p>
           </div>
           <Link
@@ -141,7 +222,7 @@ export function ArchivePage({
             className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
             style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
           >
-            Open Trash
+            {text.openTrash}
           </Link>
         </div>
       </section>
@@ -158,7 +239,7 @@ export function ArchivePage({
             }}
           >
             <FolderKanban size={16} />
-            Projects
+            {text.projectsTab}
           </button>
           <button
             type="button"
@@ -170,7 +251,7 @@ export function ArchivePage({
             }}
           >
             <Wallet size={16} />
-            Payroll / Workers
+            {text.payrollTab}
           </button>
         </div>
         <div className="flex flex-1 flex-wrap items-end justify-end gap-2">
@@ -181,7 +262,7 @@ export function ArchivePage({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={tab === "projects" ? "Search project or address" : "Search worker or project"}
+              placeholder={tab === "projects" ? text.searchProjects : text.searchPayroll}
               className="w-full bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
             />
           </label>
@@ -193,7 +274,7 @@ export function ArchivePage({
             </div>
             <div className="w-[140px]">
               <DateField
-                label="From"
+                label={text.from}
                 showHint={false}
                 value={fromDate}
                 onChange={(event) => setFromDate(event.target.value)}
@@ -202,7 +283,7 @@ export function ArchivePage({
             </div>
             <div className="w-[140px]">
               <DateField
-                label="To"
+                label={text.to}
                 showHint={false}
                 value={toDate}
                 onChange={(event) => setToDate(event.target.value)}
@@ -216,7 +297,7 @@ export function ArchivePage({
                 className="button-base button-secondary h-10 px-3 text-xs"
               >
                 <X size={14} />
-                Clear dates
+                {text.clearDates}
               </button>
             ) : null}
           </div>
@@ -227,23 +308,23 @@ export function ArchivePage({
         <section className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div className="surface-card p-4">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Archived projects</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.archivedProjects}</div>
               <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{filteredProjects.length}</div>
             </div>
             <div className="surface-card p-4">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Tasks preserved</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.tasksPreserved}</div>
               <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
                 {filteredProjects.reduce((sum, project) => sum + project.taskCount, 0)}
               </div>
             </div>
             <div className="surface-card p-4">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Media preserved</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.mediaPreserved}</div>
               <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
                 {filteredProjects.reduce((sum, project) => sum + project.mediaCount, 0)}
               </div>
             </div>
             <div className="surface-card p-4">
-              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Worker hours</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.workerHours}</div>
               <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">
                 {filteredProjects.reduce((sum, project) => sum + project.hours, 0).toFixed(1)}h
               </div>
@@ -253,18 +334,18 @@ export function ArchivePage({
           <div className="surface-card overflow-x-auto p-4">
             {filteredProjects.length === 0 ? (
               <div className="py-10 text-center text-sm text-[var(--text-secondary)]">
-                No archived projects found.
+                {text.noProjects}
               </div>
             ) : (
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
-                    <th className="pb-3 pr-3 font-semibold">Project</th>
-                    <th className="pb-3 pr-3 font-semibold">Archived</th>
-                    <th className="pb-3 pr-3 font-semibold">Work</th>
-                    <th className="pb-3 pr-3 font-semibold">Tasks</th>
-                    <th className="pb-3 pr-3 font-semibold">Media</th>
-                    <th className="pb-3 font-semibold">History</th>
+                    <th className="pb-3 pr-3 font-semibold">{text.project}</th>
+                    <th className="pb-3 pr-3 font-semibold">{text.archived}</th>
+                    <th className="pb-3 pr-3 font-semibold">{text.work}</th>
+                    <th className="pb-3 pr-3 font-semibold">{text.tasks}</th>
+                    <th className="pb-3 pr-3 font-semibold">{text.media}</th>
+                    <th className="pb-3 font-semibold">{text.history}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -272,14 +353,14 @@ export function ArchivePage({
                     <tr key={project.id} className="border-b border-[var(--border-subtle)]">
                       <td className="py-3 pr-3">
                         <div className="font-semibold text-[var(--text-primary)]">{project.name}</div>
-                        <div className="mt-0.5 text-xs text-[var(--text-secondary)]">{project.address ?? "No address"}</div>
+                        <div className="mt-0.5 text-xs text-[var(--text-secondary)]">{project.address ?? text.noAddress}</div>
                       </td>
                       <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                        {formatDate(project.archivedAt)}
+                        {formatDate(project.archivedAt, text.notRecorded)}
                       </td>
                       <td className="py-3 pr-3 whitespace-nowrap text-[var(--text-primary)]">
                         <span className="font-mono">{project.hours.toFixed(1)}h</span>
-                        <span className="ml-2 text-xs text-[var(--text-muted)]">{project.workerCount} workers</span>
+                        <span className="ml-2 text-xs text-[var(--text-muted)]">{project.workerCount} {text.workers}</span>
                       </td>
                       <td className="py-3 pr-3 whitespace-nowrap text-[var(--text-secondary)]">
                         {project.completedTaskCount}/{project.taskCount} done
@@ -288,14 +369,14 @@ export function ArchivePage({
                         {project.mediaCount} files
                         {project.receiptCount > 0 ? (
                           <span className="ml-2">
-                            {project.receiptCount} receipts
+                            {project.receiptCount} {text.receipts}
                             {hasFinanceAccess ? `, ${currency.format(project.receiptTotal)}` : ""}
                           </span>
                         ) : null}
                       </td>
                       <td className="py-3">
                         <Link href={`/archive/projects/${project.id}`} className="text-sm font-semibold text-[var(--brand-yellow)]">
-                          Open
+                          {text.open}
                         </Link>
                       </td>
                     </tr>
@@ -311,9 +392,9 @@ export function ArchivePage({
             <div className="surface-card flex items-start gap-3 p-4">
               <Lock size={18} className="mt-0.5 shrink-0 text-[var(--text-muted)]" />
               <div>
-                <h2 className="text-base font-bold text-[var(--text-primary)]">Payroll archive is finance-only</h2>
+                <h2 className="text-base font-bold text-[var(--text-primary)]">{text.payrollLockedTitle}</h2>
                 <p className="mt-1 text-sm leading-6 text-[var(--text-secondary)]">
-                  Archived project history stays visible here, but gross paid, payroll periods, rates, and paid totals require owner/admin or finance access.
+                  {text.payrollLockedDesc}
                 </p>
               </div>
             </div>
@@ -327,7 +408,7 @@ export function ArchivePage({
                     className="rounded-[var(--radius-sm)] border bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
                     style={{ borderColor: "var(--border-default)" }}
                   >
-                    <option value="all">All years</option>
+                    <option value="all">{text.allYears}</option>
                     {payrollArchive.years.map((item) => (
                       <option key={item} value={item}>{item}</option>
                     ))}
@@ -335,7 +416,7 @@ export function ArchivePage({
                 </div>
                 <button
                   type="button"
-                  onClick={() => exportPayrollCsv(filteredPayroll)}
+                  onClick={() => exportPayrollCsv(filteredPayroll, text.csvHeaders)}
                   className="button-base button-secondary px-3 py-2 text-xs"
                   disabled={filteredPayroll.length === 0}
                 >
@@ -346,15 +427,15 @@ export function ArchivePage({
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="surface-card p-4">
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Paid hours</div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.paidHours}</div>
                   <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{visiblePayrollSummary.totalPaidHours.toFixed(1)}h</div>
                 </div>
                 <div className="surface-card p-4">
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Gross paid</div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.grossPaid}</div>
                   <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{currency.format(visiblePayrollSummary.totalGrossPaid)}</div>
                 </div>
                 <div className="surface-card p-4">
-                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Worker years</div>
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{text.workerYears}</div>
                   <div className="mt-2 font-mono text-[28px] font-bold text-[var(--text-primary)]">{visiblePayrollSummary.rows.length}</div>
                 </div>
               </div>
@@ -362,18 +443,18 @@ export function ArchivePage({
               <div className="surface-card overflow-x-auto p-4">
                 {filteredPayroll.length === 0 ? (
                   <div className="py-10 text-center text-sm text-[var(--text-secondary)]">
-                    No paid payroll rows found.
+                    {text.noPayroll}
                   </div>
                 ) : (
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
-                        <th className="pb-3 pr-3 font-semibold">Worker</th>
-                        <th className="pb-3 pr-3 font-semibold">Year</th>
-                        <th className="pb-3 pr-3 font-semibold">Paid hours</th>
-                        <th className="pb-3 pr-3 font-semibold">Gross paid</th>
-                        <th className="pb-3 pr-3 font-semibold">Periods</th>
-                        <th className="pb-3 font-semibold">Projects</th>
+                        <th className="pb-3 pr-3 font-semibold">{text.worker}</th>
+                        <th className="pb-3 pr-3 font-semibold">{text.year}</th>
+                        <th className="pb-3 pr-3 font-semibold">{text.paidHours}</th>
+                        <th className="pb-3 pr-3 font-semibold">{text.grossPaid}</th>
+                        <th className="pb-3 pr-3 font-semibold">{text.periods}</th>
+                        <th className="pb-3 font-semibold">{text.projectsTab}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -400,7 +481,7 @@ export function ArchivePage({
                             </div>
                           </td>
                           <td className="py-3 text-[var(--text-secondary)]">
-                            {row.projectNames.length > 0 ? row.projectNames.join(", ") : "No project split recorded"}
+                            {row.projectNames.length > 0 ? row.projectNames.join(", ") : text.noProjectSplit}
                           </td>
                         </tr>
                       ))}
@@ -415,7 +496,7 @@ export function ArchivePage({
 
       <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
         <Archive size={14} />
-        Archive preserves linked history. Trash is only for deleted rows that can be restored or permanently removed.
+        {text.footer}
       </div>
     </div>
   );

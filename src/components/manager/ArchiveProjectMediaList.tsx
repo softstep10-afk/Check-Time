@@ -5,6 +5,7 @@ import { ExternalLink, FileText, Image, Play, Receipt } from "lucide-react";
 import { selectMediaPlayback, signWithTimeout } from "@/lib/media-playback";
 import { normalizeStoragePath } from "@/lib/task-attachments";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/lib/i18n";
 import type { MediaType } from "@/types/database";
 
 export type ArchiveProjectMediaItem = {
@@ -26,6 +27,23 @@ const currency = new Intl.NumberFormat("en-US", {
   currency: "USD",
 });
 
+const COPY = {
+  en: {
+    openError: "Could not open this file. Try again from the project detail page.",
+    empty: "No media preserved for this project.",
+    receipt: "Receipt",
+    opening: "Opening",
+    open: "Open",
+  },
+  ru: {
+    openError: "Не удалось открыть файл. Попробуйте ещё раз со страницы проекта.",
+    empty: "По этому проекту нет сохранённых файлов.",
+    receipt: "Чек",
+    opening: "Открываю",
+    open: "Открыть",
+  },
+} as const;
+
 function iconFor(item: ArchiveProjectMediaItem) {
   if (item.isReceipt) return Receipt;
   if (item.media_type === "photo") return Image;
@@ -40,6 +58,8 @@ export function ArchiveProjectMediaList({
   items: ArchiveProjectMediaItem[];
   hasFinanceAccess: boolean;
 }) {
+  const { locale } = useTranslation();
+  const text = COPY[locale];
   const supabase = useMemo(() => createClient(), []);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -56,7 +76,7 @@ export function ArchiveProjectMediaList({
     setBusyId(null);
 
     if (signError || !data?.signedUrl) {
-      setError("Could not open this file. Try again from the project detail page.");
+      setError(text.openError);
       return;
     }
 
@@ -66,7 +86,7 @@ export function ArchiveProjectMediaList({
   if (items.length === 0) {
     return (
       <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-sm text-[var(--text-secondary)]">
-        No media preserved for this project.
+        {text.empty}
       </div>
     );
   }
@@ -105,7 +125,7 @@ export function ArchiveProjectMediaList({
                     ) : null}
                     {item.isReceipt ? (
                       <div className="mt-2 text-xs font-semibold text-[var(--text-secondary)]">
-                        Receipt
+                        {text.receipt}
                         {hasFinanceAccess && item.receiptAmount !== null
                           ? ` · ${currency.format(item.receiptAmount)}`
                           : ""}
@@ -120,7 +140,7 @@ export function ArchiveProjectMediaList({
                   className="button-base button-secondary shrink-0 px-2.5 py-1.5 text-xs"
                 >
                   <ExternalLink size={14} />
-                  {busyId === item.id ? "Opening" : "Open"}
+                  {busyId === item.id ? text.opening : text.open}
                 </button>
               </div>
             </div>
