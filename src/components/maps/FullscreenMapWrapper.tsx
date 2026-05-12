@@ -7,6 +7,7 @@ import {
   ProjectsStatusMap,
   type ActiveWorkerMarker,
 } from "@/components/maps/ProjectsStatusMap";
+import { isProjectOnActiveMap } from "@/lib/map-constants";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
 
 export function FullscreenMapWrapper({
@@ -18,7 +19,11 @@ export function FullscreenMapWrapper({
 }) {
   const [fullscreen, setFullscreen] = useState(false);
 
-  const filteredProjects = projects.filter((p) => p.status !== "completed");
+  // Active map should ignore archived/deleted/completed projects so the
+  // manager only sees operational sites. ProjectsStatusMap also filters
+  // defensively; the duplicate is intentional in case a future caller
+  // passes its own dataset straight into ProjectsStatusMap.
+  const filteredProjects = projects.filter(isProjectOnActiveMap);
 
   // The fullscreen overlay is portaled into document.body so it escapes
   // any transform / filter / contain ancestor that would otherwise pin

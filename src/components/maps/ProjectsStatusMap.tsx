@@ -1,26 +1,31 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Circle, Marker } from "@react-google-maps/api";
+import { InfoWindow, Marker } from "@react-google-maps/api";
 import { MapProvider } from "@/components/maps/GoogleMaps";
 import { LiveWorkerMarkers } from "@/components/maps/LiveWorkerMarkers";
 import { StoreMarkers } from "@/components/maps/StoreMarkers";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
 import type { WorkerGeoPoint } from "@/lib/worker-types";
 import { parseGeoPoint } from "@/lib/worker-utils";
+import {
+  ACTIVE_MAP_MAX_ZOOM,
+  ACTIVE_MAP_MIN_ZOOM,
+  TRACKER_ROLE_COLOR,
+  WASHINGTON_BOUNDS,
+  classifyTrackerRole,
+  isProjectOnActiveMap,
+  pickInitialMapCenter,
+  pickInitialMapZoom,
+  type TrackerRole,
+} from "@/lib/map-constants";
 
 const MAP_COLORS = {
   gold: "#BFA234",
   green: "#2EA67A",
   gray: "#6B7280",
 } as const;
-
-const WORKER_ROLE_COLOR: Record<string, string> = {
-  driver: "#3b82f6",
-  worker: "#2EA67A",
-  supervisor: "#a855f7",
-};
 
 export type ActiveWorkerMarker = {
   id: string;
@@ -31,7 +36,10 @@ export type ActiveWorkerMarker = {
   lng: number;
 };
 
-function getMarkerColor(project: { status: string; onSiteWorkerCount: number }) {
+function getProjectMarkerColor(project: {
+  status: string;
+  onSiteWorkerCount: number;
+}) {
   if (project.status === "paused" || project.status === "archived") {
     return MAP_COLORS.gray;
   }
@@ -41,17 +49,47 @@ function getMarkerColor(project: { status: string; onSiteWorkerCount: number }) 
   return MAP_COLORS.gold;
 }
 
-// google.maps.SymbolPath.CIRCLE === 0
-function makeDotIcon(color: string, scale = 8) {
+function makeProjectIcon(color: string, scale = 9) {
   return {
-    path: 0 as google.maps.SymbolPath,
+    path: 0 as google.maps.SymbolPath, // CIRCLE
     fillColor: color,
     fillOpacity: 0.92,
-    strokeColor: color,
+    strokeColor: "#0f1117",
     strokeWeight: 2,
     scale,
   };
 }
+
+// Worker / supervisor: filled circle. Driver: forward arrow so delivery
+// runs read as movement, not a stationary worker. The arrow sits inside
+// a white halo via the stroke so it stays legible on the dark basemap.
+//
+// Future tracker integrations (BLE/AirTag-style devices, vehicle GPS)
+// should feed the same `LiveAssetMarker` shape and reuse these icons
+// rather than introducing a separate marker family.
+function makeRoleIcon(role: TrackerRole) {
+  const color = TRACKER_ROLE_COLOR[role];
+  if (role === "driver") {
+    return {
+      path: 1 as google.maps.SymbolPath, // FORWARD_CLOSED_ARROW
+      fillColor: color,
+      fillOpacity: 0.95,
+      strokeColor: "#ffffff",
+      strokeWeight: 1.5,
+      scale: 5,
+    };
+  }
+  return {
+    path: 0 as google.maps.SymbolPath, // CIRCLE
+    fillColor: color,
+    fillOpacity: 0.9,
+    strokeColor: role === "supervisor" ? "#ffffff" : "#0f1117",
+    strokeWeight: role === "supervisor" ? 2 : 1.5,
+    scale: role === "supervisor" ? 8 : 7,
+  };
+}
+
+type MappedProject = ManagerProjectSummary & { site: WorkerGeoPoint };
 
 export function ProjectsStatusMap({
   projects,
@@ -61,35 +99,44 @@ export function ProjectsStatusMap({
   activeWorkers?: ActiveWorkerMarker[];
 }) {
   const router = useRouter();
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
-  const mappedProjects = useMemo(() => {
+  // Filter archived/deleted/completed projects out of the active map so
+  // the manager only sees what's operational. Archived projects live on
+  // a dedicated archive page; they don't pollute live coverage.
+  const mappedProjects = useMemo<MappedProject[]>(() => {
     return projects
+      .filter(isProjectOnActiveMap)
       .map((project) => ({
         ...project,
         site: parseGeoPoint(project.site_point),
       }))
       .filter(
-        (
-          project,
-        ): project is ManagerProjectSummary & { site: WorkerGeoPoint } =>
-          project.site !== null,
+        (project): project is MappedProject => project.site !== null,
       );
   }, [projects]);
 
   const totalPoints = mappedProjects.length + activeWorkers.length;
 
-  const center = useMemo(() => {
-    if (mappedProjects.length > 0) {
-      return { lat: mappedProjects[0].site.lat, lng: mappedProjects[0].site.lng };
-    }
-    if (activeWorkers.length > 0) {
-      return { lat: activeWorkers[0].lat, lng: activeWorkers[0].lng };
-    }
-    return { lat: 37.7749, lng: -122.4194 };
-  }, [mappedProjects, activeWorkers]);
+  const center = useMemo(
+    () => pickInitialMapCenter(mappedProjects.map((p) => p.site), activeWorkers),
+    [mappedProjects, activeWorkers],
+  );
+  const initialZoom = pickInitialMapZoom(totalPoints);
 
   const handleLoad = useCallback(
     (map: google.maps.Map) => {
+      if (totalPoints === 0) {
+        // No points yet → frame Washington so the manager lands on a
+        // recognizable region instead of a global view.
+        map.fitBounds(
+          new google.maps.LatLngBounds(
+            { lat: WASHINGTON_BOUNDS.south, lng: WASHINGTON_BOUNDS.west },
+            { lat: WASHINGTON_BOUNDS.north, lng: WASHINGTON_BOUNDS.east },
+          ),
+        );
+        return;
+      }
       if (totalPoints < 2) return;
       const bounds = new google.maps.LatLngBounds();
       for (const project of mappedProjects) {
@@ -98,44 +145,61 @@ export function ProjectsStatusMap({
       for (const worker of activeWorkers) {
         bounds.extend({ lat: worker.lat, lng: worker.lng });
       }
-      map.fitBounds(bounds, 28);
+      map.fitBounds(bounds, 32);
     },
     [mappedProjects, activeWorkers, totalPoints],
   );
 
-  if (totalPoints === 0) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[var(--bg-surface)] px-4 text-center text-sm text-[var(--text-secondary)]">
-        Add project coordinates to start seeing live site coverage here.
-      </div>
-    );
-  }
+  const selectedProject = useMemo(
+    () =>
+      selectedProjectId
+        ? mappedProjects.find((p) => p.id === selectedProjectId) ?? null
+        : null,
+    [selectedProjectId, mappedProjects],
+  );
 
   return (
     <MapProvider
       center={center}
-      zoom={totalPoints > 1 ? 11 : 14}
+      zoom={initialZoom}
+      options={{
+        minZoom: ACTIVE_MAP_MIN_ZOOM,
+        maxZoom: ACTIVE_MAP_MAX_ZOOM,
+        restriction: {
+          latLngBounds: {
+            // Restrict panning to a generous Pacific Northwest window so
+            // the manager can't accidentally drift the map onto an empty
+            // ocean / global view. The window is wider than the state so
+            // a slight overscroll still feels natural.
+            north: WASHINGTON_BOUNDS.north + 1.5,
+            south: WASHINGTON_BOUNDS.south - 1.5,
+            east: WASHINGTON_BOUNDS.east + 2,
+            west: WASHINGTON_BOUNDS.west - 2,
+          },
+          strictBounds: false,
+        },
+      }}
       onLoad={handleLoad}
     >
       {mappedProjects.map((project) => {
-        const color = getMarkerColor(project);
+        const color = getProjectMarkerColor(project);
         return (
           <Marker
             key={project.id}
             position={{ lat: project.site.lat, lng: project.site.lng }}
-            icon={makeDotIcon(color)}
+            icon={makeProjectIcon(color)}
             title={project.name}
-            onClick={() => router.push(`/projects/${project.id}`)}
+            onClick={() => setSelectedProjectId(project.id)}
           />
         );
       })}
       {activeWorkers.map((worker) => {
-        const color = WORKER_ROLE_COLOR[worker.role] ?? WORKER_ROLE_COLOR.worker;
+        const role = classifyTrackerRole(worker.role);
         return (
           <Marker
             key={`active-${worker.id}`}
             position={{ lat: worker.lat, lng: worker.lng }}
-            icon={makeDotIcon(color, 6)}
+            icon={makeRoleIcon(role)}
             title={
               worker.projectName
                 ? `${worker.name} — ${worker.projectName}`
@@ -144,6 +208,63 @@ export function ProjectsStatusMap({
           />
         );
       })}
+      {selectedProject ? (
+        <InfoWindow
+          position={{
+            lat: selectedProject.site.lat,
+            lng: selectedProject.site.lng,
+          }}
+          onCloseClick={() => setSelectedProjectId(null)}
+        >
+          <div
+            style={{
+              background: "#181c27",
+              color: "#f4f4f5",
+              padding: "10px 12px",
+              borderRadius: 8,
+              minWidth: 200,
+              maxWidth: 260,
+              fontSize: 13,
+              lineHeight: 1.4,
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+              {selectedProject.name}
+            </div>
+            {selectedProject.address ? (
+              <div style={{ color: "#9ca3af", marginBottom: 6 }}>
+                {selectedProject.address}
+              </div>
+            ) : null}
+            <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
+              <span>
+                <span style={{ color: "#9ca3af" }}>On site:</span>{" "}
+                <strong>{selectedProject.onSiteWorkerCount}</strong>
+              </span>
+              <span>
+                <span style={{ color: "#9ca3af" }}>Open tasks:</span>{" "}
+                <strong>{selectedProject.openTaskCount}</strong>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push(`/projects/${selectedProject.id}`)}
+              style={{
+                background: "#BFA234",
+                color: "#0f1117",
+                border: "none",
+                borderRadius: 6,
+                padding: "5px 10px",
+                fontWeight: 600,
+                cursor: "pointer",
+                fontSize: 12,
+              }}
+            >
+              Open project →
+            </button>
+          </div>
+        </InfoWindow>
+      ) : null}
       <LiveWorkerMarkers />
       <StoreMarkers />
     </MapProvider>

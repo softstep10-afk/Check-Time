@@ -4,6 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import { Marker, Polyline } from "@react-google-maps/api";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
+import { TRACKER_ROLE_COLOR, classifyTrackerRole } from "@/lib/map-constants";
+
+// NOTE on external trackers (AirTag, Tile, vehicle GPS, etc.):
+//   Apple AirTag does not expose a public web API for location reads —
+//   AirTag locations are surfaced only through the Find My iCloud client
+//   on Apple devices, so the manager map cannot consume them directly.
+//   Future hardware tracker sources should write normalized lat/lng
+//   pings into an app-owned table (today: worker_live_locations, or a
+//   parallel tracker table that maps to a LiveAssetMarker), and the map
+//   reads from that same shape. Do NOT couple this component to any
+//   vendor SDK.
 
 type LivePosition = {
   worker_id: string;
@@ -16,22 +27,35 @@ type LivePosition = {
   consented: boolean;
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  driver: "#3b82f6",
-  worker: "#2EA67A",
-  supervisor: "#a855f7",
-};
-
 const STALE_MS = 5 * 60_000; // 5 min
 
-function makeWorkerIcon(color: string, stale: boolean) {
+function makeWorkerIcon(role: string, stale: boolean) {
+  const tracker = classifyTrackerRole(role);
+  const baseColor = TRACKER_ROLE_COLOR[tracker];
+  const color = stale ? "#6B7280" : baseColor;
+  // Drivers get a forward arrow so a delivery run reads as motion vs. a
+  // stationary worker. Supervisors get a slightly larger ringed circle.
+  if (tracker === "driver") {
+    return {
+      path: 1 as google.maps.SymbolPath, // FORWARD_CLOSED_ARROW
+      fillColor: color,
+      fillOpacity: stale ? 0.5 : 0.95,
+      strokeColor: stale ? "#6B7280" : "#ffffff",
+      strokeWeight: 1.5,
+      scale: 5,
+    };
+  }
   return {
     path: 0 as google.maps.SymbolPath, // CIRCLE
-    fillColor: stale ? "#6B7280" : color,
+    fillColor: color,
     fillOpacity: stale ? 0.5 : 0.92,
-    strokeColor: stale ? "#6B7280" : color,
+    strokeColor: stale
+      ? "#6B7280"
+      : tracker === "supervisor"
+        ? "#ffffff"
+        : color,
     strokeWeight: 2,
-    scale: 7,
+    scale: tracker === "supervisor" ? 8 : 7,
   };
 }
 
@@ -174,7 +198,8 @@ export function LiveWorkerMarkers() {
   return (
     <>
       {positions.map((pos) => {
-        const color = ROLE_COLORS[pos.worker_role] ?? ROLE_COLORS.worker;
+        const tracker = classifyTrackerRole(pos.worker_role);
+        const color = TRACKER_ROLE_COLOR[tracker];
         const stale = now - new Date(pos.recorded_at).getTime() > STALE_MS;
         const trail = trails.get(pos.worker_id) ?? [];
 
@@ -211,7 +236,7 @@ export function LiveWorkerMarkers() {
             ) : null}
             <Marker
               position={{ lat: pos.lat, lng: pos.lng }}
-              icon={makeWorkerIcon(color, stale)}
+              icon={makeWorkerIcon(pos.worker_role, stale)}
               title={
                 stale
                   ? `${pos.worker_name} — ${t("gps.signalLost")}`
