@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
+import { buildTeamMemberEmail } from "@/lib/team-member-provisioning";
 import type { UserRole } from "@/types/database";
 
 const allowedRoles: UserRole[] = [
@@ -64,10 +65,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
     }
 
-    // Auto-generate email from name if not provided
-    const email = rawEmail && rawEmail.includes("@")
-      ? rawEmail
-      : `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}@checktime.local`;
+    // PIN users still need a Supabase Auth email internally.
+    const email = buildTeamMemberEmail(rawEmail, name);
 
     if (!/^\d{4,6}$/.test(pin)) {
       return NextResponse.json(

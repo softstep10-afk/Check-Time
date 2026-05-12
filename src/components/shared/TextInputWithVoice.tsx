@@ -4,6 +4,7 @@ import { useCallback, useId, useRef } from "react";
 import { VoiceInput } from "./VoiceInput";
 
 type CommonProps = {
+  id?: string;
   value?: string;
   defaultValue?: string;
   onChange?: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
@@ -29,7 +30,7 @@ type TextareaProps = CommonProps & {
 type Props = InputProps | TextareaProps;
 
 export function TextInputWithVoice(props: Props) {
-  const { multiline, className = "", ...rest } = props;
+  const { multiline, className = "", id, ...rest } = props;
   const uid = useId();
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
@@ -57,7 +58,7 @@ export function TextInputWithVoice(props: Props) {
     [multiline],
   );
 
-  const inputId = `voice-${uid}`;
+  const inputId = id ?? `voice-${uid}`;
 
   // Ensure w-full is present so the input fills its grid/flex parent
   const inputClass = className.includes("w-full")

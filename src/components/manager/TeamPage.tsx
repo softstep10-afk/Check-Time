@@ -702,7 +702,14 @@ export function TeamPage({
             ) : (
               <form className="mt-4 grid gap-3" onSubmit={handleCreateMember}>
                 <div>
+                  <label
+                    htmlFor="team-member-name"
+                    className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]"
+                  >
+                    {t("team.fullName")}
+                  </label>
                   <TextInputWithVoice
+                    id="team-member-name"
                     name="name"
                     placeholder={t("team.fullName")}
                     onChange={(e) => validateName(e.target.value)}
@@ -714,8 +721,15 @@ export function TeamPage({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
+                    <label
+                      htmlFor="team-member-pin"
+                      className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]"
+                    >
+                      {t("team.pinLabel")}
+                    </label>
                     <div className="flex gap-2">
                       <input
+                        id="team-member-pin"
                         name="pin"
                         inputMode="numeric"
                         maxLength={6}
@@ -729,27 +743,45 @@ export function TeamPage({
                       <div className="mt-1 text-xs" style={{ color: "var(--red)" }}>{pinError}</div>
                     ) : null}
                   </div>
-                  <select
-                    name="role"
-                    defaultValue="worker"
-                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                  >
-                    {roleOptions.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
+                  <div>
+                    <label
+                      htmlFor="team-member-role"
+                      className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]"
+                    >
+                      {t("team.roleLabel")}
+                    </label>
+                    <select
+                      id="team-member-role"
+                      name="role"
+                      defaultValue="worker"
+                      className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                    >
+                      {roleOptions.map((role) => (
+                        <option key={role} value={role}>
+                          {role}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className={hasFinanceAccess ? "grid gap-3 sm:grid-cols-[1fr_auto]" : "grid gap-3"}>
                   {hasFinanceAccess ? (
-                    <input
-                      name="hourly_rate"
-                      type="number"
-                      step="0.01"
-                      placeholder={t("projects.hourlyRate")}
-                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                    />
+                    <div>
+                      <label
+                        htmlFor="team-member-hourly-rate"
+                        className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]"
+                      >
+                        {t("projects.hourlyRate")}
+                      </label>
+                      <input
+                        id="team-member-hourly-rate"
+                        name="hourly_rate"
+                        type="number"
+                        step="0.01"
+                        placeholder={t("projects.hourlyRate")}
+                        className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                      />
+                    </div>
                   ) : null}
                   <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-sm text-[var(--text-primary)]">
                     <input type="checkbox" name="require_video" defaultChecked />
