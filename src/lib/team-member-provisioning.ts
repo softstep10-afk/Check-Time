@@ -1,4 +1,5 @@
 const SYNTHETIC_TEAM_EMAIL_DOMAIN = "checktime.app";
+const PROVIDED_EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 export function slugifyTeamMemberName(name: string): string {
   return name
@@ -16,7 +17,7 @@ export function buildTeamMemberEmail(
   uniqueId: string = crypto.randomUUID(),
 ): string {
   const email = rawEmail.trim().toLowerCase();
-  if (email && email.includes("@")) return email;
+  if (email && PROVIDED_EMAIL_PATTERN.test(email)) return email;
 
   const slug = slugifyTeamMemberName(name) || "team-member";
   const suffix =
@@ -26,4 +27,8 @@ export function buildTeamMemberEmail(
       .slice(0, 12) || "member";
 
   return `${slug}-${suffix}@${SYNTHETIC_TEAM_EMAIL_DOMAIN}`;
+}
+
+export function generateTeamMemberPin(random: () => number = Math.random): string {
+  return String(Math.floor(1000 + random() * 9000));
 }

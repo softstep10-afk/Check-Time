@@ -5,6 +5,7 @@ import {
   isTaskInActiveOperations,
 } from "@/lib/archive-utils";
 import { getProjectsPageData } from "@/lib/manager-data";
+import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
 import { collectTaskReferencedMediaIds } from "@/lib/task-media-hydration";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
@@ -42,6 +43,7 @@ export default async function ManagerTasksRoutePage() {
       const completedById = getTaskCompletionAudit(task).completedById;
       return {
         ...task,
+        status: getEffectiveTaskStatus(task),
         projectName: task.project_id ? projectsById.get(task.project_id) ?? null : null,
         assigneeName: task.assigned_to ? profilesById.get(task.assigned_to) ?? null : null,
         completedByName: completedById ? profilesById.get(completedById) ?? null : null,

@@ -12,6 +12,7 @@ import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { toggleUserCapability } from "@/app/(manager)/admin/users/[id]/permissions/actions";
 import { ALWAYS_FINANCE_ROLES } from "@/lib/finance-access";
+import { generateTeamMemberPin } from "@/lib/team-member-provisioning";
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -76,9 +77,7 @@ export function TeamPage({
   const [showInactive, setShowInactive] = useState(false);
   const [nameError, setNameError] = useState("");
   const [pinError, setPinError] = useState("");
-  const [pinValue, setPinValue] = useState(() =>
-    String(Math.floor(1000 + Math.random() * 9000)),
-  );
+  const [pinValue, setPinValue] = useState(() => generateTeamMemberPin());
   // Optimistic override of profile.financeAccess, keyed by profile id.
   // Successful toggles land in here and stay; router.refresh() repopulates
   // initialProfiles with the same value, so effectiveFinanceAccess returns
@@ -187,6 +186,11 @@ export function TeamPage({
     }
   }
 
+  function regeneratePin() {
+    setPinValue(generateTeamMemberPin());
+    setPinError("");
+  }
+
   async function handleCreateMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -233,9 +237,13 @@ export function TeamPage({
     }
 
     form.reset();
-    setPinValue("");
+    setPinValue(generateTeamMemberPin());
     setBusyKey(null);
-    setMessage(`✓ ${result.name ?? name} created with PIN ${result.pin ?? pin}`);
+    setMessage(
+      t("team.memberCreatedPin")
+        .replace("{name}", result.name ?? name)
+        .replace("{pin}", result.pin ?? pin),
+    );
     setMessageType("success");
     router.refresh();
   }
@@ -738,6 +746,16 @@ export function TeamPage({
                         onChange={(e) => validatePin(e.target.value)}
                         className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                       />
+                      <button
+                        type="button"
+                        onClick={regeneratePin}
+                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--text-primary)]"
+                      >
+                        {t("team.newPin")}
+                      </button>
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--text-muted)]">
+                      {t("team.pinHelp")}
                     </div>
                     {pinError ? (
                       <div className="mt-1 text-xs" style={{ color: "var(--red)" }}>{pinError}</div>

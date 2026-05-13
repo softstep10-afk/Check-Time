@@ -3,6 +3,10 @@ import {
   buildActiveProjectIdSet,
   isTaskInActiveOperations,
 } from "@/lib/archive-utils";
+import {
+  isEffectiveCompletedTask,
+  isEffectiveOpenTask,
+} from "@/lib/task-status";
 import { parseGeoPoint } from "@/lib/worker-utils";
 import {
   EXTREME_SHIFT_MINUTES,
@@ -42,12 +46,12 @@ function startOfWeek(date = new Date()): Date {
   return base;
 }
 
-export function isOpenTask(task: Pick<Task, "status" | "deleted_at">): boolean {
-  return !task.deleted_at && task.status !== "done" && task.status !== "cancelled";
+export function isOpenTask(task: Pick<Task, "status" | "deleted_at" | "completed_at">): boolean {
+  return isEffectiveOpenTask(task);
 }
 
-export function isCompletedTask(task: Pick<Task, "status" | "deleted_at">): boolean {
-  return !task.deleted_at && task.status === "done";
+export function isCompletedTask(task: Pick<Task, "status" | "deleted_at" | "completed_at">): boolean {
+  return isEffectiveCompletedTask(task);
 }
 
 function endOfDay(date = new Date()): Date {

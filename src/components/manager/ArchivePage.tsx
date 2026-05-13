@@ -47,6 +47,8 @@ const COPY = {
     work: "Work",
     tasks: "Tasks",
     media: "Media",
+    done: "done",
+    files: "files",
     history: "History",
     noAddress: "No address",
     workers: "workers",
@@ -92,6 +94,8 @@ const COPY = {
     work: "Работа",
     tasks: "Задачи",
     media: "Файлы",
+    done: "готово",
+    files: "файлов",
     history: "История",
     noAddress: "Адрес не указан",
     workers: "рабочих",
@@ -403,10 +407,10 @@ export function ArchivePage({
                         <span className="ml-2 text-xs text-[var(--text-muted)]">{project.workerCount} {text.workers}</span>
                       </td>
                       <td className="py-3 pr-3 whitespace-nowrap text-[var(--text-secondary)]">
-                        {project.completedTaskCount}/{project.taskCount} done
+                        {project.completedTaskCount}/{project.taskCount} {text.done}
                       </td>
                       <td className="py-3 pr-3 whitespace-nowrap text-[var(--text-secondary)]">
-                        {project.mediaCount} files
+                        {project.mediaCount} {text.files}
                         {project.receiptCount > 0 ? (
                           <span className="ml-2">
                             {project.receiptCount} {text.receipts}

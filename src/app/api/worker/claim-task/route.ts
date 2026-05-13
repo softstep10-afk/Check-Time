@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isEffectiveOpenTask } from "@/lib/task-status";
 import type { Task } from "@/types/database";
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -67,13 +68,15 @@ export async function POST(request: NextRequest) {
     // the task can't claim it.
     const { data: task, error: taskError } = await supabase
       .from("tasks")
-      .select("id, project_id, assigned_to, org_id, deleted_at, metadata")
+      .select("id, project_id, assigned_to, org_id, status, completed_at, deleted_at, metadata")
       .eq("id", taskId)
       .maybeSingle<{
         id: string;
         project_id: string | null;
         assigned_to: string | null;
         org_id: string;
+        status: Task["status"];
+        completed_at: string | null;
         deleted_at: string | null;
         metadata: Record<string, unknown> | null;
       }>();
@@ -86,6 +89,9 @@ export async function POST(request: NextRequest) {
 
     if (task.deleted_at) {
       return NextResponse.json({ error: "Task has been deleted." }, { status: 410 });
+    }
+    if (!isEffectiveOpenTask(task)) {
+      return NextResponse.json({ error: "Task is already closed." }, { status: 409 });
     }
     if (task.assigned_to !== null) {
       return NextResponse.json(
@@ -173,6 +179,8 @@ export async function POST(request: NextRequest) {
       .is("deleted_at", null)
       .eq("project_id", task.project_id)
       .eq("org_id", profile.org_id)
+      .neq("status", "done")
+      .is("completed_at", null)
       .select("*")
       .maybeSingle<Task>();
 
@@ -185,7 +193,7 @@ export async function POST(request: NextRequest) {
 
     if (!updated) {
       return NextResponse.json(
-        { error: "Task is already assigned." },
+        { error: "Task is already assigned or closed." },
         { status: 409 },
       );
     }

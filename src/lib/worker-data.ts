@@ -11,6 +11,7 @@ import {
   getAttachmentMediaIds,
 } from "@/lib/task-attachments";
 import { getCompletionMediaIds } from "@/lib/task-notifications";
+import { getEffectiveTaskStatus } from "@/lib/task-status";
 import type { WorkerMediaItem, WorkerShellData, WorkerTaskItem } from "@/lib/worker-types";
 import type { Media, Profile, Project, Task, TimeEvent } from "@/types/database";
 
@@ -231,7 +232,10 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   let tasks: Task[] = [
     ...personalTasks,
     ...projectLevelTasks.filter((t) => !seenIds.has(t.id)),
-  ];
+  ].map((task) => ({
+    ...task,
+    status: getEffectiveTaskStatus(task),
+  }));
 
   for (const event of events) {
     projectIds.add(event.project_id);
