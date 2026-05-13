@@ -41,6 +41,11 @@ import {
   MediaGalleryDrawer,
   type GalleryItem,
 } from "@/components/shared/MediaGalleryDrawer";
+import {
+  MediaViewerModal,
+  useMediaViewerOpenGuard,
+  type ViewerMediaItem,
+} from "@/components/shared/MediaViewerModal";
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -136,11 +141,16 @@ export function TeamMemberPage({
   const [showUnpaidBreakdown, setShowUnpaidBreakdown] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
+  const [mediaViewerItem, setMediaViewerItem] = useState<ViewerMediaItem | null>(null);
   // Journal-timeline gallery drawer (open via "Open gallery" near the
   // Journal entries header). Filters live inside the drawer; the page
   // state only needs an open/closed flag.
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
+  const {
+    canOpenViewerItem: canOpenMediaViewerItem,
+    suppressViewerItem: suppressMediaViewerItem,
+  } = useMediaViewerOpenGuard();
   const { t } = useTranslation();
 
   const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
@@ -162,38 +172,12 @@ export function TeamMemberPage({
   }
 
   // Click-to-open for worker media (checkout videos + journal entries).
-  // Mirrors ProjectDetailPage.openProjectMediaItem: open a tab synchronously
-  // inside the click to dodge mobile popup blockers, then sign the path
-  // against the private 'media' bucket and navigate the tab to it.
-  //
-  // selectMediaPlayback only returns a Supabase Storage path in `path`:
-  // either the original or a transcoded H.264/MP4 copy under
-  // metadata.playback_path. Mux playback IDs live in
-  // metadata.mux_playback_id (exposed as playback.muxPlaybackId) and
-  // are NOT Storage paths — signing one through the 'media' bucket
-  // fails. We do not consume muxPlaybackId here yet; that will land
-  // alongside the Mux signed-URL minting layer. The Download button
-  // intentionally bypasses this and always pulls the original.
-  async function openMediaItem(item: WorkerMediaRow) {
-    if (typeof window === "undefined") return;
-    const tab = window.open("about:blank", "_blank");
-    if (!tab) {
-      setMessage(t("projectDetail.mediaOpenFailed"));
-      setMessageType("error");
-      return;
-    }
-    const playback = selectMediaPlayback(item);
-    const normalized = normalizeStoragePath(playback.path);
-    const { data, error } = await supabase.storage
-      .from("media")
-      .createSignedUrl(normalized, 3600);
-    if (error || !data?.signedUrl) {
-      tab.close();
-      setMessage(t("projectDetail.mediaOpenFailed"));
-      setMessageType("error");
-      return;
-    }
-    tab.location.href = data.signedUrl;
+  // Keep the manager in-app: MediaViewerModal signs and previews the
+  // selected storage object, while the separate Download action still
+  // pulls the original file.
+  function openMediaItem(item: WorkerMediaRow) {
+    if (!canOpenMediaViewerItem(item.id)) return;
+    setMediaViewerItem(item as unknown as ViewerMediaItem);
   }
 
   // Download fallback — for iPhone HEVC `.mov` clips that Chrome / Edge /
@@ -2375,6 +2359,15 @@ export function TeamMemberPage({
         viewerId={managerId}
         onClose={() => setFlagModalMediaId(null)}
         onMutate={() => void refreshOpenFlags()}
+      />
+
+      <MediaViewerModal
+        item={mediaViewerItem}
+        onClose={() => {
+          const itemId = mediaViewerItem?.id;
+          setMediaViewerItem(null);
+          suppressMediaViewerItem(itemId);
+        }}
       />
 
       <MediaGalleryDrawer

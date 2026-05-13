@@ -13,6 +13,7 @@ import {
   summarizePayrollArchiveRows,
   type ArchiveDateRange,
   ArchivedProjectRow,
+  PayrollArchivePeriod,
   PayrollArchiveSummary,
   PayrollArchiveWorkerYear,
 } from "@/lib/archive-utils";
@@ -68,6 +69,15 @@ const COPY = {
     year: "Year",
     periods: "Periods",
     noProjectSplit: "No project split recorded",
+    periodDetails: "Payroll period",
+    close: "Close",
+    paidAt: "Paid at",
+    status: "Status",
+    source: "Source",
+    sourcePayPeriodItems: "Payroll period item",
+    sourcePayrollLineItems: "Payroll ledger",
+    possibleDuplicate: "Possible duplicate",
+    duplicateWarning: "This worker has another paid period with the same dates, hours, and amount. The yearly total includes each paid record.",
     footer: "Archive preserves linked history. Trash is only for deleted rows that can be restored or permanently removed.",
   },
   ru: {
@@ -115,6 +125,15 @@ const COPY = {
     year: "Год",
     periods: "Периоды",
     noProjectSplit: "Разбивка по проектам не записана",
+    periodDetails: "Период зарплаты",
+    close: "Закрыть",
+    paidAt: "Оплачено",
+    status: "Статус",
+    source: "Источник",
+    sourcePayPeriodItems: "Строка платёжного периода",
+    sourcePayrollLineItems: "Зарплатный ledger",
+    possibleDuplicate: "Возможный дубль",
+    duplicateWarning: "У этого рабочего есть ещё один оплаченный период с теми же датами, часами и суммой. Годовой итог включает каждую оплаченную запись.",
     footer: "Архив сохраняет связанную историю. Корзина только для удалённых строк, которые можно восстановить или удалить навсегда.",
   },
 } as const;
@@ -157,6 +176,21 @@ function exportPayrollCsv(rows: PayrollArchiveWorkerYear[], header: readonly str
   URL.revokeObjectURL(url);
 }
 
+type PayrollPeriodSelection = {
+  row: PayrollArchiveWorkerYear;
+  period: PayrollArchivePeriod;
+};
+
+function payrollPeriodDuplicateKey(period: PayrollArchivePeriod): string {
+  return [
+    period.workerId,
+    period.startDate,
+    period.endDate,
+    period.hours.toFixed(2),
+    period.grossPaid.toFixed(2),
+  ].join("|");
+}
+
 export function ArchivePage({
   archivedProjects,
   payrollArchive,
@@ -173,6 +207,8 @@ export function ArchivePage({
   const [projectName, setProjectName] = useState<string>("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [selectedPayrollPeriod, setSelectedPayrollPeriod] =
+    useState<PayrollPeriodSelection | null>(null);
   const { locale } = useTranslation();
   const text = COPY[locale];
 
@@ -242,6 +278,17 @@ export function ArchivePage({
   const visiblePayrollSummary = useMemo(() => (
     summarizePayrollArchiveRows(filteredPayroll)
   ), [filteredPayroll]);
+
+  const payrollPeriodDuplicateCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const row of filteredPayroll) {
+      for (const period of row.periods) {
+        const key = payrollPeriodDuplicateKey(period);
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [filteredPayroll]);
 
   function clearDateRange() {
     setFromDate("");
@@ -541,11 +588,31 @@ export function ArchivePage({
                           <td className="py-3 pr-3 font-mono font-semibold text-[var(--text-primary)]">{currency.format(row.grossPaid)}</td>
                           <td className="py-3 pr-3">
                             <div className="space-y-1">
-                              {row.periods.map((period) => (
-                                <Link key={period.id} href={period.href} className="block text-xs text-[var(--brand-yellow)]">
-                                  {period.startDate} - {period.endDate} · {period.hours.toFixed(2)}h · {currency.format(period.grossPaid)}
-                                </Link>
-                              ))}
+                              {row.periods.map((period) => {
+                                const duplicateCount =
+                                  payrollPeriodDuplicateCounts.get(payrollPeriodDuplicateKey(period)) ?? 0;
+                                return (
+                                  <button
+                                    key={period.id}
+                                    type="button"
+                                    onClick={() => setSelectedPayrollPeriod({ row, period })}
+                                    className="block w-full text-left text-xs text-[var(--brand-yellow)] underline-offset-2 hover:underline focus:underline"
+                                  >
+                                    {period.startDate} - {period.endDate} · {period.hours.toFixed(2)}h · {currency.format(period.grossPaid)}
+                                    {duplicateCount > 1 ? (
+                                      <span
+                                        className="ml-2 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]"
+                                        style={{
+                                          background: "rgba(245, 158, 11, 0.16)",
+                                          color: "#f59e0b",
+                                        }}
+                                      >
+                                        {text.possibleDuplicate}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </td>
                           <td className="py-3 text-[var(--text-secondary)]">
@@ -566,6 +633,129 @@ export function ArchivePage({
         <Archive size={14} />
         {text.footer}
       </div>
+
+      {selectedPayrollPeriod ? (() => {
+        const { row, period } = selectedPayrollPeriod;
+        const duplicateCount =
+          payrollPeriodDuplicateCounts.get(payrollPeriodDuplicateKey(period)) ?? 0;
+        const sourceLabel = period.source === "payroll_line_items"
+          ? text.sourcePayrollLineItems
+          : text.sourcePayPeriodItems;
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
+            style={{ background: "rgba(0, 0, 0, 0.72)" }}
+            onClick={() => setSelectedPayrollPeriod(null)}
+          >
+            <div
+              className="w-full max-w-[720px] rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+                    {text.periodDetails}
+                  </p>
+                  <h2 className="mt-1 text-xl font-bold text-[var(--text-primary)]">
+                    {row.workerName}
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--text-secondary)]">
+                    {period.startDate} - {period.endDate}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayrollPeriod(null)}
+                  aria-label={text.close}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)]"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {duplicateCount > 1 ? (
+                <div
+                  className="mt-4 rounded-[var(--radius-md)] border px-3 py-2 text-sm"
+                  style={{
+                    borderColor: "rgba(245, 158, 11, 0.34)",
+                    background: "rgba(245, 158, 11, 0.08)",
+                    color: "#f59e0b",
+                  }}
+                >
+                  <div className="font-semibold">{text.possibleDuplicate}</div>
+                  <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                    {text.duplicateWarning}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {text.paidHours}
+                  </div>
+                  <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
+                    {period.hours.toFixed(2)}h
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {text.grossPaid}
+                  </div>
+                  <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
+                    {currency.format(period.grossPaid)}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {text.status}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                    {period.status}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {text.paidAt}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                    {period.paidAt ? new Date(period.paidAt).toLocaleString() : text.notRecorded}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {text.source}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                    {sourceLabel}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {text.projectsTab}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                    {period.projectNames.length > 0 ? period.projectNames.join(", ") : text.noProjectSplit}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayrollPeriod(null)}
+                  className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold text-[var(--text-primary)]"
+                  style={{ borderColor: "var(--border-default)" }}
+                >
+                  {text.close}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
     </div>
   );
 }
