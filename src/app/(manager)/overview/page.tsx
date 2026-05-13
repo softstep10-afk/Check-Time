@@ -364,7 +364,6 @@ export default async function OverviewPage() {
       }),
   ];
   const commandQueue = buildCommandCenterQueue(commandCandidates, { limit: 6 });
-  const actionItems = commandQueue.visibleItems;
   const criticalActionCount = commandQueue.criticalCount;
   const highPriorityTaskCount = urgentTasks.filter((task) => (
     task.priority === "urgent" || task.priority === "high"
@@ -655,62 +654,6 @@ export default async function OverviewPage() {
               </div>
             )}
           </div>
-        </div>
-      </section>
-
-      <section className="surface-card p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">
-              {t("overview.actionQueue")}
-            </h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {t("overview.actionQueueDesc")}
-            </p>
-          </div>
-          <Link href="/timeline" className="text-sm font-semibold text-[var(--brand-yellow)]">
-            {t("overview.fullTimeline")}
-          </Link>
-        </div>
-        <div className="mt-4 grid gap-2 lg:grid-cols-2">
-          {actionItems.length === 0 ? (
-            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)] lg:col-span-2">
-              {t("overview.noActionItems")}
-            </div>
-          ) : (
-            actionItems.map((item) => (
-              <Link
-                key={item.id}
-                href={item.href}
-                className="block rounded-[var(--radius-md)] border px-3 py-2.5 transition hover:border-[var(--brand-yellow)]"
-                style={{
-                  borderColor: "var(--border-default)",
-                  background: "rgba(15, 17, 23, 0.44)",
-                }}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div
-                      className="text-[10px] font-bold uppercase tracking-[0.14em]"
-                      style={{ color: item.color }}
-                    >
-                      {item.label}
-                    </div>
-                    <div className="mt-1 truncate text-sm font-semibold text-[var(--text-primary)]">
-                      {item.title}
-                    </div>
-                    <div className="mt-1 truncate text-xs text-[var(--text-secondary)]">
-                      {item.detail}
-                    </div>
-                  </div>
-                  <span
-                    className="mt-1 h-2 w-2 shrink-0 rounded-full"
-                    style={{ background: item.color, boxShadow: `0 0 8px ${item.color}` }}
-                  />
-                </div>
-              </Link>
-            ))
-          )}
         </div>
       </section>
 

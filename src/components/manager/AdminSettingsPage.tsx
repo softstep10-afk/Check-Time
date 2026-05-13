@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Sliders } from "lucide-react";
+import Link from "next/link";
+import { MapPin, Sliders } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 
@@ -182,6 +183,30 @@ export function AdminSettingsPage({
           >
             {saving ? t("common.saving") : t("settings.saveSettings")}
           </button>
+        </div>
+      </section>
+
+      <section className="surface-card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{ background: "rgba(96, 165, 250, 0.12)" }}
+            >
+              <MapPin size={18} style={{ color: "var(--blue)" }} />
+            </span>
+            <div>
+              <div className="text-base font-semibold text-[var(--text-primary)]">
+                {t("gps.adminTitle")}
+              </div>
+              <p className="mt-1 max-w-[62ch] text-xs leading-5 text-[var(--text-secondary)]">
+                {t("gps.adminDescription")}
+              </p>
+            </div>
+          </div>
+          <Link href="/location-data" className="button-base button-secondary px-3 py-2 text-xs">
+            {t("gps.adminTitle")}
+          </Link>
         </div>
       </section>
     </div>

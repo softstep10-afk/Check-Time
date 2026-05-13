@@ -65,6 +65,7 @@ export function ManagerTasksPage({
   workers,
   initialTasks,
   attachmentMedia = [],
+  embedded = false,
 }: {
   orgId: string;
   managerId: string;
@@ -74,6 +75,7 @@ export function ManagerTasksPage({
   workers: WorkerOption[];
   initialTasks: TaskRow[];
   attachmentMedia?: TaskAttachmentRef[];
+  embedded?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const { t } = useTranslation();
@@ -274,18 +276,20 @@ export function ManagerTasksPage({
   }
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5 p-5">
-      <section className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          {t("common.tasks")}
-        </p>
-        <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
-          {t("tasks.subtitle")}
-        </h1>
-        <p className="max-w-[64ch] text-sm leading-6 text-[var(--text-secondary)]">
-          {t("tasks.descriptionLong")}
-        </p>
-      </section>
+    <div className={embedded ? "space-y-5" : "mx-auto max-w-[1400px] space-y-5 p-5"}>
+      {!embedded ? (
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {t("common.tasks")}
+          </p>
+          <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
+            {t("tasks.subtitle")}
+          </h1>
+          <p className="max-w-[64ch] text-sm leading-6 text-[var(--text-secondary)]">
+            {t("tasks.descriptionLong")}
+          </p>
+        </section>
+      ) : null}
 
       {message ? (
         <div

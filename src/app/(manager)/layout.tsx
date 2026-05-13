@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, Archive, BarChart3, FolderKanban, Users, Clock, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, MapPin, Store, FileBarChart, ScrollText, Sliders, ClipboardCheck, MessageSquare } from "lucide-react";
+import { Activity, Archive, BarChart3, FolderKanban, Users, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, Store, ScrollText, Sliders } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
@@ -20,18 +20,13 @@ const sidebarItems: SidebarItem[] = [
   { href: "/projects", icon: FolderKanban, label: "Projects", labelKey: "manager.navProjects" },
   { href: "/team", icon: Users, label: "Team", labelKey: "manager.navTeam" },
   { section: "Work", sectionKey: "manager.sectionWork" },
-  { href: "/tasks", icon: ClipboardCheck, label: "Tasks", labelKey: "common.tasks" },
-  { href: "/timeline", icon: Clock, label: "Timeline", labelKey: "manager.navTimeline" },
   { href: "/schedule", icon: CalendarDays, label: "Schedule", labelKey: "nav.schedule" },
-  { href: "/messages", icon: MessageSquare, label: "Messages", labelKey: "nav.messages" },
   { href: "/ai", icon: Sparkles, label: "AI", labelKey: "manager.navAi" },
   { section: "Admin", sectionKey: "manager.sectionAdmin" },
   { href: "/archive", icon: Archive, label: "Archive", labelKey: "nav.archive" },
   { href: "/payroll", icon: Wallet, label: "Payroll", labelKey: "manager.navPayroll" },
-  { href: "/reports/annual", icon: FileBarChart, label: "Annual Report", labelKey: "report.title" },
   { href: "/managers", icon: ShieldCheck, label: "Managers", labelKey: "nav.managers", ownerOnly: true },
   { href: "/stores", icon: Store, label: "Stores", labelKey: "stores.title", ownerOnly: true },
-  { href: "/location-data", icon: MapPin, label: "Location Data", labelKey: "gps.adminTitle", ownerOnly: true },
   { href: "/admin/audit", icon: ScrollText, label: "Audit Log", labelKey: "audit.title", ownerOnly: true },
   { href: "/admin/settings", icon: Sliders, label: "Admin Settings", labelKey: "admin.settings.title", ownerOnly: true },
   { href: "/settings", icon: SettingsIcon, label: "Settings", labelKey: "manager.navSettings" },
@@ -40,9 +35,9 @@ const sidebarItems: SidebarItem[] = [
 
 const mobileNav = [
   { href: "/overview", icon: BarChart3, labelKey: "manager.navOverview" as TranslationKey },
+  { href: "/command-center", icon: Activity, labelKey: "manager.navCommandCenter" as TranslationKey },
   { href: "/projects", icon: FolderKanban, labelKey: "manager.navProjects" as TranslationKey },
   { href: "/team", icon: Users, labelKey: "manager.navTeam" as TranslationKey },
-  { href: "/timeline", icon: Clock, labelKey: "manager.navTimeline" as TranslationKey },
   { href: "/ai", icon: Sparkles, labelKey: "manager.navAi" as TranslationKey },
   { href: "/payroll", icon: Wallet, labelKey: "manager.navPayroll" as TranslationKey },
 ];

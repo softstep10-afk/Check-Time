@@ -42,11 +42,13 @@ export function BulkMessageComposer({
   senderId,
   senderName,
   crew,
+  embedded = false,
 }: {
   orgId: string;
   senderId: string;
   senderName: string;
   crew: CrewMember[];
+  embedded?: boolean;
 }) {
   const { t, locale } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -59,7 +61,10 @@ export function BulkMessageComposer({
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  const recipientCount = sendToAll ? crew.length : selectedIds.size;
+  const allRecipientCount = crew.filter((member) => member.id !== senderId).length;
+  const recipientCount = sendToAll
+    ? allRecipientCount
+    : [...selectedIds].filter((id) => id !== senderId).length;
   const crewById = useMemo(() => new Map(crew.map((c) => [c.id, c])), [crew]);
 
   const loadHistory = useCallback(async () => {
@@ -145,18 +150,20 @@ export function BulkMessageComposer({
   }
 
   return (
-    <div className="mx-auto max-w-[1000px] space-y-5 p-5">
-      <section className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          {t("nav.messages")}
-        </p>
-        <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
-          {t("messages.bulkTitle")}
-        </h1>
-        <p className="text-sm text-[var(--text-secondary)]">
-          {t("messages.bulkSubtitle").replace("{name}", senderName)}
-        </p>
-      </section>
+    <div className={embedded ? "space-y-4" : "mx-auto max-w-[1000px] space-y-5 p-5"}>
+      {!embedded ? (
+        <section className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {t("nav.messages")}
+          </p>
+          <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
+            {t("messages.bulkTitle")}
+          </h1>
+          <p className="text-sm text-[var(--text-secondary)]">
+            {t("messages.bulkSubtitle").replace("{name}", senderName)}
+          </p>
+        </section>
+      ) : null}
 
       <section className="surface-card p-4">
         <form onSubmit={handleSend} className="space-y-4">
@@ -174,7 +181,7 @@ export function BulkMessageComposer({
               <Users size={14} /> {t("messages.sendToAll")}
             </span>
             <span className="text-xs text-[var(--text-muted)]">
-              ({crew.length} {t("messages.people")})
+              ({allRecipientCount} {t("messages.people")})
             </span>
           </label>
 

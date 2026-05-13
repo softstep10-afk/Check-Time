@@ -1434,7 +1434,7 @@ export const translations = {
   "owner.lastOwnerError": { en: "System must have at least one Owner. Transfer ownership first.", ru: "В системе должен быть хотя бы один Владелец. Сначала передайте владение." },
   "owner.demoBanner": { en: "Demo mode — showing Owner view", ru: "Демо-режим — просмотр Владельца" },
   "audit.title": { en: "Audit Log", ru: "Журнал аудита" },
-  "audit.description": { en: "Immutable record of all sensitive actions.", ru: "Неизменяемая запись всех важных действий." },
+  "audit.description": { en: "Owner-only black box: who changed roles, approved payroll, deleted records, or changed sensitive settings.", ru: "Чёрный ящик для владельца: кто менял роли, утверждал зарплату, удалял записи или трогал важные настройки." },
   "audit.actor": { en: "Actor", ru: "Действующий" },
   "audit.action": { en: "Action", ru: "Действие" },
   "audit.target": { en: "Target", ru: "Объект" },

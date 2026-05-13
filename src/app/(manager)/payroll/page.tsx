@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPayrollPageData } from "@/lib/manager-data";
 import { hasFinanceAccess } from "@/lib/finance-access";
@@ -37,16 +38,21 @@ export default async function PayrollPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
-      <section className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          {t("payroll.title")}
-        </p>
-        <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
-          {t("payroll.subtitle")}
-        </h1>
-        <p className="max-w-[64ch] text-sm leading-6 text-[var(--text-secondary)]">
-          {t("payroll.description")}
-        </p>
+      <section className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {t("payroll.title")}
+          </p>
+          <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
+            {t("payroll.subtitle")}
+          </h1>
+          <p className="max-w-[64ch] text-sm leading-6 text-[var(--text-secondary)]">
+            {t("payroll.description")}
+          </p>
+        </div>
+        <Link href="/reports/annual" className="button-base button-secondary px-3 py-2 text-sm">
+          {t("report.title")}
+        </Link>
       </section>
 
       <PayrollCalculator
