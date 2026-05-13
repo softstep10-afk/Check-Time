@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Activity, Archive, BarChart3, FolderKanban, Users, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, Store, ScrollText, Sliders } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -49,13 +49,14 @@ export default function ManagerLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const { t } = useTranslation();
 
   // In auth-bypass/preview mode, owner is the default role
   const [userRole, setUserRole] = useState<string>(AUTH_BYPASS_ENABLED ? "owner" : "manager");
   const [userName, setUserName] = useState<string>(AUTH_BYPASS_ENABLED ? "Preview Owner" : "");
   const [hasFinanceMenu, setHasFinanceMenu] = useState(AUTH_BYPASS_ENABLED);
+  const liveRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (AUTH_BYPASS_ENABLED) return;
@@ -87,6 +88,34 @@ export default function ManagerLayout({
     }
     void loadProfile();
   }, [supabase]);
+
+  useEffect(() => {
+    if (AUTH_BYPASS_ENABLED) return;
+    function scheduleRefresh() {
+      if (liveRefreshTimerRef.current) return;
+      liveRefreshTimerRef.current = setTimeout(() => {
+        liveRefreshTimerRef.current = null;
+        router.refresh();
+      }, 1200);
+    }
+
+    const channel = supabase
+      .channel("manager-global-refresh")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "time_events" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "media" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_assignments" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
+      .subscribe();
+
+    return () => {
+      if (liveRefreshTimerRef.current) {
+        clearTimeout(liveRefreshTimerRef.current);
+        liveRefreshTimerRef.current = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, router]);
 
   const isOwnerUser = userRole === "owner" || userRole === "admin";
 

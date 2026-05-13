@@ -107,6 +107,17 @@ type ClockOptions = {
   note?: string;
 };
 
+type TaskNotificationRow = {
+  id: string;
+  assigned_to: string | null;
+  project_id: string | null;
+  status: string;
+  created_at: string;
+  updated_at?: string | null;
+  deleted_at?: string | null;
+  title?: string | null;
+};
+
 type WorkerShellContextValue = {
   shell: WorkerShellData;
   activeSeconds: number;
@@ -696,6 +707,9 @@ export function WorkerShell({
   const [taskLastSeenAt, setTaskLastSeenAt] = useState<string | null>(() =>
     loadTaskLastSeen(shell.profile.id),
   );
+  const knownTaskIdsRef = useRef<Set<string>>(
+    new Set(initialData.tasks.map((task) => task.id)),
+  );
 
   // Project access set used to test whether a project-level task
   // (assigned_to=null) is visible. Recomputed when the projects list
@@ -732,6 +746,46 @@ export function WorkerShell({
     setTaskLastSeenAt(now);
   }, [shell.profile.id]);
 
+  useEffect(() => {
+    const next = new Set(knownTaskIdsRef.current);
+    for (const task of shell.tasks) {
+      next.add(task.id);
+    }
+    knownTaskIdsRef.current = next;
+  }, [shell.tasks]);
+
+  const notifyVisibleTask = useCallback(
+    (row: TaskNotificationRow): boolean => {
+      if (
+        !isTaskVisibleToWorker(row, {
+          profileId: shell.profile.id,
+          visibleProjectIds,
+        })
+      ) {
+        return false;
+      }
+      if (knownTaskIdsRef.current.has(row.id)) return false;
+      knownTaskIdsRef.current.add(row.id);
+
+      const projectName = row.project_id
+        ? shell.projects.find((p) => p.id === row.project_id)?.name ?? null
+        : null;
+      const detail = projectName
+        ? `${t("tasks.newTaskBanner")} · ${projectName}`
+        : t("tasks.newTaskBanner");
+      setBanner({ tone: "info", text: detail });
+      if (!muted) {
+        playClockInSound();
+      }
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([120, 60, 120]);
+      }
+      router.refresh();
+      return true;
+    },
+    [muted, router, shell.profile.id, shell.projects, t, visibleProjectIds],
+  );
+
   // ── Tasks realtime subscription ─────────────────────────────────────
   //
   // INSERT: a new task arriving for this worker (personal or project-
@@ -756,40 +810,9 @@ export function WorkerShell({
           table: "tasks",
         },
         (payload) => {
-          const row = payload.new as {
-            id: string;
-            assigned_to: string | null;
-            project_id: string | null;
-            status: string;
-            created_at: string;
-            deleted_at?: string | null;
-            title?: string | null;
-          } | null;
+          const row = payload.new as TaskNotificationRow | null;
           if (!row) return;
-          if (
-            !isTaskVisibleToWorker(row, {
-              profileId: shell.profile.id,
-              visibleProjectIds,
-            })
-          ) {
-            return;
-          }
-          // Surface the new task — banner + sound (unless muted) +
-          // shell refresh so it lands in shell.tasks.
-          const projectName = row.project_id
-            ? shell.projects.find((p) => p.id === row.project_id)?.name ?? null
-            : null;
-          const detail = projectName
-            ? `${t("tasks.newTaskBanner")} · ${projectName}`
-            : t("tasks.newTaskBanner");
-          setBanner({ tone: "info", text: detail });
-          if (!muted) {
-            // Reuse the clock-in chime — short, distinct enough from the
-            // checkout double-tone, and the AudioContext is already
-            // unlocked once the worker has interacted with the shell.
-            playClockInSound();
-          }
-          router.refresh();
+          notifyVisibleTask(row);
         },
       )
       .on(
@@ -799,9 +822,9 @@ export function WorkerShell({
           schema: "public",
           table: "tasks",
         },
-        () => {
-          // No banner on edits / status changes — just keep the list
-          // fresh so the worker sees re-assignments and re-priorities.
+        (payload) => {
+          const row = payload.new as TaskNotificationRow | null;
+          if (row && notifyVisibleTask(row)) return;
           router.refresh();
         },
       )
@@ -809,7 +832,47 @@ export function WorkerShell({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, router, shell.profile.id, visibleProjectIds, shell.projects, muted, t]);
+  }, [supabase, router, notifyVisibleTask, shell.profile.id]);
+
+  useEffect(() => {
+    if (!mounted || !isOnline) return;
+    let stopped = false;
+
+    async function pollNewTasks() {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("id, assigned_to, project_id, status, created_at, updated_at, deleted_at, title")
+        .eq("org_id", shell.profile.org_id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(60);
+      if (stopped || error || !data) return;
+      const rows = [...(data as TaskNotificationRow[])].reverse();
+      let notified = false;
+      for (const row of rows) {
+        if (notifyVisibleTask(row)) notified = true;
+      }
+      if (!notified && document.visibilityState === "visible") {
+        router.refresh();
+      }
+    }
+
+    const timer = window.setInterval(() => {
+      void pollNewTasks();
+    }, 15_000);
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void pollNewTasks();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isOnline, mounted, notifyVisibleTask, router, shell.profile.org_id, supabase]);
 
   useEffect(() => {
     if (!mounted) return;

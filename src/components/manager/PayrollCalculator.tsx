@@ -11,6 +11,7 @@ import { DateField } from "@/components/shared/DateField";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { logAudit } from "@/lib/audit";
 import {
+  buildBillableTransferGapRows,
   buildPayrollDraftRows,
   buildWorkerDisambiguationMap,
   formatWorkerDisplayLabel,
@@ -175,6 +176,29 @@ function buildWorkerLines(
     proj.sessionIds.push(s.id);
     entry.byProject.set(s.projectId, proj);
     hoursByWorker.set(s.profileId, entry);
+  }
+
+  for (const gap of buildBillableTransferGapRows({
+    sessions,
+    startDate,
+    endDate,
+    closedThroughByProfileId,
+  })) {
+    const entry = hoursByWorker.get(gap.profileId) ?? { total: 0, noGps: 0, byProject: new Map() };
+    entry.total += gap.gapMinutes;
+    const projectName = `${gap.fromProject} → ${gap.toProject}`;
+    const proj = entry.byProject.get(gap.toProjectId) ?? {
+      id: gap.toProjectId,
+      name: projectName,
+      minutes: 0,
+      eventIds: [],
+      sessionIds: [],
+    };
+    proj.minutes += gap.gapMinutes;
+    proj.eventIds.push(...gap.eventIds);
+    proj.sessionIds.push(...gap.sessionIds);
+    entry.byProject.set(gap.toProjectId, proj);
+    hoursByWorker.set(gap.profileId, entry);
   }
 
   return profiles
@@ -372,7 +396,11 @@ function ShiftRow({
               {row.profileName}
             </span>
           ) : null}
-          <span className="text-[var(--text-secondary)]">{row.projectName}</span>
+          <span className="text-[var(--text-secondary)]">
+            {row.isBillableTransferGap
+              ? `${t("payroll.billableTransferGap")}: ${row.projectName}`
+              : row.projectName}
+          </span>
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-2 font-mono text-[10px] text-[var(--text-muted)]">
           <span>{formatEventTime(row.clockInTime)}</span>
@@ -405,6 +433,14 @@ function ShiftRow({
             style={{ background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }}
           >
             ≥16h
+          </span>
+        ) : null}
+        {row.isBillableTransferGap ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(15, 168, 120, 0.14)", color: "var(--green)" }}
+          >
+            {t("payroll.billableTransferGap")}
           </span>
         ) : null}
         {!row.hasGps ? (

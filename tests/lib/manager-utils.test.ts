@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildBillableTransferGapRows,
   buildPayrollDraftRows,
   buildProfileSummaries,
   buildProjectSummaries,
@@ -712,8 +713,8 @@ describe("computePayrollPreview", () => {
       timeEvents: [
         makeEvent({ id: "a1", profile_id: "w1", project_id: "p1", event_type: "clock_in", event_time: "2026-04-01T08:00:00Z" }),
         makeEvent({ id: "a2", profile_id: "w1", project_id: "p1", event_type: "clock_out", event_time: "2026-04-01T12:00:00Z" }),
-        makeEvent({ id: "b1", profile_id: "w1", project_id: "p2", event_type: "clock_in", event_time: "2026-04-01T13:00:00Z" }),
-        makeEvent({ id: "b2", profile_id: "w1", project_id: "p2", event_type: "clock_out", event_time: "2026-04-01T17:00:00Z" }),
+        makeEvent({ id: "b1", profile_id: "w1", project_id: "p2", event_type: "clock_in", event_time: "2026-04-01T12:00:00Z" }),
+        makeEvent({ id: "b2", profile_id: "w1", project_id: "p2", event_type: "clock_out", event_time: "2026-04-01T16:00:00Z" }),
       ],
     });
     const sessions = buildManagerSessions(data);
@@ -722,6 +723,28 @@ describe("computePayrollPreview", () => {
     expect(preview.workersCount).toBe(1);
     expect(preview.totalHours).toBeCloseTo(8, 2);
     expect(preview.totalAmount).toBe(240);
+  });
+
+  it("includes paid same-day transfer time in payroll preview", () => {
+    const data = makeWorkspace({
+      profiles: [makeProfile({ id: "w1", name: "W1", hourly_rate: 30 })],
+      projects: [
+        makeProject({ id: "home", name: "Home" }),
+        makeProject({ id: "dix", name: "DIX" }),
+      ],
+      timeEvents: [
+        makeEvent({ id: "a1", profile_id: "w1", project_id: "home", event_type: "clock_in", event_time: "2026-05-10T16:00:00Z" }),
+        makeEvent({ id: "a2", profile_id: "w1", project_id: "home", event_type: "clock_out", event_time: "2026-05-10T21:00:00Z" }),
+        makeEvent({ id: "b1", profile_id: "w1", project_id: "dix", event_type: "clock_in", event_time: "2026-05-10T22:00:00Z" }),
+        makeEvent({ id: "b2", profile_id: "w1", project_id: "dix", event_type: "clock_out", event_time: "2026-05-11T01:00:00Z" }),
+      ],
+    });
+
+    const preview = computePayrollPreview(data, buildManagerSessions(data), "2026-05-31");
+
+    expect(preview.totalHours).toBe(9);
+    expect(preview.totalAmount).toBe(270);
+    expect(preview.lines.find((line) => line.projectId === "dix")?.hours).toBe(4);
   });
 
   it("excludes hours before the latest payroll closure for that worker", () => {
@@ -827,7 +850,146 @@ function makeSession(
   };
 }
 
+describe("buildBillableTransferGapRows", () => {
+  it("adds same-day time between different projects as a billable gap", () => {
+    const sessions: ManagerSession[] = [
+      makeSession({
+        id: "s1",
+        profileId: "w1",
+        profileName: "Vasia",
+        projectId: "home",
+        projectName: "Home",
+        clockInTime: "2026-05-10T16:00:00Z",
+        clockOutTime: "2026-05-10T21:00:00Z",
+      }),
+      makeSession({
+        id: "s2",
+        profileId: "w1",
+        profileName: "Vasia",
+        projectId: "dix",
+        projectName: "DIX",
+        clockInTime: "2026-05-10T22:00:00Z",
+        clockOutTime: "2026-05-11T01:00:00Z",
+      }),
+    ];
+
+    const gaps = buildBillableTransferGapRows({
+      sessions,
+      startDate: "2026-05-10",
+      endDate: "2026-05-10",
+      timeZone: "America/Los_Angeles",
+    });
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]).toMatchObject({
+      profileId: "w1",
+      fromProject: "Home",
+      toProject: "DIX",
+      gapMinutes: 60,
+    });
+  });
+
+  it("does not pay overnight gaps between different work days", () => {
+    const sessions: ManagerSession[] = [
+      makeSession({
+        id: "s1",
+        profileId: "w1",
+        projectId: "home",
+        projectName: "Home",
+        clockInTime: "2026-05-10T16:00:00Z",
+        clockOutTime: "2026-05-11T02:00:00Z",
+      }),
+      makeSession({
+        id: "s2",
+        profileId: "w1",
+        projectId: "dix",
+        projectName: "DIX",
+        clockInTime: "2026-05-11T13:00:00Z",
+        clockOutTime: "2026-05-11T20:00:00Z",
+      }),
+    ];
+
+    expect(
+      buildBillableTransferGapRows({
+        sessions,
+        startDate: "2026-05-10",
+        endDate: "2026-05-11",
+        timeZone: "America/Los_Angeles",
+      }),
+    ).toHaveLength(0);
+  });
+
+  it("cuts already-closed transfer time out of a new payroll window", () => {
+    const sessions: ManagerSession[] = [
+      makeSession({
+        id: "s1",
+        profileId: "w1",
+        projectId: "home",
+        projectName: "Home",
+        clockInTime: "2026-05-10T16:00:00Z",
+        clockOutTime: "2026-05-10T21:00:00Z",
+      }),
+      makeSession({
+        id: "s2",
+        profileId: "w1",
+        projectId: "dix",
+        projectName: "DIX",
+        clockInTime: "2026-05-10T23:00:00Z",
+        clockOutTime: "2026-05-11T01:00:00Z",
+      }),
+    ];
+
+    const gaps = buildBillableTransferGapRows({
+      sessions,
+      startDate: "2026-05-10",
+      endDate: "2026-05-10",
+      closedThroughByProfileId: {
+        w1: "2026-05-10T22:00:00Z",
+      },
+      timeZone: "America/Los_Angeles",
+    });
+
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].gapMinutes).toBe(60);
+  });
+});
+
 describe("buildPayrollDraftRows", () => {
+  it("includes same-day project transfer gaps as paid review rows", () => {
+    const sessions: ManagerSession[] = [
+      makeSession({
+        id: "s1",
+        profileId: "w1",
+        profileName: "Vasia",
+        projectId: "home",
+        projectName: "Home",
+        clockInTime: "2026-05-10T16:00:00Z",
+        clockOutTime: "2026-05-10T21:00:00Z",
+      }),
+      makeSession({
+        id: "s2",
+        profileId: "w1",
+        profileName: "Vasia",
+        projectId: "dix",
+        projectName: "DIX",
+        clockInTime: "2026-05-10T22:00:00Z",
+        clockOutTime: "2026-05-11T01:00:00Z",
+      }),
+    ];
+
+    const rows = buildPayrollDraftRows({
+      sessions,
+      hasGpsBySessionId: { s1: true, s2: true },
+      requireVideoByProfileId: { w1: false },
+      startDate: "2026-05-10",
+      endDate: "2026-05-10",
+    });
+
+    const gap = rows.find((row) => row.isBillableTransferGap);
+    expect(gap?.durationMinutes).toBe(60);
+    expect(gap?.projectName).toBe("Home → DIX");
+  });
+
   it("includes only sessions overlapping the period window", () => {
     const sessions: ManagerSession[] = [
       makeSession({

@@ -102,6 +102,7 @@ export const translations = {
   "common.noAddressSet": { en: "No address set", ru: "Адрес не указан" },
   "common.total": { en: "total", ru: "всего" },
   "common.openProject": { en: "Open project", ru: "Открыть проект" },
+  "common.openProjects": { en: "Open projects", ru: "Открыть проекты" },
   "common.generalTask": { en: "General task", ru: "Общая задача" },
   "common.projectNotResolved": { en: "Project not resolved", ru: "Проект не определён" },
 
@@ -278,6 +279,7 @@ export const translations = {
 
   // ── Projects Page ──
   "projects.title": { en: "Projects", ru: "Проекты" },
+  "projects.activeProjects": { en: "Active projects", ru: "Активные проекты" },
   "projects.subtitle": { en: "Sites and production lanes", ru: "Объекты и производственные линии" },
   "projects.description": { en: "Keep every active jobsite, rate, radius, and note aligned with the same ledger your crews are using.", ru: "Все активные объекты, ставки, радиусы и заметки в одном месте с реестром бригад." },
   "projects.createProject": { en: "Create Project", ru: "Создать проект" },
@@ -640,6 +642,7 @@ export const translations = {
   "team.requireCheckoutVideo": { en: "Require checkout video", ru: "Требовать видео при выходе" },
   "team.createMember": { en: "Create Member", ru: "Создать участника" },
   "team.memberCreatedPin": { en: "✓ {name} created with PIN {pin}", ru: "✓ {name} создан с PIN {pin}" },
+  "team.financeAccess": { en: "Finance access", ru: "Доступ к финансам" },
   "team.nameRequired": { en: "Name is required", ru: "Имя обязательно" },
   "team.pinDigitsOnly": { en: "Login code must use digits only", ru: "Код входа должен содержать только цифры" },
   "team.pinLettersDigitsOnly": { en: "Login code can use only letters and digits", ru: "Код входа может содержать только буквы и цифры" },
@@ -652,6 +655,10 @@ export const translations = {
   // ── Team Member Page ──
   "teamMember.backToTeam": { en: "Back to team", ru: "Назад к команде" },
   "teamMember.description": { en: "Adjust access, assignments, and pay settings without breaking the worker timeline underneath.", ru: "Настройте доступ, назначения и оплату без нарушения хронологии рабочего." },
+  "teamMember.ownerAdminDescription": {
+    en: "Owner/admin profile. This account manages the company, so worker shift widgets, assigned-task lists, store visits, and self-messaging are intentionally hidden.",
+    ru: "Профиль владельца/админа. Этот аккаунт управляет компанией, поэтому смены рабочего, назначенные задачи, магазины и сообщения самому себе здесь скрыты.",
+  },
   "teamMember.profileSettings": { en: "Profile settings", ru: "Настройки профиля" },
   "teamMember.requireCheckoutVideo": { en: "Require checkout video", ru: "Требовать видео при выходе" },
   "teamMember.allowPinAccess": { en: "Allow PIN access", ru: "Разрешить вход по PIN" },
@@ -665,6 +672,21 @@ export const translations = {
   "teamMember.couldNotResetPin": { en: "Could not reset PIN.", ru: "Не удалось сбросить PIN." },
   "teamMember.pinResetSuccess": { en: "PIN reset successfully. New PIN:", ru: "PIN успешно сброшен. Новый PIN:" },
   "teamMember.profileUpdated": { en: "Profile updated.", ru: "Профиль обновлён." },
+  "teamMember.ownerAdminAccessHint": {
+    en: "Owners and admins have full project access by role. They are not tracked as payroll workers unless you explicitly change the role to a field role.",
+    ru: "Владельцы и админы имеют полный доступ к проектам по роли. Они не считаются рабочими в зарплате, пока вы явно не смените роль на полевую.",
+  },
+  "teamMember.ownerAdminRoleCard": { en: "Management access", ru: "Управленческий доступ" },
+  "teamMember.ownerAdminNoWorkerStats": {
+    en: "No recent shifts, store visits, assigned worker tasks, or manual hour closing are shown here for owner/admin accounts.",
+    ru: "Для owner/admin здесь не показываются последние смены, магазины, рабочие задачи и ручное закрытие часов.",
+  },
+  "teamMember.ownerProjectControl": { en: "Project control", ru: "Управление проектами" },
+  "teamMember.ownerProjectControlHint": {
+    en: "Owners can create, open, archive, and review every project. This card shows the current operating load instead of worker access toggles.",
+    ru: "Владельцы могут создавать, открывать, архивировать и проверять все проекты. Здесь показана текущая нагрузка, а не тумблеры доступа рабочего.",
+  },
+  "teamMember.ownerAllProjects": { en: "All", ru: "Все" },
   "teamMember.noCurrentProject": { en: "No current project", ru: "Нет текущего проекта" },
   "teamMember.projectAssignments": { en: "Project Assignments", ru: "Назначения проектов" },
   "teamMember.projectAccess": { en: "Project Access", ru: "Доступ к проектам" },
@@ -1061,6 +1083,7 @@ export const translations = {
   "payroll.missingCheckoutShort": { en: "Open shift", ru: "Не закрыта" },
   "payroll.missingVideoShort": { en: "No video", ru: "Без видео" },
   "payroll.transferGapShort": { en: "Transfer gap", ru: "Перерыв" },
+  "payroll.billableTransferGap": { en: "Paid transfer", ru: "Оплачиваемый переезд" },
   "payroll.reviewClean": { en: "Clean", ru: "Чисто" },
   "payroll.reviewWarn": { en: "Needs review", ru: "Требует проверки" },
   "payroll.reviewBlocked": { en: "Needs review", ru: "Проверить" },

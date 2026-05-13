@@ -56,7 +56,10 @@ const roleOptions: UserRole[] = [
   "subcontractor",
   "manager",
   "admin",
+  "owner",
 ];
+
+const OWNER_ADMIN_ROLES = new Set<UserRole>(["owner", "admin"]);
 
 type WorkerMediaRow = Media & { projectName: string | null };
 
@@ -345,6 +348,8 @@ export function TeamMemberPage({
 
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
   const activeProjects = projects.filter((project) => !project.deleted_at && project.status !== "archived");
+  const isOwnerAdminProfile = OWNER_ADMIN_ROLES.has(profile.role);
+  const ownerProjectRows = activeProjects.slice(0, 8);
 
   // Migration 00018 — per-worker visibility mode. Default to 'list' for
   // legacy / unmigrated rows so behavior matches today.
@@ -361,11 +366,12 @@ export function TeamMemberPage({
     const formData = new FormData(event.currentTarget);
     const name = formData.get("name")?.toString().trim() ?? profile.name;
     const role = (formData.get("role")?.toString() ?? profile.role) as UserRole;
-    const hourlyRateRaw = hasFinanceAccess
+    const roleIsOwnerAdmin = OWNER_ADMIN_ROLES.has(role);
+    const hourlyRateRaw = hasFinanceAccess && !roleIsOwnerAdmin
       ? formData.get("hourly_rate")?.toString().trim() ?? ""
       : "";
     const hourlyRate = hourlyRateRaw ? Number.parseFloat(hourlyRateRaw) : null;
-    const requireVideo = formData.get("require_video") === "on";
+    const requireVideo = roleIsOwnerAdmin ? false : formData.get("require_video") === "on";
     const isActive = formData.get("is_active") === "on";
 
     setBusyKey("profile");
@@ -383,7 +389,7 @@ export function TeamMemberPage({
         role,
         require_video: requireVideo,
         is_active: isActive,
-        ...(hasFinanceAccess
+        ...(hasFinanceAccess && !roleIsOwnerAdmin
           ? {
               hourly_rate:
                 typeof hourlyRate === "number" && Number.isFinite(hourlyRate)
@@ -768,6 +774,241 @@ export function TeamMemberPage({
       },
     });
     router.refresh();
+  }
+
+  if (isOwnerAdminProfile) {
+    return (
+      <div className="mx-auto max-w-[1200px] space-y-5 p-5">
+        <section className="space-y-2">
+          <Link href="/team" className="text-sm font-semibold text-[var(--brand-yellow)]">
+            {t("teamMember.backToTeam")}
+          </Link>
+          <h1 className="text-[28px] font-bold text-[var(--text-primary)]">{profile.name}</h1>
+          <p className="max-w-[64ch] text-sm leading-6 text-[var(--text-secondary)]">
+            {t("teamMember.ownerAdminDescription")}
+          </p>
+        </section>
+
+        {message ? (
+          <div
+            className="rounded-[var(--radius-md)] px-3 py-3 text-sm"
+            style={{
+              background: messageType === "error"
+                ? "rgba(212, 81, 94, 0.12)"
+                : messageType === "success"
+                  ? "rgba(15, 168, 120, 0.16)"
+                  : "rgba(191, 162, 52, 0.12)",
+              color: messageType === "error"
+                ? "var(--red)"
+                : messageType === "success"
+                  ? "var(--green)"
+                  : "var(--brand-yellow)",
+            }}
+          >
+            {message}
+          </div>
+        ) : null}
+
+        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="space-y-4">
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.profileSettings")}</h2>
+              <form className="mt-4 grid gap-3" onSubmit={handleUpdateProfile}>
+                <TextInputWithVoice
+                  name="name"
+                  defaultValue={profile.name}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <select
+                    name="role"
+                    defaultValue={profile.role}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  >
+                    {roleOptions.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-sm text-[var(--text-primary)]">
+                    <input
+                      key={`is-active-${profile.id}-${profile.is_active ? "yes" : "no"}`}
+                      type="checkbox"
+                      name="is_active"
+                      defaultChecked={profile.is_active}
+                    />
+                    {t("teamMember.allowPinAccess")}
+                  </label>
+                </div>
+                <div className="rounded-[var(--radius-md)] border border-[rgba(191,162,52,0.24)] bg-[rgba(191,162,52,0.08)] px-3 py-3 text-xs leading-5 text-[var(--text-secondary)]">
+                  {t("teamMember.ownerAdminAccessHint")}
+                </div>
+                <button
+                  type="submit"
+                  disabled={busyKey === "profile"}
+                  className="rounded-[var(--radius-sm)] px-4 py-3 text-sm font-semibold"
+                  style={{
+                    background: busyKey === "profile" ? "var(--border-default)" : "var(--brand-yellow)",
+                    color: busyKey === "profile" ? "var(--text-muted)" : "var(--text-inverse)",
+                  }}
+                >
+                  {busyKey === "profile" ? t("common.saving") : t("teamMember.saveProfile")}
+                </button>
+              </form>
+
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--border-default)] pt-4">
+                <button
+                  type="button"
+                  onClick={() => void handleResetPin()}
+                  disabled={busyKey === "reset-pin"}
+                  className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                  style={{ borderColor: "var(--brand-yellow)", color: "var(--brand-yellow)" }}
+                >
+                  {busyKey === "reset-pin" ? t("teamMember.resetting") : t("teamMember.resetPin")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleToggleActive()}
+                  disabled={busyKey === "toggle-active"}
+                  className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                  style={{
+                    borderColor: profile.is_active ? "rgba(212, 81, 94, 0.3)" : "rgba(15, 168, 120, 0.3)",
+                    color: profile.is_active ? "var(--red)" : "var(--green)",
+                  }}
+                >
+                  {profile.is_active ? t("teamMember.deactivate") : t("team.reactivate")}
+                </button>
+              </div>
+
+              {resetPinResult ? (
+                <div
+                  className="mt-3 rounded-[var(--radius-md)] px-3 py-3 text-sm font-semibold"
+                  style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
+                >
+                  New PIN: {resetPinResult} — {t("teamMember.newPinShare")}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("teamMember.ownerAdminRoleCard")}
+              </h2>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("team.roleLabel")}
+                  </div>
+                  <div className="mt-1 text-sm font-bold uppercase text-[var(--brand-yellow)]">
+                    {profile.role}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("team.financeAccess")}
+                  </div>
+                  <div className="mt-1 text-sm font-bold" style={{ color: profile.financeAccess ? "var(--green)" : "var(--text-muted)" }}>
+                    {profile.financeAccess ? t("team.financeAlways") : t("sidebar.limitedAccess")}
+                  </div>
+                </div>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-[var(--text-secondary)]">
+                {t("teamMember.ownerAdminNoWorkerStats")}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("teamMember.ownerProjectControl")}
+              </h2>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                {t("teamMember.ownerProjectControlHint")}
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("projects.activeProjects")}
+                  </div>
+                  <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">
+                    {activeProjects.filter((project) => project.status === "active").length}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("common.tasks")}
+                  </div>
+                  <div className="mt-1 text-xl font-bold text-[var(--text-primary)]">
+                    {projects.reduce((sum, project) => sum + project.openTaskCount, 0)}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("teamMember.projectAccess")}
+                  </div>
+                  <div className="mt-1 text-xl font-bold text-[var(--green)]">
+                    {t("teamMember.ownerAllProjects")}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {ownerProjectRows.length === 0 ? (
+                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+                    {t("teamMember.noActiveProjects")}
+                  </div>
+                ) : (
+                  ownerProjectRows.map((project) => (
+                    <Link
+                      key={project.id}
+                      href={`/projects/${project.id}`}
+                      className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-2.5 hover:border-[var(--brand-yellow)]"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-[var(--text-primary)]">
+                          {project.name}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-[var(--text-muted)]">
+                          {project.address ?? t("common.noAddress")}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-xs font-semibold text-[var(--brand-yellow)]">
+                        {project.openTaskCount} {t("common.tasks").toLowerCase()}
+                      </span>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Link
+                href="/projects"
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--brand-yellow)]"
+              >
+                {t("common.openProjects")}
+              </Link>
+              {hasFinanceAccess ? (
+                <Link
+                  href="/payroll"
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--brand-yellow)]"
+                >
+                  {t("manager.navPayroll")}
+                </Link>
+              ) : null}
+              <Link
+                href="/admin/settings"
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 text-sm font-semibold text-[var(--text-primary)] hover:border-[var(--brand-yellow)]"
+              >
+                {t("admin.settings.title")}
+              </Link>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
   }
 
   return (

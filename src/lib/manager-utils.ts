@@ -251,6 +251,36 @@ export interface TransferGap {
   severity: TransferGapSeverity;
 }
 
+export interface BillableTransferGap {
+  id: string;
+  profileId: string;
+  profileName: string;
+  fromProjectId: string;
+  toProjectId: string;
+  fromProject: string;
+  toProject: string;
+  outTime: string;
+  inTime: string;
+  gapMinutes: number;
+  eventIds: string[];
+  sessionIds: string[];
+}
+
+const DEFAULT_PAYROLL_TIME_ZONE = "America/Los_Angeles";
+
+function dateKeyInTimeZone(iso: string, timeZone = DEFAULT_PAYROLL_TIME_ZONE): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(iso));
+  const year = parts.find((part) => part.type === "year")?.value ?? "0000";
+  const month = parts.find((part) => part.type === "month")?.value ?? "00";
+  const day = parts.find((part) => part.type === "day")?.value ?? "00";
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * Detect project-transfer gaps across one or many workers.
  *
@@ -342,6 +372,95 @@ export function detectTransferGaps(args: {
   }
 
   return gaps.sort((a, b) => b.gapMinutes - a.gapMinutes);
+}
+
+export function buildBillableTransferGapRows(args: {
+  sessions: ManagerSession[];
+  /** Inclusive ISO date YYYY-MM-DD. */
+  startDate: string;
+  /** Inclusive ISO date YYYY-MM-DD. */
+  endDate: string;
+  /** Latest paid/closed cutoff by worker id. New payroll drafts ignore time at or before this. */
+  closedThroughByProfileId?: Record<string, string | null | undefined>;
+  /** Restrict to one worker. */
+  profileId?: string;
+  /** Payroll/business day timezone. Defaults to Washington/Pacific. */
+  timeZone?: string;
+}): BillableTransferGap[] {
+  const startMs = new Date(`${args.startDate}T00:00:00`).getTime();
+  const endMs = new Date(`${args.endDate}T23:59:59.999`).getTime();
+  const timeZone = args.timeZone ?? DEFAULT_PAYROLL_TIME_ZONE;
+  const byProfile = new Map<string, ManagerSession[]>();
+
+  for (const session of args.sessions) {
+    if (args.profileId && session.profileId !== args.profileId) continue;
+    const list = byProfile.get(session.profileId) ?? [];
+    list.push(session);
+    byProfile.set(session.profileId, list);
+  }
+
+  const gaps: BillableTransferGap[] = [];
+  for (const [profileId, list] of byProfile) {
+    const sorted = [...list].sort(
+      (left, right) =>
+        new Date(left.clockInTime).getTime() - new Date(right.clockInTime).getTime(),
+    );
+    for (let index = 0; index < sorted.length - 1; index += 1) {
+      const previous = sorted[index];
+      const next = sorted[index + 1];
+      if (!previous.clockOutTime) continue;
+      if (previous.projectId === next.projectId) continue;
+      if (
+        dateKeyInTimeZone(previous.clockOutTime, timeZone) !==
+        dateKeyInTimeZone(next.clockInTime, timeZone)
+      ) {
+        continue;
+      }
+
+      const gapStartMs = new Date(previous.clockOutTime).getTime();
+      const gapEndMs = new Date(next.clockInTime).getTime();
+      if (gapEndMs <= gapStartMs) continue;
+
+      const closedThroughRaw = args.closedThroughByProfileId?.[profileId];
+      const closedThroughMs = closedThroughRaw
+        ? new Date(closedThroughRaw).getTime()
+        : Number.NEGATIVE_INFINITY;
+      const payableStartMs = Math.max(
+        gapStartMs,
+        startMs,
+        Number.isFinite(closedThroughMs)
+          ? closedThroughMs
+          : Number.NEGATIVE_INFINITY,
+      );
+      const payableEndMs = Math.min(gapEndMs, endMs);
+      if (payableEndMs <= payableStartMs) continue;
+
+      const gapMinutes = Math.round((payableEndMs - payableStartMs) / 60_000);
+      if (gapMinutes <= 0) continue;
+
+      gaps.push({
+        id: `${previous.id}-${next.id}`,
+        profileId,
+        profileName: previous.profileName,
+        fromProjectId: previous.projectId,
+        toProjectId: next.projectId,
+        fromProject: previous.projectName,
+        toProject: next.projectName,
+        outTime: new Date(payableStartMs).toISOString(),
+        inTime: new Date(payableEndMs).toISOString(),
+        gapMinutes,
+        eventIds: [
+          ...(previous.clockOutEventId ? [previous.clockOutEventId] : []),
+          next.clockInEventId,
+        ],
+        sessionIds: [previous.id, next.id],
+      });
+    }
+  }
+
+  return gaps.sort(
+    (left, right) => new Date(left.outTime).getTime() - new Date(right.outTime).getTime(),
+  );
 }
 
 export const TRANSFER_GAP_COLOR: Record<TransferGapSeverity, string> = {
@@ -839,6 +958,49 @@ export function computePayrollPreview(
   const linesByKey = new Map<string, PayrollPreviewLine>();
   let earliestWindowStart = periodEnd.toISOString();
 
+  function addPayLine(args: {
+    profile: Profile;
+    project: Project;
+    minutes: number;
+    windowStartIso: string;
+    sessionIds: string[];
+    eventIds: string[];
+  }) {
+    if (args.minutes <= 0) return;
+    if (args.windowStartIso < earliestWindowStart) {
+      earliestWindowStart = args.windowStartIso;
+    }
+
+    const rate = Number(args.profile.hourly_rate ?? args.project.rate ?? 0);
+    const hours = roundCurrency(args.minutes / 60);
+    const amount = roundCurrency(hours * rate);
+    const key = `${args.profile.id}:${args.project.id}:${rate.toFixed(2)}`;
+    const existing = linesByKey.get(key);
+
+    if (existing) {
+      existing.minutes += args.minutes;
+      existing.hours = roundCurrency(existing.minutes / 60);
+      existing.amount = roundCurrency(existing.hours * existing.rate);
+      existing.sessionIds.push(...args.sessionIds);
+      existing.eventIds.push(...args.eventIds);
+      return;
+    }
+
+    linesByKey.set(key, {
+      profileId: args.profile.id,
+      profileName: args.profile.name,
+      profileRole: args.profile.role,
+      projectId: args.project.id,
+      projectName: args.project.name,
+      minutes: args.minutes,
+      hours,
+      rate,
+      amount,
+      sessionIds: [...args.sessionIds],
+      eventIds: [...args.eventIds],
+    });
+  }
+
   for (const session of sessions) {
     const sessionStart = toDate(session.clockInTime);
     const sessionEnd = toDate(session.clockOutTime ?? new Date().toISOString());
@@ -875,33 +1037,38 @@ export function computePayrollPreview(
       continue;
     }
 
-    const rate = Number(profile.hourly_rate ?? project.rate ?? 0);
-    const hours = roundCurrency(minutes / 60);
-    const amount = roundCurrency(hours * rate);
-    const key = `${profile.id}:${project.id}:${rate.toFixed(2)}`;
-    const existing = linesByKey.get(key);
-
-    if (existing) {
-      existing.minutes += minutes;
-      existing.hours = roundCurrency(existing.minutes / 60);
-      existing.amount = roundCurrency(existing.hours * existing.rate);
-      existing.sessionIds.push(session.id);
-      existing.eventIds.push(...session.eventIds);
-      continue;
-    }
-
-    linesByKey.set(key, {
-      profileId: profile.id,
-      profileName: profile.name,
-      profileRole: profile.role,
-      projectId: project.id,
-      projectName: project.name,
+    addPayLine({
+      profile,
+      project,
       minutes,
-      hours,
-      rate,
-      amount,
+      windowStartIso: payableStart.toISOString(),
       sessionIds: [session.id],
       eventIds: [...session.eventIds],
+    });
+  }
+
+  const closedThroughByProfileId: Record<string, string> = {};
+  for (const [profileId, closedThrough] of latestClosureByProfile.entries()) {
+    closedThroughByProfileId[profileId] = closedThrough.toISOString();
+  }
+  const billableGaps = buildBillableTransferGapRows({
+    sessions,
+    startDate: "1970-01-01",
+    endDate: periodEnd.toISOString().slice(0, 10),
+    closedThroughByProfileId,
+  });
+
+  for (const gap of billableGaps) {
+    const profile = data.profiles.find((entry) => entry.id === gap.profileId);
+    const project = projectsById.get(gap.toProjectId);
+    if (!profile || !project) continue;
+    addPayLine({
+      profile,
+      project,
+      minutes: gap.gapMinutes,
+      windowStartIso: gap.outTime,
+      sessionIds: gap.sessionIds,
+      eventIds: gap.eventIds,
     });
   }
 
@@ -985,6 +1152,8 @@ export interface PayrollDraftRow {
   missingVideo: boolean;
   /** True when this clock_in is the to-side of a project transfer gap. */
   hasTransferGap: boolean;
+  /** True when this row is paid travel time between same-day projects. */
+  isBillableTransferGap: boolean;
   /** Severity from shiftDurationSeverity for this shift. */
   shiftSeverity: ShiftSeverity;
   /** Worker free-form note from CheckoutModal, or null. */
@@ -1081,8 +1250,37 @@ export function buildPayrollDraftRows(args: {
       hasTransferGap: transferGapKeys.has(
         `${session.profileId}|${session.clockInTime}`,
       ),
+      isBillableTransferGap: false,
       shiftSeverity: shiftDurationSeverity(session.durationMinutes),
       checkoutNote: session.checkoutNote,
+    });
+  }
+
+  const billableGaps = buildBillableTransferGapRows({
+    sessions: args.sessions,
+    startDate: args.startDate,
+    endDate: args.endDate,
+    closedThroughByProfileId: args.closedThroughByProfileId,
+    profileId: args.profileId,
+  });
+  for (const gap of billableGaps) {
+    rows.push({
+      sessionId: `transfer-gap:${gap.id}`,
+      profileId: gap.profileId,
+      profileName: gap.profileName,
+      projectId: gap.toProjectId,
+      projectName: `${gap.fromProject} → ${gap.toProject}`,
+      clockInTime: gap.outTime,
+      clockOutTime: gap.inTime,
+      dayKey: gap.outTime.slice(0, 10),
+      durationMinutes: gap.gapMinutes,
+      hasGps: true,
+      missingCheckout: false,
+      missingVideo: false,
+      hasTransferGap: true,
+      isBillableTransferGap: true,
+      shiftSeverity: "ok",
+      checkoutNote: null,
     });
   }
 
