@@ -997,6 +997,8 @@ export const translations = {
   "member.resetSuccess": { en: "Hours reset to zero.", ru: "Часы обнулены." },
   "member.resetNothing": { en: "No unpaid hours to reset.", ru: "Нет неоплаченных часов для обнуления." },
   "payroll.processSelected": { en: "Process selected", ru: "Обработать выбранные" },
+  "payroll.approveSelected": { en: "Approve selected", ru: "Утвердить выбранные" },
+  "payroll.markSelectedPaid": { en: "Mark selected paid", ru: "Отметить оплату выбранных" },
   "payroll.selectAll": { en: "Select all", ru: "Выбрать все" },
   "payroll.selectAllVisible": { en: "Select all visible", ru: "Выбрать все видимые" },
   "payroll.selectedCount": { en: "{n} selected", ru: "Выбрано: {n}" },
@@ -1014,7 +1016,7 @@ export const translations = {
   "payroll.transferGapShort": { en: "Transfer gap", ru: "Перерыв" },
   "payroll.reviewClean": { en: "Clean", ru: "Чисто" },
   "payroll.reviewWarn": { en: "Needs review", ru: "Требует проверки" },
-  "payroll.reviewBlocked": { en: "Blocked", ru: "Заблокировано" },
+  "payroll.reviewBlocked": { en: "Needs review", ru: "Проверить" },
   "payroll.reviewCleanHint": {
     en: "No abnormal shift facts in this period.",
     ru: "В этом периоде нет аномальных фактов по сменам.",
@@ -1024,8 +1026,8 @@ export const translations = {
     ru: "Длинные смены, отсутствие GPS, нет видео при выходе или перерывы между объектами. Проверьте перед утверждением.",
   },
   "payroll.reviewBlockedHint": {
-    en: "Critical facts: ≥24h shift or missing checkout. Resolve before approving payroll.",
-    ru: "Критичные факты: смена ≥24ч или незакрытая. Решите до утверждения зарплаты.",
+    en: "Critical facts: ≥24h shift or missing checkout. Review before paying; this does not hide the hours.",
+    ru: "Критичные факты: смена ≥24ч или незакрытая. Проверьте перед оплатой; часы не скрываются.",
   },
   "payroll.emptyPeriod": {
     en: "No payroll items for this period.",
@@ -1314,6 +1316,7 @@ export const translations = {
   "payroll.approved": { en: "Approved", ru: "Утверждён" },
   "payroll.paid": { en: "Paid", ru: "Оплачен" },
   "payroll.regHours": { en: "Regular", ru: "Обычные" },
+  "payroll.totalHours": { en: "Total hours", ru: "Всего часов" },
   "payroll.otHours": { en: "Overtime", ru: "Сверхурочные" },
   "payroll.noGpsHours": { en: "No-GPS", ru: "Без GPS" },
   "payroll.noGpsHoursLoadedHint": { en: "No-GPS breakdown is only computed for newly built periods.", ru: "Разбивка без GPS считается только для свеже-собранных периодов." },

@@ -546,7 +546,10 @@ export function PayrollCalculator({
 
   async function handleCreatePeriodFor(start: string, end: string, type: PeriodType) {
     if (!start || !end) return;
-    const lines = buildWorkerLines(profiles, sessions, start, end, hasGpsBySessionId);
+    const scopedProfiles = workerFilter
+      ? profiles.filter((profile) => profile.id === workerFilter)
+      : profiles;
+    const lines = buildWorkerLines(scopedProfiles, sessions, start, end, hasGpsBySessionId);
     const label = `${start} → ${end}`;
 
     if (AUTH_BYPASS_ENABLED) {
@@ -637,7 +640,10 @@ export function PayrollCalculator({
 
   async function handleCreatePeriod() {
     if (!startDate || !endDate) return;
-    const lines = buildWorkerLines(profiles, sessions, startDate, endDate, hasGpsBySessionId);
+    const scopedProfiles = workerFilter
+      ? profiles.filter((profile) => profile.id === workerFilter)
+      : profiles;
+    const lines = buildWorkerLines(scopedProfiles, sessions, startDate, endDate, hasGpsBySessionId);
     const label = `${startDate} → ${endDate}`;
 
     if (AUTH_BYPASS_ENABLED) {
@@ -1024,7 +1030,14 @@ export function PayrollCalculator({
     if (visibleSelectedIds.size === 0) return;
 
     const ids = [...visibleSelectedIds];
-    const nextStatus: ItemStatus = period.status === "draft" ? "approved" : "paid";
+    const selectedLines = period.lines.filter((line) =>
+      visibleSelectedIds.has(line.workerId),
+    );
+    const nextStatus: ItemStatus =
+      selectedLines.length > 0 &&
+      selectedLines.every((line) => line.status === "approved")
+        ? "paid"
+        : "approved";
     const nextLines = period.lines.map((line) =>
       visibleSelectedIds.has(line.workerId)
         ? { ...line, status: nextStatus }
@@ -1208,6 +1221,16 @@ export function PayrollCalculator({
     );
   }, [visibleLines]);
 
+  useEffect(() => {
+    if (!workerFilter || eligibleSelectableLines.length !== 1) return;
+    const onlyLine = eligibleSelectableLines[0];
+    if (onlyLine.workerId !== workerFilter) return;
+    setSelectedIds((current) => {
+      if (current.size === 1 && current.has(workerFilter)) return current;
+      return new Set([workerFilter]);
+    });
+  }, [workerFilter, eligibleSelectableLines]);
+
   // require_video is read once off the profiles array. The shift-row
   // helper uses it to flag missing-checkout-video on close.
   const requireVideoByProfileId = useMemo(() => {
@@ -1289,13 +1312,27 @@ export function PayrollCalculator({
     return { count: visibleSelectedIds.size, totalHours: sum.totalHours };
   }, [draftRows, visibleSelectedIds]);
 
+  const selectedAction = useMemo<"approve" | "pay">(() => {
+    if (!period || visibleSelectedIds.size === 0) return "approve";
+    const selectedLines = period.lines.filter((line) =>
+      visibleSelectedIds.has(line.workerId),
+    );
+    return selectedLines.length > 0 &&
+      selectedLines.every((line) => line.status === "approved")
+      ? "pay"
+      : "approve";
+  }, [period, visibleSelectedIds]);
+
   const summary = useMemo(() => {
     if (!period) return null;
     const active = period.lines.filter((l) => l.hasHours);
+    const regHours = active.reduce((s, l) => s + l.regHours, 0);
+    const otHours = active.reduce((s, l) => s + l.otHours, 0);
     return {
       workers: active.length,
-      regHours: active.reduce((s, l) => s + l.regHours, 0),
-      otHours: active.reduce((s, l) => s + l.otHours, 0),
+      totalHours: regHours + otHours,
+      regHours,
+      otHours,
       grossTotal: active.reduce((s, l) => s + l.grossTotal, 0),
       netTotal: active.reduce((s, l) => s + l.netTotal, 0),
       adjustments: active.reduce((s, l) => s + l.netTotal - l.grossTotal, 0),
@@ -1462,10 +1499,14 @@ export function PayrollCalculator({
       {period && summary ? (
         <>
           {/* Summary row */}
-          <section className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          <section className="grid gap-3 sm:grid-cols-3 xl:grid-cols-7">
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.workers")}</div>
               <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">{summary.workers}</div>
+            </div>
+            <div className="surface-card p-3">
+              <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.totalHours")}</div>
+              <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">{summary.totalHours.toFixed(1)}h</div>
             </div>
             <div className="surface-card p-3">
               <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("payroll.regHours")}</div>
@@ -1507,12 +1548,12 @@ export function PayrollCalculator({
 
           {/* Bulk actions */}
           <section className="flex flex-wrap items-center gap-2">
-            {period.status === "draft" ? (
+            {!workerFilter && period.status === "draft" ? (
               <button type="button" onClick={() => void approveAll()} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "rgba(191, 162, 52, 0.3)", color: "var(--brand-yellow)" }}>
                 {t("payroll.approveAll")}
               </button>
             ) : null}
-            {period.status === "approved" ? (
+            {!workerFilter && period.status === "approved" ? (
               <button type="button" onClick={() => void markAllPaid()} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "rgba(15, 168, 120, 0.3)", color: "var(--green)" }}>
                 {t("payroll.markAllPaid")}
               </button>
@@ -1528,7 +1569,9 @@ export function PayrollCalculator({
                   color: selectionSummary.count === 0 ? "var(--text-muted)" : "var(--text-inverse)",
                 }}
               >
-                {t("payroll.processSelected")}
+                {selectedAction === "pay"
+                  ? t("payroll.markSelectedPaid")
+                  : t("payroll.approveSelected")}
                 {selectionSummary.count > 0
                   ? ` · ${selectionSummary.count} · ${selectionSummary.totalHours.toFixed(1)}h`
                   : ""}
@@ -1674,6 +1717,7 @@ export function PayrollCalculator({
                       <tr className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]" style={{ borderBottom: "1px solid var(--border-default)" }}>
                         <th className="pb-3 pr-2 font-semibold" />
                         <th className="pb-3 pr-3 font-semibold">{t("overview.colName")}</th>
+                        <th className="pb-3 pr-3 font-semibold">{t("payroll.totalHours")}</th>
                         <th className="pb-3 pr-3 font-semibold">{t("payroll.regHours")}</th>
                         <th className="pb-3 pr-3 font-semibold">{t("payroll.otHours")}</th>
                         <th className="pb-3 pr-3 font-semibold">{t("payroll.noGpsHours")}</th>
@@ -1833,6 +1877,7 @@ export function PayrollCalculator({
                                 {line.rate === 0 && line.hasHours ? <div className="mt-1 text-[10px] font-semibold" style={{ color: "#f59e0b" }}>{t("payroll.rateNotSet")}</div> : null}
                                 {!line.hasHours ? <div className="mt-1 text-[10px] text-[var(--text-muted)]">{t("payroll.noHours")}</div> : null}
                               </td>
+                              <td className="py-3 pr-3 whitespace-nowrap align-top font-mono font-bold text-[var(--text-primary)]">{(line.regHours + line.otHours).toFixed(1)}h</td>
                               <td className="py-3 pr-3 whitespace-nowrap align-top font-mono text-[var(--text-primary)]">{line.regHours.toFixed(1)}h</td>
                               <td className="py-3 pr-3 whitespace-nowrap align-top font-mono" style={{ color: line.otHours > 0 ? "#f59e0b" : "var(--text-primary)" }}>{line.otHours.toFixed(1)}h</td>
                               <td
@@ -1886,7 +1931,7 @@ export function PayrollCalculator({
                                 worker filter narrows to one person. */}
                             {!isCollapsed && group && group.rows.length > 0 ? (
                               <tr>
-                                <td colSpan={10} className="bg-[var(--bg-primary)] px-3 py-2">
+                                <td colSpan={11} className="bg-[var(--bg-primary)] px-3 py-2">
                                   <ShiftDetailList rows={group.rows} t={t} />
                                 </td>
                               </tr>
