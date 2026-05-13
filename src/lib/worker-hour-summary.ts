@@ -19,7 +19,7 @@
  *      helper splits them out so the UI can show:
  *
  *        worked_total   = sessions before any reduction
- *        paid_or_closed = adjustments + closure cutoffs
+ *        paid_or_closed = latest closure cutoff + later manual resets
  *        unpaid         = worked_total - paid_or_closed (clamped at 0)
  *
  *      This is what makes a worker like Vasya — whose week shows 0m even
@@ -189,27 +189,63 @@ export function deriveWorkerHourBuckets(args: {
     }
   }
 
-  let paidOrClosedMinutes = 0;
+  let paidAdjustmentMinutes = 0;
   let adjustmentsTotalMinutes = 0;
+  let latestClosureMs: number | null = null;
+
+  for (const closure of args.closures ?? []) {
+    const closedThroughMs = new Date(closure.closedThrough).getTime();
+    if (!Number.isFinite(closedThroughMs)) continue;
+    if (latestClosureMs === null || closedThroughMs > latestClosureMs) {
+      latestClosureMs = closedThroughMs;
+    }
+  }
+
   for (const adj of args.adjustments) {
     adjustmentsTotalMinutes += adj.minutes;
     if (isPaidOrClosedAdjustment(adj)) {
+      const adjustmentMs = new Date(adj.eventTime).getTime();
+      if (
+        latestClosureMs !== null &&
+        Number.isFinite(adjustmentMs) &&
+        adjustmentMs <= latestClosureMs
+      ) {
+        continue;
+      }
       // A reset_to_zero is recorded as a NEGATIVE minutes value; the
       // paid/closed bucket should display it as POSITIVE hours moved
       // out of unpaid. abs() lets one-off positive credits land in the
       // bucket cleanly too if a manager ever uses kind=period_closed
       // for a forward-credit.
-      paidOrClosedMinutes += Math.abs(adj.minutes);
+      paidAdjustmentMinutes += Math.abs(adj.minutes);
     }
   }
 
-  // payroll_closures rows do NOT carry a minute count — they only mark a
-  // cutoff timestamp. Sum of session minutes whose clockOutTime ≤
-  // closedThrough, on a per-closure basis, would double-count if a
-  // worker has multiple closures. Keep the closure data available for
-  // UI presentation and rely on the reset_to_zero adjustment as the
-  // accounting source-of-truth.
-  void args.closures;
+  let closurePaidMinutes = 0;
+  if (latestClosureMs !== null) {
+    for (const session of args.sessions) {
+      if (!session.clockOutTime) continue;
+      const sessionStartMs = new Date(session.clockInTime).getTime();
+      const sessionEndMs = new Date(session.clockOutTime).getTime();
+      if (!Number.isFinite(sessionStartMs) || !Number.isFinite(sessionEndMs)) continue;
+      if (sessionStartMs >= latestClosureMs) continue;
+
+      if (sessionEndMs <= latestClosureMs) {
+        closurePaidMinutes += session.durationMinutes;
+        continue;
+      }
+
+      closurePaidMinutes += Math.max(
+        0,
+        Math.round((latestClosureMs - sessionStartMs) / 60_000),
+      );
+    }
+  }
+
+  const paidOrClosedMinutes = Math.min(
+    totalWorkedMinutes,
+    closurePaidMinutes + paidAdjustmentMinutes,
+  );
 
   const unpaidMinutes = Math.max(0, totalWorkedMinutes - paidOrClosedMinutes);
 

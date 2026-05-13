@@ -77,6 +77,7 @@ export function TeamMemberPage({
   currentShiftReview,
   transferGaps,
   workerAdjustments,
+  workerClosures,
 }: {
   orgId: string;
   managerId: string;
@@ -103,6 +104,9 @@ export function TeamMemberPage({
     minutes: number;
     reason: string;
     kind: string | null;
+  }>;
+  workerClosures: Array<{
+    closedThrough: string;
   }>;
 }) {
   const router = useRouter();
@@ -270,8 +274,9 @@ export function TeamMemberPage({
           durationMinutes: session.durationMinutes,
         })),
         adjustments: workerAdjustments,
+        closures: workerClosures,
       }),
-    [sessions, workerAdjustments],
+    [sessions, workerAdjustments, workerClosures],
   );
   const unpaidMinutes = hourBuckets.unpaidMinutes;
   const unpaidHours = Math.round((unpaidMinutes / 60) * 100) / 100;

@@ -97,6 +97,10 @@ export interface WorkerAdjustmentItem {
   kind: string | null;
 }
 
+export interface WorkerPayrollClosureItem {
+  closedThrough: string;
+}
+
 export interface WorkerShellData {
   profile: Profile;
   projects: WorkerProject[];
@@ -106,4 +110,5 @@ export interface WorkerShellData {
   clockState: WorkerClockState;
   summary: WorkerSummary;
   adjustments: WorkerAdjustmentItem[];
+  closures: WorkerPayrollClosureItem[];
 }

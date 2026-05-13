@@ -429,5 +429,6 @@ export function buildPreviewWorkerShellData(): WorkerShellData {
     clockState,
     summary,
     adjustments: [],
+    closures: [],
   };
 }

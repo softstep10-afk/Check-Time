@@ -16,7 +16,7 @@ import {
 } from "@/lib/manager-utils";
 import { deriveGpsFreshness } from "@/lib/gps-freshness";
 import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
-import type { Media, TimeEvent } from "@/types/database";
+import type { Media, PayrollClosure, TimeEvent } from "@/types/database";
 
 // F5 must reflect the worker's latest shifts, tasks, and media.
 export const revalidate = 0;
@@ -181,6 +181,25 @@ export default async function TeamMemberRoutePage({
       };
     });
 
+  let workerClosures: Array<{ closedThrough: string }> = [];
+  if (managerHasFinanceAccess) {
+    const { data: workerClosureRows, error: workerClosureError } = await supabase
+      .from("payroll_closures")
+      .select("*")
+      .eq("profile_id", id)
+      .order("closed_through", { ascending: false })
+      .range(0, 999)
+      .returns<PayrollClosure[]>();
+
+    if (workerClosureError) {
+      throw new Error(`Worker payroll closures query failed: ${workerClosureError.message}`);
+    }
+
+    workerClosures = (workerClosureRows ?? []).map((closure) => ({
+      closedThrough: closure.closed_through,
+    }));
+  }
+
   // Migration 00018 — current exclusion rows for this worker. Empty when
   // the worker is in 'list' mode or the migration hasn't run yet.
   const { data: exclusionRows } = await supabase
@@ -247,6 +266,7 @@ export default async function TeamMemberRoutePage({
       currentShiftReview={currentShiftReview}
       transferGaps={transferGaps}
       workerAdjustments={workerAdjustments}
+      workerClosures={workerClosures}
     />
   );
 }

@@ -37,8 +37,9 @@ export function HoursPage() {
           reason: adjustment.reason,
           kind: adjustment.kind,
         })),
+        closures: shell.closures,
       }),
-    [shell.sessions, shell.adjustments],
+    [shell.sessions, shell.adjustments, shell.closures],
   );
 
   return (

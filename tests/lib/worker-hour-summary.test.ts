@@ -128,6 +128,57 @@ describe("deriveWorkerHourBuckets", () => {
     expect(result.adjustmentsTotalMinutes).toBe(-3000);
   });
 
+  it("uses the latest payroll closure cutoff to move older sessions out of unpaid", () => {
+    const result = deriveWorkerHourBuckets({
+      sessions: [
+        session("2026-04-01T08:00:00.000Z", 480, "2026-04-01T16:00:00.000Z"),
+        session("2026-04-02T08:00:00.000Z", 480, "2026-04-02T16:00:00.000Z"),
+        session("2026-04-03T08:00:00.000Z", 480, "2026-04-03T16:00:00.000Z"),
+      ],
+      adjustments: [],
+      closures: [{ closedThrough: "2026-04-02T23:59:59.000Z" }],
+      now: NOW,
+    });
+    expect(result.totalWorkedMinutes).toBe(1440);
+    expect(result.paidOrClosedMinutes).toBe(960);
+    expect(result.unpaidMinutes).toBe(480);
+  });
+
+  it("does not double-count reset adjustments already covered by a later payroll closure", () => {
+    const result = deriveWorkerHourBuckets({
+      sessions: [
+        session("2026-04-01T08:00:00.000Z", 480, "2026-04-01T16:00:00.000Z"),
+        session("2026-04-02T08:00:00.000Z", 480, "2026-04-02T16:00:00.000Z"),
+      ],
+      adjustments: [
+        adjustment("2026-04-01T20:00:00.000Z", -480, "Period closed, hours paid", "reset_to_zero"),
+      ],
+      closures: [{ closedThrough: "2026-04-02T23:59:59.000Z" }],
+      now: NOW,
+    });
+    expect(result.totalWorkedMinutes).toBe(960);
+    expect(result.paidOrClosedMinutes).toBe(960);
+    expect(result.unpaidMinutes).toBe(0);
+    expect(result.adjustmentsTotalMinutes).toBe(-480);
+  });
+
+  it("keeps manual reset adjustments after the latest payroll closure", () => {
+    const result = deriveWorkerHourBuckets({
+      sessions: [
+        session("2026-04-01T08:00:00.000Z", 480, "2026-04-01T16:00:00.000Z"),
+        session("2026-04-03T08:00:00.000Z", 120, "2026-04-03T10:00:00.000Z"),
+      ],
+      adjustments: [
+        adjustment("2026-04-03T20:00:00.000Z", -120, "Period closed, hours paid", "reset_to_zero"),
+      ],
+      closures: [{ closedThrough: "2026-04-01T23:59:59.000Z" }],
+      now: NOW,
+    });
+    expect(result.totalWorkedMinutes).toBe(600);
+    expect(result.paidOrClosedMinutes).toBe(600);
+    expect(result.unpaidMinutes).toBe(0);
+  });
+
   it("clamps unpaid at 0 when adjustments exceed worked hours", () => {
     const result = deriveWorkerHourBuckets({
       sessions: [session("2026-03-15T07:00:00.000Z", 1200)],

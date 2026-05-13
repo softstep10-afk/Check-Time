@@ -13,7 +13,7 @@ import {
 import { getCompletionMediaIds } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import type { WorkerMediaItem, WorkerShellData, WorkerTaskItem } from "@/lib/worker-types";
-import type { Media, Profile, Project, Task, TimeEvent } from "@/types/database";
+import type { Media, PayrollClosure, Profile, Project, Task, TimeEvent } from "@/types/database";
 
 function assertNoError(error: { message: string } | null, label: string) {
   if (error) {
@@ -40,6 +40,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     profileResult,
     assignmentsResult,
     eventsResult,
+    closuresResult,
     tasksResult,
     mediaResult,
   ] = await Promise.all([
@@ -55,6 +56,13 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       .order("event_time", { ascending: false })
       .limit(500)
       .returns<TimeEvent[]>(),
+    supabase
+      .from("payroll_closures")
+      .select("closed_through")
+      .eq("profile_id", user.id)
+      .order("closed_through", { ascending: false })
+      .limit(50)
+      .returns<Pick<PayrollClosure, "closed_through">[]>(),
     supabase
       .from("tasks")
       .select("*")
@@ -104,6 +112,9 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
 
   const assignments = assignmentsResult.data ?? [];
   const events = eventsResult.data ?? [];
+  const closures = (closuresResult.error ? [] : closuresResult.data ?? []).map((closure) => ({
+    closedThrough: closure.closed_through,
+  }));
   const personalTasks = tasksResult.data ?? [];
   let media = mediaResult.data ?? [];
 
@@ -356,5 +367,6 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     clockState,
     summary,
     adjustments,
+    closures,
   };
 });

@@ -1701,7 +1701,9 @@ export function PayrollCalculator({
                       border: "1px solid var(--border-default)",
                     }}
                   >
-                    {t("payroll.reviewModeByWorker")}
+                    {workerFilter
+                      ? t("payroll.reviewModeList")
+                      : t("payroll.reviewModeByWorker")}
                   </button>
                   <button
                     type="button"
