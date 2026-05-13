@@ -41,4 +41,16 @@ describe("task status helpers", () => {
     expect(isEffectiveCompletedTask(task)).toBe(false);
     expect(isEffectiveOpenTask(task)).toBe(true);
   });
+
+  it("falls back unknown legacy status strings to pending", () => {
+    const task = {
+      status: "stuck_in_old_ui",
+      completed_at: null,
+      deleted_at: null,
+    };
+
+    expect(getEffectiveTaskStatus(task)).toBe("pending");
+    expect(isEffectiveCompletedTask(task)).toBe(false);
+    expect(isEffectiveOpenTask(task)).toBe(true);
+  });
 });

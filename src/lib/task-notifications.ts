@@ -16,6 +16,12 @@
  *      tasks do not keep triggering after the worker upgrades.
  */
 
+import {
+  getEffectiveTaskStatus,
+  isEffectiveCompletedTask,
+  isEffectiveOpenTask,
+} from "@/lib/task-status";
+
 const TASK_LAST_SEEN_KEY_PREFIX = "check-time-tasks-last-seen-";
 
 export interface TaskVisibilityArgs {
@@ -31,6 +37,7 @@ export interface TaskLike {
   project_id: string | null;
   status: string;
   created_at: string;
+  completed_at?: string | null;
   deleted_at?: string | null;
 }
 
@@ -47,8 +54,7 @@ export function isTaskVisibleToWorker(
   task: TaskLike,
   args: TaskVisibilityArgs,
 ): boolean {
-  if (task.deleted_at) return false;
-  if (task.status === "done" || task.status === "cancelled") return false;
+  if (!isEffectiveOpenTask(task)) return false;
   if (task.assigned_to === args.profileId) return true;
   if (
     task.assigned_to === null &&
@@ -206,19 +212,24 @@ export function applyClaimedTaskAssignment<
 }
 
 export function splitWorkerProjectTasks<
-  T extends { assigned_to: string | null; status: string },
+  T extends {
+    assigned_to: string | null;
+    status: string;
+    completed_at?: string | null;
+    deleted_at?: string | null;
+  },
 >(tasks: T[], profileId: string): {
   mineTasks: T[];
   projectLevelTasks: T[];
   completedTasks: T[];
 } {
-  const completedTasks = tasks.filter((task) => task.status === "done");
+  const completedTasks = tasks.filter(isEffectiveCompletedTask);
   return {
     mineTasks: tasks.filter(
-      (task) => task.assigned_to === profileId && task.status !== "done",
+      (task) => task.assigned_to === profileId && isEffectiveOpenTask(task),
     ),
     projectLevelTasks: tasks.filter(
-      (task) => task.assigned_to === null && task.status !== "done",
+      (task) => task.assigned_to === null && isEffectiveOpenTask(task),
     ),
     completedTasks,
   };
@@ -404,7 +415,7 @@ export function getTaskCompletionAudit(
   const completedById = task.completed_by ?? recordedBy;
   const completedAt = task.completed_at ?? null;
   const hasAudit =
-    task.status === "done" ||
+    getEffectiveTaskStatus(task) === "done" ||
     Boolean(completedById) ||
     Boolean(completedAt) ||
     Boolean(getCompletionNote(task)) ||

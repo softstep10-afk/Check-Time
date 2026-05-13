@@ -189,6 +189,37 @@ describe("archive helpers", () => {
     });
   });
 
+  it("counts legacy completed archived tasks by completed_at", () => {
+    const archived = project({
+      id: "archived",
+      name: "Archived",
+      status: "archived",
+      archived_at: "2026-03-01T00:00:00Z",
+    });
+
+    const archiveRows = buildArchivedProjectRows({
+      projects: [archived],
+      tasks: [
+        task({
+          id: "legacy-done",
+          title: "Legacy done",
+          project_id: archived.id,
+          status: "pending",
+          completed_at: "2026-03-02T00:00:00Z",
+        }),
+      ],
+      media: [],
+      sessions: [],
+      assignments: [],
+      includeFinancials: true,
+    });
+
+    expect(archiveRows[0]).toMatchObject({
+      taskCount: 1,
+      completedTaskCount: 1,
+    });
+  });
+
   it("keeps archived project tasks out of overview open-task counts", () => {
     const active = project({ id: "active", name: "Active" });
     const archived = project({ id: "archived", name: "Archived", status: "archived" });

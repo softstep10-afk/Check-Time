@@ -7,6 +7,7 @@ import {
   getCompletionMediaIds,
   getCompletionNote,
   getFollowUpInfo,
+  getTaskCompletionAudit,
   groupWorkerTasksByProject,
   isTaskVisibleToWorker,
   loadTaskLastSeen,
@@ -79,6 +80,21 @@ describe("isTaskVisibleToWorker", () => {
     expect(
       isTaskVisibleToWorker(
         makeTask({ id: "t6", assigned_to: "w1", project_id: "p1", status: "cancelled" }),
+        args,
+      ),
+    ).toBe(false);
+  });
+
+  it("excludes legacy completed tasks when status is still pending", () => {
+    expect(
+      isTaskVisibleToWorker(
+        makeTask({
+          id: "legacy-done",
+          assigned_to: "w1",
+          project_id: "p1",
+          status: "pending",
+          completed_at: "2026-05-10T22:27:00Z",
+        }),
         args,
       ),
     ).toBe(false);
@@ -300,12 +316,22 @@ describe("splitWorkerProjectTasks", () => {
         { id: "project-open", assigned_to: null, status: "in_progress" },
         { id: "done-mine", assigned_to: "worker-1", status: "done" },
         { id: "done-project", assigned_to: null, status: "done" },
+        {
+          id: "legacy-done-project",
+          assigned_to: null,
+          status: "pending",
+          completed_at: "2026-05-10T22:27:00Z",
+        },
       ],
       "worker-1",
     );
     expect(split.mineTasks.map((task) => task.id)).toEqual(["mine-open"]);
     expect(split.projectLevelTasks.map((task) => task.id)).toEqual(["project-open"]);
-    expect(split.completedTasks.map((task) => task.id)).toEqual(["done-mine", "done-project"]);
+    expect(split.completedTasks.map((task) => task.id)).toEqual([
+      "done-mine",
+      "done-project",
+      "legacy-done-project",
+    ]);
   });
 });
 
@@ -506,5 +532,19 @@ describe("getCompletionMediaIds / getFollowUpInfo / getCompletionNote", () => {
     expect(getCompletionNote({ metadata: { completion_note: "ok" } })).toBe("ok");
     expect(getCompletionNote({ metadata: {} })).toBeNull();
     expect(getCompletionNote({ metadata: { completion_note: 42 } })).toBeNull();
+  });
+});
+
+describe("getTaskCompletionAudit", () => {
+  it("treats legacy pending tasks with completed_at as audited completion", () => {
+    const audit = getTaskCompletionAudit({
+      status: "pending",
+      completed_at: "2026-05-10T22:27:00Z",
+      completed_by: "worker-1",
+    });
+
+    expect(audit.hasAudit).toBe(true);
+    expect(audit.completedById).toBe("worker-1");
+    expect(audit.completedAt).toBe("2026-05-10T22:27:00Z");
   });
 });

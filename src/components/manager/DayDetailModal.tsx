@@ -25,6 +25,7 @@ import {
   signWithTimeout,
 } from "@/lib/media-playback";
 import { normalizeStoragePath } from "@/lib/task-attachments";
+import { isEffectiveCompletedTask } from "@/lib/task-status";
 
 type MediaKindTag = "check_in_video" | "checkout" | "before_leave" | "project_media" | "receipt" | "journal";
 
@@ -203,7 +204,7 @@ export function DayDetailModal({
     }
 
     for (const task of tasks) {
-      if (task.status !== "done" || !task.completed_at) continue;
+      if (!isEffectiveCompletedTask(task) || !task.completed_at) continue;
       if (dayKey(task.completed_at) !== date) continue;
       out.push({
         id: `task-${task.id}`,

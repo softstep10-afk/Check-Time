@@ -19,6 +19,10 @@ import {
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { formatDateTime } from "@/lib/worker-utils";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
+import {
+  getEffectiveTaskStatus,
+  isEffectiveCompletedTask,
+} from "@/lib/task-status";
 import type {
   ProjectStatus,
   Task,
@@ -86,12 +90,12 @@ export function ManagerTasksPage({
   const visibleTasks = useMemo(() => {
     return tasks.filter((task) => {
       if (filterProject && task.project_id !== filterProject) return false;
-      if (filterStatus && task.status !== filterStatus) return false;
+      if (filterStatus && getEffectiveTaskStatus(task) !== filterStatus) return false;
       return true;
     });
   }, [tasks, filterProject, filterStatus]);
   const completedTasks = useMemo(
-    () => tasks.filter((task) => task.status === "done"),
+    () => tasks.filter(isEffectiveCompletedTask),
     [tasks],
   );
 
@@ -189,7 +193,7 @@ export function ManagerTasksPage({
       return;
     }
     setPendingClearDone(false);
-    setTasks((prev) => prev.filter((task) => task.status !== "done"));
+    setTasks((prev) => prev.filter((task) => !isEffectiveCompletedTask(task)));
     setMessage(t("tasks.completedCleared").replace("{count}", String(ids.length)));
     setMessageTone("success");
   }
@@ -320,8 +324,9 @@ export function ManagerTasksPage({
               </div>
             ) : (
               visibleTasks.map((task) => {
+                const effectiveStatus = getEffectiveTaskStatus(task);
                 const accent = PRIORITY_COLORS[task.priority];
-                const statusColor = STATUS_COLORS[task.status];
+                const statusColor = STATUS_COLORS[effectiveStatus];
                 const updating = busyKey === `status-${task.id}` || busyKey === `delete-${task.id}`;
                 const rowAudit = getManagerTaskRowAuditText(task, workerNameById, {
                   unassigned: t("tasks.unassigned"),
@@ -373,7 +378,7 @@ export function ManagerTasksPage({
                             </>
                           ) : null}
                         </div>
-                        {task.status === "done" ? (
+                        {effectiveStatus === "done" ? (
                           <div
                             className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-[var(--text-primary)]"
                             data-testid="manager-task-row-completion-audit"
@@ -440,7 +445,7 @@ export function ManagerTasksPage({
                                 <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                                   {t("tasks.completionEvidenceHeader")}
                                 </span>
-                                {task.status === "done" ? (
+                                {effectiveStatus === "done" ? (
                                   <span
                                     className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]"
                                     style={{
@@ -448,7 +453,7 @@ export function ManagerTasksPage({
                                       color: "var(--green)",
                                     }}
                                   >
-                                    {statusLabel(task.status)}
+                                    {statusLabel(effectiveStatus)}
                                   </span>
                                 ) : null}
                                 {followUp.required ? (
@@ -496,7 +501,7 @@ export function ManagerTasksPage({
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
                         <select
-                          value={task.status}
+                          value={effectiveStatus}
                           onChange={(e) => void handleStatusChange(task.id, e.target.value as TaskStatus)}
                           disabled={updating}
                           className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1 text-[10px] font-semibold uppercase outline-none"

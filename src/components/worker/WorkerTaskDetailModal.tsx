@@ -10,6 +10,10 @@ import {
   getCompletionNote,
   getFollowUpInfo,
 } from "@/lib/task-notifications";
+import {
+  getEffectiveTaskStatus,
+  isEffectiveCompletedTask,
+} from "@/lib/task-status";
 import type { TaskStatus } from "@/types/database";
 import type { TaskAttachmentRef } from "@/lib/task-attachments";
 import type { WorkerTaskModalMode } from "@/lib/worker-task-ui";
@@ -286,11 +290,12 @@ function WorkerTaskDetailModalBody({
   const isMine = task.assigned_to === profileId;
   const isUnassigned = task.assigned_to === null;
   const isCommonClaimable = isUnassigned && Boolean(task.project_id) && Boolean(onClaim);
+  const effectiveStatus = getEffectiveTaskStatus(task);
   // Status-driven buttons only render for tasks the worker already
   // owns. Claim-then-start is a two-step flow: claim flips assigned_to,
   // and the parent re-renders the modal with isMine=true.
-  const canStart = isMine && task.status === "pending";
-  const canFinish = isMine && task.status !== "done" && task.status !== "cancelled";
+  const canStart = isMine && effectiveStatus === "pending";
+  const canFinish = isMine && effectiveStatus !== "done" && effectiveStatus !== "cancelled";
   const readOnlyReason = isMine
     ? null
     : isCommonClaimable
@@ -335,7 +340,7 @@ function WorkerTaskDetailModalBody({
               <span>·</span>
               <span>{task.priority}</span>
               <span>·</span>
-              <span>{task.status.replace("_", " ")}</span>
+              <span>{effectiveStatus.replace("_", " ")}</span>
               {task.due_date ? (
                 <>
                   <span>·</span>
@@ -404,7 +409,7 @@ function WorkerTaskDetailModalBody({
             completionRefs.length > 0 ||
             completionIdsKnown.length > 0 ||
             Boolean(task.completed_at);
-          if (task.status !== "done" || !hasEvidence) return null;
+          if (!isEffectiveCompletedTask(task) || !hasEvidence) return null;
           return (
             <div
               className="mt-4 rounded-[var(--radius-md)] border p-3"

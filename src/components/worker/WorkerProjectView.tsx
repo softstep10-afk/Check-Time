@@ -21,6 +21,7 @@ import {
 } from "@/lib/safety-acknowledgements";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
 import { splitWorkerProjectTasks } from "@/lib/task-notifications";
+import { getEffectiveTaskStatus } from "@/lib/task-status";
 import {
   openWorkerProjectTaskDetails,
   submitWorkerTaskCompletion,
@@ -996,20 +997,21 @@ function WorkerTaskCard({
       : task.priority === "medium"
         ? "#f59e0b"
         : "#22c55e";
+  const effectiveStatus = getEffectiveTaskStatus(task);
   const statusColor =
-    task.status === "done"
+    effectiveStatus === "done"
       ? "var(--green)"
-      : task.status === "in_progress"
+      : effectiveStatus === "in_progress"
         ? "var(--blue)"
-        : task.status === "cancelled"
+        : effectiveStatus === "cancelled"
           ? "var(--red)"
           : "var(--text-muted)";
   const statusLabelText =
-    task.status === "done"
+    effectiveStatus === "done"
       ? t("tasks.statusDone")
-      : task.status === "in_progress"
+      : effectiveStatus === "in_progress"
         ? t("tasks.statusInProgress")
-        : task.status === "cancelled"
+        : effectiveStatus === "cancelled"
           ? t("tasks.statusCancelled")
           : t("tasks.statusPending");
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {

@@ -1,4 +1,5 @@
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
+import { getEffectiveTaskStatus } from "@/lib/task-status";
 
 export type ManagerTaskRowAuditInput = {
   status?: string | null;
@@ -64,7 +65,7 @@ export function getManagerTaskRowAuditText(
 ): ManagerTaskRowAuditText {
   const assignedToText = getManagerTaskAssignedToText(task, profileNames, labels);
 
-  if (task.status !== "done") {
+  if (getEffectiveTaskStatus(task) !== "done") {
     return {
       assignedToText,
       completedByText: null,

@@ -103,4 +103,23 @@ describe("getManagerTaskRowAuditText", () => {
 
     expect(row.completedByText).toBe("12345678");
   });
+
+  it("shows completion audit for legacy pending tasks with completed_at", () => {
+    const row = getManagerTaskRowAuditText(
+      {
+        status: "pending",
+        assigned_to: "worker-2",
+        assigneeName: "Vasya",
+        completed_by: "worker-2",
+        completed_at: "2026-05-01T10:30:00Z",
+        metadata: {},
+      },
+      new Map([["worker-2", "Vasya"]]),
+      labels,
+    );
+
+    expect(row.assignedToText).toBe("Vasya");
+    expect(row.completedByText).toBe("Vasya");
+    expect(row.completedAtText).toBe("formatted 2026-05-01T10:30:00Z");
+  });
 });

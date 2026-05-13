@@ -14,6 +14,11 @@ import {
   groupWorkerTasksByProject,
 } from "@/lib/task-notifications";
 import {
+  getEffectiveTaskStatus,
+  isEffectiveCompletedTask,
+  isEffectiveOpenTask,
+} from "@/lib/task-status";
+import {
   openWorkerTaskCompletion,
   submitWorkerTaskCompletion,
   type WorkerTaskModalMode,
@@ -232,10 +237,10 @@ export function TasksPage() {
   ]);
 
   const activeTasks = taskList
-    .filter((task) => task.status !== "done" && task.status !== "cancelled")
+    .filter(isEffectiveOpenTask)
     .filter(filterMatch);
   const doneTasks = taskList
-    .filter((task) => task.status === "done")
+    .filter(isEffectiveCompletedTask)
     .filter((task) =>
       resolvedProjectId ? task.project_id === resolvedProjectId : true,
     );
@@ -255,7 +260,7 @@ export function TasksPage() {
       const key = task.project_id ?? "__noproject__";
       const entry = counts.get(key) ?? { done: 0, total: 0 };
       entry.total += 1;
-      if (task.status === "done") entry.done += 1;
+      if (isEffectiveCompletedTask(task)) entry.done += 1;
       counts.set(key, entry);
     }
     return counts;
@@ -301,6 +306,7 @@ export function TasksPage() {
     const updating = busyAction === `task-${task.id}`;
     const accent = getPriorityAccent(task.priority);
     const ownership = classifyTaskForWorker(task, shell.profile.id);
+    const effectiveStatus = getEffectiveTaskStatus(task);
 
     return (
       <div
@@ -343,10 +349,10 @@ export function TasksPage() {
                   {t("tasks.labelProjectTask")}
                 </span>
               ) : null}
-              <span>{task.projectName ?? t("common.general")} • {task.status.replace("_", " ")}</span>
+              <span>{task.projectName ?? t("common.general")} • {effectiveStatus.replace("_", " ")}</span>
               {task.due_date ? (() => {
                 const dueIso = task.due_date.slice(0, 10);
-                const overdue = dueIso < todayIsoRef && task.status !== "done";
+                const overdue = dueIso < todayIsoRef && effectiveStatus !== "done";
                 return (
                   <span
                     className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
+import { isEffectiveOpenTask } from "@/lib/task-status";
 import type { ProjectStatus } from "@/types/database";
 
 const STATUS_COLORS: Record<ProjectStatus, { bg: string; color: string }> = {
@@ -25,7 +26,7 @@ export function WorkerProjectsList() {
   const tasksByProject = useMemo(() => {
     const map = new Map<string, number>();
     for (const task of shell.tasks) {
-      if (!task.project_id || task.status === "done" || task.status === "cancelled") continue;
+      if (!task.project_id || !isEffectiveOpenTask(task)) continue;
       map.set(task.project_id, (map.get(task.project_id) ?? 0) + 1);
     }
     return map;

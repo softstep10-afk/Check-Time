@@ -1,4 +1,5 @@
 import type { ManagerSession } from "@/lib/manager-types";
+import { isEffectiveCompletedTask } from "@/lib/task-status";
 import type {
   Media,
   PayrollLineItem,
@@ -372,7 +373,7 @@ export function buildArchivedProjectRows(args: {
         archivedAt: project.archived_at ?? null,
         updatedAt: project.updated_at,
         taskCount: tasks.length,
-        completedTaskCount: tasks.filter((task) => task.status === "done").length,
+        completedTaskCount: tasks.filter(isEffectiveCompletedTask).length,
         mediaCount: media.length,
         receiptCount,
         receiptTotal: args.includeFinancials ? round2(receiptTotal) : 0,

@@ -19,6 +19,7 @@ import {
   isOpenTask,
   TRANSFER_GAP_COLOR,
 } from "@/lib/manager-utils";
+import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { formatDurationCompact, formatEventTime, parseGeoPoint } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import {
@@ -420,7 +421,8 @@ export default async function OverviewPage() {
         });
       }
 
-      if (task.status === "done" && task.completed_at) {
+      const effectiveStatus = getEffectiveTaskStatus(task);
+      if (effectiveStatus === "done" && task.completed_at) {
         const actor = task.completed_by ? profilesById.get(task.completed_by) : null;
         feedEvents.push({
           id: `task-done-${task.id}`,
@@ -433,7 +435,7 @@ export default async function OverviewPage() {
           timestamp: task.completed_at,
           href: task.project_id ? `/projects/${task.project_id}` : null,
         });
-      } else if (task.status === "in_progress") {
+      } else if (effectiveStatus === "in_progress") {
         feedEvents.push({
           id: `task-start-${task.id}`,
           kind: "task_started",

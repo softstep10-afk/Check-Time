@@ -44,6 +44,10 @@ import {
   type ViewerMediaItem,
 } from "@/components/shared/MediaViewerModal";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
+import {
+  getEffectiveTaskStatus,
+  isEffectiveOpenTask,
+} from "@/lib/task-status";
 import { createClient } from "@/lib/supabase/client";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
 import {
@@ -557,9 +561,10 @@ export function ProjectDetailPage({
     let completed = 0;
 
     for (const task of taskList) {
-      if (task.status === "done") {
+      const effectiveStatus = getEffectiveTaskStatus(task);
+      if (effectiveStatus === "done") {
         completed += 1;
-      } else if (task.status !== "cancelled") {
+      } else if (effectiveStatus !== "cancelled") {
         active += 1;
       }
     }
@@ -1342,7 +1347,7 @@ export function ProjectDetailPage({
               {t("common.tasks")}
             </div>
             <div className="mt-1 text-lg font-bold text-[var(--text-primary)]">
-              {taskList.filter((task) => task.status !== "done" && task.status !== "cancelled").length}
+              {taskList.filter(isEffectiveOpenTask).length}
             </div>
           </div>
           <div className="metric-panel rounded-[var(--radius-md)] p-3">
@@ -1787,6 +1792,7 @@ export function ProjectDetailPage({
 
           <div className="mt-5 space-y-3">
             {taskList.map((task) => {
+              const effectiveStatus = getEffectiveTaskStatus(task);
               // Priority drives the LEFT accent stripe + the priority
               // badge color. Status drives a separate badge so "urgent"
               // (red) is never misread as "done" (green) — the bug we
@@ -1798,24 +1804,24 @@ export function ProjectDetailPage({
                     ? "#f59e0b"
                     : "#22c55e";
               const statusColor =
-                task.status === "done"
+                effectiveStatus === "done"
                   ? "var(--green)"
-                  : task.status === "in_progress"
+                  : effectiveStatus === "in_progress"
                     ? "var(--blue)"
-                    : task.status === "cancelled"
+                    : effectiveStatus === "cancelled"
                       ? "var(--red)"
                       : "var(--text-muted)";
               const statusLabelText =
-                task.status === "done"
+                effectiveStatus === "done"
                   ? t("tasks.statusDone")
-                  : task.status === "in_progress"
+                  : effectiveStatus === "in_progress"
                     ? t("tasks.statusInProgress")
-                    : task.status === "cancelled"
+                    : effectiveStatus === "cancelled"
                       ? t("tasks.statusCancelled")
                       : t("tasks.statusPending");
-              const canStart = task.status === "pending";
-              const canMarkDone = task.status === "pending" || task.status === "in_progress";
-              const canCancel = task.status !== "cancelled" && task.status !== "done";
+              const canStart = effectiveStatus === "pending";
+              const canMarkDone = effectiveStatus === "pending" || effectiveStatus === "in_progress";
+              const canCancel = effectiveStatus !== "cancelled" && effectiveStatus !== "done";
               const isPendingDelete = pendingDeleteTaskId === task.id;
               const isBusy =
                 busyKey === `task-${task.id}` || busyKey === `task-delete-${task.id}`;
@@ -1870,7 +1876,7 @@ export function ProjectDetailPage({
                 {task.description ? (
                   <p className="mt-3 text-sm text-[var(--text-secondary)]">{task.description}</p>
                 ) : null}
-                {task.status === "done" ? (
+                {effectiveStatus === "done" ? (
                   <div
                     className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-[var(--text-primary)]"
                     data-testid="manager-project-task-row-completion-audit"
@@ -1956,7 +1962,7 @@ export function ProjectDetailPage({
                         <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                           {t("tasks.completionEvidenceHeader")}
                         </div>
-                        {task.status === "done" ? (
+                        {effectiveStatus === "done" ? (
                           <span
                             className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
                             style={{

@@ -18,6 +18,7 @@ import {
   deriveWorkerHourBuckets,
   isPaidOrClosedAdjustment,
 } from "@/lib/worker-hour-summary";
+import { getEffectiveTaskStatus, isEffectiveOpenTask } from "@/lib/task-status";
 import type { Media, ProjectAssignment, Task, UserRole } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
 import { ArrowRight, Camera, Store } from "lucide-react";
@@ -980,11 +981,7 @@ export function TeamMemberPage({
             </div>
             <div className="mt-2 space-y-1.5">
               {(() => {
-                const openTasks = tasks
-                  .filter(
-                    (task) => task.status !== "done" && task.status !== "cancelled",
-                  )
-                  .slice(0, 5);
+                const openTasks = tasks.filter(isEffectiveOpenTask).slice(0, 5);
                 if (openTasks.length === 0) {
                   return (
                     <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
@@ -1006,7 +1003,7 @@ export function TeamMemberPage({
                           {task.title}
                         </div>
                         <div className="text-[10px] text-[var(--text-muted)]">
-                          {project?.name ?? t("common.generalTask")} · {task.status}
+                          {project?.name ?? t("common.generalTask")} · {getEffectiveTaskStatus(task)}
                         </div>
                       </div>
                       <span
