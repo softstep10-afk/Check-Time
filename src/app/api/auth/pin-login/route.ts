@@ -1,6 +1,7 @@
 import { verify } from "@node-rs/argon2";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isValidTeamPasscode } from "@/lib/team-member-provisioning";
 import type { UserRole } from "@/types/database";
 
 type PinProfile = {
@@ -15,9 +16,9 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as Record<string, unknown>;
     const pin = typeof body.pin === "string" ? body.pin.trim() : "";
 
-    if (!/^\d{4,6}$/.test(pin)) {
+    if (!isValidTeamPasscode(pin)) {
       return NextResponse.json(
-        { error: "Enter a valid 4 to 6 digit PIN." },
+        { error: "Enter a valid 4 to 12 character login code." },
         { status: 400 },
       );
     }

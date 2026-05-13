@@ -12,6 +12,14 @@ export default async function AdminSettingsRoutePage() {
     <AdminSettingsPage
       managerId={data.manager.id}
       managerRole={data.manager.role}
+      ownerProfiles={data.profiles
+        .filter((profile) => profile.role === "owner" || profile.role === "admin")
+        .map((profile) => ({
+          id: profile.id,
+          name: profile.name,
+          role: profile.role,
+          isActive: profile.is_active,
+        }))}
     />
   );
 }

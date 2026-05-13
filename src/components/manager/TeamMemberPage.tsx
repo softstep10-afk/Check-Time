@@ -52,6 +52,7 @@ const roleOptions: UserRole[] = [
   "worker",
   "supervisor",
   "driver",
+  "sales",
   "subcontractor",
   "manager",
   "admin",

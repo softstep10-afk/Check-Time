@@ -2,11 +2,12 @@ import type { UserRole } from "@/types/database";
 
 /**
  * Role hierarchy (higher number = more power):
- *   worker(0) < driver(1) < subcontractor(1) < supervisor(2) < manager(3) < admin(4) < owner(5)
+ *   worker(0) < driver/sales/subcontractor(1) < supervisor(2) < manager(3) < admin(4) < owner(5)
  */
 const ROLE_POWER: Record<UserRole, number> = {
   worker: 0,
   driver: 1,
+  sales: 1,
   subcontractor: 1,
   supervisor: 2,
   manager: 3,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/worker-utils";
+import { isValidTeamPasscode } from "@/lib/team-member-provisioning";
 import type { Profile } from "@/types/database";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 
@@ -48,7 +49,7 @@ export default function ManagersPage() {
       setMessageType("error");
       return;
     }
-    if (!/^\d{4,6}$/.test(pin)) {
+    if (!isValidTeamPasscode(pin)) {
       setMessage(t("team.pinLength"));
       setMessageType("error");
       return;
@@ -218,9 +219,10 @@ export default function ManagersPage() {
             />
             <input
               name="pin"
-              inputMode="numeric"
-              maxLength={6}
-              placeholder={`${t("managers.pin")} (4-6)`}
+              inputMode="text"
+              autoCapitalize="none"
+              maxLength={12}
+              placeholder={`${t("managers.pin")} (4-12)`}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
             <select

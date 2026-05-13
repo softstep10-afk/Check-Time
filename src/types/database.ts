@@ -3,7 +3,7 @@
 // In production, generate these with: npx supabase gen types typescript
 // ============================================================================
 
-export type UserRole = 'worker' | 'supervisor' | 'driver' | 'subcontractor' | 'manager' | 'admin' | 'owner';
+export type UserRole = 'worker' | 'supervisor' | 'driver' | 'sales' | 'subcontractor' | 'manager' | 'admin' | 'owner';
 export type ProjectStatus = 'active' | 'paused' | 'completed' | 'archived';
 export type TimeEventType = 'clock_in' | 'clock_out' | 'auto_out' | 'adjust' | 'break_start' | 'break_end';
 export type CheckoutVideoStatus = 'not_required' | 'pending' | 'uploaded' | 'verified';

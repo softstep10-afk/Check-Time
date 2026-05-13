@@ -38,6 +38,45 @@ export interface ShiftReview {
   isOpen: boolean;
 }
 
+export interface ShiftReviewAck {
+  status: ShiftReviewStatus;
+  reviewedAt: string;
+  reviewedBy: string | null;
+  reviewedEventId: string | null;
+}
+
+export function getShiftReviewAck(metadata: unknown): ShiftReviewAck | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const raw = (metadata as Record<string, unknown>).shift_review_ack;
+  if (!raw || typeof raw !== "object") return null;
+  const ack = raw as Record<string, unknown>;
+  const status = typeof ack.status === "string" ? ack.status : "";
+  const reviewedAt = typeof ack.reviewed_at === "string" ? ack.reviewed_at : "";
+  if (!reviewedAt) return null;
+  return {
+    status: (status || "normal") as ShiftReviewStatus,
+    reviewedAt,
+    reviewedBy: typeof ack.reviewed_by === "string" ? ack.reviewed_by : null,
+    reviewedEventId: typeof ack.reviewed_event_id === "string" ? ack.reviewed_event_id : null,
+  };
+}
+
+export function isShiftReviewAcknowledged(metadata: unknown): boolean {
+  return getShiftReviewAck(metadata) !== null;
+}
+
+export function buildShiftReviewAckEventIds(
+  events: Array<{ event_type: string; metadata: unknown }>,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const event of events) {
+    if (event.event_type !== "adjust") continue;
+    const ack = getShiftReviewAck(event.metadata);
+    if (ack?.reviewedEventId) ids.add(ack.reviewedEventId);
+  }
+  return ids;
+}
+
 /**
  * Active shift becomes "long" at 12h. The Phase-1 product brief calls
  * anything over a normal workday a hint to follow up; 12h is the same

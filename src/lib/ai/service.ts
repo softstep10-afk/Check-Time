@@ -59,6 +59,15 @@ function uniqueList(values: string[], limit = 5): string[] {
   return output;
 }
 
+function monthWindow(now = new Date()): { start: string; end: string } {
+  const start = new Date(now);
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 function keywordMatches(text: string, keywords: string[]): string[] {
   const normalized = text.toLowerCase();
 
@@ -299,6 +308,44 @@ function buildAssistantFallback(
       ],
       links: [{ label: "Open payroll", href: "/payroll" }],
       confidence: 0.71,
+      source: "fallback",
+    };
+  }
+
+  if (
+    normalized.includes("efficiency") ||
+    normalized.includes("efficient") ||
+    normalized.includes("leader") ||
+    normalized.includes("most hours") ||
+    normalized.includes("most tasks") ||
+    normalized.includes("эффектив") ||
+    normalized.includes("больше всего") ||
+    normalized.includes("час") ||
+    normalized.includes("задач")
+  ) {
+    const hoursLeader = snapshot.workerMetrics.find((worker) => worker.monthHours > 0) ?? null;
+    const taskLeader = [...snapshot.workerMetrics]
+      .sort((left, right) => right.completedTasksThisMonth - left.completedTasksThisMonth)
+      .find((worker) => worker.completedTasksThisMonth > 0) ?? null;
+
+    return {
+      answer: "Here is the current month operational leaderboard from the app data I can see.",
+      bullets: uniqueList(
+        [
+          hoursLeader
+            ? `Most hours this month: ${hoursLeader.name} (${hoursLeader.monthHours.toFixed(2)}h).`
+            : "No hours are logged this month yet.",
+          taskLeader
+            ? `Most completed tasks this month: ${taskLeader.name} (${taskLeader.completedTasksThisMonth}).`
+            : "No completed tasks are recorded this month yet.",
+          ...snapshot.workerMetrics
+            .slice(0, 5)
+            .map((worker) => `${worker.name}: ${worker.monthHours.toFixed(2)}h · ${worker.completedTasksThisMonth} tasks`),
+        ],
+        7,
+      ),
+      links: [{ label: "Open team", href: "/team" }, { label: "Open timeline", href: "/timeline" }],
+      confidence: 0.72,
       source: "fallback",
     };
   }
@@ -610,6 +657,25 @@ export function buildAssistantSnapshot(
   const stats = getOverviewStats(data, sessions, projectSummaries, profileSummaries, {
     includeFinancials,
   });
+  const { start: monthStart, end: monthEnd } = monthWindow();
+  const monthMinutesByProfile = new Map<string, number>();
+  for (const session of sessions) {
+    if (session.clockInTime < monthStart || session.clockInTime >= monthEnd) continue;
+    monthMinutesByProfile.set(
+      session.profileId,
+      (monthMinutesByProfile.get(session.profileId) ?? 0) + session.durationMinutes,
+    );
+  }
+  const completedTasksByProfile = new Map<string, number>();
+  for (const task of data.tasks) {
+    if (!task.completed_by || !task.completed_at) continue;
+    if (task.completed_at < monthStart || task.completed_at >= monthEnd) continue;
+    if (task.status !== "done") continue;
+    completedTasksByProfile.set(
+      task.completed_by,
+      (completedTasksByProfile.get(task.completed_by) ?? 0) + 1,
+    );
+  }
 
   return {
     orgName: data.org.name,
@@ -636,6 +702,17 @@ export function buildAssistantSnapshot(
         projectName: profile.currentProjectName,
         currentSessionMinutes: profile.currentSessionMinutes,
       })),
+    workerMetrics: data.profiles
+      .filter((profile) => profile.is_active && !profile.deleted_at)
+      .map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        role: profile.role,
+        monthHours: roundNumber((monthMinutesByProfile.get(profile.id) ?? 0) / 60),
+        completedTasksThisMonth: completedTasksByProfile.get(profile.id) ?? 0,
+      }))
+      .sort((left, right) => right.monthHours - left.monthHours || right.completedTasksThisMonth - left.completedTasksThisMonth)
+      .slice(0, 12),
     recentReports: dailyReports.slice(0, 8).map((report) => ({
       id: report.id,
       projectName:
@@ -761,6 +838,7 @@ export async function answerManagerAssistant(
       ...financialPromptLines,
       `Projects: ${snapshot.projects.map((project) => `${project.name} (${project.onSiteWorkerCount} live, ${project.openTaskCount} open tasks)`).join(" | ")}`,
       `Live workers: ${snapshot.liveWorkers.map((worker) => `${worker.name} on ${worker.projectName ?? "unknown project"}`).join(" | ") || "None"}`,
+      `Current month worker metrics: ${snapshot.workerMetrics.map((worker) => `${worker.name} (${worker.role}): ${worker.monthHours.toFixed(2)}h, ${worker.completedTasksThisMonth} completed tasks`).join(" | ") || "None"}`,
       `Recent reports: ${snapshot.recentReports.map((report) => `${report.projectName} ${report.reportDate}: ${report.summary ?? "No summary"}`).join(" | ") || "None"}`,
     ].join("\n"),
   );

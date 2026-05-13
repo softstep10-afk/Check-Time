@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildTeamMemberEmail,
   generateTeamMemberPin,
+  isValidTeamPasscode,
   slugifyTeamMemberName,
 } from "@/lib/team-member-provisioning";
 
@@ -34,5 +35,13 @@ describe("team member provisioning", () => {
   it("generates a 4 digit PIN", () => {
     expect(generateTeamMemberPin(() => 0)).toBe("1000");
     expect(generateTeamMemberPin(() => 0.9999)).toBe("9999");
+  });
+
+  it("allows stronger alphanumeric passcodes while keeping short/bad values out", () => {
+    expect(isValidTeamPasscode("1234")).toBe(true);
+    expect(isValidTeamPasscode("Andrei77")).toBe(true);
+    expect(isValidTeamPasscode("abc")).toBe(false);
+    expect(isValidTeamPasscode("too-long-passcode")).toBe(false);
+    expect(isValidTeamPasscode("bad pin")).toBe(false);
   });
 });

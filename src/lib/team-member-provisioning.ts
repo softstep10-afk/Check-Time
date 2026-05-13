@@ -1,5 +1,6 @@
 const SYNTHETIC_TEAM_EMAIL_DOMAIN = "checktime.app";
 const PROVIDED_EMAIL_PATTERN = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+export const TEAM_PASSCODE_PATTERN = /^[A-Za-z0-9]{4,12}$/;
 
 export function slugifyTeamMemberName(name: string): string {
   return name
@@ -31,4 +32,8 @@ export function buildTeamMemberEmail(
 
 export function generateTeamMemberPin(random: () => number = Math.random): string {
   return String(Math.floor(1000 + random() * 9000));
+}
+
+export function isValidTeamPasscode(value: string): boolean {
+  return TEAM_PASSCODE_PATTERN.test(value);
 }

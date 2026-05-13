@@ -11,7 +11,7 @@ import { TopProgressBar } from "@/components/shared/TopProgressBar";
 
 type SidebarItem =
   | { section: string; sectionKey: TranslationKey; ownerOnly?: boolean }
-  | { href: string; icon: typeof BarChart3; label: string; labelKey: TranslationKey; ownerOnly?: boolean };
+  | { href: string; icon: typeof BarChart3; label: string; labelKey: TranslationKey; ownerOnly?: boolean; financeOnly?: boolean };
 
 const sidebarItems: SidebarItem[] = [
   { section: "Main", sectionKey: "manager.sectionMain" },
@@ -24,7 +24,7 @@ const sidebarItems: SidebarItem[] = [
   { href: "/ai", icon: Sparkles, label: "AI", labelKey: "manager.navAi" },
   { section: "Admin", sectionKey: "manager.sectionAdmin" },
   { href: "/archive", icon: Archive, label: "Archive", labelKey: "nav.archive" },
-  { href: "/payroll", icon: Wallet, label: "Payroll", labelKey: "manager.navPayroll" },
+  { href: "/payroll", icon: Wallet, label: "Payroll", labelKey: "manager.navPayroll", financeOnly: true },
   { href: "/managers", icon: ShieldCheck, label: "Managers", labelKey: "nav.managers", ownerOnly: true },
   { href: "/stores", icon: Store, label: "Stores", labelKey: "stores.title", ownerOnly: true },
   { href: "/admin/audit", icon: ScrollText, label: "Audit Log", labelKey: "audit.title", ownerOnly: true },
@@ -33,13 +33,13 @@ const sidebarItems: SidebarItem[] = [
   { href: "/trash", icon: Trash2, label: "Trash", labelKey: "nav.trash" },
 ];
 
-const mobileNav = [
-  { href: "/overview", icon: BarChart3, labelKey: "manager.navOverview" as TranslationKey },
-  { href: "/command-center", icon: Activity, labelKey: "manager.navCommandCenter" as TranslationKey },
-  { href: "/projects", icon: FolderKanban, labelKey: "manager.navProjects" as TranslationKey },
-  { href: "/team", icon: Users, labelKey: "manager.navTeam" as TranslationKey },
-  { href: "/ai", icon: Sparkles, labelKey: "manager.navAi" as TranslationKey },
-  { href: "/payroll", icon: Wallet, labelKey: "manager.navPayroll" as TranslationKey },
+const mobileNav: Array<{ href: string; icon: typeof BarChart3; labelKey: TranslationKey; financeOnly?: boolean }> = [
+  { href: "/overview", icon: BarChart3, labelKey: "manager.navOverview" },
+  { href: "/command-center", icon: Activity, labelKey: "manager.navCommandCenter" },
+  { href: "/projects", icon: FolderKanban, labelKey: "manager.navProjects" },
+  { href: "/team", icon: Users, labelKey: "manager.navTeam" },
+  { href: "/ai", icon: Sparkles, labelKey: "manager.navAi" },
+  { href: "/payroll", icon: Wallet, labelKey: "manager.navPayroll", financeOnly: true },
 ];
 
 export default function ManagerLayout({
@@ -55,6 +55,7 @@ export default function ManagerLayout({
   // In auth-bypass/preview mode, owner is the default role
   const [userRole, setUserRole] = useState<string>(AUTH_BYPASS_ENABLED ? "owner" : "manager");
   const [userName, setUserName] = useState<string>(AUTH_BYPASS_ENABLED ? "Preview Owner" : "");
+  const [hasFinanceMenu, setHasFinanceMenu] = useState(AUTH_BYPASS_ENABLED);
 
   useEffect(() => {
     if (AUTH_BYPASS_ENABLED) return;
@@ -70,6 +71,18 @@ export default function ManagerLayout({
         const profile = data as { role: string; name: string | null };
         setUserRole(profile.role);
         setUserName(profile.name ?? "");
+        let canSeeFinance = profile.role === "owner" || profile.role === "admin";
+        if (!canSeeFinance) {
+          const { data: capability } = await supabase
+            .from("user_capabilities")
+            .select("granted")
+            .eq("user_id", user.id)
+            .eq("capability", "finance_access")
+            .eq("granted", true)
+            .maybeSingle<{ granted: boolean }>();
+          canSeeFinance = capability?.granted === true;
+        }
+        setHasFinanceMenu(canSeeFinance);
       }
     }
     void loadProfile();
@@ -79,8 +92,10 @@ export default function ManagerLayout({
 
   const visibleSidebar = sidebarItems.filter((item) => {
     if ("ownerOnly" in item && item.ownerOnly && !isOwnerUser) return false;
+    if ("financeOnly" in item && item.financeOnly && !hasFinanceMenu) return false;
     return true;
   });
+  const visibleMobileNav = mobileNav.filter((item) => !item.financeOnly || hasFinanceMenu);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -241,7 +256,7 @@ export default function ManagerLayout({
         }}
       >
         <div className="flex justify-around items-center py-1.5 pb-3">
-          {mobileNav.map((item) => {
+          {visibleMobileNav.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
             return (
               <button

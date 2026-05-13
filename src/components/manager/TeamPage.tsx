@@ -1,18 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, MessageSquare, Trash2, UserPlus } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDurationCompact } from "@/lib/worker-utils";
 import type { ManagerProfileSummary } from "@/lib/manager-types";
 import type { UserRole } from "@/types/database";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { toggleUserCapability } from "@/app/(manager)/admin/users/[id]/permissions/actions";
 import { ALWAYS_FINANCE_ROLES } from "@/lib/finance-access";
-import { generateTeamMemberPin } from "@/lib/team-member-provisioning";
+import { generateTeamMemberPin, isValidTeamPasscode } from "@/lib/team-member-provisioning";
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -28,6 +28,7 @@ const roleOptions: UserRole[] = [
   "worker",
   "supervisor",
   "driver",
+  "sales",
   "subcontractor",
   "manager",
   "admin",
@@ -42,9 +43,18 @@ const ROLE_TAG_COLORS: Record<string, { bg: string; color: string }> = {
   manager: { bg: "rgba(59, 130, 246, 0.14)", color: "#3b82f6" },        // blue
   supervisor: { bg: "rgba(139, 92, 246, 0.14)", color: "#8b5cf6" },     // purple
   driver: { bg: "rgba(34, 197, 94, 0.14)", color: "#22c55e" },          // green
+  sales: { bg: "rgba(6, 182, 212, 0.14)", color: "#06b6d4" },           // cyan
   worker: { bg: "rgba(107, 114, 128, 0.18)", color: "#9ca3af" },        // gray (lighter text on dark bg)
   subcontractor: { bg: "rgba(249, 115, 22, 0.14)", color: "#f97316" },  // orange
 };
+
+const ROLE_GROUPS: Array<{ key: string; labelKey: TranslationKey; roles: UserRole[] }> = [
+  { key: "managers", labelKey: "team.groupManagers", roles: ["owner", "admin", "manager"] },
+  { key: "supervisors", labelKey: "team.groupSupervisors", roles: ["supervisor"] },
+  { key: "sales", labelKey: "team.groupSales", roles: ["sales"] },
+  { key: "drivers", labelKey: "team.groupDrivers", roles: ["driver"] },
+  { key: "workers", labelKey: "team.groupWorkers", roles: ["worker", "subcontractor"] },
+];
 
 const AVATAR_COLORS = ["#f59e0b", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#06b6d4", "#f97316", "#ec4899"];
 
@@ -157,6 +167,19 @@ export function TeamPage({
     return filtered;
   }, [initialProfiles, query, roleFilter, showInactive]);
 
+  const groupedProfiles = useMemo(() => {
+    return ROLE_GROUPS
+      .map((group) => ({
+        ...group,
+        profiles: visibleProfiles.filter((profile) => group.roles.includes(profile.role)),
+      }))
+      .filter((group) => group.profiles.length > 0);
+  }, [visibleProfiles]);
+
+  const showFinanceAccessColumn = canManageFinanceAccess;
+  const rosterColumnCount =
+    4 + (hasFinanceAccess ? 2 : 0) + (showFinanceAccessColumn ? 1 : 0) + 1;
+
   const inactiveCount = useMemo(
     () => initialProfiles.filter((p) => !p.is_active).length,
     [initialProfiles],
@@ -177,10 +200,12 @@ export function TeamPage({
 
   function validatePin(value: string) {
     setPinValue(value);
-    if (value && !/^\d*$/.test(value)) {
-      setPinError(t("team.pinDigitsOnly"));
+    if (value && !/^[A-Za-z0-9]*$/.test(value)) {
+      setPinError(t("team.pinLettersDigitsOnly"));
     } else if (value && value.length > 0 && value.length < 4) {
       setPinError(t("team.pinMinLength"));
+    } else if (value.length > 12) {
+      setPinError(t("team.pinLength"));
     } else {
       setPinError("");
     }
@@ -202,7 +227,7 @@ export function TeamPage({
       setNameError(t("team.nameRequired"));
       return;
     }
-    if (!/^\d{4,6}$/.test(pin)) {
+    if (!isValidTeamPasscode(pin)) {
       setPinError(t("team.pinLength"));
       return;
     }
@@ -354,7 +379,9 @@ export function TeamPage({
                 <option value="worker">Worker</option>
                 <option value="driver">Driver</option>
                 <option value="supervisor">Supervisor</option>
+                <option value="sales">Sales</option>
                 <option value="subcontractor">Subcontractor</option>
+                <option value="manager">Manager</option>
               </select>
               <TextInputWithVoice
                 value={query}
@@ -383,12 +410,24 @@ export function TeamPage({
                       <th className="pb-3 pr-3 text-right font-semibold">{t("team.colEarned")}</th>
                     </>
                   ) : null}
-                  <th className="pb-3 pr-3 text-right font-semibold">{t("team.colFinance")}</th>
+                  {showFinanceAccessColumn ? (
+                    <th className="pb-3 pr-3 text-right font-semibold">{t("team.colFinance")}</th>
+                  ) : null}
                   <th className="pb-3 text-right font-semibold">{t("team.colActions")}</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleProfiles.map((profile) => {
+                {groupedProfiles.map((group) => (
+                  <Fragment key={group.key}>
+                    <tr>
+                      <td
+                        colSpan={rosterColumnCount}
+                        className="py-3 pr-3 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)]"
+                      >
+                        {t(group.labelKey)} · {group.profiles.length}
+                      </td>
+                    </tr>
+                    {group.profiles.map((profile) => {
                   const earned = earnedAmount(profile);
                   const rate = Number(profile.hourly_rate ?? 0);
                   return (
@@ -451,6 +490,7 @@ export function TeamPage({
                           </td>
                         </>
                       ) : null}
+                      {showFinanceAccessColumn ? (
                       <td className="py-3 pr-3 text-right">
                         {ALWAYS_FINANCE_ROLES.has(profile.role) ? (
                           <span
@@ -475,6 +515,7 @@ export function TeamPage({
                           />
                         )}
                       </td>
+                      ) : null}
                       <td className="py-3 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Link
@@ -510,7 +551,9 @@ export function TeamPage({
                       </td>
                     </tr>
                   );
-                })}
+                    })}
+                  </Fragment>
+                ))}
               </tbody>
               <tfoot
                 className="sticky bottom-0 z-10"
@@ -534,7 +577,7 @@ export function TeamPage({
                       </td>
                     </>
                   ) : null}
-                  <td className="py-3 pr-3" />
+                  {showFinanceAccessColumn ? <td className="py-3 pr-3" /> : null}
                   <td className="py-3 pr-3" />
                 </tr>
               </tfoot>
@@ -543,7 +586,12 @@ export function TeamPage({
 
           {/* Mobile stacked rows */}
           <div className="mt-4 space-y-2 md:hidden">
-            {visibleProfiles.map((profile) => {
+            {groupedProfiles.map((group) => (
+              <div key={group.key} className="space-y-2">
+                <div className="px-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t(group.labelKey)} · {group.profiles.length}
+                </div>
+                {group.profiles.map((profile) => {
               const earned = earnedAmount(profile);
               const rate = Number(profile.hourly_rate ?? 0);
               return (
@@ -606,7 +654,8 @@ export function TeamPage({
                   </div>
 
                   <div className="mt-3 flex items-center justify-between gap-2">
-                    {ALWAYS_FINANCE_ROLES.has(profile.role) ? (
+                    {showFinanceAccessColumn ? (
+                    ALWAYS_FINANCE_ROLES.has(profile.role) ? (
                       <span
                         className="inline-flex items-center rounded-[var(--radius-pill)] px-2 py-0.5 text-[9px] font-bold uppercase"
                         style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
@@ -629,7 +678,8 @@ export function TeamPage({
                         />
                         {t("team.colFinance")}
                       </label>
-                    )}
+                    )
+                    ) : <span />}
                     <div className="inline-flex items-center gap-1">
                     <Link
                       href={`/team/${profile.id}`}
@@ -661,7 +711,9 @@ export function TeamPage({
                   </div>
                 </div>
               );
-            })}
+                })}
+              </div>
+            ))}
 
             <div
               className="sticky bottom-0 flex items-center justify-between gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] px-3 py-3 text-[11px]"
@@ -739,8 +791,9 @@ export function TeamPage({
                       <input
                         id="team-member-pin"
                         name="pin"
-                        inputMode="numeric"
-                        maxLength={6}
+                        inputMode="text"
+                        autoCapitalize="none"
+                        maxLength={12}
                         placeholder={t("team.pinPlaceholder")}
                         value={pinValue}
                         onChange={(e) => validatePin(e.target.value)}

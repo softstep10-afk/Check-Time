@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 
-const PIN_LENGTH = 4;
+const MIN_PASSCODE_LENGTH = 4;
+const MAX_PASSCODE_LENGTH = 12;
 
 type Phase = "idle" | "loading" | "success" | "error";
 
@@ -46,15 +47,15 @@ export default function Page() {
     (n: string) => {
       if (locked) return;
       setPin((prev) => {
-        if (prev.length >= PIN_LENGTH) return prev;
+        if (prev.length >= MAX_PASSCODE_LENGTH || !/^[A-Za-z0-9]$/.test(n)) return prev;
         const next = prev + n;
         setStatusText(
-          next.length < PIN_LENGTH ? `${PIN_LENGTH - next.length} ${t("login.more")}` : t("login.ready")
+          next.length < MIN_PASSCODE_LENGTH ? `${MIN_PASSCODE_LENGTH - next.length} ${t("login.more")}` : t("login.ready")
         );
         return next;
       });
     },
-    [locked]
+    [locked, t]
   );
 
   const backspace = useCallback(() => {
@@ -62,11 +63,15 @@ export default function Page() {
     setPin((prev) => {
       const next = prev.slice(0, -1);
       setStatusText(
-        next.length ? `${PIN_LENGTH - next.length} ${t("login.more")}` : t("login.enterYourPin")
+        next.length && next.length < MIN_PASSCODE_LENGTH
+          ? `${MIN_PASSCODE_LENGTH - next.length} ${t("login.more")}`
+          : next.length
+            ? t("login.ready")
+            : t("login.enterYourPin")
       );
       return next;
     });
-  }, [locked]);
+  }, [locked, t]);
 
   const clear = useCallback(() => {
     if (locked) return;
@@ -75,7 +80,7 @@ export default function Page() {
   }, [locked, t]);
 
   const submit = useCallback(async () => {
-    if (locked || pin.length < PIN_LENGTH) return;
+    if (locked || pin.length < MIN_PASSCODE_LENGTH) return;
 
     setPhase("loading");
     setStatusText(t("login.verifying"));
@@ -127,7 +132,8 @@ export default function Page() {
   // Keyboard support
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key >= "0" && e.key <= "9") addDigit(e.key);
+      if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
+      if (/^[A-Za-z0-9]$/.test(e.key)) addDigit(e.key);
       else if (e.key === "Backspace") backspace();
       else if (e.key === "Escape") clear();
       else if (e.key === "Enter") submit();
@@ -154,7 +160,7 @@ export default function Page() {
 
   const signInClass = () => {
     if (phase === "loading") return "login-sign-in loading";
-    if (pin.length >= PIN_LENGTH) return "login-sign-in ready";
+    if (pin.length >= MIN_PASSCODE_LENGTH) return "login-sign-in ready";
     return "login-sign-in";
   };
 
@@ -183,8 +189,36 @@ export default function Page() {
           <div className="login-divider" />
 
           <div className="login-pin-label">{t("login.enterPin")}</div>
+          <input
+            className="login-passcode-input"
+            type="password"
+            value={pin}
+            disabled={locked}
+            maxLength={MAX_PASSCODE_LENGTH}
+            autoCapitalize="none"
+            autoComplete="off"
+            inputMode="text"
+            placeholder={t("login.passcodePlaceholder")}
+            onChange={(event) => {
+              const next = event.target.value.replace(/[^A-Za-z0-9]/g, "").slice(0, MAX_PASSCODE_LENGTH);
+              setPin(next);
+              setStatusText(
+                next.length < MIN_PASSCODE_LENGTH
+                  ? next.length
+                    ? `${MIN_PASSCODE_LENGTH - next.length} ${t("login.more")}`
+                    : t("login.enterYourPin")
+                  : t("login.ready"),
+              );
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submit();
+              }
+            }}
+          />
           <div className={pinBoxClass()}>
-            {Array.from({ length: PIN_LENGTH }, (_, i) => (
+            {Array.from({ length: Math.max(MIN_PASSCODE_LENGTH, Math.min(pin.length, MAX_PASSCODE_LENGTH)) }, (_, i) => (
               <div key={i} className={dotClass(i)} />
             ))}
           </div>
@@ -241,7 +275,7 @@ export default function Page() {
           <button
             type="button"
             className={signInClass()}
-            disabled={phase === "loading" || pin.length < PIN_LENGTH}
+            disabled={phase === "loading" || pin.length < MIN_PASSCODE_LENGTH}
             onPointerDown={(e) => {
               e.preventDefault();
               submit();
@@ -391,6 +425,26 @@ const loginStyles = /* css */ `
     text-transform: uppercase;
     margin-bottom: 12px;
     animation: loginFadeUp 0.5s 0.32s both;
+  }
+
+  .login-passcode-input {
+    width: 100%;
+    margin-bottom: 10px;
+    border: 1px solid rgba(191, 162, 52, 0.2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+    padding: 12px 14px;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    outline: none;
+    animation: loginFadeUp 0.5s 0.34s both;
+  }
+
+  .login-passcode-input:focus {
+    border-color: rgba(191, 162, 52, 0.48);
+    box-shadow: 0 0 0 3px rgba(191, 162, 52, 0.10);
   }
 
   .login-pin-dots {

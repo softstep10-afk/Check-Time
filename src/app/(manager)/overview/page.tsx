@@ -3,6 +3,7 @@ import { FullscreenMapWrapper } from "@/components/maps/FullscreenMapWrapper";
 import { ForceCheckoutButton } from "@/components/manager/ForceCheckoutButton";
 import { EventFeed, type FeedEvent } from "@/components/manager/EventFeed";
 import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
+import { ShiftReviewAckButton } from "@/components/manager/ShiftReviewAckButton";
 import {
   buildActiveProjectIdSet,
   getActiveOperationalMedia,
@@ -36,6 +37,7 @@ import {
 } from "@/lib/gps-freshness";
 import {
   SHIFT_REVIEW_COLOR,
+  buildShiftReviewAckEventIds,
   deriveShiftReview,
   type ShiftReview,
   type ShiftReviewStatus,
@@ -137,6 +139,7 @@ export default async function OverviewPage() {
       .filter((e) => e.event_type === "clock_out" || e.event_type === "auto_out")
       .map((e) => [e.id, e]),
   );
+  const acknowledgedShiftEventIds = buildShiftReviewAckEventIds(data.timeEvents);
   const onSiteSessions = activeSessions
     .filter((s) => s.isOpen)
     .map((session) => {
@@ -262,6 +265,11 @@ export default async function OverviewPage() {
       return { ...session, review };
     })
     .filter((session) => session.review.status !== "normal")
+    .filter((session) => {
+      return session.clockOutEventId
+        ? !acknowledgedShiftEventIds.has(session.clockOutEventId)
+        : true;
+    })
     .sort((left, right) => {
       const statusGap =
         reviewPriorityRank[left.review.status] - reviewPriorityRank[right.review.status];
@@ -702,9 +710,8 @@ export default async function OverviewPage() {
                 ? clockOutEventsById.get(session.clockOutEventId)
                 : null;
               return (
-                <Link
+                <article
                   key={session.id}
-                  href={`/team/${session.profileId}`}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-2.5"
                   style={{
                     borderColor: "rgba(212, 81, 94, 0.22)",
@@ -713,9 +720,12 @@ export default async function OverviewPage() {
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-[var(--text-primary)]">
+                      <Link
+                        href={`/team/${session.profileId}`}
+                        className="text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--brand-yellow)]"
+                      >
                         {session.profileName}
-                      </span>
+                      </Link>
                       <span className="text-xs text-[var(--text-secondary)]">
                         {session.projectName}
                       </span>
@@ -741,8 +751,15 @@ export default async function OverviewPage() {
                     <span className="font-mono text-sm font-bold text-[var(--text-primary)]">
                       {formatDurationCompact(session.durationMinutes)}
                     </span>
+                    {clockOutEvent ? (
+                      <ShiftReviewAckButton
+                        eventId={clockOutEvent.id}
+                        managerId={data.manager.id}
+                        status={session.review.status}
+                      />
+                    ) : null}
                   </div>
-                </Link>
+                </article>
               );
             })}
           </div>

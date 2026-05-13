@@ -3,6 +3,8 @@ import {
   EXTREME_SHIFT_MINUTES,
   WARN_SHIFT_MINUTES,
   deriveShiftReview,
+  buildShiftReviewAckEventIds,
+  getShiftReviewAck,
   isShiftActionable,
   shiftDurationSeverity,
 } from "@/lib/shift-review";
@@ -301,5 +303,52 @@ describe("isShiftActionable", () => {
         isShiftActionable({ status, reasons: [status], durationMinutes: 0, isOpen: true }),
       ).toBe(true);
     }
+  });
+});
+
+describe("shift review acknowledgement metadata", () => {
+  it("reads append-only acknowledgement metadata", () => {
+    expect(
+      getShiftReviewAck({
+        shift_review_ack: {
+          status: "needs_review",
+          reviewed_event_id: "clock-out-1",
+          reviewed_at: "2026-05-13T10:00:00Z",
+          reviewed_by: "manager-1",
+        },
+      }),
+    ).toEqual({
+      status: "needs_review",
+      reviewedEventId: "clock-out-1",
+      reviewedAt: "2026-05-13T10:00:00Z",
+      reviewedBy: "manager-1",
+    });
+  });
+
+  it("builds a set of reviewed clock-out event ids from adjust events only", () => {
+    const ids = buildShiftReviewAckEventIds([
+      {
+        event_type: "clock_out",
+        metadata: {
+          shift_review_ack: {
+            reviewed_event_id: "should-not-count",
+            reviewed_at: "2026-05-13T10:00:00Z",
+          },
+        },
+      },
+      {
+        event_type: "adjust",
+        metadata: {
+          shift_review_ack: {
+            status: "long_shift",
+            reviewed_event_id: "clock-out-2",
+            reviewed_at: "2026-05-13T10:05:00Z",
+            reviewed_by: "manager-1",
+          },
+        },
+      },
+    ]);
+
+    expect([...ids]).toEqual(["clock-out-2"]);
   });
 });

@@ -4,13 +4,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
-import { buildTeamMemberEmail } from "@/lib/team-member-provisioning";
+import { buildTeamMemberEmail, isValidTeamPasscode } from "@/lib/team-member-provisioning";
 import type { UserRole } from "@/types/database";
 
 const allowedRoles: UserRole[] = [
   "worker",
   "supervisor",
   "driver",
+  "sales",
   "subcontractor",
   "manager",
   "admin",
@@ -68,9 +69,9 @@ export async function POST(request: NextRequest) {
     // PIN users still need a Supabase Auth email internally.
     const email = buildTeamMemberEmail(rawEmail, name);
 
-    if (!/^\d{4,6}$/.test(pin)) {
+    if (!isValidTeamPasscode(pin)) {
       return NextResponse.json(
-        { error: "PIN must be 4 to 6 digits." },
+        { error: "Login code must be 4 to 12 letters or digits." },
         { status: 400 },
       );
     }

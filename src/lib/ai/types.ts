@@ -90,6 +90,14 @@ export interface SnapshotReport {
   summary: string | null;
 }
 
+export interface SnapshotWorkerMetric {
+  id: string;
+  name: string;
+  role: string;
+  monthHours: number;
+  completedTasksThisMonth: number;
+}
+
 export interface AssistantSnapshot {
   orgName: string;
   onSiteCount: number;
@@ -100,6 +108,7 @@ export interface AssistantSnapshot {
   unpaidAmount: number;
   projects: SnapshotProject[];
   liveWorkers: SnapshotWorker[];
+  workerMetrics: SnapshotWorkerMetric[];
   recentReports: SnapshotReport[];
 }
 
