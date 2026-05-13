@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { X } from "lucide-react";
 import {
   ArchiveProjectMediaList,
   type ArchiveProjectMediaItem,
@@ -18,6 +19,7 @@ export const revalidate = 0;
 const COPY = {
   en: {
     back: "Back to Archive",
+    close: "Close archived project",
     eyebrow: "Archived Project",
     noAddress: "No address",
     archived: "archived",
@@ -61,6 +63,7 @@ const COPY = {
   },
   ru: {
     back: "Назад в архив",
+    close: "Закрыть архивный проект",
     eyebrow: "Архивный проект",
     noAddress: "Адрес не указан",
     archived: "архивирован",
@@ -200,12 +203,23 @@ export default async function ArchivedProjectDetailPage({
               {project.address ?? text.noAddress} · {text.archived} {project.archived_at ? new Date(project.archived_at).toLocaleDateString(dateLocale) : text.noArchiveDate}
             </p>
           </div>
-          <span
-            className="rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em]"
-            style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
-          >
-            {text.readOnly}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em]"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+            >
+              {text.readOnly}
+            </span>
+            <Link
+              href="/archive"
+              aria-label={text.close}
+              title={text.close}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border text-[var(--text-primary)] transition hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
+              style={{ borderColor: "var(--border-default)" }}
+            >
+              <X size={17} />
+            </Link>
+          </div>
         </div>
       </section>
 

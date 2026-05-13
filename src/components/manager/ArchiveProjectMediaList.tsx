@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ExternalLink, FileText, Image, Play, Receipt } from "lucide-react";
-import { selectMediaPlayback, signWithTimeout } from "@/lib/media-playback";
-import { normalizeStoragePath } from "@/lib/task-attachments";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
+import { Eye, FileText, Image, Play, Receipt } from "lucide-react";
+import {
+  MediaViewerModal,
+  useMediaViewerOpenGuard,
+} from "@/components/shared/MediaViewerModal";
 import { useTranslation } from "@/lib/i18n";
 import type { MediaType } from "@/types/database";
 
@@ -29,18 +30,14 @@ const currency = new Intl.NumberFormat("en-US", {
 
 const COPY = {
   en: {
-    openError: "Could not open this file. Try again from the project detail page.",
     empty: "No media preserved for this project.",
     receipt: "Receipt",
-    opening: "Opening",
-    open: "Open",
+    open: "View",
   },
   ru: {
-    openError: "Не удалось открыть файл. Попробуйте ещё раз со страницы проекта.",
     empty: "По этому проекту нет сохранённых файлов.",
     receipt: "Чек",
-    opening: "Открываю",
-    open: "Открыть",
+    open: "Смотреть",
   },
 } as const;
 
@@ -60,27 +57,18 @@ export function ArchiveProjectMediaList({
 }) {
   const { locale } = useTranslation();
   const text = COPY[locale];
-  const supabase = useMemo(() => createClient(), []);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [viewerItem, setViewerItem] = useState<ArchiveProjectMediaItem | null>(null);
+  const { canOpenViewerItem, suppressViewerItem } = useMediaViewerOpenGuard();
 
-  async function openMedia(item: ArchiveProjectMediaItem) {
-    setBusyId(item.id);
-    setError("");
-    const playback = selectMediaPlayback(item);
-    const { data, error: signError } = await signWithTimeout(
-      supabase.storage
-        .from("media")
-        .createSignedUrl(normalizeStoragePath(playback.path), 3600),
-    );
-    setBusyId(null);
+  function openMedia(item: ArchiveProjectMediaItem) {
+    if (!canOpenViewerItem(item.id)) return;
+    setViewerItem(item);
+  }
 
-    if (signError || !data?.signedUrl) {
-      setError(text.openError);
-      return;
-    }
-
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  function closeViewer() {
+    const itemId = viewerItem?.id;
+    setViewerItem(null);
+    suppressViewerItem(itemId);
   }
 
   if (items.length === 0) {
@@ -93,13 +81,6 @@ export function ArchiveProjectMediaList({
 
   return (
     <div className="space-y-3">
-      {error ? (
-        <div className="rounded-[var(--radius-md)] border p-3 text-sm"
-          style={{ borderColor: "rgba(212, 81, 94, 0.32)", color: "var(--red)" }}
-        >
-          {error}
-        </div>
-      ) : null}
       <div className="grid gap-2 md:grid-cols-2">
         {items.map((item) => {
           const Icon = iconFor(item);
@@ -135,18 +116,35 @@ export function ArchiveProjectMediaList({
                 </div>
                 <button
                   type="button"
-                  onClick={() => void openMedia(item)}
-                  disabled={busyId === item.id}
+                  onClick={() => openMedia(item)}
                   className="button-base button-secondary shrink-0 px-2.5 py-1.5 text-xs"
                 >
-                  <ExternalLink size={14} />
-                  {busyId === item.id ? text.opening : text.open}
+                  <Eye size={14} />
+                  {text.open}
                 </button>
               </div>
             </div>
           );
         })}
       </div>
+      <MediaViewerModal
+        item={
+          viewerItem
+            ? {
+                id: viewerItem.id,
+                storage_path: viewerItem.storage_path,
+                filename: viewerItem.filename,
+                mime_type: viewerItem.mime_type,
+                media_type: viewerItem.media_type,
+                caption: viewerItem.caption,
+                created_at: viewerItem.created_at,
+                metadata: viewerItem.metadata,
+                uploaderName: viewerItem.uploadedByName,
+              }
+            : null
+        }
+        onClose={closeViewer}
+      />
     </div>
   );
 }
