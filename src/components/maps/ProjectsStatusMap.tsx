@@ -15,6 +15,7 @@ import {
   TRACKER_ROLE_COLOR,
   WASHINGTON_BOUNDS,
   classifyTrackerRole,
+  isPointInsideWashingtonBounds,
   isProjectOnActiveMap,
   pickInitialMapCenter,
   pickInitialMapZoom,
@@ -104,7 +105,29 @@ function makeRoleIcon(role: TrackerRole) {
   };
 }
 
-type MappedProject = ManagerProjectSummary & { site: WorkerGeoPoint };
+type ProjectWithSite = ManagerProjectSummary & { site: WorkerGeoPoint };
+type MappedProject = ProjectWithSite & {
+  site: WorkerGeoPoint;
+  markerSite: WorkerGeoPoint;
+};
+
+function coordinateKey(point: WorkerGeoPoint): string {
+  return `${point.lat.toFixed(5)}:${point.lng.toFixed(5)}`;
+}
+
+function spreadDuplicatePoint(
+  point: WorkerGeoPoint,
+  index: number,
+  total: number,
+): WorkerGeoPoint {
+  if (total <= 1) return point;
+  const angle = (Math.PI * 2 * index) / total;
+  const radius = 0.0012 + Math.floor(index / 8) * 0.0004;
+  return {
+    lat: point.lat + Math.sin(angle) * radius,
+    lng: point.lng + Math.cos(angle) * radius,
+  };
+}
 
 export function ProjectsStatusMap({
   projects,
@@ -122,21 +145,35 @@ export function ProjectsStatusMap({
   // the manager only sees what's operational. Archived projects live on
   // a dedicated archive page; they don't pollute live coverage.
   const mappedProjects = useMemo<MappedProject[]>(() => {
-    return projects
+    const withSites = projects
       .filter(isProjectOnActiveMap)
       .map((project) => ({
         ...project,
         site: parseGeoPoint(project.site_point),
       }))
-      .filter(
-        (project): project is MappedProject => project.site !== null,
-      );
+      .filter((project): project is ProjectWithSite => project.site !== null)
+      .filter((project) => isPointInsideWashingtonBounds(project.site));
+    const groupCounts = new Map<string, number>();
+    for (const project of withSites) {
+      const key = coordinateKey(project.site);
+      groupCounts.set(key, (groupCounts.get(key) ?? 0) + 1);
+    }
+    const groupIndexes = new Map<string, number>();
+    return withSites.map((project) => {
+      const key = coordinateKey(project.site);
+      const index = groupIndexes.get(key) ?? 0;
+      groupIndexes.set(key, index + 1);
+      return {
+        ...project,
+        markerSite: spreadDuplicatePoint(project.site, index, groupCounts.get(key) ?? 1),
+      };
+    });
   }, [projects]);
 
   const totalPoints = mappedProjects.length + activeWorkers.length;
 
   const center = useMemo(
-    () => pickInitialMapCenter(mappedProjects.map((p) => p.site), activeWorkers),
+    () => pickInitialMapCenter(mappedProjects.map((p) => p.markerSite), activeWorkers),
     [mappedProjects, activeWorkers],
   );
   const initialZoom = pickInitialMapZoom(totalPoints);
@@ -185,7 +222,7 @@ export function ProjectsStatusMap({
       if (totalPoints < 2) return;
       const bounds = new google.maps.LatLngBounds();
       for (const project of mappedProjects) {
-        bounds.extend({ lat: project.site.lat, lng: project.site.lng });
+        bounds.extend({ lat: project.markerSite.lat, lng: project.markerSite.lng });
       }
       for (const worker of activeWorkers) {
         bounds.extend({ lat: worker.lat, lng: worker.lng });
@@ -215,7 +252,7 @@ export function ProjectsStatusMap({
         return (
           <MarkerF
             key={project.id}
-            position={{ lat: project.site.lat, lng: project.site.lng }}
+            position={{ lat: project.markerSite.lat, lng: project.markerSite.lng }}
             icon={projectIcons[tone]}
             title={project.name}
             onClick={() => setSelectedProjectId(project.id)}
@@ -240,8 +277,8 @@ export function ProjectsStatusMap({
       {selectedProject ? (
         <InfoWindowF
           position={{
-            lat: selectedProject.site.lat,
-            lng: selectedProject.site.lng,
+            lat: selectedProject.markerSite.lat,
+            lng: selectedProject.markerSite.lng,
           }}
           onCloseClick={() => setSelectedProjectId(null)}
         >

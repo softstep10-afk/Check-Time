@@ -6,6 +6,7 @@ import {
   WASHINGTON_BOUNDS,
   WASHINGTON_CENTER,
   classifyTrackerRole,
+  isPointInsideWashingtonBounds,
   isProjectOnActiveMap,
   pickInitialMapCenter,
   pickInitialMapZoom,
@@ -26,6 +27,13 @@ describe("WASHINGTON_CENTER / WASHINGTON_BOUNDS", () => {
     expect(WASHINGTON_BOUNDS.north).toBeGreaterThan(47.6062);
     expect(WASHINGTON_BOUNDS.west).toBeLessThan(-122.3321);
     expect(WASHINGTON_BOUNDS.east).toBeGreaterThan(-122.3321);
+  });
+
+  it("distinguishes Washington project points from bad/out-of-state points", () => {
+    expect(isPointInsideWashingtonBounds({ lat: 47.3138, lng: -122.263 })).toBe(true);
+    expect(isPointInsideWashingtonBounds({ lat: 37.7749, lng: -122.4194 })).toBe(false);
+    expect(isPointInsideWashingtonBounds({ lat: 82, lng: -175 })).toBe(false);
+    expect(isPointInsideWashingtonBounds(null)).toBe(false);
   });
 
   it("keeps zoom limits inside a sane operational range", () => {

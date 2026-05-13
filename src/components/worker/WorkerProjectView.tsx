@@ -1216,6 +1216,7 @@ function ProjectClockControls({
   const { t } = useTranslation();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
+  const [pendingNoGpsStart, setPendingNoGpsStart] = useState(false);
   const [savingAck, setSavingAck] = useState(false);
   const [ackError, setAckError] = useState<string | null>(null);
   const supabase = useMemo(() => createClient(), []);
@@ -1227,8 +1228,9 @@ function ProjectClockControls({
   const clockedInElsewhere = isClockedIn && currentProjectId !== projectId;
   const startingShift = busyAction === "clock-in";
 
-  function handleStart() {
+  function handleStart(noGps = false) {
     setAckError(null);
+    setPendingNoGpsStart(noGps);
     setSafetyOpen(true);
   }
 
@@ -1261,7 +1263,13 @@ function ProjectClockControls({
       return;
     }
     setSafetyOpen(false);
-    void clockIn(projectId);
+    void clockIn(
+      projectId,
+      pendingNoGpsStart
+        ? { skipGps: true, gpsErrorKind: "unavailable" }
+        : undefined,
+    );
+    setPendingNoGpsStart(false);
   }
 
   async function handleSwitch() {
@@ -1321,16 +1329,28 @@ function ProjectClockControls({
           </button>
         </>
       ) : (
-        <button
-          type="button"
-          onClick={handleStart}
-          disabled={startingShift}
-          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
-          style={{ background: "#f59e0b", color: "var(--text-inverse)" }}
-        >
-          <Play size={14} />
-          {startingShift ? t("clock.checkingLocation") : t("clock.startShiftCta")}
-        </button>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => handleStart(false)}
+            disabled={startingShift}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
+            style={{ background: "#f59e0b", color: "var(--text-inverse)" }}
+          >
+            <Play size={14} />
+            {startingShift ? t("clock.checkingLocation") : t("clock.startShiftCta")}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleStart(true)}
+            disabled={startingShift}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border px-4 py-3 text-sm font-semibold disabled:opacity-50"
+            style={{ borderColor: "rgba(245,158,11,0.45)", color: "#f59e0b" }}
+          >
+            <Play size={14} />
+            {t("worker.gpsPromptStartWithoutGps")}
+          </button>
+        </div>
       )}
 
       <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
@@ -1344,6 +1364,7 @@ function ProjectClockControls({
         onCancel={() => {
           if (!savingAck) {
             setAckError(null);
+            setPendingNoGpsStart(false);
             setSafetyOpen(false);
           }
         }}

@@ -93,6 +93,16 @@ export interface LatLngLike {
   lng: number;
 }
 
+export function isPointInsideWashingtonBounds(point: LatLngLike | null | undefined): boolean {
+  if (!point) return false;
+  return (
+    point.lat >= WASHINGTON_BOUNDS.south &&
+    point.lat <= WASHINGTON_BOUNDS.north &&
+    point.lng >= WASHINGTON_BOUNDS.west &&
+    point.lng <= WASHINGTON_BOUNDS.east
+  );
+}
+
 // Pick a sensible initial center for the map given the points we know
 // about. Project bounds take priority, then any active worker/driver
 // position, then the Washington fallback. The result is only used until

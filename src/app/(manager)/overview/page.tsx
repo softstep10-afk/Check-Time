@@ -582,11 +582,11 @@ export default async function OverviewPage() {
               {t("overview.openCommandCenter")}
             </Link>
             <Link
-              href={primaryAction?.href ?? "/timeline"}
+              href="/timeline"
               className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold"
               style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
             >
-              {primaryAction ? t("overview.openTopAction") : t("overview.fullTimeline")}
+              {t("overview.fullTimeline")}
             </Link>
           </div>
         </div>
@@ -634,7 +634,7 @@ export default async function OverviewPage() {
               {t("overview.commandNext")}
             </div>
             {primaryAction ? (
-              <Link href={primaryAction.href} className="mt-2 block">
+              <div className="mt-2">
                 <div
                   className="text-[10px] font-bold uppercase tracking-[0.14em]"
                   style={{ color: primaryAction.color }}
@@ -647,7 +647,7 @@ export default async function OverviewPage() {
                 <div className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--text-secondary)]">
                   {primaryAction.detail}
                 </div>
-              </Link>
+              </div>
             ) : (
               <div className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
                 {t("overview.noActionItems")}
