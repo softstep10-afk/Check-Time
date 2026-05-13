@@ -574,13 +574,22 @@ export default async function OverviewPage() {
               {t("overview.commandCenterDesc")}
             </p>
           </div>
-          <Link
-            href={primaryAction?.href ?? "/timeline"}
-            className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold"
-            style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
-          >
-            {primaryAction ? t("overview.openTopAction") : t("overview.fullTimeline")}
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link
+              href="/command-center"
+              className="rounded-[var(--radius-sm)] border px-4 py-2 text-sm font-semibold"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+            >
+              {t("overview.openCommandCenter")}
+            </Link>
+            <Link
+              href={primaryAction?.href ?? "/timeline"}
+              className="rounded-[var(--radius-sm)] px-4 py-2 text-sm font-semibold"
+              style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+            >
+              {primaryAction ? t("overview.openTopAction") : t("overview.fullTimeline")}
+            </Link>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">

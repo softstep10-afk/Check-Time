@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Archive, BarChart3, FolderKanban, Users, Clock, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, MapPin, Store, FileBarChart, ScrollText, Sliders, ClipboardCheck, MessageSquare } from "lucide-react";
+import { Activity, Archive, BarChart3, FolderKanban, Users, Clock, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, MapPin, Store, FileBarChart, ScrollText, Sliders, ClipboardCheck, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
@@ -16,6 +16,7 @@ type SidebarItem =
 const sidebarItems: SidebarItem[] = [
   { section: "Main", sectionKey: "manager.sectionMain" },
   { href: "/overview", icon: BarChart3, label: "Overview", labelKey: "manager.navOverview" },
+  { href: "/command-center", icon: Activity, label: "Command Center", labelKey: "manager.navCommandCenter" },
   { href: "/projects", icon: FolderKanban, label: "Projects", labelKey: "manager.navProjects" },
   { href: "/team", icon: Users, label: "Team", labelKey: "manager.navTeam" },
   { section: "Work", sectionKey: "manager.sectionWork" },
