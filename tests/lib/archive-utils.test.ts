@@ -3,9 +3,11 @@ import {
   buildArchivedProjectRows,
   buildPaidPayrollArchive,
   filterArchivedProjectsByDateRange,
+  filterPayrollArchive,
   filterPayrollArchiveByDateRange,
   getActiveOperationalMedia,
   getActiveOperationalTasks,
+  NO_PROJECT_SPLIT_FILTER,
 } from "@/lib/archive-utils";
 import { getOverviewStats } from "@/lib/manager-utils";
 import type { ManagerSession, ManagerWorkspaceData } from "@/lib/manager-types";
@@ -403,5 +405,127 @@ describe("archive helpers", () => {
     expect(filtered.rows[0].periods.map((period) => period.label)).toEqual(["April"]);
     expect(filtered.totalPaidHours).toBe(10);
     expect(filtered.totalGrossPaid).toBe(400);
+  });
+
+  it("filters payroll archive by worker and project while recalculating totals", () => {
+    const workerA = profile({ id: "worker-a", name: "Andrew" });
+    const workerB = profile({ id: "worker-b", name: "Vasia" });
+    const home = project({ id: "home", name: "Home" });
+    const shop = project({ id: "shop", name: "Shop" });
+    const run: PayrollRun = {
+      id: "run",
+      org_id: "org",
+      run_by: "owner",
+      period_start: "2026-05-01",
+      period_end: "2026-05-15",
+      status: "confirmed",
+      total_hours: 17,
+      total_amount: 700,
+      notes: null,
+      metadata: {},
+      created_at: "2026-05-16T00:00:00Z",
+      confirmed_at: "2026-05-16T00:00:00Z",
+    };
+    const archive = buildPaidPayrollArchive(
+      {
+        profiles: [workerA, workerB],
+        projects: [home, shop],
+        payPeriods: [],
+        payPeriodItems: [],
+        payrollRuns: [run],
+        payrollLineItems: [
+          {
+            id: "home-a",
+            payroll_run_id: run.id,
+            profile_id: workerA.id,
+            project_id: home.id,
+            hours: 8,
+            rate: 40,
+            amount: 320,
+            event_ids: [],
+            metadata: {},
+            created_at: "2026-05-16T00:00:00Z",
+          },
+          {
+            id: "shop-a",
+            payroll_run_id: run.id,
+            profile_id: workerA.id,
+            project_id: shop.id,
+            hours: 4,
+            rate: 40,
+            amount: 160,
+            event_ids: [],
+            metadata: {},
+            created_at: "2026-05-16T00:00:00Z",
+          },
+          {
+            id: "home-b",
+            payroll_run_id: run.id,
+            profile_id: workerB.id,
+            project_id: home.id,
+            hours: 5,
+            rate: 44,
+            amount: 220,
+            event_ids: [],
+            metadata: {},
+            created_at: "2026-05-16T00:00:00Z",
+          },
+        ],
+      },
+      { includeFinancials: true },
+    );
+
+    const filtered = filterPayrollArchive(archive, {
+      workerId: workerA.id,
+      projectName: home.name,
+      year: 2026,
+    });
+
+    expect(filtered.rows).toHaveLength(1);
+    expect(filtered.rows[0].workerName).toBe(workerA.name);
+    expect(filtered.rows[0].projectNames).toEqual([home.name]);
+    expect(filtered.totalPaidHours).toBe(8);
+    expect(filtered.totalGrossPaid).toBe(320);
+  });
+
+  it("can filter payroll archive to rows without project split", () => {
+    const worker = profile({ id: "worker", name: "Worker" });
+    const archive = buildPaidPayrollArchive(
+      {
+        profiles: [worker],
+        projects: [],
+        payPeriods: [
+          {
+            id: "period",
+            label: "June",
+            start_date: "2026-06-01",
+            end_date: "2026-06-15",
+            status: "paid",
+            paid_at: "2026-06-16T00:00:00Z",
+          },
+        ],
+        payPeriodItems: [
+          {
+            id: "item",
+            pay_period_id: "period",
+            worker_id: worker.id,
+            regular_hours: 6,
+            overtime_hours: 0,
+            gross_total: 240,
+            status: "paid",
+          },
+        ],
+        payrollRuns: [],
+        payrollLineItems: [],
+      },
+      { includeFinancials: true },
+    );
+
+    const filtered = filterPayrollArchive(archive, {
+      projectName: NO_PROJECT_SPLIT_FILTER,
+    });
+
+    expect(filtered.totalPaidHours).toBe(6);
+    expect(filtered.totalGrossPaid).toBe(240);
   });
 });

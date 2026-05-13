@@ -7,7 +7,9 @@ import { DateField } from "@/components/shared/DateField";
 import { useTranslation } from "@/lib/i18n";
 import {
   filterArchivedProjectsByDateRange,
+  filterPayrollArchive,
   filterPayrollArchiveByDateRange,
+  NO_PROJECT_SPLIT_FILTER,
   summarizePayrollArchiveRows,
   type ArchiveDateRange,
   ArchivedProjectRow,
@@ -53,6 +55,9 @@ const COPY = {
     payrollLockedTitle: "Payroll archive is finance-only",
     payrollLockedDesc: "Archived project history stays visible here, but gross paid, payroll periods, rates, and paid totals require owner/admin or finance access.",
     allYears: "All years",
+    allWorkers: "All workers",
+    allProjects: "All projects",
+    noProjectSplitOption: "No project split",
     paidHours: "Paid hours",
     grossPaid: "Gross paid",
     workerYears: "Worker years",
@@ -95,6 +100,9 @@ const COPY = {
     payrollLockedTitle: "Архив зарплаты доступен только финансам",
     payrollLockedDesc: "История архивных проектов остаётся видимой, но начисления, периоды зарплаты, ставки и суммы доступны только владельцу, администратору или пользователю с финансовым доступом.",
     allYears: "Все годы",
+    allWorkers: "Все рабочие",
+    allProjects: "Все проекты",
+    noProjectSplitOption: "Без разбивки по проекту",
     paidHours: "Оплаченные часы",
     grossPaid: "Начислено",
     workerYears: "Рабочие по годам",
@@ -157,6 +165,8 @@ export function ArchivePage({
   const [tab, setTab] = useState<"projects" | "payroll">("projects");
   const [query, setQuery] = useState("");
   const [year, setYear] = useState<string>("all");
+  const [workerId, setWorkerId] = useState<string>("all");
+  const [projectName, setProjectName] = useState<string>("all");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const { locale } = useTranslation();
@@ -184,16 +194,46 @@ export function ArchivePage({
     filterPayrollArchiveByDateRange(payrollArchive, dateRange)
   ), [dateRange, payrollArchive]);
 
+  const workerOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const row of payrollArchive.rows) {
+      byId.set(row.workerId, row.workerName);
+    }
+    return [...byId.entries()].sort((left, right) => left[1].localeCompare(right[1]));
+  }, [payrollArchive.rows]);
+
+  const projectOptions = useMemo(() => {
+    const names = new Set<string>();
+    let hasNoSplit = false;
+    for (const row of payrollArchive.rows) {
+      for (const period of row.periods) {
+        if (period.projectNames.length === 0) {
+          hasNoSplit = true;
+          continue;
+        }
+        for (const name of period.projectNames) {
+          names.add(name);
+        }
+      }
+    }
+    const sorted = [...names].sort((left, right) => left.localeCompare(right));
+    return hasNoSplit ? [...sorted, NO_PROJECT_SPLIT_FILTER] : sorted;
+  }, [payrollArchive.rows]);
+
   const filteredPayroll = useMemo(() => {
-    return dateFilteredPayroll.rows.filter((row) => {
-      if (year !== "all" && row.year !== Number(year)) return false;
+    const scoped = filterPayrollArchive(dateFilteredPayroll, {
+      year: year === "all" ? null : Number(year),
+      workerId: workerId === "all" ? null : workerId,
+      projectName: projectName === "all" ? null : projectName,
+    });
+    return scoped.rows.filter((row) => {
       if (!normalizedQuery) return true;
       return (
         row.workerName.toLowerCase().includes(normalizedQuery) ||
         row.projectNames.some((name) => name.toLowerCase().includes(normalizedQuery))
       );
     });
-  }, [dateFilteredPayroll.rows, normalizedQuery, year]);
+  }, [dateFilteredPayroll, normalizedQuery, projectName, workerId, year]);
 
   const visiblePayrollSummary = useMemo(() => (
     summarizePayrollArchiveRows(filteredPayroll)
@@ -411,6 +451,30 @@ export function ArchivePage({
                     <option value="all">{text.allYears}</option>
                     {payrollArchive.years.map((item) => (
                       <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={workerId}
+                    onChange={(event) => setWorkerId(event.target.value)}
+                    className="rounded-[var(--radius-sm)] border bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    style={{ borderColor: "var(--border-default)" }}
+                  >
+                    <option value="all">{text.allWorkers}</option>
+                    {workerOptions.map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={projectName}
+                    onChange={(event) => setProjectName(event.target.value)}
+                    className="rounded-[var(--radius-sm)] border bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)]"
+                    style={{ borderColor: "var(--border-default)" }}
+                  >
+                    <option value="all">{text.allProjects}</option>
+                    {projectOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name === NO_PROJECT_SPLIT_FILTER ? text.noProjectSplitOption : name}
+                      </option>
                     ))}
                   </select>
                 </div>

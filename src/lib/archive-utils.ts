@@ -90,6 +90,14 @@ export type ArchiveDateRange = {
   toDate?: string | null;
 };
 
+export const NO_PROJECT_SPLIT_FILTER = "__no_project_split__";
+
+export type PayrollArchiveFilters = {
+  year?: number | null;
+  workerId?: string | null;
+  projectName?: string | null;
+};
+
 function toNumber(value: unknown): number {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
@@ -186,6 +194,43 @@ export function filterPayrollArchiveByDateRange(
       const periods = row.periods.filter((period) => (
         dateSpanOverlapsRange(period.startDate, period.endDate, range)
       ));
+      if (periods.length === 0) return null;
+      return {
+        ...row,
+        paidHours: round2(periods.reduce((sum, period) => sum + period.hours, 0)),
+        grossPaid: round2(periods.reduce((sum, period) => sum + period.grossPaid, 0)),
+        periodCount: periods.length,
+        projectNames: sortedNames(new Set(periods.flatMap((period) => period.projectNames))),
+        periods,
+      };
+    })
+    .filter((row): row is PayrollArchiveWorkerYear => row !== null);
+
+  return summarizePayrollArchiveRows(rows);
+}
+
+export function filterPayrollArchive(
+  summary: PayrollArchiveSummary,
+  filters: PayrollArchiveFilters,
+): PayrollArchiveSummary {
+  const rows = summary.rows
+    .filter((row) => {
+      if (filters.year !== null && filters.year !== undefined && row.year !== filters.year) {
+        return false;
+      }
+      if (filters.workerId && row.workerId !== filters.workerId) {
+        return false;
+      }
+      return true;
+    })
+    .map((row) => {
+      if (!filters.projectName) return row;
+      const periods = row.periods.filter((period) => {
+        if (filters.projectName === NO_PROJECT_SPLIT_FILTER) {
+          return period.projectNames.length === 0;
+        }
+        return period.projectNames.includes(filters.projectName ?? "");
+      });
       if (periods.length === 0) return null;
       return {
         ...row,
