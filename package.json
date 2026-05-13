@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "smoke:core": "node scripts/core-smoke.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

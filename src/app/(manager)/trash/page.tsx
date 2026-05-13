@@ -93,6 +93,17 @@ export default function TrashPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!confirmEmptyAll) return;
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setConfirmEmptyAll(false);
+    }
+
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [confirmEmptyAll]);
+
   function tableName(kind: TrashItem["kind"]): "projects" | "profiles" | "tasks" | "media" {
     if (kind === "project") return "projects";
     if (kind === "profile") return "profiles";
@@ -305,6 +316,8 @@ export default function TrashPage() {
 
       {confirmEmptyAll ? (
         <div
+          role="dialog"
+          aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.5)" }}
           onClick={() => setConfirmEmptyAll(false)}
@@ -313,9 +326,19 @@ export default function TrashPage() {
             className="surface-card w-full max-w-[440px] p-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-base font-bold text-[var(--text-primary)]">
-              {t("trash.emptyAllConfirmTitle")}
-            </h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="text-base font-bold text-[var(--text-primary)]">
+                {t("trash.emptyAllConfirmTitle")}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setConfirmEmptyAll(false)}
+                aria-label={t("common.dismiss")}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)]"
+              >
+                <X size={16} />
+              </button>
+            </div>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
               {t("trash.emptyAllConfirmBody").replace("{n}", String(items.length))}
             </p>

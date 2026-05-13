@@ -178,6 +178,15 @@ function MediaViewerModalBody({
     };
   }, [supabase, item.storage_path, item.mime_type, item.metadata]);
 
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
   async function handleDownload() {
     if (typeof window === "undefined") return;
     const path = normalizeStoragePath(item.storage_path);

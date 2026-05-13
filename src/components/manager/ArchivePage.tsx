@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Archive, CalendarDays, Download, FolderKanban, Lock, Search, Wallet, X } from "lucide-react";
 import { DateField } from "@/components/shared/DateField";
 import { useTranslation } from "@/lib/i18n";
@@ -303,6 +303,17 @@ export function ArchivePage({
     }
     return counts;
   }, [filteredPayroll]);
+
+  useEffect(() => {
+    if (!selectedPayrollPeriod) return;
+
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setSelectedPayrollPeriod(null);
+    }
+
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [selectedPayrollPeriod]);
 
   function clearDateRange() {
     setFromDate("");

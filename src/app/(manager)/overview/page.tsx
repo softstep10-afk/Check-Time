@@ -351,11 +351,12 @@ export default async function OverviewPage() {
       .filter((task) => task.priority === "urgent" || task.priority === "high")
       .map((task) => {
         const project = task.project_id ? projectsById.get(task.project_id) : null;
+        const effectiveStatus = getEffectiveTaskStatus(task);
         return {
           id: `task-${task.id}`,
           label: t("overview.actionTask"),
           title: task.title,
-          detail: `${project?.name ?? t("common.generalTask")} · ${task.status}`,
+          detail: `${project?.name ?? t("common.generalTask")} · ${effectiveStatus}`,
           href: task.project_id ? `/projects/${task.project_id}#tasks` : "/tasks",
           severity: task.priority === "urgent" ? 0 as const : 1 as const,
           color: task.priority === "urgent" ? "var(--red)" : "#f59e0b",
@@ -1134,32 +1135,35 @@ export default async function OverviewPage() {
                 {t("overview.noOpenTasks")}
               </div>
             ) : (
-              urgentTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
-                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                        {task.project_id ? (
-                          <Link href={`/projects/${task.project_id}`} className="text-[var(--brand-yellow)]">
-                            {t("common.openProject")}
-                          </Link>
-                        ) : (
-                          t("common.generalTask")
-                        )}
-                        {" • "}
-                        {task.status}
+              urgentTasks.map((task) => {
+                const effectiveStatus = getEffectiveTaskStatus(task);
+                return (
+                  <div
+                    key={task.id}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
+                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {task.project_id ? (
+                            <Link href={`/projects/${task.project_id}`} className="text-[var(--brand-yellow)]">
+                              {t("common.openProject")}
+                            </Link>
+                          ) : (
+                            t("common.generalTask")
+                          )}
+                          {" • "}
+                          {effectiveStatus}
+                        </div>
+                      </div>
+                      <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--brand-yellow)]">
+                        {task.priority}
                       </div>
                     </div>
-                    <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--brand-yellow)]">
-                      {task.priority}
-                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

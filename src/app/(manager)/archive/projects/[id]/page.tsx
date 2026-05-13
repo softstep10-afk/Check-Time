@@ -10,6 +10,7 @@ import { hasFinanceAccess } from "@/lib/finance-access";
 import { getArchivePageData } from "@/lib/manager-data";
 import { buildManagerSessions } from "@/lib/manager-utils";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
+import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { createClient } from "@/lib/supabase/server";
 import { getServerLocale } from "@/lib/i18n/server";
 import { formatDurationCompact } from "@/lib/worker-utils";
@@ -135,10 +136,19 @@ function playbackMetadata(metadata: Record<string, unknown>): Record<string, unk
 
 export default async function ArchivedProjectDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ returnTo?: string | string[] }>;
 }) {
   const { id } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const rawReturnTo = Array.isArray(resolvedSearchParams.returnTo)
+    ? resolvedSearchParams.returnTo[0]
+    : resolvedSearchParams.returnTo;
+  const backHref = rawReturnTo?.startsWith("/") && !rawReturnTo.startsWith("//")
+    ? rawReturnTo
+    : "/archive";
   const locale = await getServerLocale();
   const text = COPY[locale];
   const dateLocale = locale === "ru" ? "ru-RU" : "en-US";
@@ -190,7 +200,7 @@ export default async function ArchivedProjectDetailPage({
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
-        <Link href="/archive" className="text-sm font-semibold text-[var(--brand-yellow)]">
+        <Link href={backHref} className="text-sm font-semibold text-[var(--brand-yellow)]">
           {text.back}
         </Link>
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -211,7 +221,7 @@ export default async function ArchivedProjectDetailPage({
               {text.readOnly}
             </span>
             <Link
-              href="/archive"
+              href={backHref}
               aria-label={text.close}
               title={text.close}
               className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border text-[var(--text-primary)] transition hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
@@ -322,6 +332,7 @@ export default async function ArchivedProjectDetailPage({
             <tbody>
               {projectTasks.map((task) => {
                 const audit = getTaskCompletionAudit(task);
+                const effectiveStatus = getEffectiveTaskStatus(task);
                 const completedById = task.completed_by ?? audit.completedById;
                 const completedBy = completedById ? profilesById.get(completedById)?.name ?? text.unknown : text.notCompleted;
                 return (
@@ -332,7 +343,7 @@ export default async function ArchivedProjectDetailPage({
                         <div className="mt-0.5 text-xs text-[var(--text-secondary)]">{task.description}</div>
                       ) : null}
                     </td>
-                    <td className="py-3 pr-3 text-[var(--text-secondary)]">{text.taskStatus[task.status] ?? task.status}</td>
+                    <td className="py-3 pr-3 text-[var(--text-secondary)]">{text.taskStatus[effectiveStatus] ?? effectiveStatus}</td>
                     <td className="py-3 pr-3 text-[var(--text-secondary)]">
                       {task.assigned_to ? profilesById.get(task.assigned_to)?.name ?? text.unknown : text.unassigned}
                     </td>

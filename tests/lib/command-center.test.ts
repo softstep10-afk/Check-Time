@@ -21,7 +21,7 @@ function item(
 }
 
 describe("buildCommandCenterQueue", () => {
-  it("sorts critical manager actions first and picks the primary action", () => {
+  it("sorts critical manager actions first and preserves source order within a severity", () => {
     const queue = buildCommandCenterQueue([
       item("medium", 1),
       item("critical-b", 0, "Bravo"),
@@ -30,13 +30,17 @@ describe("buildCommandCenterQueue", () => {
     ]);
 
     expect(queue.allItems.map((entry) => entry.id)).toEqual([
-      "critical-a",
       "critical-b",
+      "critical-a",
       "medium",
       "low",
     ]);
-    expect(queue.primaryAction?.id).toBe("critical-a");
+    expect(queue.primaryAction?.id).toBe("critical-b");
+    expect(queue.totalCount).toBe(4);
     expect(queue.criticalCount).toBe(2);
+    expect(queue.warningCount).toBe(1);
+    expect(queue.lowCount).toBe(1);
+    expect(queue.hasActions).toBe(true);
   });
 
   it("limits visible items without hiding the full critical count", () => {
@@ -48,5 +52,15 @@ describe("buildCommandCenterQueue", () => {
 
     expect(queue.visibleItems.map((entry) => entry.id)).toEqual(["a"]);
     expect(queue.criticalCount).toBe(2);
+  });
+
+  it("handles an empty manager queue", () => {
+    const queue = buildCommandCenterQueue([]);
+
+    expect(queue.allItems).toEqual([]);
+    expect(queue.visibleItems).toEqual([]);
+    expect(queue.primaryAction).toBeNull();
+    expect(queue.hasActions).toBe(false);
+    expect(queue.totalCount).toBe(0);
   });
 });
