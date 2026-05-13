@@ -16,10 +16,14 @@ import {
   formatWorkerDisplayLabel,
   groupPayrollRowsByDay,
   groupPayrollRowsByWorker,
-  isOwnerRole,
   sumDraftRowMinutes,
   type PayrollDraftRow,
 } from "@/lib/manager-utils";
+import {
+  buildPayrollLedgerLineDrafts,
+  getPaidWorkerIdsAfter,
+  rollupPayPeriodStatus,
+} from "@/lib/payroll-period-utils";
 import type { Profile, UserRole } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
 import { formatEventTime } from "@/lib/worker-utils";
@@ -28,6 +32,7 @@ import { formatEventTime } from "@/lib/worker-utils";
 
 type PeriodType = "weekly" | "biweekly" | "semi-monthly" | "monthly" | "custom";
 type PeriodStatus = "draft" | "approved" | "paid";
+type ItemStatus = "pending" | "approved" | "paid";
 type AdjType = "bonus" | "reimbursement" | "deduction";
 
 type Adjustment = {
@@ -54,9 +59,16 @@ type WorkerLine = {
   adjustments: Adjustment[];
   grossTotal: number;
   netTotal: number;
-  status: PeriodStatus;
+  status: ItemStatus;
   hasHours: boolean;
-  projectBreakdown: Array<{ projectName: string; hours: number; amount: number }>;
+  projectBreakdown: Array<{
+    projectId: string;
+    projectName: string;
+    hours: number;
+    amount: number;
+    eventIds: string[];
+    sessionIds: string[];
+  }>;
 };
 
 type PayPeriod = {
@@ -85,13 +97,6 @@ function r2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function computeNet(line: { grossTotal: number; adjustments: Adjustment[] }): number {
-  const bonus = line.adjustments.filter((a) => a.type === "bonus").reduce((s, a) => s + a.amount, 0);
-  const reimb = line.adjustments.filter((a) => a.type === "reimbursement").reduce((s, a) => s + a.amount, 0);
-  const deduct = line.adjustments.filter((a) => a.type === "deduction").reduce((s, a) => s + a.amount, 0);
-  return r2(line.grossTotal + bonus + reimb - deduct);
-}
-
 function buildWorkerLines(
   profiles: Profile[],
   sessions: ManagerSession[],
@@ -108,7 +113,17 @@ function buildWorkerLines(
   // payroll-safety task.
   const hoursByWorker = new Map<
     string,
-    { total: number; noGps: number; byProject: Map<string, { name: string; minutes: number }> }
+    {
+      total: number;
+      noGps: number;
+      byProject: Map<string, {
+        id: string;
+        name: string;
+        minutes: number;
+        eventIds: string[];
+        sessionIds: string[];
+      }>;
+    }
   >();
 
   for (const s of sessions) {
@@ -122,8 +137,16 @@ function buildWorkerLines(
     const entry = hoursByWorker.get(s.profileId) ?? { total: 0, noGps: 0, byProject: new Map() };
     entry.total += minutes;
     if (!hasGpsBySessionId[s.id]) entry.noGps += minutes;
-    const proj = entry.byProject.get(s.projectId) ?? { name: s.projectName, minutes: 0 };
+    const proj = entry.byProject.get(s.projectId) ?? {
+      id: s.projectId,
+      name: s.projectName,
+      minutes: 0,
+      eventIds: [],
+      sessionIds: [],
+    };
     proj.minutes += minutes;
+    proj.eventIds.push(...s.eventIds);
+    proj.sessionIds.push(s.id);
     entry.byProject.set(s.projectId, proj);
     hoursByWorker.set(s.profileId, entry);
   }
@@ -142,9 +165,12 @@ function buildWorkerLines(
 
       const projectBreakdown = data
         ? Array.from(data.byProject.entries()).map(([, v]) => ({
+            projectId: v.id,
             projectName: v.name,
             hours: r2(v.minutes / 60),
             amount: r2((v.minutes / 60) * rate),
+            eventIds: [...new Set(v.eventIds)],
+            sessionIds: [...new Set(v.sessionIds)],
           }))
         : [];
 
@@ -162,7 +188,7 @@ function buildWorkerLines(
         adjustments: [],
         grossTotal,
         netTotal: grossTotal,
-        status: "draft" as PeriodStatus,
+        status: "pending" as ItemStatus,
         hasHours: totalHours > 0,
         projectBreakdown,
       };
@@ -348,6 +374,7 @@ export function PayrollCalculator({
   managerId,
   managerName,
   managerRole,
+  showFinancialFields,
   profiles,
   sessions,
   hasGpsBySessionId,
@@ -356,6 +383,7 @@ export function PayrollCalculator({
   managerId: string;
   managerName: string;
   managerRole: string;
+  showFinancialFields: boolean;
   profiles: Profile[];
   sessions: ManagerSession[];
   hasGpsBySessionId: Record<string, boolean>;
@@ -450,7 +478,7 @@ export function PayrollCalculator({
         adjustments: (item.adjustments_json ?? []) as Adjustment[],
         grossTotal: Number(item.gross_total),
         netTotal: Number(item.net_total),
-        status: item.status as PeriodStatus,
+        status: item.status as ItemStatus,
         hasHours: Number(item.regular_hours) + Number(item.overtime_hours) > 0,
         projectBreakdown: [],
       };
@@ -496,7 +524,6 @@ export function PayrollCalculator({
 
     if (AUTH_BYPASS_ENABLED) {
       // Date.now() is fine here — this runs from a click handler, not render.
-      // eslint-disable-next-line react-hooks/purity
       setPeriod({ id: `period-${Date.now()}`, label, startDate: start, endDate: end, type, status: "draft", lines });
       setShowNewPeriod(false);
       return;
@@ -574,7 +601,10 @@ export function PayrollCalculator({
       .map((p) => `• ${p.label} (${p.status})`)
       .join("\n");
     return window.confirm(
-      `An existing pay period overlaps ${start} → ${end}:\n\n${summary}\n\nCreate another period anyway?`,
+      t("payroll.overlapConfirm")
+        .replace("{start}", start)
+        .replace("{end}", end)
+        .replace("{summary}", summary),
     );
   }
 
@@ -739,6 +769,7 @@ export function PayrollCalculator({
         .eq("pay_period_id", period.id);
       if (iErr) { setPeriod(previous); setError(iErr.message); return; }
     }
+    updateSavedPeriodStatus(period.id, "approved");
 
     void logAudit({
       orgId,
@@ -753,19 +784,43 @@ export function PayrollCalculator({
     });
   }
 
+  function updateSavedPeriodStatus(periodId: string, status: PeriodStatus) {
+    setSavedPeriods((prev) =>
+      prev.map((item) => (item.id === periodId ? { ...item, status } : item)),
+    );
+  }
+
+  function periodStatusUpdate(status: PeriodStatus, nowIso: string) {
+    if (status === "approved") {
+      return { status, approved_by: managerId, approved_at: nowIso };
+    }
+    if (status === "paid") {
+      return { status, paid_at: nowIso };
+    }
+    return { status };
+  }
+
   // Bridge between the two payroll models. pay_periods/pay_period_items is
-  // the canonical draft/approve/paid UI container; payroll_runs +
-  // payroll_closures is the immutable "paid through" anchor the overview's
-  // computePayrollPreview reads to drop already-paid hours from the
-  // unpaid totals. Without this bridge, marking a pay_period paid did not
-  // decrement the dashboard's unpaid-hours figure — the two models drifted
-  // and managers saw double-counted balances. Linking by metadata.pay_period_id
-  // lets repeat invocations (markAllPaid after processSelected, or two
-  // selects on different worker subsets) reuse the same payroll_runs row.
-  async function mirrorPaidToClosures(workerIds: string[]): Promise<string | null> {
+  // the canonical review screen. payroll_runs + payroll_line_items +
+  // payroll_closures is the immutable ledger: archive/reporting read the
+  // line items, and overview unpaid totals read the closures.
+  async function mirrorPaidToPayrollLedger(workerIds: string[]): Promise<string | null> {
     if (AUTH_BYPASS_ENABLED) return null;
     if (!period) return null;
     if (workerIds.length === 0) return null;
+
+    const ledgerWorkerIds = getPaidWorkerIdsAfter(period.lines, workerIds);
+    const ledgerLines = buildPayrollLedgerLineDrafts(period.lines, ledgerWorkerIds);
+    if (ledgerLines.length === 0) return null;
+
+    const totals = ledgerLines.reduce(
+      (acc, line) => {
+        acc.hours += line.hours;
+        acc.amount += line.amount;
+        return acc;
+      },
+      { hours: 0, amount: 0 },
+    );
 
     const { data: existing } = await supabase
       .from("payroll_runs")
@@ -778,16 +833,6 @@ export function PayrollCalculator({
     let runId = existing?.id ?? null;
 
     if (!runId) {
-      const totals = period.lines.reduce(
-        (acc, l) => {
-          if (workerIds.includes(l.workerId)) {
-            acc.hours += l.regHours + l.otHours;
-            acc.amount += l.grossTotal;
-          }
-          return acc;
-        },
-        { hours: 0, amount: 0 },
-      );
       const { data: inserted, error: runErr } = await supabase
         .from("payroll_runs")
         .insert({
@@ -807,15 +852,72 @@ export function PayrollCalculator({
         return runErr?.message ?? "payroll_runs insert returned no row";
       }
       runId = inserted.id;
+    } else {
+      const { error: runUpdateErr } = await supabase
+        .from("payroll_runs")
+        .update({
+          total_hours: r2(totals.hours),
+          total_amount: r2(totals.amount),
+        })
+        .eq("id", runId);
+      if (runUpdateErr) return runUpdateErr.message;
+    }
+    if (!runId) return "payroll_runs insert returned no row";
+
+    const { data: existingLineItems, error: existingItemsErr } = await supabase
+      .from("payroll_line_items")
+      .select("profile_id, project_id")
+      .eq("payroll_run_id", runId)
+      .in("profile_id", ledgerWorkerIds)
+      .returns<Array<{ profile_id: string; project_id: string | null }>>();
+    if (existingItemsErr) return existingItemsErr.message;
+
+    const existingLineKeys = new Set(
+      (existingLineItems ?? []).map((item) => `${item.profile_id}:${item.project_id ?? ""}`),
+    );
+    const lineRows = ledgerLines
+      .filter((line) => !existingLineKeys.has(`${line.profileId}:${line.projectId ?? ""}`))
+      .map((line) => ({
+        payroll_run_id: runId,
+        profile_id: line.profileId,
+        project_id: line.projectId,
+        hours: line.hours,
+        rate: line.rate,
+        amount: line.amount,
+        event_ids: line.eventIds,
+        metadata: {
+          pay_period_id: period.id,
+          session_ids: line.sessionIds,
+        },
+      }));
+
+    if (lineRows.length > 0) {
+      const { error: lineErr } = await supabase
+        .from("payroll_line_items")
+        .insert(lineRows);
+      if (lineErr) return lineErr.message;
     }
 
     const closedThrough = `${period.endDate}T23:59:59Z`;
-    const closureRows = workerIds.map((wid) => ({
-      org_id: orgId,
-      payroll_run_id: runId,
-      profile_id: wid,
-      closed_through: closedThrough,
-    }));
+    const { data: existingClosures, error: existingClosuresErr } = await supabase
+      .from("payroll_closures")
+      .select("profile_id")
+      .eq("payroll_run_id", runId)
+      .in("profile_id", ledgerWorkerIds)
+      .returns<Array<{ profile_id: string }>>();
+    if (existingClosuresErr) return existingClosuresErr.message;
+
+    const closedWorkerIds = new Set((existingClosures ?? []).map((row) => row.profile_id));
+    const closureRows = ledgerWorkerIds
+      .filter((wid) => !closedWorkerIds.has(wid))
+      .map((wid) => ({
+        org_id: orgId,
+        payroll_run_id: runId,
+        profile_id: wid,
+        closed_through: closedThrough,
+      }));
+
+    if (closureRows.length === 0) return null;
 
     const { error: closeErr } = await supabase
       .from("payroll_closures")
@@ -845,17 +947,17 @@ export function PayrollCalculator({
         .eq("pay_period_id", period.id);
       if (iErr) { setPeriod(previous); setError(iErr.message); return; }
 
-      // Mirror the paid transition into payroll_closures so the overview
-      // unpaid-hours computation sees the cutoff. A failure here is logged
-      // but not surfaced as a hard error — the pay_period is already paid
-      // in its own table, and a manager can re-trigger by tapping again.
-      const mirrorErr = await mirrorPaidToClosures(
+      // Mirror the paid transition into the ledger so archive/reporting
+      // and overview unpaid totals agree with the pay period state.
+      const mirrorErr = await mirrorPaidToPayrollLedger(
         period.lines.map((l) => l.workerId),
       );
       if (mirrorErr) {
-        console.warn("payroll_closures mirror failed:", mirrorErr);
+        setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+        return;
       }
     }
+    updateSavedPeriodStatus(period.id, "paid");
 
     void logAudit({
       orgId,
@@ -895,7 +997,13 @@ export function PayrollCalculator({
     if (visibleSelectedIds.size === 0) return;
 
     const ids = [...visibleSelectedIds];
-    const nextStatus: PeriodStatus = period.status === "draft" ? "approved" : "paid";
+    const nextStatus: ItemStatus = period.status === "draft" ? "approved" : "paid";
+    const nextLines = period.lines.map((line) =>
+      visibleSelectedIds.has(line.workerId)
+        ? { ...line, status: nextStatus }
+        : line,
+    );
+    const nextPeriodStatus = rollupPayPeriodStatus(nextLines);
 
     if (!AUTH_BYPASS_ENABLED) {
       const { error: itemErr } = await supabase
@@ -909,9 +1017,21 @@ export function PayrollCalculator({
       }
 
       if (nextStatus === "paid") {
-        const mirrorErr = await mirrorPaidToClosures(ids);
+        const mirrorErr = await mirrorPaidToPayrollLedger(ids);
         if (mirrorErr) {
-          console.warn("payroll_closures mirror failed:", mirrorErr);
+          setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+          return;
+        }
+      }
+
+      if (nextPeriodStatus !== period.status) {
+        const { error: periodErr } = await supabase
+          .from("pay_periods")
+          .update(periodStatusUpdate(nextPeriodStatus, new Date().toISOString()))
+          .eq("id", period.id);
+        if (periodErr) {
+          setError(periodErr.message);
+          return;
         }
       }
     }
@@ -920,14 +1040,14 @@ export function PayrollCalculator({
       prev
         ? {
             ...prev,
-            lines: prev.lines.map((line) =>
-              visibleSelectedIds.has(line.workerId)
-                ? { ...line, status: nextStatus }
-                : line,
-            ),
+            status: nextPeriodStatus,
+            lines: nextLines,
           }
         : prev,
     );
+    if (nextPeriodStatus !== period.status) {
+      updateSavedPeriodStatus(period.id, nextPeriodStatus);
+    }
     setSelectedIds(new Set());
 
     void logAudit({
@@ -1087,11 +1207,9 @@ export function PayrollCalculator({
     [profiles],
   );
 
-  // Owner-vs-manager separation. Pay/$ columns and totals are
-  // owner-only; manager-tier roles still see the operational
-  // (hours / review flag) columns. Falls back to the conservative
-  // "no money" path on any unexpected role string.
-  const showFinancialFields = isOwnerRole(managerRole as never);
+  // Pay/$ columns follow the same finance gate as the page itself:
+  // owner/admin or explicit finance_access. Manager-tier roles without
+  // finance still see operational hours/review status, but no dollars.
 
   // Shift-level rows derived from sessions + period dates + worker filter.
   // pay_period_items model is per-worker; this derivation gives the
@@ -1171,7 +1289,7 @@ export function PayrollCalculator({
     return Array.from(map.values()).sort((a, b) => b.amount - a.amount);
   }, [period]);
 
-  const statusColor = (s: PeriodStatus) =>
+  const statusColor = (s: PeriodStatus | ItemStatus) =>
     s === "paid" ? "var(--green)" : s === "approved" ? "var(--brand-yellow)" : "var(--text-muted)";
 
   return (
@@ -1713,7 +1831,7 @@ export function PayrollCalculator({
                               <td className="py-3 align-top">
                                 <div className="flex items-center gap-1.5">
                                   <span className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase" style={{ background: `color-mix(in srgb, ${statusColor(line.status)} 16%, transparent)`, color: statusColor(line.status) }}>
-                                    {line.status}
+                                    {t(`payroll.${line.status}` as Parameters<typeof t>[0])}
                                   </span>
                                   {line.hasHours ? (
                                     <button

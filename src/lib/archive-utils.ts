@@ -453,12 +453,22 @@ export function buildPaidPayrollArchive(
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
   const periodsById = new Map(input.payPeriods.map((period) => [period.id, period]));
   const rows = new Map<string, PayrollArchiveWorkerYear>();
-  const paidPeriodIds = new Set<string>();
+  const runsById = new Map(input.payrollRuns.map((run) => [run.id, run]));
+  const periodIdsBackedByLedger = new Set<string>();
+
+  for (const item of input.payrollLineItems) {
+    const run = runsById.get(item.payroll_run_id);
+    if (!run || !isClosedPayrollRun(run)) continue;
+    const linkedPayPeriodId = (run.metadata as Record<string, unknown> | null)?.pay_period_id;
+    if (typeof linkedPayPeriodId === "string") {
+      periodIdsBackedByLedger.add(linkedPayPeriodId);
+    }
+  }
 
   for (const item of input.payPeriodItems) {
     const period = periodsById.get(item.pay_period_id);
     if (!period || !isPaidPeriodItem(item, period)) continue;
-    paidPeriodIds.add(period.id);
+    if (periodIdsBackedByLedger.has(period.id)) continue;
     const hours = round2(toNumber(item.regular_hours) + toNumber(item.overtime_hours));
     const grossPaid = includeFinancials ? round2(toNumber(item.gross_total)) : 0;
     upsertArchiveRow(
@@ -482,14 +492,13 @@ export function buildPaidPayrollArchive(
     );
   }
 
-  const runsById = new Map(input.payrollRuns.map((run) => [run.id, run]));
   for (const item of input.payrollLineItems) {
     const run = runsById.get(item.payroll_run_id);
     if (!run || !isClosedPayrollRun(run)) continue;
     const linkedPayPeriodId = (run.metadata as Record<string, unknown> | null)?.pay_period_id;
-    if (typeof linkedPayPeriodId === "string" && paidPeriodIds.has(linkedPayPeriodId)) {
-      continue;
-    }
+    const linkedPeriod = typeof linkedPayPeriodId === "string"
+      ? periodsById.get(linkedPayPeriodId)
+      : null;
     const projectName = item.project_id ? projectsById.get(item.project_id)?.name : null;
     const hours = round2(toNumber(item.hours));
     const grossPaid = includeFinancials ? round2(toNumber(item.amount)) : 0;
@@ -499,16 +508,16 @@ export function buildPaidPayrollArchive(
       {
         id: item.id,
         workerId: item.profile_id,
-        label: `Payroll run ${run.period_start} - ${run.period_end}`,
-        startDate: run.period_start,
-        endDate: run.period_end,
-        status: run.status,
-        paidAt: run.confirmed_at,
+        label: linkedPeriod?.label ?? `Payroll run ${run.period_start} - ${run.period_end}`,
+        startDate: linkedPeriod?.start_date ?? run.period_start,
+        endDate: linkedPeriod?.end_date ?? run.period_end,
+        status: linkedPeriod?.status ?? run.status,
+        paidAt: linkedPeriod?.paid_at ?? run.confirmed_at,
         hours,
         grossPaid,
         projectNames: projectName ? [projectName] : [],
         source: "payroll_line_items",
-        href: getPayrollRunHref(run.id),
+        href: linkedPeriod ? getPayPeriodHref(linkedPeriod.id) : getPayrollRunHref(run.id),
       },
       includeFinancials,
     );

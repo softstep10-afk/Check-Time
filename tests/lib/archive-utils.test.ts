@@ -270,6 +270,86 @@ describe("archive helpers", () => {
     expect(archive.rows[0].grossPaid).toBe(500);
   });
 
+  it("prefers linked payroll ledger lines over pay period items for project split", () => {
+    const worker = profile({ id: "worker", name: "Worker" });
+    const home = project({ id: "home", name: "Home" });
+    const shop = project({ id: "shop", name: "Shop" });
+    const run: PayrollRun = {
+      id: "run",
+      org_id: "org",
+      run_by: "owner",
+      period_start: "2026-05-01",
+      period_end: "2026-05-15",
+      status: "confirmed",
+      total_hours: 10,
+      total_amount: 300,
+      notes: null,
+      metadata: { pay_period_id: "period" },
+      created_at: "2026-05-16T00:00:00Z",
+      confirmed_at: "2026-05-16T00:00:00Z",
+    };
+
+    const archive = buildPaidPayrollArchive(
+      {
+        profiles: [worker],
+        projects: [home, shop],
+        payPeriods: [
+          {
+            id: "period",
+            label: "May 1 - May 15",
+            start_date: "2026-05-01",
+            end_date: "2026-05-15",
+            status: "paid",
+            paid_at: "2026-05-16T00:00:00Z",
+          },
+        ],
+        payPeriodItems: [
+          {
+            id: "period-item",
+            pay_period_id: "period",
+            worker_id: worker.id,
+            regular_hours: 10,
+            overtime_hours: 0,
+            gross_total: 999,
+            status: "paid",
+          },
+        ],
+        payrollRuns: [run],
+        payrollLineItems: [
+          {
+            id: "home-line",
+            payroll_run_id: run.id,
+            profile_id: worker.id,
+            project_id: home.id,
+            hours: 6,
+            rate: 30,
+            amount: 180,
+            event_ids: [],
+            metadata: {},
+            created_at: "2026-05-16T00:00:00Z",
+          },
+          {
+            id: "shop-line",
+            payroll_run_id: run.id,
+            profile_id: worker.id,
+            project_id: shop.id,
+            hours: 4,
+            rate: 30,
+            amount: 120,
+            event_ids: [],
+            metadata: {},
+            created_at: "2026-05-16T00:00:00Z",
+          },
+        ],
+      },
+      { includeFinancials: true },
+    );
+
+    expect(archive.totalPaidHours).toBe(10);
+    expect(archive.totalGrossPaid).toBe(300);
+    expect(archive.rows[0].projectNames).toEqual(["Home", "Shop"]);
+  });
+
   it("hides paid amounts for non-finance managers while preserving paid hours", () => {
     const worker = profile({ id: "worker", name: "Worker" });
     const run: PayrollRun = {

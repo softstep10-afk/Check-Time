@@ -54,6 +54,7 @@ export default async function PayrollPage() {
         managerId={data.manager.id}
         managerName={data.manager.name}
         managerRole={data.manager.role}
+        showFinancialFields={allowed}
         profiles={data.profiles}
         sessions={sessions}
         hasGpsBySessionId={hasGpsBySessionId}

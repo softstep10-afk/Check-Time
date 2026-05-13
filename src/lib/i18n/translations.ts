@@ -774,7 +774,7 @@ export const translations = {
   // ── Payroll ──
   "payroll.title": { en: "Payroll", ru: "Зарплата" },
   "payroll.subtitle": { en: "Draft payroll from live hours", ru: "Черновик зарплаты из текущих часов" },
-  "payroll.description": { en: "Preview pay directly from the unpaid event window, then close those hours into a confirmed run.", ru: "Предварительный расчёт из неоплаченных часов, затем закрытие подтверждённым расчётом." },
+  "payroll.description": { en: "Create a pay period, review worker hours, approve them, then mark paid so the ledger, archive, and unpaid totals all move together.", ru: "Создайте платёжный период, проверьте часы рабочих, утвердите и отметьте оплату — тогда ledger, архив и неоплаченные итоги обновятся вместе." },
   "payroll.closeThrough": { en: "Close Through", ru: "Закрыть до" },
   "payroll.refreshPreview": { en: "Refresh Preview", ru: "Обновить расчёт" },
   "payroll.workers": { en: "Workers", ru: "Рабочие" },
@@ -1283,6 +1283,7 @@ export const translations = {
   "payroll.startDate": { en: "Start date", ru: "Дата начала" },
   "payroll.endDate": { en: "End date", ru: "Дата окончания" },
   "payroll.create": { en: "Create Period", ru: "Создать период" },
+  "payroll.pending": { en: "Pending", ru: "Ожидает" },
   "payroll.draft": { en: "Draft", ru: "Черновик" },
   "payroll.approved": { en: "Approved", ru: "Утверждён" },
   "payroll.paid": { en: "Paid", ru: "Оплачен" },
@@ -1311,6 +1312,14 @@ export const translations = {
   "payroll.paidOn": { en: "Paid on", ru: "Оплачено" },
   "payroll.emptyHeadline": { en: "Select or create a pay period to begin", ru: "Выберите или создайте платёжный период" },
   "payroll.emptyHelp": { en: "Pick a quick range or build a custom window. Worker hours, OT, and net pay will appear here.", ru: "Выберите готовый диапазон или задайте свой. Часы, сверхурочные и итоговая зарплата появятся здесь." },
+  "payroll.overlapConfirm": {
+    en: "An existing pay period overlaps {start} → {end}:\n\n{summary}\n\nCreate another period anyway?",
+    ru: "Уже есть платёжный период, который пересекается с {start} → {end}:\n\n{summary}\n\nВсё равно создать ещё один период?",
+  },
+  "payroll.ledgerMirrorFailed": {
+    en: "Payroll was marked, but the ledger sync failed",
+    ru: "Статус зарплаты записан, но синхронизация ledger не прошла",
+  },
   "payroll.quickStart": { en: "Quick start", ru: "Быстрый старт" },
   "payroll.newCustom": { en: "New custom period", ru: "Свой период" },
   "payroll.openSaved": { en: "Open a saved period", ru: "Открыть сохранённый период" },
