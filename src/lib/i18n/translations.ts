@@ -1351,6 +1351,8 @@ export const translations = {
   "payroll.markAllPaid": { en: "Mark all paid", ru: "Отметить всё оплаченным" },
   "payroll.exportCsv": { en: "Export CSV", ru: "Экспорт CSV" },
   "payroll.exportBigBooksCsv": { en: "BigBooks CSV", ru: "CSV для BigBooks" },
+  "payroll.externalPaymentReference": { en: "BigBooks ref", ru: "BigBooks ref" },
+  "payroll.externalPaymentReferencePlaceholder": { en: "Batch / check / note", ru: "Batch / check / заметка" },
   "payroll.exportPdf": { en: "Export PDF", ru: "Экспорт PDF" },
   "payroll.rateNotSet": { en: "Rate not set — $0 gross", ru: "Ставка не указана — $0" },
   "payroll.noHours": { en: "No hours", ru: "Нет часов" },

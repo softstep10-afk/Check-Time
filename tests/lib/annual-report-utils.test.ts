@@ -33,6 +33,7 @@ describe("annual report helpers", () => {
               source: "payroll_line_items",
               href: "/payroll?period=jan",
               shiftDetails: [],
+              externalPayment: null,
             },
             {
               id: "shop-line",
@@ -48,6 +49,7 @@ describe("annual report helpers", () => {
               source: "payroll_line_items",
               href: "/payroll?period=feb",
               shiftDetails: [],
+              externalPayment: null,
             },
           ],
         },

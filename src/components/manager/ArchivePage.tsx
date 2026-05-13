@@ -76,6 +76,8 @@ const COPY = {
     source: "Source",
     sourcePayPeriodItems: "Payroll period item",
     sourcePayrollLineItems: "Payroll ledger",
+    externalPayment: "External payment",
+    externalPaymentReference: "Reference",
     shifts: "Paid shifts",
     noShifts: "No shift breakdown was found for this paid period.",
     shiftTime: "Time",
@@ -137,6 +139,8 @@ const COPY = {
     source: "Источник",
     sourcePayPeriodItems: "Строка платёжного периода",
     sourcePayrollLineItems: "Зарплатный ledger",
+    externalPayment: "Внешняя оплата",
+    externalPaymentReference: "Reference",
     shifts: "Оплаченные смены",
     noShifts: "Разбивка смен для этого оплаченного периода не найдена.",
     shiftTime: "Время",
@@ -748,6 +752,24 @@ export function ArchivePage({
                   </div>
                   <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
                     {period.projectNames.length > 0 ? period.projectNames.join(", ") : text.noProjectSplit}
+                  </div>
+                </div>
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 sm:col-span-2">
+                  <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {text.externalPayment}
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
+                    {period.externalPayment
+                      ? [
+                          period.externalPayment.provider,
+                          period.externalPayment.reference
+                            ? `${text.externalPaymentReference}: ${period.externalPayment.reference}`
+                            : null,
+                          period.externalPayment.recordedAt
+                            ? new Date(period.externalPayment.recordedAt).toLocaleString()
+                            : null,
+                        ].filter(Boolean).join(" · ")
+                      : text.notRecorded}
                   </div>
                 </div>
               </div>

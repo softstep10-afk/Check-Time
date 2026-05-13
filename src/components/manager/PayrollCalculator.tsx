@@ -83,7 +83,16 @@ type PayPeriod = {
   endDate: string;
   type: PeriodType;
   status: PeriodStatus;
+  metadata: Record<string, unknown>;
   lines: WorkerLine[];
+};
+
+type ExternalPaymentRecord = {
+  provider: "BigBooks";
+  reference: string | null;
+  worker_ids: string[];
+  recorded_at: string;
+  recorded_by: string;
 };
 
 // ── Helpers ──
@@ -292,6 +301,21 @@ function downloadCsvFile(filename: string, csv: string) {
   URL.revokeObjectURL(url);
 }
 
+function appendExternalPaymentRecord(
+  metadata: Record<string, unknown> | null | undefined,
+  record: ExternalPaymentRecord,
+): Record<string, unknown> {
+  const current = metadata && typeof metadata === "object" ? metadata : {};
+  const existing = Array.isArray(current.external_payments)
+    ? current.external_payments
+    : [];
+  return {
+    ...current,
+    external_payment: record,
+    external_payments: [...existing, record],
+  };
+}
+
 // ── Shift detail rendering ──
 
 // Row in the chronology + per-worker shift listing. Pure presentational —
@@ -476,6 +500,7 @@ export function PayrollCalculator({
   const [error, setError] = useState("");
   const [payrollActionBusy, setPayrollActionBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [externalPaymentReference, setExternalPaymentReference] = useState("");
 
   // Adjustment modal
   const [adjWorker, setAdjWorker] = useState<string | null>(null);
@@ -507,7 +532,15 @@ export function PayrollCalculator({
       .single();
     if (!periodRow) return;
 
-    const p = periodRow as { id: string; label: string; start_date: string; end_date: string; period_type: string; status: string };
+    const p = periodRow as {
+      id: string;
+      label: string;
+      start_date: string;
+      end_date: string;
+      period_type: string;
+      status: string;
+      metadata: Record<string, unknown> | null;
+    };
 
     const { data: items } = await supabase
       .from("pay_period_items")
@@ -552,8 +585,13 @@ export function PayrollCalculator({
       endDate: p.end_date,
       type: p.period_type as PeriodType,
       status: p.status as PeriodStatus,
+      metadata: p.metadata ?? {},
       lines,
     });
+    const externalPayment = p.metadata?.external_payment as Record<string, unknown> | undefined;
+    setExternalPaymentReference(
+      typeof externalPayment?.reference === "string" ? externalPayment.reference : "",
+    );
   }, [supabase, profiles]);
 
   // Auto-load a period when arriving via /payroll?period=<id> (e.g. from history page).
@@ -621,7 +659,7 @@ export function PayrollCalculator({
 
     if (AUTH_BYPASS_ENABLED) {
       // Date.now() is fine here — this runs from a click handler, not render.
-      setPeriod({ id: `period-${Date.now()}`, label, startDate: start, endDate: end, type, status: "draft", lines });
+      setPeriod({ id: `period-${Date.now()}`, label, startDate: start, endDate: end, type, status: "draft", metadata: {}, lines });
       setShowNewPeriod(false);
       return;
     }
@@ -721,7 +759,7 @@ export function PayrollCalculator({
     const label = `${startDate} → ${endDate}`;
 
     if (AUTH_BYPASS_ENABLED) {
-      setPeriod({ id: `period-${Date.now()}`, label, startDate, endDate, type: periodType, status: "draft", lines });
+      setPeriod({ id: `period-${Date.now()}`, label, startDate, endDate, type: periodType, status: "draft", metadata: {}, lines });
       setShowNewPeriod(false);
       return;
     }
@@ -902,21 +940,39 @@ export function PayrollCalculator({
     );
   }
 
-  function periodStatusUpdate(status: PeriodStatus, nowIso: string) {
+  function periodStatusUpdate(
+    status: PeriodStatus,
+    nowIso: string,
+    metadata?: Record<string, unknown>,
+  ) {
+    const base = metadata ? { status, metadata } : { status };
     if (status === "approved") {
-      return { status, approved_by: managerId, approved_at: nowIso };
+      return { ...base, approved_by: managerId, approved_at: nowIso };
     }
     if (status === "paid") {
-      return { status, paid_at: nowIso };
+      return { ...base, paid_at: nowIso };
     }
-    return { status };
+    return base;
+  }
+
+  function buildExternalPaymentRecord(workerIds: string[], paidAt: string): ExternalPaymentRecord {
+    return {
+      provider: "BigBooks",
+      reference: externalPaymentReference.trim() || null,
+      worker_ids: [...new Set(workerIds)],
+      recorded_at: paidAt,
+      recorded_by: managerId,
+    };
   }
 
   // Bridge between the two payroll models. pay_periods/pay_period_items is
   // the canonical review screen. payroll_runs + payroll_line_items +
   // payroll_closures is the immutable ledger: archive/reporting read the
   // line items, and overview unpaid totals read the closures.
-  async function mirrorPaidToPayrollLedger(workerIds: string[]): Promise<string | null> {
+  async function mirrorPaidToPayrollLedger(
+    workerIds: string[],
+    externalPayment: ExternalPaymentRecord,
+  ): Promise<string | null> {
     if (AUTH_BYPASS_ENABLED) return null;
     if (!period) return null;
     if (workerIds.length === 0) return null;
@@ -936,11 +992,11 @@ export function PayrollCalculator({
 
     const { data: existing } = await supabase
       .from("payroll_runs")
-      .select("id")
+      .select("id, metadata")
       .eq("org_id", orgId)
       .filter("metadata->>pay_period_id", "eq", period.id)
       .limit(1)
-      .maybeSingle<{ id: string }>();
+      .maybeSingle<{ id: string; metadata: Record<string, unknown> | null }>();
 
     let runId = existing?.id ?? null;
 
@@ -956,7 +1012,12 @@ export function PayrollCalculator({
           total_hours: r2(totals.hours),
           total_amount: r2(totals.amount),
           confirmed_at: new Date().toISOString(),
-          metadata: { pay_period_id: period.id, source: "pay_periods_bridge" },
+          metadata: {
+            pay_period_id: period.id,
+            source: "pay_periods_bridge",
+            external_payment: externalPayment,
+            external_payments: [externalPayment],
+          },
         })
         .select("id")
         .single<{ id: string }>();
@@ -970,6 +1031,7 @@ export function PayrollCalculator({
         .update({
           total_hours: r2(totals.hours),
           total_amount: r2(totals.amount),
+          metadata: appendExternalPaymentRecord(existing?.metadata, externalPayment),
         })
         .eq("id", runId);
       if (runUpdateErr) return runUpdateErr.message;
@@ -1000,6 +1062,7 @@ export function PayrollCalculator({
         metadata: {
           pay_period_id: period.id,
           session_ids: line.sessionIds,
+          external_payment: externalPayment,
         },
       }));
 
@@ -1084,22 +1147,33 @@ export function PayrollCalculator({
     setPayrollActionBusy(true);
     try {
       const previous = period;
+      const paidAt = new Date().toISOString();
       const targetWorkerIds = period.lines
         .filter((line) => line.hasHours && line.status !== "paid")
         .map((line) => line.workerId);
+      const externalPayment = buildExternalPaymentRecord(targetWorkerIds, paidAt);
+      const nextMetadata = appendExternalPaymentRecord(period.metadata, externalPayment);
 
       if (!AUTH_BYPASS_ENABLED && !(await assertWorkersNotAlreadyClosed(targetWorkerIds))) {
         return;
       }
 
       setPeriod((prev) =>
-        prev ? { ...prev, status: "paid", lines: prev.lines.map((l) => ({ ...l, status: "paid" })) } : prev,
+        prev
+          ? {
+              ...prev,
+              status: "paid",
+              metadata: nextMetadata,
+              lines: prev.lines.map((l) => ({ ...l, status: "paid" })),
+            }
+          : prev,
       );
 
       if (!AUTH_BYPASS_ENABLED) {
         const { error: pErr } = await supabase.from("pay_periods").update({
           status: "paid",
-          paid_at: new Date().toISOString(),
+          paid_at: paidAt,
+          metadata: nextMetadata,
         }).eq("id", period.id);
 
         if (pErr) { setPeriod(previous); setError(pErr.message); return; }
@@ -1114,6 +1188,7 @@ export function PayrollCalculator({
         // and overview unpaid totals agree with the pay period state.
         const mirrorErr = await mirrorPaidToPayrollLedger(
           period.lines.map((l) => l.workerId),
+          externalPayment,
         );
         if (mirrorErr) {
           setError(payrollLedgerErrorMessage(mirrorErr));
@@ -1173,12 +1248,19 @@ export function PayrollCalculator({
         selectedLines.every((line) => line.status === "approved")
           ? "paid"
           : "approved";
+      const paidAt = new Date().toISOString();
+      const paymentWorkerIds = selectedLines
+        .filter((line) => line.hasHours && line.status !== "paid")
+        .map((line) => line.workerId);
+      const externalPayment = nextStatus === "paid"
+        ? buildExternalPaymentRecord(paymentWorkerIds, paidAt)
+        : null;
+      const nextMetadata = externalPayment
+        ? appendExternalPaymentRecord(period.metadata, externalPayment)
+        : period.metadata;
 
       if (nextStatus === "paid" && !AUTH_BYPASS_ENABLED) {
-        const targetWorkerIds = selectedLines
-          .filter((line) => line.hasHours && line.status !== "paid")
-          .map((line) => line.workerId);
-        if (!(await assertWorkersNotAlreadyClosed(targetWorkerIds))) {
+        if (!(await assertWorkersNotAlreadyClosed(paymentWorkerIds))) {
           return;
         }
       }
@@ -1201,18 +1283,18 @@ export function PayrollCalculator({
           return;
         }
 
-        if (nextStatus === "paid") {
-          const mirrorErr = await mirrorPaidToPayrollLedger(ids);
+        if (nextStatus === "paid" && externalPayment) {
+          const mirrorErr = await mirrorPaidToPayrollLedger(ids, externalPayment);
           if (mirrorErr) {
             setError(payrollLedgerErrorMessage(mirrorErr));
             return;
           }
         }
 
-        if (nextPeriodStatus !== period.status) {
+        if (nextPeriodStatus !== period.status || externalPayment) {
           const { error: periodErr } = await supabase
             .from("pay_periods")
-            .update(periodStatusUpdate(nextPeriodStatus, new Date().toISOString()))
+            .update(periodStatusUpdate(nextPeriodStatus, paidAt, nextMetadata))
             .eq("id", period.id);
           if (periodErr) {
             setError(periodErr.message);
@@ -1226,6 +1308,7 @@ export function PayrollCalculator({
           ? {
               ...prev,
               status: nextPeriodStatus,
+              metadata: nextMetadata,
               lines: nextLines,
             }
           : prev,
@@ -1819,6 +1902,21 @@ export function PayrollCalculator({
 
           {/* Bulk actions */}
           <section className="flex flex-wrap items-center gap-2">
+            {period.status !== "paid" ? (
+              <label className="flex min-w-[220px] items-center gap-2 rounded-[var(--radius-sm)] border px-3 py-2 text-xs"
+                style={{ borderColor: "var(--border-default)", background: "var(--bg-primary)" }}
+              >
+                <span className="shrink-0 font-semibold text-[var(--text-muted)]">
+                  {t("payroll.externalPaymentReference")}
+                </span>
+                <TextInputWithVoice
+                  value={externalPaymentReference}
+                  onChange={(event) => setExternalPaymentReference(event.target.value)}
+                  placeholder={t("payroll.externalPaymentReferencePlaceholder")}
+                  className="min-w-0 flex-1 bg-transparent text-[var(--text-primary)] outline-none placeholder:text-[var(--text-muted)]"
+                />
+              </label>
+            ) : null}
             {!workerFilter && period.status === "draft" ? (
               <button type="button" onClick={() => void approveAll()} disabled={payrollActionBusy} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:opacity-50" style={{ borderColor: "rgba(191, 162, 52, 0.3)", color: "var(--brand-yellow)" }}>
                 {t("payroll.approveAll")}

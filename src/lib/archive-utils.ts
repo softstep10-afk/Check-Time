@@ -66,6 +66,7 @@ export type PayrollArchivePeriod = {
   source: "pay_period_items" | "payroll_line_items";
   href: string;
   shiftDetails: PayrollArchiveShift[];
+  externalPayment: PayrollExternalPayment | null;
 };
 
 export type PayrollArchiveShift = {
@@ -76,6 +77,12 @@ export type PayrollArchiveShift = {
   clockOutTime: string | null;
   hours: number;
   amount: number;
+};
+
+export type PayrollExternalPayment = {
+  provider: string;
+  reference: string | null;
+  recordedAt: string | null;
 };
 
 export type PayrollArchiveWorkerYear = {
@@ -440,6 +447,33 @@ function stringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function externalPaymentFromMetadata(
+  ...metadataValues: Array<Record<string, unknown> | null | undefined>
+): PayrollExternalPayment | null {
+  for (const metadata of metadataValues) {
+    const direct = asRecord(metadata?.external_payment);
+    const history = Array.isArray(metadata?.external_payments)
+      ? metadata.external_payments
+      : [];
+    const latest = asRecord(history[history.length - 1]);
+    const source = direct ?? latest;
+    if (!source) continue;
+    const provider = typeof source.provider === "string" ? source.provider : "External";
+    const reference = typeof source.reference === "string" && source.reference.trim()
+      ? source.reference
+      : null;
+    const recordedAt = typeof source.recorded_at === "string" ? source.recorded_at : null;
+    return { provider, reference, recordedAt };
+  }
+  return null;
+}
+
 function buildPayrollArchiveShiftDetails(args: {
   sessions: ManagerSession[];
   workerId: string;
@@ -608,6 +642,7 @@ export function buildPaidPayrollArchive(
         source: "pay_period_items",
         href: getPayPeriodHref(period.id),
         shiftDetails,
+        externalPayment: externalPaymentFromMetadata(period.metadata),
       },
       includeFinancials,
     );
@@ -651,6 +686,11 @@ export function buildPaidPayrollArchive(
         source: "payroll_line_items",
         href: linkedPeriod ? getPayPeriodHref(linkedPeriod.id) : getPayrollRunHref(run.id),
         shiftDetails,
+        externalPayment: externalPaymentFromMetadata(
+          item.metadata,
+          linkedPeriod?.metadata,
+          run.metadata,
+        ),
       },
       includeFinancials,
     );

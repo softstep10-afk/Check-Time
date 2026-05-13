@@ -377,6 +377,53 @@ describe("archive helpers", () => {
     ]);
   });
 
+  it("carries BigBooks external payment references into archive periods", () => {
+    const worker = profile({ id: "worker", name: "Worker" });
+    const archive = buildPaidPayrollArchive(
+      {
+        profiles: [worker],
+        projects: [],
+        payPeriods: [
+          {
+            id: "period",
+            label: "April",
+            start_date: "2026-04-01",
+            end_date: "2026-04-30",
+            status: "paid",
+            paid_at: "2026-05-01T00:00:00Z",
+            metadata: {
+              external_payment: {
+                provider: "BigBooks",
+                reference: "batch-42",
+                recorded_at: "2026-05-01T12:00:00Z",
+              },
+            },
+          },
+        ],
+        payPeriodItems: [
+          {
+            id: "item",
+            pay_period_id: "period",
+            worker_id: worker.id,
+            regular_hours: 8,
+            overtime_hours: 0,
+            gross_total: 280,
+            status: "paid",
+          },
+        ],
+        payrollRuns: [],
+        payrollLineItems: [],
+      },
+      { includeFinancials: true },
+    );
+
+    expect(archive.rows[0].periods[0].externalPayment).toEqual({
+      provider: "BigBooks",
+      reference: "batch-42",
+      recordedAt: "2026-05-01T12:00:00Z",
+    });
+  });
+
   it("prefers linked payroll ledger lines over pay period items for project split", () => {
     const worker = profile({ id: "worker", name: "Worker" });
     const home = project({ id: "home", name: "Home" });
