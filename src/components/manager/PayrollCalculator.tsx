@@ -25,6 +25,10 @@ import {
   getWorkersClosedIntoPeriod,
   rollupPayPeriodStatus,
 } from "@/lib/payroll-period-utils";
+import {
+  makeBigBooksPayrollCsv,
+  type BigBooksPayrollExportLine,
+} from "@/lib/payroll-export-utils";
 import type { PayrollClosure, Profile, UserRole } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
 import { formatEventTime } from "@/lib/worker-utils";
@@ -266,6 +270,26 @@ function generateCsv(period: PayPeriod): string {
       return `"${l.workerName}","${l.workerRole}",${l.regHours},${l.otHours},${l.noGpsHours},${l.rate},${l.grossRegular},${l.grossOt},${bonus},${reimb},${deduct},${l.netTotal},"${period.startDate}","${period.endDate}"`;
     });
   return [headers, ...rows].join("\n");
+}
+
+function lineAdjustmentTotals(line: WorkerLine): { bonus: number; reimbursement: number; deduction: number } {
+  return {
+    bonus: line.adjustments.filter((item) => item.type === "bonus").reduce((sum, item) => sum + item.amount, 0),
+    reimbursement: line.adjustments.filter((item) => item.type === "reimbursement").reduce((sum, item) => sum + item.amount, 0),
+    deduction: line.adjustments.filter((item) => item.type === "deduction").reduce((sum, item) => sum + item.amount, 0),
+  };
+}
+
+function downloadCsvFile(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }
 
 // ── Shift detail rendering ──
@@ -1223,15 +1247,51 @@ export function PayrollCalculator({
   function exportCsv() {
     if (!period) return;
     const csv = generateCsv(period);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `payroll-${period.startDate}-${period.endDate}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadCsvFile(`payroll-${period.startDate}-${period.endDate}.csv`, csv);
+  }
+
+  function exportBigBooksCsv() {
+    if (!period) return;
+    const projectNamesByWorker = new Map<string, Set<string>>();
+    for (const row of draftRows) {
+      const names = projectNamesByWorker.get(row.profileId) ?? new Set<string>();
+      names.add(row.projectName);
+      projectNamesByWorker.set(row.profileId, names);
+    }
+
+    const lines: BigBooksPayrollExportLine[] = visibleLines
+      .filter((line) => line.hasHours)
+      .map((line) => {
+        const adjustments = lineAdjustmentTotals(line);
+        const projectNames = new Set(projectNamesByWorker.get(line.workerId) ?? []);
+        for (const project of line.projectBreakdown) {
+          projectNames.add(project.projectName);
+        }
+        return {
+          workerName: line.workerName,
+          workerId: line.workerId,
+          workerRole: line.workerRole,
+          status: line.status,
+          regularHours: line.regHours,
+          overtimeHours: line.otHours,
+          hourlyRate: line.rate,
+          grossRegular: line.grossRegular,
+          grossOvertime: line.grossOt,
+          bonus: adjustments.bonus,
+          reimbursement: adjustments.reimbursement,
+          deduction: adjustments.deduction,
+          netPay: line.netTotal,
+          projectNames: [...projectNames].sort((left, right) => left.localeCompare(right)),
+        };
+      });
+
+    const csv = makeBigBooksPayrollCsv({
+      periodLabel: period.label,
+      startDate: period.startDate,
+      endDate: period.endDate,
+      lines,
+    });
+    downloadCsvFile(`bigbooks-payroll-${period.startDate}-${period.endDate}.csv`, csv);
   }
 
   async function downloadPaystub(line: WorkerLine) {
@@ -1784,6 +1844,10 @@ export function PayrollCalculator({
             <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}>
               <Download size={13} />
               {t("payroll.exportCsv")}
+            </button>
+            <button type="button" onClick={exportBigBooksCsv} className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "rgba(191, 162, 52, 0.35)", color: "var(--brand-yellow)" }}>
+              <Download size={13} />
+              {t("payroll.exportBigBooksCsv")}
             </button>
             {selectionSummary.count > 0 && period.status !== "paid" ? (
               <span className="max-w-[56ch] text-xs text-[var(--text-secondary)]">
