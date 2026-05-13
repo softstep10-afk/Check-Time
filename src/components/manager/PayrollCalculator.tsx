@@ -1173,16 +1173,52 @@ export function PayrollCalculator({
     if (!period || payrollActionBusy) return;
     setPayrollActionBusy(true);
     try {
-      const previous = period;
       const paidAt = new Date().toISOString();
       const targetWorkerIds = period.lines
         .filter((line) => line.hasHours && line.status !== "paid")
         .map((line) => line.workerId);
       const externalPayment = buildExternalPaymentRecord(targetWorkerIds, paidAt);
       const nextMetadata = appendExternalPaymentRecord(period.metadata, externalPayment);
+      const nextLines = period.lines.map((line) => ({ ...line, status: "paid" as ItemStatus }));
 
       if (!AUTH_BYPASS_ENABLED && !(await assertWorkersNotAlreadyClosed(targetWorkerIds))) {
         return;
+      }
+
+      if (!AUTH_BYPASS_ENABLED) {
+        // Close the immutable ledger before flipping the review rows to paid.
+        // If a network/database failure happens halfway through, it is safer
+        // for payroll to have a closure than to show "paid" without one.
+        const mirrorErr = await mirrorPaidToPayrollLedger(
+          targetWorkerIds,
+          externalPayment,
+        );
+        if (mirrorErr) {
+          setError(payrollLedgerErrorMessage(mirrorErr));
+          return;
+        }
+
+        const { error: iErr } = await supabase
+          .from("pay_period_items")
+          .update({ status: "paid" })
+          .eq("pay_period_id", period.id);
+        if (iErr) {
+          setError(iErr.message);
+          void loadPeriod(period.id);
+          return;
+        }
+
+        const { error: pErr } = await supabase.from("pay_periods").update({
+          status: "paid",
+          paid_at: paidAt,
+          metadata: nextMetadata,
+        }).eq("id", period.id);
+
+        if (pErr) {
+          setError(pErr.message);
+          void loadPeriod(period.id);
+          return;
+        }
       }
 
       setPeriod((prev) =>
@@ -1191,37 +1227,10 @@ export function PayrollCalculator({
               ...prev,
               status: "paid",
               metadata: nextMetadata,
-              lines: prev.lines.map((l) => ({ ...l, status: "paid" })),
+              lines: nextLines,
             }
           : prev,
       );
-
-      if (!AUTH_BYPASS_ENABLED) {
-        const { error: pErr } = await supabase.from("pay_periods").update({
-          status: "paid",
-          paid_at: paidAt,
-          metadata: nextMetadata,
-        }).eq("id", period.id);
-
-        if (pErr) { setPeriod(previous); setError(pErr.message); return; }
-
-        const { error: iErr } = await supabase
-          .from("pay_period_items")
-          .update({ status: "paid" })
-          .eq("pay_period_id", period.id);
-        if (iErr) { setPeriod(previous); setError(iErr.message); return; }
-
-        // Mirror the paid transition into the ledger so archive/reporting
-        // and overview unpaid totals agree with the pay period state.
-        const mirrorErr = await mirrorPaidToPayrollLedger(
-          period.lines.map((l) => l.workerId),
-          externalPayment,
-        );
-        if (mirrorErr) {
-          setError(payrollLedgerErrorMessage(mirrorErr));
-          return;
-        }
-      }
       updateSavedPeriodStatus(period.id, "paid");
 
       void logAudit({
@@ -1241,9 +1250,7 @@ export function PayrollCalculator({
             endDate: period.endDate,
             status: "paid",
           },
-          lines: toPayrollAuditLines(
-            period.lines.map((line) => ({ ...line, status: "paid" as ItemStatus })),
-          ),
+          lines: toPayrollAuditLines(nextLines),
           externalPayment,
         }),
       });
@@ -1312,6 +1319,20 @@ export function PayrollCalculator({
       const nextPeriodStatus = rollupPayPeriodStatus(nextLines);
 
       if (!AUTH_BYPASS_ENABLED) {
+        if (nextStatus === "paid" && externalPayment) {
+          // Same invariant as "pay all": ledger closure first, review
+          // status second. This prevents a visible paid row with no
+          // closure if the database blocks or loses the ledger write.
+          const mirrorErr = await mirrorPaidToPayrollLedger(
+            paymentWorkerIds,
+            externalPayment,
+          );
+          if (mirrorErr) {
+            setError(payrollLedgerErrorMessage(mirrorErr));
+            return;
+          }
+        }
+
         const { error: itemErr } = await supabase
           .from("pay_period_items")
           .update({ status: nextStatus })
@@ -1319,15 +1340,8 @@ export function PayrollCalculator({
           .in("worker_id", ids);
         if (itemErr) {
           setError(itemErr.message);
+          if (nextStatus === "paid") void loadPeriod(period.id);
           return;
-        }
-
-        if (nextStatus === "paid" && externalPayment) {
-          const mirrorErr = await mirrorPaidToPayrollLedger(ids, externalPayment);
-          if (mirrorErr) {
-            setError(payrollLedgerErrorMessage(mirrorErr));
-            return;
-          }
         }
 
         if (nextPeriodStatus !== period.status || externalPayment) {
@@ -1337,6 +1351,7 @@ export function PayrollCalculator({
             .eq("id", period.id);
           if (periodErr) {
             setError(periodErr.message);
+            if (nextStatus === "paid") void loadPeriod(period.id);
             return;
           }
         }
@@ -1631,20 +1646,19 @@ export function PayrollCalculator({
 
   const dayGroups = useMemo(() => groupPayrollRowsByDay(draftRows), [draftRows]);
 
-  // Selected ids that are also currently visible after the worker
-  // filter. Per spec, bulk actions never reach outside what the manager
-  // can see — even if a stale selection persists when the filter
-  // changes, the "Process selected" button only counts/operates on the
-  // intersection.
+  // Selected ids that are also currently visible and still actionable
+  // after the worker filter. Per spec, bulk actions never reach outside
+  // what the manager can see — and stale paid selections cannot sneak
+  // back into a new approve/pay click.
   const visibleSelectedIds = useMemo(() => {
     if (selectedIds.size === 0) return new Set<string>();
-    const visibleSet = new Set(visibleLines.map((line) => line.workerId));
+    const visibleSet = new Set(eligibleSelectableLines.map((line) => line.workerId));
     const next = new Set<string>();
     for (const id of selectedIds) {
       if (visibleSet.has(id)) next.add(id);
     }
     return next;
-  }, [selectedIds, visibleLines]);
+  }, [selectedIds, eligibleSelectableLines]);
 
   // "Selected total hours" reads PayrollDraftRow durations for the
   // currently-selected visible workers. Surfaces alongside the

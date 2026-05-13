@@ -324,6 +324,18 @@ export function TeamMemberPage({
       }),
     [workerAdjustments, latestClosureMs],
   );
+  const paidClosedAdjustmentRows = useMemo(
+    () =>
+      workerAdjustments
+        .filter((adjustment) =>
+          adjustment.minutes !== 0 && isPaidOrClosedAdjustment(adjustment),
+        )
+        .sort(
+          (left, right) =>
+            new Date(right.eventTime).getTime() - new Date(left.eventTime).getTime(),
+        ),
+    [workerAdjustments],
+  );
 
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
   const activeProjects = projects.filter((project) => !project.deleted_at && project.status !== "archived");
@@ -1462,6 +1474,52 @@ export function TeamMemberPage({
                         </div>
                       </div>
                     </div>
+
+                    {paidClosedAdjustmentRows.length > 0 ? (
+                      <div className="mt-4">
+                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                          {t("teamMember.breakdownPaidAdjustments")}
+                        </div>
+                        <div className="grid gap-1.5 md:grid-cols-2">
+                          {paidClosedAdjustmentRows.map((adjustment) => {
+                            const positive = adjustment.minutes >= 0;
+                            return (
+                              <div
+                                key={`paid-closed-${adjustment.id}`}
+                                className="rounded-[var(--radius-sm)] border px-3 py-2"
+                                style={{
+                                  borderColor: "rgba(15,168,120,0.20)",
+                                  background: "rgba(15,168,120,0.06)",
+                                }}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                                      {adjustment.projectName ?? t("common.general")}
+                                    </div>
+                                    <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                                      {formatDateTime(adjustment.eventTime)}
+                                    </div>
+                                    {adjustment.reason ? (
+                                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                                        {adjustment.reason}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <span
+                                    className="shrink-0 whitespace-nowrap font-mono text-xs font-bold"
+                                    style={{ color: positive ? "var(--green)" : "var(--red)" }}
+                                  >
+                                    {positive ? "+" : "−"}
+                                    {formatDurationCompact(Math.abs(adjustment.minutes))}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div className="mt-4 grid gap-3 xl:grid-cols-2">
                       <div>

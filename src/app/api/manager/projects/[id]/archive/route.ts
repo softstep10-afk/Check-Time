@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import { logAuditServer } from "@/lib/audit-server";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -66,6 +67,20 @@ async function handleArchive(
     const supabase = await createClient();
     const { profile } = await requireManagerContext(supabase);
     const adminClient = createAdminClient();
+    const { data: beforeProject } = adminClient
+      ? await adminClient
+          .from("projects")
+          .select("id, name, status, deleted_at, archived_at")
+          .eq("id", id)
+          .eq("org_id", profile.org_id)
+          .maybeSingle<{
+            id: string;
+            name: string;
+            status: string;
+            deleted_at: string | null;
+            archived_at?: string | null;
+          }>()
+      : { data: null };
 
     const { data, error } = await archiveProject({
       adminClient,
@@ -80,6 +95,31 @@ async function handleArchive(
 
     if (!data) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    }
+
+    if (adminClient) {
+      await logAuditServer(adminClient, {
+        orgId: profile.org_id,
+        actorId: profile.id,
+        actorName: profile.name,
+        actorRole: profile.role,
+        action: "project_archived",
+        targetType: "project",
+        targetId: id,
+        beforeData: beforeProject
+          ? {
+              name: beforeProject.name,
+              status: beforeProject.status,
+              deleted_at: beforeProject.deleted_at,
+              archived_at: beforeProject.archived_at ?? null,
+            }
+          : null,
+        afterData: {
+          status: "archived",
+          deleted_at: null,
+          archived_by: profile.id,
+        },
+      });
     }
 
     revalidatePath("/overview");

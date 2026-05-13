@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FolderKanban, User, ClipboardCheck, Receipt, Trash2 } from "lucide-react";
+import { FolderKanban, User, ClipboardCheck, Receipt, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/worker-utils";
@@ -163,16 +164,27 @@ export default function TrashPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
-      <section className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-          {t("trash.title")}
-        </p>
-        <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
-          {t("trash.subtitle")}
-        </h1>
-        <p className="max-w-[60ch] text-sm leading-6 text-[var(--text-secondary)]">
-          {t("trash.description")}
-        </p>
+      <section className="flex items-start justify-between gap-3">
+        <div className="space-y-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {t("trash.title")}
+          </p>
+          <h1 className="text-[28px] font-bold text-[var(--text-primary)]">
+            {t("trash.subtitle")}
+          </h1>
+          <p className="max-w-[60ch] text-sm leading-6 text-[var(--text-secondary)]">
+            {t("trash.description")}
+          </p>
+        </div>
+        <Link
+          href="/archive"
+          aria-label={t("common.dismiss")}
+          title={t("common.dismiss")}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border text-[var(--text-primary)] transition hover:border-[var(--brand-yellow)] hover:text-[var(--brand-yellow)]"
+          style={{ borderColor: "var(--border-default)" }}
+        >
+          <X size={17} />
+        </Link>
       </section>
 
       {message ? (

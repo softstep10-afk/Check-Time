@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { logAuditServer } from "@/lib/audit-server";
 import { createClient } from "@/lib/supabase/server";
 import { setUserCapability, type CapabilityKey, CAPABILITIES } from "@/lib/capabilities";
 import { isManagerRole } from "@/lib/manager-utils";
@@ -29,6 +30,8 @@ export async function toggleUserCapability(args: {
   // In AUTH_BYPASS demo mode there's no logged-in user — accept the write
   // anyway so the toggle is visible, with a null granted_by.
   let actorId: string | null = user?.id ?? null;
+  let actorProfile: { id: string; name: string; role: string; org_id: string } | null = null;
+  let targetProfile: { id: string; name: string; role: string; org_id: string } | null = null;
   if (!AUTH_BYPASS_ENABLED) {
     if (!user) return { ok: false, message: "Not signed in" };
 
@@ -37,14 +40,14 @@ export async function toggleUserCapability(args: {
     // but we double-check here for a clean error before the write.
     const { data: actor } = await supabase
       .from("profiles")
-      .select("role, org_id")
+      .select("id, name, role, org_id")
       .eq("id", user.id)
-      .single<{ role: string; org_id: string }>();
+      .single<{ id: string; name: string; role: string; org_id: string }>();
     const { data: target } = await supabase
       .from("profiles")
-      .select("org_id")
+      .select("id, name, role, org_id")
       .eq("id", args.userId)
-      .single<{ org_id: string }>();
+      .single<{ id: string; name: string; role: string; org_id: string }>();
     if (
       !actor ||
       !target ||
@@ -60,8 +63,17 @@ export async function toggleUserCapability(args: {
     ) {
       return { ok: false, message: "Only owners/admins can change finance access." };
     }
+    actorProfile = actor;
+    targetProfile = target;
     actorId = user.id;
   }
+
+  const { data: existingCapability } = await supabase
+    .from("user_capabilities")
+    .select("granted")
+    .eq("user_id", args.userId)
+    .eq("capability", args.capability)
+    .maybeSingle<{ granted: boolean }>();
 
   const result = await setUserCapability(supabase, {
     userId: args.userId,
@@ -71,6 +83,29 @@ export async function toggleUserCapability(args: {
   });
 
   if (result.ok) {
+    if (actorProfile && targetProfile) {
+      await logAuditServer(supabase, {
+        orgId: actorProfile.org_id,
+        actorId,
+        actorName: actorProfile.name,
+        actorRole: actorProfile.role,
+        action: "capability_changed",
+        targetType: "profile",
+        targetId: args.userId,
+        beforeData: {
+          target_name: targetProfile.name,
+          target_role: targetProfile.role,
+          capability: args.capability,
+          granted: existingCapability?.granted === true,
+        },
+        afterData: {
+          target_name: targetProfile.name,
+          target_role: targetProfile.role,
+          capability: args.capability,
+          granted: args.granted,
+        },
+      });
+    }
     revalidatePath(`/admin/users/${args.userId}/permissions`);
   }
 
