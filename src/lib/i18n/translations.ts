@@ -1368,6 +1368,10 @@ export const translations = {
     en: "Payroll was marked, but the ledger sync failed",
     ru: "Статус зарплаты записан, но синхронизация ledger не прошла",
   },
+  "payroll.alreadyPaidBlock": {
+    en: "{workers} already has paid/closed hours inside {start} → {end}. Open the existing paid period in Archive instead of paying it again.",
+    ru: "{workers}: часы уже оплачены/закрыты внутри периода {start} → {end}. Откройте существующий оплаченный период в Архиве вместо повторной оплаты.",
+  },
   "payroll.quickStart": { en: "Quick start", ru: "Быстрый старт" },
   "payroll.newCustom": { en: "New custom period", ru: "Свой период" },
   "payroll.openSaved": { en: "Open a saved period", ru: "Открыть сохранённый период" },

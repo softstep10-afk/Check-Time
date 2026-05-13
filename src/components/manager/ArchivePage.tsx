@@ -76,6 +76,11 @@ const COPY = {
     source: "Source",
     sourcePayPeriodItems: "Payroll period item",
     sourcePayrollLineItems: "Payroll ledger",
+    shifts: "Paid shifts",
+    noShifts: "No shift breakdown was found for this paid period.",
+    shiftTime: "Time",
+    shiftHours: "Hours",
+    shiftAmount: "Amount",
     possibleDuplicate: "Possible duplicate",
     duplicateWarning: "This worker has another paid period with the same dates, hours, and amount. The yearly total includes each paid record.",
     footer: "Archive preserves linked history. Trash is only for deleted rows that can be restored or permanently removed.",
@@ -132,6 +137,11 @@ const COPY = {
     source: "Источник",
     sourcePayPeriodItems: "Строка платёжного периода",
     sourcePayrollLineItems: "Зарплатный ledger",
+    shifts: "Оплаченные смены",
+    noShifts: "Разбивка смен для этого оплаченного периода не найдена.",
+    shiftTime: "Время",
+    shiftHours: "Часы",
+    shiftAmount: "Сумма",
     possibleDuplicate: "Возможный дубль",
     duplicateWarning: "У этого рабочего есть ещё один оплаченный период с теми же датами, часами и суммой. Годовой итог включает каждую оплаченную запись.",
     footer: "Архив сохраняет связанную историю. Корзина только для удалённых строк, которые можно восстановить или удалить навсегда.",
@@ -650,7 +660,7 @@ export function ArchivePage({
             onClick={() => setSelectedPayrollPeriod(null)}
           >
             <div
-              className="w-full max-w-[720px] rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 shadow-2xl"
+              className="max-h-[90vh] w-full max-w-[840px] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 shadow-2xl"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-start justify-between gap-3">
@@ -740,6 +750,57 @@ export function ArchivePage({
                     {period.projectNames.length > 0 ? period.projectNames.join(", ") : text.noProjectSplit}
                   </div>
                 </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold text-[var(--text-primary)]">
+                    {text.shifts}
+                  </h3>
+                  <span className="font-mono text-xs text-[var(--text-muted)]">
+                    {period.shiftDetails.length} · {period.shiftDetails.reduce((sum, shift) => sum + shift.hours, 0).toFixed(2)}h
+                  </span>
+                </div>
+                {period.shiftDetails.length === 0 ? (
+                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+                    {text.noShifts}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-[var(--radius-md)] border border-[var(--border-subtle)]">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                          <th className="px-3 py-2 font-semibold">{text.project}</th>
+                          <th className="px-3 py-2 font-semibold">{text.shiftTime}</th>
+                          <th className="px-3 py-2 text-right font-semibold">{text.shiftHours}</th>
+                          <th className="px-3 py-2 text-right font-semibold">{text.shiftAmount}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {period.shiftDetails.map((shift) => (
+                          <tr key={shift.id} className="border-t border-[var(--border-subtle)]">
+                            <td className="px-3 py-2 font-semibold text-[var(--text-primary)]">
+                              {shift.projectName}
+                            </td>
+                            <td className="px-3 py-2 text-[var(--text-secondary)]">
+                              {new Date(shift.clockInTime).toLocaleString()}
+                              {" - "}
+                              {shift.clockOutTime
+                                ? new Date(shift.clockOutTime).toLocaleString()
+                                : text.notRecorded}
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-[var(--text-primary)]">
+                              {shift.hours.toFixed(2)}h
+                            </td>
+                            <td className="px-3 py-2 text-right font-mono text-[var(--text-primary)]">
+                              {currency.format(shift.amount)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               <div className="mt-4 flex flex-wrap justify-end gap-2">

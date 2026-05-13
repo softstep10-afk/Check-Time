@@ -301,6 +301,82 @@ describe("archive helpers", () => {
     expect(archive.rows[0].grossPaid).toBe(500);
   });
 
+  it("adds paid shift details by worker and date when ledger session ids are missing", () => {
+    const worker = profile({ id: "worker", name: "Worker", hourly_rate: 35 });
+    const home = project({ id: "home", name: "Home" });
+    const run: PayrollRun = {
+      id: "run",
+      org_id: "org",
+      run_by: "owner",
+      period_start: "2026-04-01",
+      period_end: "2026-04-30",
+      status: "confirmed",
+      total_hours: 4,
+      total_amount: 140,
+      notes: null,
+      metadata: { pay_period_id: "period" },
+      created_at: "2026-05-01T00:00:00Z",
+      confirmed_at: "2026-05-01T00:00:00Z",
+    };
+
+    const archive = buildPaidPayrollArchive(
+      {
+        profiles: [worker],
+        projects: [home],
+        payPeriods: [
+          {
+            id: "period",
+            label: "April",
+            start_date: "2026-04-01",
+            end_date: "2026-04-30",
+            status: "paid",
+            paid_at: "2026-05-01T00:00:00Z",
+          },
+        ],
+        payPeriodItems: [],
+        payrollRuns: [run],
+        payrollLineItems: [
+          {
+            id: "line",
+            payroll_run_id: run.id,
+            profile_id: worker.id,
+            project_id: null,
+            hours: 4,
+            rate: 35,
+            amount: 140,
+            event_ids: [],
+            metadata: { session_ids: [] },
+            created_at: "2026-05-01T00:00:00Z",
+          },
+        ],
+        sessions: [
+          session({
+            id: "shift",
+            projectId: home.id,
+            projectName: home.name,
+            profileId: worker.id,
+            clockInTime: "2026-04-10T08:00:00Z",
+            clockOutTime: "2026-04-10T12:00:00Z",
+            durationMinutes: 240,
+          }),
+        ],
+      },
+      { includeFinancials: true },
+    );
+
+    expect(archive.rows[0].periods[0].shiftDetails).toEqual([
+      {
+        id: "shift",
+        projectId: home.id,
+        projectName: home.name,
+        clockInTime: "2026-04-10T08:00:00Z",
+        clockOutTime: "2026-04-10T12:00:00Z",
+        hours: 4,
+        amount: 140,
+      },
+    ]);
+  });
+
   it("prefers linked payroll ledger lines over pay period items for project split", () => {
     const worker = profile({ id: "worker", name: "Worker" });
     const home = project({ id: "home", name: "Home" });

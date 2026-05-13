@@ -35,6 +35,7 @@ export default async function ArchiveRoutePage() {
           payPeriodItems: data.payPeriodItems,
           payrollRuns: data.payrollRuns,
           payrollLineItems: data.payrollLineItems,
+          sessions,
         },
         { includeFinancials: true },
       )

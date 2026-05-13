@@ -35,8 +35,18 @@ export type PayrollLedgerLineDraft = {
   sessionIds: string[];
 };
 
+export type PayrollClosurePaymentGuardRow = {
+  profile_id: string;
+  closed_through: string;
+};
+
 function r2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function startOfDayMs(date: string): number {
+  const value = new Date(`${date}T00:00:00Z`).getTime();
+  return Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
 }
 
 export function rollupPayPeriodStatus(lines: PayPeriodStatusLine[]): PayPeriodStatus {
@@ -57,6 +67,27 @@ export function getPaidWorkerIdsAfter(
   return lines
     .filter((line) => line.hasHours && (line.status === "paid" || newlyPaid.has(line.workerId)))
     .map((line) => line.workerId);
+}
+
+export function getWorkersClosedIntoPeriod(
+  workerIds: Iterable<string>,
+  periodStartDate: string,
+  closures: PayrollClosurePaymentGuardRow[],
+): Set<string> {
+  const workerSet = new Set(workerIds);
+  const periodStartMs = startOfDayMs(periodStartDate);
+  const blocked = new Set<string>();
+
+  for (const closure of closures) {
+    if (!workerSet.has(closure.profile_id)) continue;
+    const closedThroughMs = new Date(closure.closed_through).getTime();
+    if (!Number.isFinite(closedThroughMs)) continue;
+    if (closedThroughMs >= periodStartMs) {
+      blocked.add(closure.profile_id);
+    }
+  }
+
+  return blocked;
 }
 
 function unique(values: Iterable<string>): string[] {

@@ -22,6 +22,7 @@ import {
 import {
   buildPayrollLedgerLineDrafts,
   getPaidWorkerIdsAfter,
+  getWorkersClosedIntoPeriod,
   rollupPayPeriodStatus,
 } from "@/lib/payroll-period-utils";
 import type { PayrollClosure, Profile, UserRole } from "@/types/database";
@@ -449,6 +450,7 @@ export function PayrollCalculator({
     new Set(),
   );
   const [error, setError] = useState("");
+  const [payrollActionBusy, setPayrollActionBusy] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Adjustment modal
@@ -826,43 +828,48 @@ export function PayrollCalculator({
   }
 
   async function approveAll() {
-    if (!period) return;
-    const previous = period;
+    if (!period || payrollActionBusy) return;
+    setPayrollActionBusy(true);
+    try {
+      const previous = period;
 
-    // Optimistic flip so the buttons re-render immediately ("Approve All"
-    // → "Mark All Paid"). Roll back if the DB writes fail.
-    setPeriod((prev) =>
-      prev ? { ...prev, status: "approved", lines: prev.lines.map((l) => ({ ...l, status: "approved" })) } : prev,
-    );
+      // Optimistic flip so the buttons re-render immediately ("Approve All"
+      // → "Mark All Paid"). Roll back if the DB writes fail.
+      setPeriod((prev) =>
+        prev ? { ...prev, status: "approved", lines: prev.lines.map((l) => ({ ...l, status: "approved" })) } : prev,
+      );
 
-    if (!AUTH_BYPASS_ENABLED) {
-      const { error: pErr } = await supabase.from("pay_periods").update({
-        status: "approved",
-        approved_by: managerId,
-        approved_at: new Date().toISOString(),
-      }).eq("id", period.id);
+      if (!AUTH_BYPASS_ENABLED) {
+        const { error: pErr } = await supabase.from("pay_periods").update({
+          status: "approved",
+          approved_by: managerId,
+          approved_at: new Date().toISOString(),
+        }).eq("id", period.id);
 
-      if (pErr) { setPeriod(previous); setError(pErr.message); return; }
+        if (pErr) { setPeriod(previous); setError(pErr.message); return; }
 
-      const { error: iErr } = await supabase
-        .from("pay_period_items")
-        .update({ status: "approved" })
-        .eq("pay_period_id", period.id);
-      if (iErr) { setPeriod(previous); setError(iErr.message); return; }
+        const { error: iErr } = await supabase
+          .from("pay_period_items")
+          .update({ status: "approved" })
+          .eq("pay_period_id", period.id);
+        if (iErr) { setPeriod(previous); setError(iErr.message); return; }
+      }
+      updateSavedPeriodStatus(period.id, "approved");
+
+      void logAudit({
+        orgId,
+        actorId: managerId,
+        actorName: managerName,
+        actorRole: managerRole,
+        action: "payroll_approved",
+        targetType: "pay_period",
+        targetId: period.id,
+        beforeData: { status: "draft" },
+        afterData: { status: "approved", label: period.label },
+      });
+    } finally {
+      setPayrollActionBusy(false);
     }
-    updateSavedPeriodStatus(period.id, "approved");
-
-    void logAudit({
-      orgId,
-      actorId: managerId,
-      actorName: managerName,
-      actorRole: managerRole,
-      action: "payroll_approved",
-      targetType: "pay_period",
-      targetId: period.id,
-      beforeData: { status: "draft" },
-      afterData: { status: "approved", label: period.label },
-    });
   }
 
   function updateSavedPeriodStatus(periodId: string, status: PeriodStatus) {
@@ -1006,51 +1013,98 @@ export function PayrollCalculator({
     return closeErr?.message ?? null;
   }
 
-  async function markAllPaid() {
-    if (!period) return;
-    const previous = period;
+  async function assertWorkersNotAlreadyClosed(workerIds: string[]): Promise<boolean> {
+    if (!period || workerIds.length === 0) return true;
+    const periodStartIso = `${period.startDate}T00:00:00Z`;
+    const { data, error: closuresError } = await supabase
+      .from("payroll_closures")
+      .select("profile_id, closed_through")
+      .in("profile_id", workerIds)
+      .gte("closed_through", periodStartIso)
+      .returns<Array<{ profile_id: string; closed_through: string }>>();
 
-    setPeriod((prev) =>
-      prev ? { ...prev, status: "paid", lines: prev.lines.map((l) => ({ ...l, status: "paid" })) } : prev,
+    if (closuresError) {
+      setError(closuresError.message);
+      return false;
+    }
+
+    const blockedIds = getWorkersClosedIntoPeriod(
+      workerIds,
+      period.startDate,
+      data ?? [],
     );
+    if (blockedIds.size === 0) return true;
 
-    if (!AUTH_BYPASS_ENABLED) {
-      const { error: pErr } = await supabase.from("pay_periods").update({
-        status: "paid",
-        paid_at: new Date().toISOString(),
-      }).eq("id", period.id);
+    const names = period.lines
+      .filter((line) => blockedIds.has(line.workerId))
+      .map((line) => line.workerName)
+      .join(", ");
+    setError(
+      t("payroll.alreadyPaidBlock")
+        .replace("{workers}", names)
+        .replace("{start}", period.startDate)
+        .replace("{end}", period.endDate),
+    );
+    return false;
+  }
 
-      if (pErr) { setPeriod(previous); setError(pErr.message); return; }
+  async function markAllPaid() {
+    if (!period || payrollActionBusy) return;
+    setPayrollActionBusy(true);
+    try {
+      const previous = period;
+      const targetWorkerIds = period.lines
+        .filter((line) => line.hasHours && line.status !== "paid")
+        .map((line) => line.workerId);
 
-      const { error: iErr } = await supabase
-        .from("pay_period_items")
-        .update({ status: "paid" })
-        .eq("pay_period_id", period.id);
-      if (iErr) { setPeriod(previous); setError(iErr.message); return; }
-
-      // Mirror the paid transition into the ledger so archive/reporting
-      // and overview unpaid totals agree with the pay period state.
-      const mirrorErr = await mirrorPaidToPayrollLedger(
-        period.lines.map((l) => l.workerId),
-      );
-      if (mirrorErr) {
-        setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+      if (!AUTH_BYPASS_ENABLED && !(await assertWorkersNotAlreadyClosed(targetWorkerIds))) {
         return;
       }
-    }
-    updateSavedPeriodStatus(period.id, "paid");
 
-    void logAudit({
-      orgId,
-      actorId: managerId,
-      actorName: managerName,
-      actorRole: managerRole,
-      action: "payroll_paid",
-      targetType: "pay_period",
-      targetId: period.id,
-      beforeData: { status: "approved" },
-      afterData: { status: "paid", label: period.label },
-    });
+      setPeriod((prev) =>
+        prev ? { ...prev, status: "paid", lines: prev.lines.map((l) => ({ ...l, status: "paid" })) } : prev,
+      );
+
+      if (!AUTH_BYPASS_ENABLED) {
+        const { error: pErr } = await supabase.from("pay_periods").update({
+          status: "paid",
+          paid_at: new Date().toISOString(),
+        }).eq("id", period.id);
+
+        if (pErr) { setPeriod(previous); setError(pErr.message); return; }
+
+        const { error: iErr } = await supabase
+          .from("pay_period_items")
+          .update({ status: "paid" })
+          .eq("pay_period_id", period.id);
+        if (iErr) { setPeriod(previous); setError(iErr.message); return; }
+
+        // Mirror the paid transition into the ledger so archive/reporting
+        // and overview unpaid totals agree with the pay period state.
+        const mirrorErr = await mirrorPaidToPayrollLedger(
+          period.lines.map((l) => l.workerId),
+        );
+        if (mirrorErr) {
+          setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+          return;
+        }
+      }
+      updateSavedPeriodStatus(period.id, "paid");
+
+      void logAudit({
+        orgId,
+        actorId: managerId,
+        actorName: managerName,
+        actorRole: managerRole,
+        action: "payroll_paid",
+        targetType: "pay_period",
+        targetId: period.id,
+        beforeData: { status: "approved" },
+        afterData: { status: "paid", label: period.label },
+      });
+    } finally {
+      setPayrollActionBusy(false);
+    }
   }
 
   function toggleSelect(workerId: string) {
@@ -1070,85 +1124,100 @@ export function PayrollCalculator({
   }
 
   async function processSelected() {
-    if (!period) return;
+    if (!period || payrollActionBusy) return;
     // Per spec — never act outside what the manager can currently see.
     // visibleSelectedIds is selectedIds ∩ visibleLines.workerId; we
     // pass the intersection rather than selectedIds so a stale
     // selection from a previous filter cannot leak through.
     if (visibleSelectedIds.size === 0) return;
+    setPayrollActionBusy(true);
+    try {
 
-    const ids = [...visibleSelectedIds];
-    const selectedLines = period.lines.filter((line) =>
-      visibleSelectedIds.has(line.workerId),
-    );
-    const nextStatus: ItemStatus =
-      selectedLines.length > 0 &&
-      selectedLines.every((line) => line.status === "approved")
-        ? "paid"
-        : "approved";
-    const nextLines = period.lines.map((line) =>
-      visibleSelectedIds.has(line.workerId)
-        ? { ...line, status: nextStatus }
-        : line,
-    );
-    const nextPeriodStatus = rollupPayPeriodStatus(nextLines);
+      const ids = [...visibleSelectedIds];
+      const selectedLines = period.lines.filter((line) =>
+        visibleSelectedIds.has(line.workerId),
+      );
+      const nextStatus: ItemStatus =
+        selectedLines.length > 0 &&
+        selectedLines.every((line) => line.status === "approved")
+          ? "paid"
+          : "approved";
 
-    if (!AUTH_BYPASS_ENABLED) {
-      const { error: itemErr } = await supabase
-        .from("pay_period_items")
-        .update({ status: nextStatus })
-        .eq("pay_period_id", period.id)
-        .in("worker_id", ids);
-      if (itemErr) {
-        setError(itemErr.message);
-        return;
-      }
-
-      if (nextStatus === "paid") {
-        const mirrorErr = await mirrorPaidToPayrollLedger(ids);
-        if (mirrorErr) {
-          setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+      if (nextStatus === "paid" && !AUTH_BYPASS_ENABLED) {
+        const targetWorkerIds = selectedLines
+          .filter((line) => line.hasHours && line.status !== "paid")
+          .map((line) => line.workerId);
+        if (!(await assertWorkersNotAlreadyClosed(targetWorkerIds))) {
           return;
         }
       }
 
-      if (nextPeriodStatus !== period.status) {
-        const { error: periodErr } = await supabase
-          .from("pay_periods")
-          .update(periodStatusUpdate(nextPeriodStatus, new Date().toISOString()))
-          .eq("id", period.id);
-        if (periodErr) {
-          setError(periodErr.message);
+      const nextLines = period.lines.map((line) =>
+        visibleSelectedIds.has(line.workerId)
+          ? { ...line, status: nextStatus }
+          : line,
+      );
+      const nextPeriodStatus = rollupPayPeriodStatus(nextLines);
+
+      if (!AUTH_BYPASS_ENABLED) {
+        const { error: itemErr } = await supabase
+          .from("pay_period_items")
+          .update({ status: nextStatus })
+          .eq("pay_period_id", period.id)
+          .in("worker_id", ids);
+        if (itemErr) {
+          setError(itemErr.message);
           return;
         }
-      }
-    }
 
-    setPeriod((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: nextPeriodStatus,
-            lines: nextLines,
+        if (nextStatus === "paid") {
+          const mirrorErr = await mirrorPaidToPayrollLedger(ids);
+          if (mirrorErr) {
+            setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+            return;
           }
-        : prev,
-    );
-    if (nextPeriodStatus !== period.status) {
-      updateSavedPeriodStatus(period.id, nextPeriodStatus);
-    }
-    setSelectedIds(new Set());
+        }
 
-    void logAudit({
-      orgId,
-      actorId: managerId,
-      actorName: managerName,
-      actorRole: managerRole,
-      action: nextStatus === "paid" ? "payroll_paid" : "payroll_approved",
-      targetType: "pay_period_items",
-      targetId: period.id,
-      beforeData: { count: ids.length, status: period.status },
-      afterData: { count: ids.length, status: nextStatus, workerIds: ids },
-    });
+        if (nextPeriodStatus !== period.status) {
+          const { error: periodErr } = await supabase
+            .from("pay_periods")
+            .update(periodStatusUpdate(nextPeriodStatus, new Date().toISOString()))
+            .eq("id", period.id);
+          if (periodErr) {
+            setError(periodErr.message);
+            return;
+          }
+        }
+      }
+
+      setPeriod((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: nextPeriodStatus,
+              lines: nextLines,
+            }
+          : prev,
+      );
+      if (nextPeriodStatus !== period.status) {
+        updateSavedPeriodStatus(period.id, nextPeriodStatus);
+      }
+      setSelectedIds(new Set());
+
+      void logAudit({
+        orgId,
+        actorId: managerId,
+        actorName: managerName,
+        actorRole: managerRole,
+        action: nextStatus === "paid" ? "payroll_paid" : "payroll_approved",
+        targetType: "pay_period_items",
+        targetId: period.id,
+        beforeData: { count: ids.length, status: period.status },
+        afterData: { count: ids.length, status: nextStatus, workerIds: ids },
+      });
+    } finally {
+      setPayrollActionBusy(false);
+    }
   }
 
   function exportCsv() {
@@ -1684,12 +1753,12 @@ export function PayrollCalculator({
           {/* Bulk actions */}
           <section className="flex flex-wrap items-center gap-2">
             {!workerFilter && period.status === "draft" ? (
-              <button type="button" onClick={() => void approveAll()} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "rgba(191, 162, 52, 0.3)", color: "var(--brand-yellow)" }}>
+              <button type="button" onClick={() => void approveAll()} disabled={payrollActionBusy} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:opacity-50" style={{ borderColor: "rgba(191, 162, 52, 0.3)", color: "var(--brand-yellow)" }}>
                 {t("payroll.approveAll")}
               </button>
             ) : null}
             {!workerFilter && period.status === "approved" ? (
-              <button type="button" onClick={() => void markAllPaid()} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "rgba(15, 168, 120, 0.3)", color: "var(--green)" }}>
+              <button type="button" onClick={() => void markAllPaid()} disabled={payrollActionBusy} className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:opacity-50" style={{ borderColor: "rgba(15, 168, 120, 0.3)", color: "var(--green)" }}>
                 {t("payroll.markAllPaid")}
               </button>
             ) : null}
@@ -1697,16 +1766,16 @@ export function PayrollCalculator({
               <button
                 type="button"
                 onClick={() => void processSelected()}
-                disabled={selectionSummary.count === 0}
+                disabled={selectionSummary.count === 0 || payrollActionBusy}
                 className="rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
                 style={{
                   background:
-                    selectionSummary.count === 0
+                    selectionSummary.count === 0 || payrollActionBusy
                       ? "var(--border-default)"
                       : selectedAction === "pay"
                         ? "var(--green)"
                         : "var(--brand-yellow)",
-                  color: selectionSummary.count === 0 ? "var(--text-muted)" : "var(--text-inverse)",
+                  color: selectionSummary.count === 0 || payrollActionBusy ? "var(--text-muted)" : "var(--text-inverse)",
                 }}
               >
                 {selectedActionLabel}

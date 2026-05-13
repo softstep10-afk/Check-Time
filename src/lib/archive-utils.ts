@@ -65,6 +65,17 @@ export type PayrollArchivePeriod = {
   projectNames: string[];
   source: "pay_period_items" | "payroll_line_items";
   href: string;
+  shiftDetails: PayrollArchiveShift[];
+};
+
+export type PayrollArchiveShift = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  clockInTime: string;
+  clockOutTime: string | null;
+  hours: number;
+  amount: number;
 };
 
 export type PayrollArchiveWorkerYear = {
@@ -409,6 +420,103 @@ function getPayrollRunHref(runId: string): string {
   return `/payroll/history#run-${runId}`;
 }
 
+function periodBoundaryMs(date: string, endOfDay: boolean): number {
+  const time = endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z";
+  const value = new Date(`${date}${time}`).getTime();
+  return Number.isFinite(value) ? value : Number.NaN;
+}
+
+function sessionEndMs(session: ManagerSession): number {
+  const startMs = new Date(session.clockInTime).getTime();
+  if (session.clockOutTime) {
+    const clockOutMs = new Date(session.clockOutTime).getTime();
+    if (Number.isFinite(clockOutMs)) return clockOutMs;
+  }
+  return startMs + session.durationMinutes * 60_000;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
+function buildPayrollArchiveShiftDetails(args: {
+  sessions: ManagerSession[];
+  workerId: string;
+  projectId: string | null;
+  projectName: string | null;
+  startDate: string;
+  endDate: string;
+  grossPaid: number;
+  sessionIds?: string[];
+  eventIds?: string[];
+}): PayrollArchiveShift[] {
+  const startMs = periodBoundaryMs(args.startDate, false);
+  const endMs = periodBoundaryMs(args.endDate, true);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return [];
+
+  const workerSessions = args.sessions.filter((session) => session.profileId === args.workerId);
+  const sessionIdSet = new Set(args.sessionIds ?? []);
+  const eventIdSet = new Set(args.eventIds ?? []);
+
+  let candidates: ManagerSession[] = [];
+  if (sessionIdSet.size > 0) {
+    candidates = workerSessions.filter((session) => sessionIdSet.has(session.id));
+  } else if (eventIdSet.size > 0) {
+    candidates = workerSessions.filter((session) =>
+      session.eventIds.some((eventId) => eventIdSet.has(eventId)),
+    );
+  }
+
+  if (candidates.length === 0) {
+    candidates = workerSessions.filter((session) => {
+      if (args.projectId && session.projectId !== args.projectId) return false;
+      const sessionStartMs = new Date(session.clockInTime).getTime();
+      const sessionStopMs = sessionEndMs(session);
+      if (!Number.isFinite(sessionStartMs) || !Number.isFinite(sessionStopMs)) return false;
+      return sessionStopMs > startMs && sessionStartMs < endMs;
+    });
+  }
+
+  const unique = new Map<string, ManagerSession>();
+  for (const session of candidates) {
+    unique.set(session.id, session);
+  }
+
+  const details = [...unique.values()]
+    .map((session) => {
+      const sessionStartMs = new Date(session.clockInTime).getTime();
+      const sessionStopMs = sessionEndMs(session);
+      if (!Number.isFinite(sessionStartMs) || !Number.isFinite(sessionStopMs)) return null;
+      const effectiveStartMs = Math.max(sessionStartMs, startMs);
+      const effectiveStopMs = Math.min(sessionStopMs, endMs);
+      if (effectiveStopMs <= effectiveStartMs) return null;
+      return {
+        id: session.id,
+        projectId: session.projectId,
+        projectName: args.projectName ?? session.projectName,
+        clockInTime: session.clockInTime,
+        clockOutTime: session.clockOutTime,
+        hours: round2((effectiveStopMs - effectiveStartMs) / 3_600_000),
+        amount: 0,
+      };
+    })
+    .filter((item): item is PayrollArchiveShift => item !== null)
+    .sort((left, right) => new Date(left.clockInTime).getTime() - new Date(right.clockInTime).getTime());
+
+  const totalHours = details.reduce((sum, item) => sum + item.hours, 0);
+  if (totalHours <= 0) return details;
+
+  let allocated = 0;
+  return details.map((detail, index) => {
+    const amount = index === details.length - 1
+      ? round2(args.grossPaid - allocated)
+      : round2(args.grossPaid * (detail.hours / totalHours));
+    allocated = round2(allocated + amount);
+    return { ...detail, amount };
+  });
+}
+
 function upsertArchiveRow(
   rows: Map<string, PayrollArchiveWorkerYear>,
   profilesById: ReadonlyMap<string, Profile>,
@@ -446,10 +554,12 @@ export function buildPaidPayrollArchive(
     payPeriodItems: PayPeriodItemRow[];
     payrollRuns: PayrollRun[];
     payrollLineItems: PayrollLineItem[];
+    sessions?: ManagerSession[];
   },
   options: { includeFinancials: boolean },
 ): PayrollArchiveSummary {
   const includeFinancials = options.includeFinancials;
+  const sessions = input.sessions ?? [];
   const profilesById = new Map(input.profiles.map((profile) => [profile.id, profile]));
   const projectsById = new Map(input.projects.map((project) => [project.id, project]));
   const periodsById = new Map(input.payPeriods.map((period) => [period.id, period]));
@@ -472,6 +582,15 @@ export function buildPaidPayrollArchive(
     if (periodIdsBackedByLedger.has(period.id)) continue;
     const hours = round2(toNumber(item.regular_hours) + toNumber(item.overtime_hours));
     const grossPaid = includeFinancials ? round2(toNumber(item.gross_total)) : 0;
+    const shiftDetails = buildPayrollArchiveShiftDetails({
+      sessions,
+      workerId: item.worker_id,
+      projectId: null,
+      projectName: null,
+      startDate: period.start_date,
+      endDate: period.end_date,
+      grossPaid,
+    });
     upsertArchiveRow(
       rows,
       profilesById,
@@ -488,6 +607,7 @@ export function buildPaidPayrollArchive(
         projectNames: [],
         source: "pay_period_items",
         href: getPayPeriodHref(period.id),
+        shiftDetails,
       },
       includeFinancials,
     );
@@ -503,6 +623,17 @@ export function buildPaidPayrollArchive(
     const projectName = item.project_id ? projectsById.get(item.project_id)?.name : null;
     const hours = round2(toNumber(item.hours));
     const grossPaid = includeFinancials ? round2(toNumber(item.amount)) : 0;
+    const shiftDetails = buildPayrollArchiveShiftDetails({
+      sessions,
+      workerId: item.profile_id,
+      projectId: item.project_id,
+      projectName: projectName ?? null,
+      startDate: linkedPeriod?.start_date ?? run.period_start,
+      endDate: linkedPeriod?.end_date ?? run.period_end,
+      grossPaid,
+      sessionIds: stringArray((item.metadata as Record<string, unknown> | null)?.session_ids),
+      eventIds: stringArray(item.event_ids),
+    });
     upsertArchiveRow(
       rows,
       profilesById,
@@ -519,6 +650,7 @@ export function buildPaidPayrollArchive(
         projectNames: projectName ? [projectName] : [],
         source: "payroll_line_items",
         href: linkedPeriod ? getPayPeriodHref(linkedPeriod.id) : getPayrollRunHref(run.id),
+        shiftDetails,
       },
       includeFinancials,
     );

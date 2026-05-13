@@ -32,6 +32,7 @@ describe("annual report helpers", () => {
               projectNames: ["Home"],
               source: "payroll_line_items",
               href: "/payroll?period=jan",
+              shiftDetails: [],
             },
             {
               id: "shop-line",
@@ -46,6 +47,7 @@ describe("annual report helpers", () => {
               projectNames: ["Shop"],
               source: "payroll_line_items",
               href: "/payroll?period=feb",
+              shiftDetails: [],
             },
           ],
         },
