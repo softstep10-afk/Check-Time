@@ -1072,6 +1072,13 @@ export function PayrollCalculator({
     return false;
   }
 
+  function payrollLedgerErrorMessage(message: string): string {
+    if (message.includes("payroll_overlap")) {
+      return t("payroll.alreadyPaidDbBlock");
+    }
+    return `${t("payroll.ledgerMirrorFailed")}: ${message}`;
+  }
+
   async function markAllPaid() {
     if (!period || payrollActionBusy) return;
     setPayrollActionBusy(true);
@@ -1109,7 +1116,7 @@ export function PayrollCalculator({
           period.lines.map((l) => l.workerId),
         );
         if (mirrorErr) {
-          setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+          setError(payrollLedgerErrorMessage(mirrorErr));
           return;
         }
       }
@@ -1197,7 +1204,7 @@ export function PayrollCalculator({
         if (nextStatus === "paid") {
           const mirrorErr = await mirrorPaidToPayrollLedger(ids);
           if (mirrorErr) {
-            setError(`${t("payroll.ledgerMirrorFailed")}: ${mirrorErr}`);
+            setError(payrollLedgerErrorMessage(mirrorErr));
             return;
           }
         }
