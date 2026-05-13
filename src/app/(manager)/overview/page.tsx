@@ -42,6 +42,10 @@ import {
 } from "@/lib/shift-review";
 import { createClient } from "@/lib/supabase/server";
 import { hasFinanceAccess } from "@/lib/finance-access";
+import {
+  buildCommandCenterQueue,
+  type CommandCenterActionItem,
+} from "@/lib/command-center";
 
 // 0 = force-dynamic. F5 must always fetch the current state of time_events,
 // projects, tasks, media; OverviewLiveIndicator still pushes router.refresh()
@@ -299,7 +303,7 @@ export default async function OverviewPage() {
     sinceIso: todayStartIso,
   });
   const workersWithGaps = new Set(travelGaps.map((g) => g.profileId));
-  const allActionItems = [
+  const commandCandidates: CommandCenterActionItem[] = [
     ...onSiteSessions
       .map((session) => {
         const review = shiftReviewByProfileId.get(session.profileId);
@@ -315,7 +319,7 @@ export default async function OverviewPage() {
           title: session.profileName,
           detail: `${session.projectName} · ${formatDurationCompact(session.todayMinutes)} · ${reasonLabels || shiftReviewLabel[review.status]}`,
           href: `/team/${session.profileId}`,
-          severity: isCritical ? 0 : 1,
+          severity: isCritical ? 0 as const : 1 as const,
           color: isCritical ? "var(--red)" : "#f59e0b",
         };
       })
@@ -330,7 +334,7 @@ export default async function OverviewPage() {
         title: session.profileName,
         detail: `${session.projectName} · ${formatDurationCompact(session.durationMinutes)} · ${reasonLabels}`,
         href: `/team/${session.profileId}`,
-        severity: 0,
+        severity: 0 as const,
         color: "var(--red)",
       };
     }),
@@ -340,7 +344,7 @@ export default async function OverviewPage() {
       title: gap.workerName,
       detail: `${gap.fromProject} → ${gap.toProject} · ${formatDurationCompact(gap.gapMinutes)}`,
       href: `/team/${gap.profileId}`,
-      severity: gap.severity === "critical" ? 0 : 1,
+      severity: gap.severity === "critical" ? 0 as const : 1 as const,
       color: TRANSFER_GAP_COLOR[gap.severity],
     })),
     ...urgentTasks
@@ -353,21 +357,21 @@ export default async function OverviewPage() {
           title: task.title,
           detail: `${project?.name ?? t("common.generalTask")} · ${task.status}`,
           href: task.project_id ? `/projects/${task.project_id}#tasks` : "/tasks",
-          severity: task.priority === "urgent" ? 0 : 1,
+          severity: task.priority === "urgent" ? 0 as const : 1 as const,
           color: task.priority === "urgent" ? "var(--red)" : "#f59e0b",
         };
       }),
-  ]
-    .sort((left, right) => left.severity - right.severity);
-  const actionItems = allActionItems.slice(0, 6);
-  const criticalActionCount = allActionItems.filter((item) => item.severity === 0).length;
+  ];
+  const commandQueue = buildCommandCenterQueue(commandCandidates, { limit: 6 });
+  const actionItems = commandQueue.visibleItems;
+  const criticalActionCount = commandQueue.criticalCount;
   const highPriorityTaskCount = urgentTasks.filter((task) => (
     task.priority === "urgent" || task.priority === "high"
   )).length;
   const projectsWithCrewCount = projectSummaries.filter((project) => (
     project.onSiteWorkerCount > 0
   )).length;
-  const primaryAction = allActionItems[0] ?? null;
+  const primaryAction = commandQueue.primaryAction;
 
   // ── Unified event feed (last 15) ──
   const profilesById = new Map(data.profiles.map((p) => [p.id, p]));
