@@ -1256,6 +1256,28 @@ export function PayrollCalculator({
       ),
     [profiles],
   );
+  const payrollWorkerOptions = useMemo(
+    () =>
+      profiles
+        .filter((profile) =>
+          profile.role === "worker" ||
+          profile.role === "supervisor" ||
+          profile.role === "driver" ||
+          profile.role === "subcontractor",
+        )
+        .map((profile) => ({
+          id: profile.id,
+          label: formatWorkerDisplayLabel(
+            {
+              id: profile.id,
+              name: profile.name,
+              role: profile.role,
+            },
+            workerLabels.get(profile.id),
+          ),
+        })),
+    [profiles, workerLabels],
+  );
 
   // Pay/$ columns follow the same finance gate as the page itself:
   // owner/admin or explicit finance_access. Manager-tier roles without
@@ -1411,6 +1433,29 @@ export function PayrollCalculator({
             >
               {t("payroll.newPeriod")}
             </button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(240px,360px)_1fr]">
+          <label className="block">
+            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("payroll.workerFilterLabel")}
+            </span>
+            <select
+              value={workerFilter}
+              onChange={(event) => setWorkerFilter(event.target.value)}
+              className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              aria-label={t("payroll.workerFilterLabel")}
+            >
+              <option value="">{t("payroll.workerFilterAll")}</option>
+              {payrollWorkerOptions.map((worker) => (
+                <option key={worker.id} value={worker.id}>
+                  {worker.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="self-end text-xs text-[var(--text-secondary)]">
+            {t("payroll.workerFilterCreateHint")}
           </div>
         </div>
 

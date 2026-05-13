@@ -1005,6 +1005,10 @@ export const translations = {
   "payroll.workerFilterLabel": { en: "Worker", ru: "Работник" },
   "payroll.workerFilterAll": { en: "All workers", ru: "Все работники" },
   "payroll.workerFilterActive": { en: "Filter active", ru: "Фильтр активен" },
+  "payroll.workerFilterCreateHint": {
+    en: "Choose a worker before creating a period to build payroll for just that person.",
+    ru: "Выберите работника до создания периода, чтобы собрать зарплату только по нему.",
+  },
   "payroll.reviewModeByWorker": { en: "By worker", ru: "По работникам" },
   "payroll.reviewModeChronology": { en: "Chronology", ru: "Хронология" },
   "payroll.expandShifts": { en: "Show shifts", ru: "Показать смены" },
