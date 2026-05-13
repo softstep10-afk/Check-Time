@@ -70,6 +70,7 @@ describe("deriveWorkerHourBuckets", () => {
     expect(result.todayMinutes).toBe(0);
     expect(result.yesterdayMinutes).toBe(0);
     expect(result.currentWeekMinutes).toBe(0);
+    expect(result.lastTwoWeeksMinutes).toBe(0);
     expect(result.previousWeekMinutes).toBe(0);
     expect(result.currentMonthMinutes).toBe(0);
     expect(result.totalWorkedMinutes).toBe(0);
@@ -101,6 +102,8 @@ describe("deriveWorkerHourBuckets", () => {
     expect(result.yesterdayMinutes).toBe(480);
     // current week = today (240) + yesterday (480) + monday (360) = 1080
     expect(result.currentWeekMinutes).toBe(1080);
+    // last 14 calendar days includes April 1-8, excludes March 15
+    expect(result.lastTwoWeeksMinutes).toBe(240 + 480 + 360 + 480 + 480);
     // previous week = thursday 4-02 (480) + 4-01 wednesday (480) = 960
     expect(result.previousWeekMinutes).toBe(960);
     // april sessions only (excludes 2026-03-15)

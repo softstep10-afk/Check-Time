@@ -1,11 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
 import {
   formatDateTime,
   formatDurationCompact,
   formatEventDate,
 } from "@/lib/worker-utils";
+import { deriveWorkerHourBuckets } from "@/lib/worker-hour-summary";
 import { useTranslation } from "@/lib/i18n";
 
 export function HoursPage() {
@@ -20,6 +22,23 @@ export function HoursPage() {
       return groups;
     },
     new Map(),
+  );
+  const hourBuckets = useMemo(
+    () =>
+      deriveWorkerHourBuckets({
+        sessions: shell.sessions.map((session) => ({
+          clockInTime: session.clockInTime,
+          clockOutTime: session.clockOutTime,
+          durationMinutes: session.durationMinutes,
+        })),
+        adjustments: shell.adjustments.map((adjustment) => ({
+          eventTime: adjustment.eventTime,
+          minutes: adjustment.minutes,
+          reason: adjustment.reason,
+          kind: adjustment.kind,
+        })),
+      }),
+    [shell.sessions, shell.adjustments],
   );
 
   return (
@@ -65,21 +84,80 @@ export function HoursPage() {
       </section>
 
       <section className="surface-card p-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="metric-panel rounded-[var(--radius-md)] p-3">
             <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
               {t("common.today")}
             </div>
             <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
-              {formatDurationCompact(shell.summary.todayMinutes)}
+              {formatDurationCompact(hourBuckets.todayMinutes)}
             </div>
           </div>
           <div className="metric-panel rounded-[var(--radius-md)] p-3">
             <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-              {t("common.thisWeek")}
+              {t("hours.currentWeek")}
             </div>
             <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
-              {formatDurationCompact(shell.summary.weekMinutes)}
+              {formatDurationCompact(hourBuckets.currentWeekMinutes)}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("hours.lastTwoWeeks")}
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
+              {formatDurationCompact(hourBuckets.lastTwoWeeksMinutes)}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("hours.currentMonth")}
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
+              {formatDurationCompact(hourBuckets.currentMonthMinutes)}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("hours.totalWorked")}
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold text-[var(--text-primary)]">
+              {formatDurationCompact(hourBuckets.totalWorkedMinutes)}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--green)" }}>
+              {t("hours.paidClosed")}
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold" style={{ color: "var(--green)" }}>
+              {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--brand-yellow)" }}>
+              {t("hours.unpaidOpen")}
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold" style={{ color: "var(--brand-yellow)" }}>
+              {formatDurationCompact(hourBuckets.unpaidMinutes)}
+            </div>
+          </div>
+          <div className="metric-panel rounded-[var(--radius-md)] p-3">
+            <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+              {t("hours.adjustmentsTotal")}
+            </div>
+            <div
+              className="mt-1 font-mono text-xl font-bold"
+              style={{
+                color:
+                  hourBuckets.adjustmentsTotalMinutes < 0
+                    ? "var(--red)"
+                    : hourBuckets.adjustmentsTotalMinutes > 0
+                      ? "var(--green)"
+                      : "var(--text-primary)",
+              }}
+            >
+              {hourBuckets.adjustmentsTotalMinutes >= 0 ? "+" : "−"}
+              {formatDurationCompact(Math.abs(hourBuckets.adjustmentsTotalMinutes))}
             </div>
           </div>
         </div>

@@ -1027,6 +1027,7 @@ export function ProjectDetailPage({
     form.reset();
     setTaskAttachmentFiles([]);
     if (taskAttachmentInputRef.current) taskAttachmentInputRef.current.value = "";
+    setTaskComposerOpen(false);
     setBusyKey(null);
     setMessage(t("projectDetail.taskCreated"));
     router.refresh();

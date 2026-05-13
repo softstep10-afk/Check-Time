@@ -53,7 +53,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       .select("*")
       .eq("profile_id", user.id)
       .order("event_time", { ascending: false })
-      .limit(160)
+      .limit(500)
       .returns<TimeEvent[]>(),
     supabase
       .from("tasks")
@@ -335,6 +335,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
         eventTime: event.event_time,
         minutes: Number.isFinite(minutes) ? minutes : 0,
         reason: typeof meta?.reason === "string" ? meta.reason : "",
+        kind: typeof meta?.kind === "string" ? meta.kind : null,
       };
     });
 

@@ -94,6 +94,7 @@ export interface WorkerAdjustmentItem {
   eventTime: string;
   minutes: number;
   reason: string;
+  kind: string | null;
 }
 
 export interface WorkerShellData {

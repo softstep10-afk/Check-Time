@@ -14,7 +14,10 @@ import {
   TRANSFER_GAP_COLOR,
   type TransferGap,
 } from "@/lib/manager-utils";
-import { deriveWorkerHourBuckets } from "@/lib/worker-hour-summary";
+import {
+  deriveWorkerHourBuckets,
+  isPaidOrClosedAdjustment,
+} from "@/lib/worker-hour-summary";
 import type { Media, ProjectAssignment, Task, UserRole } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
 import { ArrowRight, Camera, Store } from "lucide-react";
@@ -93,6 +96,9 @@ export function TeamMemberPage({
   currentShiftReview: ShiftReview | null;
   transferGaps: TransferGap[];
   workerAdjustments: Array<{
+    id: string;
+    projectId: string;
+    projectName: string | null;
     eventTime: string;
     minutes: number;
     reason: string;
@@ -109,6 +115,7 @@ export function TeamMemberPage({
   const [showAdjustForm, setShowAdjustForm] = useState(false);
   const [adjustSign, setAdjustSign] = useState<"+" | "-">("+");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showUnpaidBreakdown, setShowUnpaidBreakdown] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   // Journal-timeline gallery drawer (open via "Open gallery" near the
@@ -202,14 +209,6 @@ export function TeamMemberPage({
     anchor.remove();
   }
 
-  const unpaidMinutes = useMemo(() => {
-    let total = 0;
-    for (const session of sessions) {
-      if (session.clockOutTime) total += session.durationMinutes;
-    }
-    return total;
-  }, [sessions]);
-  const unpaidHours = Math.round((unpaidMinutes / 60) * 100) / 100;
   const closedProblemShifts = useMemo(
     () =>
       sessions.filter(
@@ -256,12 +255,12 @@ export function TeamMemberPage({
     return [...seen.entries()].map(([id, name]) => ({ id, name }));
   }, [media]);
 
-  // Hour buckets for the new "Hour summary" panel below profile
+  // Hour buckets for the "Hour summary" panel below profile
   // settings. Pulls from this worker's sessions + adjustments — the
-  // helper keeps the today / yesterday / week / month / month math in
+  // helper keeps the today / yesterday / week / month math in
   // one tested place. We deliberately recompute on every render
   // because the boundaries shift across midnight; the worker
-  // typically has at most ~20 sessions in scope.
+  // detail route feeds this component the full history for this worker.
   const hourBuckets = useMemo(
     () =>
       deriveWorkerHourBuckets({
@@ -273,6 +272,21 @@ export function TeamMemberPage({
         adjustments: workerAdjustments,
       }),
     [sessions, workerAdjustments],
+  );
+  const unpaidMinutes = hourBuckets.unpaidMinutes;
+  const unpaidHours = Math.round((unpaidMinutes / 60) * 100) / 100;
+  const sessionMinutes = useMemo(
+    () =>
+      sessions.reduce(
+        (sum, session) => sum + session.durationMinutes,
+        0,
+      ),
+    [sessions],
+  );
+  const sessionRows = sessions;
+  const adjustmentRows = useMemo(
+    () => workerAdjustments.filter((adjustment) => adjustment.minutes !== 0),
+    [workerAdjustments],
   );
 
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
@@ -1101,7 +1115,7 @@ export function TeamMemberPage({
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("common.week")}</div>
                 <div className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                  {formatDurationCompact(profile.weekMinutes)}
+                  {formatDurationCompact(hourBuckets.currentWeekMinutes)}
                 </div>
               </div>
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
@@ -1192,7 +1206,7 @@ export function TeamMemberPage({
             <p className="mt-1 text-xs text-[var(--text-muted)]">
               {t("teamMember.hourSummaryHint")}
             </p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <div className="mt-3 grid gap-2 sm:grid-cols-4">
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
                 <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
                   {t("teamMember.bucketToday")}
@@ -1215,6 +1229,14 @@ export function TeamMemberPage({
                 </div>
                 <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
                   {formatDurationCompact(hourBuckets.currentWeekMinutes)}
+                </div>
+              </div>
+              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
+                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {t("teamMember.bucketLastTwoWeeks")}
+                </div>
+                <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                  {formatDurationCompact(hourBuckets.lastTwoWeeksMinutes)}
                 </div>
               </div>
               <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
@@ -1242,9 +1264,9 @@ export function TeamMemberPage({
                 </div>
               </div>
             </div>
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {hasFinanceAccess ? (
-                <>
+            {hasFinanceAccess ? (
+              <>
+                <div className="mt-3 grid gap-2 sm:grid-cols-4">
                   <div
                     className="rounded-[var(--radius-md)] p-3"
                     style={{ background: "rgba(15, 168, 120, 0.10)" }}
@@ -1256,9 +1278,14 @@ export function TeamMemberPage({
                       {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
                     </div>
                   </div>
-                  <div
-                    className="rounded-[var(--radius-md)] p-3"
-                    style={{ background: "rgba(191, 162, 52, 0.10)" }}
+                  <button
+                    type="button"
+                    onClick={() => setShowUnpaidBreakdown((open) => !open)}
+                    className="rounded-[var(--radius-md)] p-3 text-left transition-colors hover:border-[var(--brand-yellow)]"
+                    style={{
+                      background: "rgba(191, 162, 52, 0.10)",
+                      border: "1px solid rgba(191, 162, 52, 0.24)",
+                    }}
                   >
                     <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--brand-yellow)" }}>
                       {t("teamMember.bucketUnpaid")}
@@ -1266,29 +1293,201 @@ export function TeamMemberPage({
                     <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
                       {formatDurationCompact(hourBuckets.unpaidMinutes)}
                     </div>
+                    <div className="mt-2 text-[10px] font-semibold text-[var(--text-secondary)]">
+                      {showUnpaidBreakdown
+                        ? t("teamMember.hideUnpaidBreakdown")
+                        : t("teamMember.showUnpaidBreakdown")}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowUnpaidBreakdown((open) => !open)}
+                    className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-left transition-colors hover:border-[var(--brand-yellow)]"
+                    style={{ border: "1px solid var(--border-default)" }}
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t("teamMember.bucketAdjustments")}
+                    </div>
+                    <div
+                      className="mt-1 font-mono text-sm font-bold"
+                      style={{
+                        color:
+                          hourBuckets.adjustmentsTotalMinutes < 0
+                            ? "var(--red)"
+                            : hourBuckets.adjustmentsTotalMinutes > 0
+                              ? "var(--green)"
+                              : "var(--text-primary)",
+                      }}
+                    >
+                      {hourBuckets.adjustmentsTotalMinutes >= 0 ? "+" : "−"}
+                      {formatDurationCompact(Math.abs(hourBuckets.adjustmentsTotalMinutes))}
+                    </div>
+                    {adjustmentRows.length > 0 ? (
+                      <div className="mt-2 text-[10px] text-[var(--text-secondary)]">
+                        {adjustmentRows.length} {t("hours.entries")}
+                      </div>
+                    ) : null}
+                  </button>
+                  <Link
+                    href={`/payroll?worker=${profile.id}&preset=thisMonth`}
+                    className="flex rounded-[var(--radius-md)] p-3 transition-colors hover:border-[var(--brand-yellow)]"
+                    style={{
+                      background: "rgba(191, 162, 52, 0.16)",
+                      border: "1px solid rgba(191, 162, 52, 0.3)",
+                      color: "var(--brand-yellow)",
+                    }}
+                  >
+                    <span className="flex w-full flex-col">
+                      <span className="text-[10px] uppercase tracking-[0.16em]">
+                        {t("teamMember.payOff")}
+                      </span>
+                      <span className="mt-1 text-sm font-bold text-[var(--text-primary)]">
+                        {t("teamMember.openPayrollForWorker")}
+                      </span>
+                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
+                        {t("payroll.thisMonth")}
+                        <ArrowRight size={12} />
+                      </span>
+                    </span>
+                  </Link>
+                </div>
+
+                {showUnpaidBreakdown ? (
+                  <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-[var(--text-primary)]">
+                          {t("teamMember.unpaidBreakdownTitle")}
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">
+                          {t("teamMember.unpaidBreakdownHint")}
+                        </p>
+                      </div>
+                      <Link
+                        href={`/payroll?worker=${profile.id}&preset=thisMonth`}
+                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold"
+                        style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+                      >
+                        {t("teamMember.payOff")}
+                        <ArrowRight size={13} />
+                      </Link>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-[var(--radius-sm)] bg-[rgba(255,255,255,0.03)] p-2">
+                        <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                          {t("teamMember.breakdownClosedShifts")}
+                        </div>
+                        <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                          {formatDurationCompact(sessionMinutes)}
+                        </div>
+                      </div>
+                      <div className="rounded-[var(--radius-sm)] bg-[rgba(15,168,120,0.10)] p-2">
+                        <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "var(--green)" }}>
+                          {t("teamMember.breakdownPaidAdjustments")}
+                        </div>
+                        <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
+                          {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
+                        </div>
+                      </div>
+                      <div className="rounded-[var(--radius-sm)] bg-[rgba(191,162,52,0.10)] p-2">
+                        <div className="text-[10px] uppercase tracking-[0.14em]" style={{ color: "var(--brand-yellow)" }}>
+                          {t("teamMember.breakdownOpenBalance")}
+                        </div>
+                        <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
+                          {formatDurationCompact(hourBuckets.unpaidMinutes)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 xl:grid-cols-2">
+                      <div>
+                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                          {t("teamMember.breakdownShiftRows")}
+                        </div>
+                        <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                          {sessionRows.length === 0 ? (
+                            <div className="rounded-[var(--radius-sm)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                              {t("teamMember.noShifts")}
+                            </div>
+                          ) : (
+                            sessionRows.map((session) => (
+                              <button
+                                key={`breakdown-${session.id}`}
+                                type="button"
+                                onClick={() => setDayDetailDate(session.clockInTime.slice(0, 10))}
+                                className="flex w-full items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-left hover:border-[var(--brand-yellow)]"
+                              >
+                                <span className="min-w-0">
+                                  <span className="block truncate text-xs font-semibold text-[var(--text-primary)]">
+                                    {session.projectName}
+                                  </span>
+                                  <span className="block text-[10px] text-[var(--text-muted)]">
+                                    {formatDateTime(session.clockInTime)}
+                                    {session.clockOutTime
+                                      ? ` - ${formatDateTime(session.clockOutTime)}`
+                                      : ` - ${t("common.live").toLowerCase()}`}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 font-mono text-xs font-bold text-[var(--text-primary)]">
+                                  {formatDurationCompact(session.durationMinutes)}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                          {t("teamMember.breakdownAdjustmentRows")}
+                        </div>
+                        <div className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                          {adjustmentRows.length === 0 ? (
+                            <div className="rounded-[var(--radius-sm)] bg-[rgba(255,255,255,0.03)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                              {t("teamMember.noAdjustments")}
+                            </div>
+                          ) : (
+                            adjustmentRows.map((adjustment) => {
+                              const positive = adjustment.minutes >= 0;
+                              const paidClosed = isPaidOrClosedAdjustment(adjustment);
+                              return (
+                                <div
+                                  key={adjustment.id}
+                                  className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0">
+                                      <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
+                                        {adjustment.projectName ?? t("common.general")}
+                                      </div>
+                                      <div className="mt-0.5 text-[10px] text-[var(--text-muted)]">
+                                        {formatDateTime(adjustment.eventTime)}
+                                        {paidClosed ? ` - ${t("teamMember.bucketPaidClosed")}` : ""}
+                                      </div>
+                                      {adjustment.reason ? (
+                                        <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                                          {adjustment.reason}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                    <span
+                                      className="shrink-0 whitespace-nowrap font-mono text-xs font-bold"
+                                      style={{ color: positive ? "var(--green)" : "var(--red)" }}
+                                    >
+                                      {positive ? "+" : "−"}
+                                      {formatDurationCompact(Math.abs(adjustment.minutes))}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </>
-              ) : null}
-              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
-                <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {t("teamMember.bucketAdjustments")}
-                </div>
-                <div
-                  className="mt-1 font-mono text-sm font-bold"
-                  style={{
-                    color:
-                      hourBuckets.adjustmentsTotalMinutes < 0
-                        ? "var(--red)"
-                        : hourBuckets.adjustmentsTotalMinutes > 0
-                          ? "var(--green)"
-                          : "var(--text-primary)",
-                  }}
-                >
-                  {hourBuckets.adjustmentsTotalMinutes >= 0 ? "+" : "−"}
-                  {formatDurationCompact(Math.abs(hourBuckets.adjustmentsTotalMinutes))}
-                </div>
-              </div>
-            </div>
+                ) : null}
+              </>
+            ) : null}
           </div>
 
           <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
@@ -2085,7 +2284,7 @@ export function TeamMemberPage({
         sessions={sessions}
         tasks={tasks}
         media={media}
-        adjustments={[]}
+        adjustments={workerAdjustments}
         onClose={() => setDayDetailDate(null)}
       />
 

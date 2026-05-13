@@ -16,7 +16,7 @@ import {
 } from "@/lib/manager-utils";
 import { deriveGpsFreshness } from "@/lib/gps-freshness";
 import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
-import type { Media } from "@/types/database";
+import type { Media, TimeEvent } from "@/types/database";
 
 // F5 must reflect the worker's latest shifts, tasks, and media.
 export const revalidate = 0;
@@ -53,12 +53,30 @@ export default async function TeamMemberRoutePage({
   const tasks = getActiveOperationalTasks(data.tasks, data.projects)
     .filter((task) => task.assigned_to === id)
     .slice(0, 20);
-  const allWorkerSessions = activeSessions.filter((session) => session.profileId === id);
-  const workerSessions = allWorkerSessions.slice(0, 20);
+  const { data: workerTimeEvents, error: workerTimeEventsError } = await supabase
+    .from("time_events")
+    .select("*")
+    .eq("profile_id", id)
+    .order("event_time", { ascending: false })
+    .range(0, 4999)
+    .returns<TimeEvent[]>();
 
-  // Build clock_in event lookup (events come from getTeamPageData — last 14 days).
+  if (workerTimeEventsError) {
+    throw new Error(`Worker time events query failed: ${workerTimeEventsError.message}`);
+  }
+
+  // The roster page only needs a recent team-wide slice. This detail page
+  // is the audit surface for one worker, so it pulls that worker's full
+  // event history and keeps old reset/payment adjustments visible.
+  const workerEvents = workerTimeEvents ?? [];
+  const workerWorkspaceData = { ...data, timeEvents: workerEvents };
+  const allWorkerSessions = buildManagerSessions(workerWorkspaceData)
+    .filter((session) => session.profileId === id);
+  const workerSessions = allWorkerSessions;
+
+  // Build clock_in event lookup from the worker's full event history.
   const clockInById = new Map<string, (typeof data.timeEvents)[number]>();
-  for (const e of data.timeEvents) {
+  for (const e of workerEvents) {
     if (e.event_type === "clock_in") clockInById.set(e.id, e);
   }
   const hasGpsBySessionId: Record<string, boolean> = {};
@@ -101,7 +119,6 @@ export default async function TeamMemberRoutePage({
 
   // Closed store visits in the last 7 days, newest first.
   // Date.now() is fine here — server component, runs once per request.
-  // eslint-disable-next-line react-hooks/purity
   const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const workerStoreVisits = data.storeVisits
     .filter(
@@ -136,7 +153,7 @@ export default async function TeamMemberRoutePage({
   // signal. Scope to the same 7-day window the rest of the page uses
   // so a worker with no recent activity doesn't show stale alerts.
   const transferGaps = detectTransferGaps({
-    timeEvents: data.timeEvents.filter((event) => activeProjectIds.has(event.project_id)),
+    timeEvents: workerEvents.filter((event) => activeProjectIds.has(event.project_id)),
     projects: getActiveOperationalProjects(data.projects),
     profiles: data.profiles,
     profileId: id,
@@ -148,12 +165,15 @@ export default async function TeamMemberRoutePage({
   // "Period closed, hours paid" reset (Vasya regression) as a paid /
   // closed bucket so the manager can see it instead of staring at a
   // 0m current-week and wondering where the hours went.
-  const workerAdjustments = data.timeEvents
+  const workerAdjustments = workerEvents
     .filter((event) => event.event_type === "adjust" && event.profile_id === id)
     .map((event) => {
       const meta = (event.metadata ?? {}) as Record<string, unknown>;
       const minutes = Number(meta.adjustMinutes ?? 0);
       return {
+        id: event.id,
+        projectId: event.project_id,
+        projectName: projectsById.get(event.project_id) ?? null,
         eventTime: event.event_time,
         minutes: Number.isFinite(minutes) ? minutes : 0,
         reason: typeof meta.reason === "string" ? meta.reason : "",

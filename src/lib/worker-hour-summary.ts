@@ -66,6 +66,8 @@ export interface WorkerHourBuckets {
   yesterdayMinutes: number;
   /** Sessions whose clockInTime falls in the current Mon–Sun window. */
   currentWeekMinutes: number;
+  /** Sessions whose clockInTime falls in the last 14 calendar days. */
+  lastTwoWeeksMinutes: number;
   /** Sessions whose clockInTime falls in the previous Mon–Sun window. */
   previousWeekMinutes: number;
   /** Sessions whose clockInTime falls in the current calendar month. */
@@ -151,6 +153,8 @@ export function deriveWorkerHourBuckets(args: {
   const yesterdayStart = new Date(todayStart);
   yesterdayStart.setDate(todayStart.getDate() - 1);
   const currentWeekStart = startOfMondayWeek(now);
+  const lastTwoWeeksStart = new Date(todayStart);
+  lastTwoWeeksStart.setDate(todayStart.getDate() - 13);
   const previousWeekStart = new Date(currentWeekStart);
   previousWeekStart.setDate(previousWeekStart.getDate() - 7);
   const currentMonthStart = startOfMonth(now);
@@ -158,6 +162,7 @@ export function deriveWorkerHourBuckets(args: {
   let todayMinutes = 0;
   let yesterdayMinutes = 0;
   let currentWeekMinutes = 0;
+  let lastTwoWeeksMinutes = 0;
   let previousWeekMinutes = 0;
   let currentMonthMinutes = 0;
   let totalWorkedMinutes = 0;
@@ -175,6 +180,9 @@ export function deriveWorkerHourBuckets(args: {
       currentWeekMinutes += minutes;
     } else if (inDate >= previousWeekStart) {
       previousWeekMinutes += minutes;
+    }
+    if (inDate >= lastTwoWeeksStart) {
+      lastTwoWeeksMinutes += minutes;
     }
     if (inDate >= currentMonthStart) {
       currentMonthMinutes += minutes;
@@ -209,6 +217,7 @@ export function deriveWorkerHourBuckets(args: {
     todayMinutes,
     yesterdayMinutes,
     currentWeekMinutes,
+    lastTwoWeeksMinutes,
     previousWeekMinutes,
     currentMonthMinutes,
     totalWorkedMinutes,

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Calculator, Download, Plus, X } from "lucide-react";
@@ -391,6 +391,7 @@ export function PayrollCalculator({
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
+  const queryPresetAppliedRef = useRef(false);
   const [showNewPeriod, setShowNewPeriod] = useState(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -500,6 +501,32 @@ export function PayrollCalculator({
     const periodId = searchParams.get("period");
     if (periodId) void loadPeriod(periodId);
   }, [searchParams, loadPeriod]);
+
+  useEffect(() => {
+    const workerId = searchParams.get("worker");
+    if (!workerId) return;
+    if (!profiles.some((profile) => profile.id === workerId)) return;
+    setWorkerFilter((current) => (current === workerId ? current : workerId));
+  }, [searchParams, profiles]);
+
+  useEffect(() => {
+    const preset = searchParams.get("preset");
+    if (
+      queryPresetAppliedRef.current ||
+      period ||
+      (preset !== "lastWeek" && preset !== "last2Weeks" && preset !== "thisMonth")
+    ) {
+      return;
+    }
+    const dates = presetDates(preset);
+    const periodTypeForPreset: PeriodType =
+      preset === "lastWeek" ? "weekly" : preset === "last2Weeks" ? "biweekly" : "monthly";
+    setStartDate(dates.start);
+    setEndDate(dates.end);
+    setPeriodType(periodTypeForPreset);
+    setShowNewPeriod(true);
+    queryPresetAppliedRef.current = true;
+  }, [searchParams, period]);
 
   function handlePreset(preset: string) {
     const dates = presetDates(preset);
@@ -1554,6 +1581,13 @@ export function PayrollCalculator({
                           )}
                         </option>
                       ))}
+                    {workerFilter &&
+                    !period.lines.some((line) => line.workerId === workerFilter) ? (
+                      <option value={workerFilter}>
+                        {profiles.find((profile) => profile.id === workerFilter)?.name ??
+                          workerFilter.slice(0, 8)}
+                      </option>
+                    ) : null}
                   </select>
                   {workerFilter ? (
                     <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.12)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand-yellow)]">
