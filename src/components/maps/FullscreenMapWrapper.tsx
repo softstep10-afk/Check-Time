@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 import {
@@ -8,7 +8,23 @@ import {
   type ActiveWorkerMarker,
 } from "@/components/maps/ProjectsStatusMap";
 import { isProjectOnActiveMap } from "@/lib/map-constants";
+import { useTranslation } from "@/lib/i18n";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
+
+const COPY = {
+  en: {
+    title: "Projects and crew map",
+    close: "Close",
+    expand: "Fullscreen",
+    expandTitle: "Open map fullscreen",
+  },
+  ru: {
+    title: "Карта объектов и бригады",
+    close: "Закрыть",
+    expand: "На весь экран",
+    expandTitle: "Развернуть карту",
+  },
+} as const;
 
 export function FullscreenMapWrapper({
   projects,
@@ -18,12 +34,17 @@ export function FullscreenMapWrapper({
   activeWorkers?: ActiveWorkerMarker[];
 }) {
   const [fullscreen, setFullscreen] = useState(false);
+  const { locale } = useTranslation();
+  const text = COPY[locale];
 
   // Active map should ignore archived/deleted/completed projects so the
   // manager only sees operational sites. ProjectsStatusMap also filters
   // defensively; the duplicate is intentional in case a future caller
   // passes its own dataset straight into ProjectsStatusMap.
-  const filteredProjects = projects.filter(isProjectOnActiveMap);
+  const filteredProjects = useMemo(
+    () => projects.filter(isProjectOnActiveMap),
+    [projects],
+  );
 
   // The fullscreen overlay is portaled into document.body so it escapes
   // any transform / filter / contain ancestor that would otherwise pin
@@ -43,7 +64,7 @@ export function FullscreenMapWrapper({
         style={{ background: "#181c27", borderBottom: "1px solid #2a3045" }}
       >
         <span className="font-bold text-[var(--text-primary)]">
-          Карта объектов и бригады
+          {text.title}
         </span>
         <button
           type="button"
@@ -56,7 +77,7 @@ export function FullscreenMapWrapper({
           }}
         >
           <X size={14} />
-          Закрыть
+          {text.close}
         </button>
       </div>
       <div className="relative flex-1">
@@ -83,7 +104,7 @@ export function FullscreenMapWrapper({
         <button
           type="button"
           onClick={() => setFullscreen(true)}
-          title="Развернуть карту"
+          title={text.expandTitle}
           className="absolute right-2 top-2 z-10 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold"
           style={{
             background: "rgba(15,17,23,0.85)",
@@ -92,7 +113,7 @@ export function FullscreenMapWrapper({
           }}
         >
           <Maximize2 size={13} />
-          На весь экран
+          {text.expand}
         </button>
       </div>
 

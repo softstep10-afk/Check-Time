@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { InfoWindow, Marker } from "@react-google-maps/api";
+import { InfoWindowF, MarkerF } from "@react-google-maps/api";
 import { MapProvider } from "@/components/maps/GoogleMaps";
 import { LiveWorkerMarkers } from "@/components/maps/LiveWorkerMarkers";
 import { useTranslation } from "@/lib/i18n";
@@ -213,7 +213,7 @@ export function ProjectsStatusMap({
       {mappedProjects.map((project) => {
         const tone = getProjectMarkerTone(project);
         return (
-          <Marker
+          <MarkerF
             key={project.id}
             position={{ lat: project.site.lat, lng: project.site.lng }}
             icon={projectIcons[tone]}
@@ -225,7 +225,7 @@ export function ProjectsStatusMap({
       {activeWorkers.map((worker) => {
         const role = classifyTrackerRole(worker.role);
         return (
-          <Marker
+          <MarkerF
             key={`active-${worker.id}`}
             position={{ lat: worker.lat, lng: worker.lng }}
             icon={roleIcons[role]}
@@ -238,7 +238,7 @@ export function ProjectsStatusMap({
         );
       })}
       {selectedProject ? (
-        <InfoWindow
+        <InfoWindowF
           position={{
             lat: selectedProject.site.lat,
             lng: selectedProject.site.lng,
@@ -292,7 +292,7 @@ export function ProjectsStatusMap({
               {text.openProject}
             </button>
           </div>
-        </InfoWindow>
+        </InfoWindowF>
       ) : null}
       <LiveWorkerMarkers />
     </MapProvider>

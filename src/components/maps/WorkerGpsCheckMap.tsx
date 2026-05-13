@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { Circle, Marker } from "@react-google-maps/api";
 import { MapProvider } from "@/components/maps/GoogleMaps";
 import type { WorkerGpsCheck } from "@/lib/worker-types";
@@ -18,7 +18,10 @@ export function WorkerGpsCheckMap({
 }) {
   const workerColor =
     gpsCheck.withinFence === false ? MAP_COLORS.red : MAP_COLORS.green;
-  const workerPos = { lat: gpsCheck.position.lat, lng: gpsCheck.position.lng };
+  const workerPos = useMemo(() => ({
+    lat: gpsCheck.position.lat,
+    lng: gpsCheck.position.lng,
+  }), [gpsCheck.position.lat, gpsCheck.position.lng]);
 
   const handleLoad = useCallback(
     (map: google.maps.Map) => {

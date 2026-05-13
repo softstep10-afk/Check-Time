@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
+import { useTranslation } from "@/lib/i18n";
 
 const DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: "geometry", stylers: [{ color: "#1a1d27" }] },
@@ -71,6 +72,19 @@ const CONTAINER_STYLE: React.CSSProperties = {
   height: "100%",
 };
 
+const COPY = {
+  en: {
+    missingKey: "Map unavailable: NEXT_PUBLIC_GOOGLE_MAPS_KEY is not set.",
+    loadError: "Map failed to load. Check the Google Maps API key and billing.",
+    loading: "Loading map...",
+  },
+  ru: {
+    missingKey: "Карта недоступна: NEXT_PUBLIC_GOOGLE_MAPS_KEY не задан.",
+    loadError: "Карта не загрузилась. Проверьте Google Maps API key и billing.",
+    loading: "Карта загружается...",
+  },
+} as const;
+
 export function MapProvider({
   children,
   center,
@@ -85,6 +99,8 @@ export function MapProvider({
   onLoad?: (map: google.maps.Map) => void;
 }) {
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY ?? "";
+  const { locale } = useTranslation();
+  const text = COPY[locale];
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: apiKey,
   });
@@ -103,7 +119,7 @@ export function MapProvider({
         className="flex h-full w-full items-center justify-center px-4 text-center text-sm"
         style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}
       >
-        Map unavailable: NEXT_PUBLIC_GOOGLE_MAPS_KEY is not set.
+        {text.missingKey}
       </div>
     );
   }
@@ -114,7 +130,7 @@ export function MapProvider({
         className="flex h-full w-full items-center justify-center px-4 text-center text-sm"
         style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}
       >
-        Map failed to load. Check the Google Maps API key and billing.
+        {text.loadError}
       </div>
     );
   }
@@ -125,7 +141,7 @@ export function MapProvider({
         className="flex h-full w-full items-center justify-center text-sm"
         style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}
       >
-        Loading map...
+        {text.loading}
       </div>
     );
   }
