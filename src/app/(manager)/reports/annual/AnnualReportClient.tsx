@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { summarizeAnnualPaidPayroll } from "@/lib/annual-report-utils";
 import { useTranslation } from "@/lib/i18n";
+import type { PayrollArchiveSummary } from "@/lib/archive-utils";
 import type { Profile, Project, TimeEvent, Media } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
 
@@ -47,13 +49,11 @@ type MonthData = {
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
-function pct(current: number, previous: number): string | null {
-  if (previous === 0) return null;
-  const delta = Math.round(((current - previous) / previous) * 100);
-  return delta >= 0 ? `+${delta}%` : `${delta}%`;
-}
-
-export function AnnualReportClient() {
+export function AnnualReportClient({
+  paidPayrollArchive,
+}: {
+  paidPayrollArchive: PayrollArchiveSummary;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const { t, locale } = useTranslation();
   const currentYear = new Date().getFullYear();
@@ -67,6 +67,11 @@ export function AnnualReportClient() {
   const [receipts, setReceipts] = useState<Media[]>([]);
   const [storeVisits, setStoreVisits] = useState<StoreVisit[]>([]);
   const [tab, setTab] = useState<"workers" | "projects" | "monthly" | "stores">("workers");
+
+  const annualPayroll = useMemo(
+    () => summarizeAnnualPaidPayroll(paidPayrollArchive, year),
+    [paidPayrollArchive, year],
+  );
 
   useEffect(() => {
     async function load() {
@@ -122,8 +127,6 @@ export function AnnualReportClient() {
 
       const minutes = Math.max(0, Math.round((new Date(e.event_time).getTime() - new Date(clockIn.event_time).getTime()) / 60_000));
       const hours = minutes / 60;
-      const profile = profileMap.get(e.profile_id);
-      const rate = Number(profile?.hourly_rate ?? 0);
 
       const entry = hoursByWorker.get(e.profile_id) ?? { total: 0, ot: 0, gross: 0, projects: new Set<string>(), days: new Set<string>(), first: null, last: null };
       entry.total += hours;
@@ -138,34 +141,50 @@ export function AnnualReportClient() {
     }
 
     // Second pass: compute OT and gross
-    return Array.from(hoursByWorker.entries()).map(([workerId, data]) => {
+    const rows: WorkerRow[] = Array.from(hoursByWorker.entries()).map(([workerId, data]) => {
       const profile = profileMap.get(workerId);
-      const rate = Number(profile?.hourly_rate ?? 0);
-      const reg = Math.min(data.total, 2080);
       const ot = Math.max(0, data.total - 2080);
-      const gross = Math.round((reg * rate + ot * rate * 1.5) * 100) / 100;
+      const paid = annualPayroll.workerPayById.get(workerId);
       const avgPerDay = data.days.size > 0 ? Math.round((data.total / data.days.size) * 10) / 10 : 0;
 
       return {
         id: workerId,
         name: profile?.name ?? "Unknown",
         role: profile?.role ?? "worker",
-        totalHours: Math.round(data.total * 100) / 100,
+        totalHours: Math.round((data.total || paid?.paidHours || 0) * 100) / 100,
         otHours: Math.round(ot * 100) / 100,
-        grossPaid: gross,
-        projectCount: data.projects.size,
+        grossPaid: paid?.grossPaid ?? 0,
+        projectCount: data.projects.size || paid?.projectNames.length || 0,
         storeVisits: visitsByWorker.get(workerId) ?? 0,
         firstShift: data.first,
         lastShift: data.last,
         avgHoursPerDay: avgPerDay,
       };
-    }).sort((a, b) => b.totalHours - a.totalHours);
-  }, [profiles, events, visitsByWorker]);
+    });
+
+    for (const paid of annualPayroll.workerPayById.values()) {
+      if (hoursByWorker.has(paid.workerId)) continue;
+      rows.push({
+        id: paid.workerId,
+        name: paid.workerName,
+        role: paid.workerRole,
+        totalHours: paid.paidHours,
+        otHours: 0,
+        grossPaid: paid.grossPaid,
+        projectCount: paid.projectNames.length,
+        storeVisits: visitsByWorker.get(paid.workerId) ?? 0,
+        firstShift: null,
+        lastShift: null,
+        avgHoursPerDay: 0,
+      });
+    }
+
+    return rows.sort((a, b) => b.grossPaid - a.grossPaid || b.totalHours - a.totalHours);
+  }, [annualPayroll, profiles, events, visitsByWorker]);
 
   const projectRows = useMemo((): ProjectRow[] => {
-    const hoursByProject = new Map<string, { hours: number; cost: number; workers: Set<string> }>();
+    const hoursByProject = new Map<string, { hours: number; workers: Set<string> }>();
     const sorted = [...events].filter((e) => e.event_type === "clock_in" || e.event_type === "clock_out" || e.event_type === "auto_out").sort((a, b) => new Date(a.event_time).getTime() - new Date(b.event_time).getTime());
-    const profileMap = new Map(profiles.map((p) => [p.id, p]));
     const openShifts = new Map<string, TimeEvent>();
 
     for (const e of sorted) {
@@ -175,10 +194,8 @@ export function AnnualReportClient() {
       openShifts.delete(e.profile_id);
 
       const hours = Math.max(0, (new Date(e.event_time).getTime() - new Date(clockIn.event_time).getTime()) / 3_600_000);
-      const rate = Number(profileMap.get(e.profile_id)?.hourly_rate ?? 0);
-      const entry = hoursByProject.get(clockIn.project_id) ?? { hours: 0, cost: 0, workers: new Set<string>() };
+      const entry = hoursByProject.get(clockIn.project_id) ?? { hours: 0, workers: new Set<string>() };
       entry.hours += hours;
-      entry.cost += hours * rate;
       entry.workers.add(e.profile_id);
       hoursByProject.set(clockIn.project_id, entry);
     }
@@ -194,7 +211,7 @@ export function AnnualReportClient() {
     return projects.map((p) => {
       const labor = hoursByProject.get(p.id);
       const matCost = receiptsByProject.get(p.id) ?? 0;
-      const laborCost = Math.round((labor?.cost ?? 0) * 100) / 100;
+      const laborCost = Math.round((annualPayroll.projectPayByName.get(p.name) ?? 0) * 100) / 100;
       return {
         id: p.id,
         name: p.name,
@@ -208,17 +225,15 @@ export function AnnualReportClient() {
         totalCost: Math.round((laborCost + matCost) * 100) / 100,
         workerCount: labor?.workers.size ?? 0,
       };
-    }).filter((p) => p.laborHours > 0 || p.materialCost > 0).sort((a, b) => b.totalCost - a.totalCost);
-  }, [profiles, projects, events, receipts]);
+    }).filter((p) => p.laborHours > 0 || p.laborCost > 0 || p.materialCost > 0).sort((a, b) => b.totalCost - a.totalCost);
+  }, [annualPayroll, projects, events, receipts]);
 
   const monthlyData = useMemo((): MonthData[] => {
     const months = locale === "ru"
       ? ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"]
       : ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-    const laborByMonth = new Array(12).fill(0);
     const workersByMonth = Array.from({ length: 12 }, () => new Set<string>());
-    const profileMap = new Map(profiles.map((p) => [p.id, p]));
     const sorted = [...events].filter((e) => e.event_type === "clock_in" || e.event_type === "clock_out" || e.event_type === "auto_out").sort((a, b) => new Date(a.event_time).getTime() - new Date(b.event_time).getTime());
     const openShifts = new Map<string, TimeEvent>();
 
@@ -229,9 +244,6 @@ export function AnnualReportClient() {
       openShifts.delete(e.profile_id);
 
       const month = new Date(clockIn.event_time).getMonth();
-      const hours = Math.max(0, (new Date(e.event_time).getTime() - new Date(clockIn.event_time).getTime()) / 3_600_000);
-      const rate = Number(profileMap.get(e.profile_id)?.hourly_rate ?? 0);
-      laborByMonth[month] += hours * rate;
       workersByMonth[month].add(e.profile_id);
     }
 
@@ -244,16 +256,16 @@ export function AnnualReportClient() {
     return months.map((label, i) => ({
       month: i,
       label,
-      laborCost: Math.round(laborByMonth[i] * 100) / 100,
+      laborCost: annualPayroll.laborCostByMonth[i],
       materialCost: Math.round(materialByMonth[i] * 100) / 100,
-      activeWorkers: workersByMonth[i].size,
+      activeWorkers: Math.max(workersByMonth[i].size, annualPayroll.paidWorkerIdsByMonth[i].size),
     }));
-  }, [profiles, events, receipts, locale]);
+  }, [annualPayroll, events, receipts, locale]);
 
   // ── Summary totals ──
   const summary = useMemo(() => {
     const totalHours = workerRows.reduce((s, w) => s + w.totalHours, 0);
-    const totalGross = workerRows.reduce((s, w) => s + w.grossPaid, 0);
+    const totalGross = annualPayroll.totalGross;
     const totalMaterials = receipts.reduce((s, r) => s + Number((r.metadata as Record<string, unknown>)?.amount ?? 0), 0);
     const totalProjectsWorked = projectRows.length;
     const completedProjects = projectRows.filter((p) => p.status === "completed").length;
@@ -272,7 +284,7 @@ export function AnnualReportClient() {
       totalVisits,
       totalVisitMinutes,
     };
-  }, [workerRows, projectRows, receipts, storeVisits]);
+  }, [annualPayroll, workerRows, projectRows, receipts, storeVisits]);
 
   // ── Store breakdowns for the Stores tab ──
   const storeBreakdown = useMemo(() => {
@@ -491,7 +503,7 @@ export function AnnualReportClient() {
   }
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
-  const hasData = events.length > 0 || receipts.length > 0;
+  const hasData = events.length > 0 || receipts.length > 0 || annualPayroll.totalPaidHours > 0;
   const maxBar = Math.max(...monthlyData.map((m) => m.laborCost + m.materialCost), 1);
 
   return (

@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
+import { buildPaidPayrollArchive } from "@/lib/archive-utils";
 import { buildPreviewManagerWorkspaceData } from "@/lib/preview-data";
 import { hasFinanceAccess } from "@/lib/finance-access";
+import { getArchivePageData } from "@/lib/manager-data";
 import { isManagerRole } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "@/types/database";
@@ -45,5 +47,18 @@ export default async function AnnualReportRoutePage() {
   const allowed = await hasFinanceAccess(supabase, manager);
   if (!allowed) redirect("/overview");
 
-  return <AnnualReportClient />;
+  const archiveData = await getArchivePageData();
+  const paidPayrollArchive = buildPaidPayrollArchive(
+    {
+      profiles: archiveData.profiles,
+      projects: archiveData.projects,
+      payPeriods: archiveData.payPeriods,
+      payPeriodItems: archiveData.payPeriodItems,
+      payrollRuns: archiveData.payrollRuns,
+      payrollLineItems: archiveData.payrollLineItems,
+    },
+    { includeFinancials: true },
+  );
+
+  return <AnnualReportClient paidPayrollArchive={paidPayrollArchive} />;
 }

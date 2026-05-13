@@ -1333,12 +1333,12 @@ export const translations = {
 
   // ── Annual Report ──
   "report.title": { en: "Annual Report", ru: "Годовой отчёт" },
-  "report.description": { en: "Year-end summary of labor, materials, projects, and store activity.", ru: "Итоги года по труду, материалам, проектам и посещениям магазинов." },
+  "report.description": { en: "Year-end summary of labor, paid payroll, materials, projects, and store activity.", ru: "Итоги года по труду, оплаченной зарплате, материалам, проектам и посещениям магазинов." },
   "report.year": { en: "Year", ru: "Год" },
   "report.exportPdf": { en: "Export PDF", ru: "Экспорт PDF" },
   "report.exportCsv": { en: "Export CSV bundle", ru: "Экспорт CSV" },
   "report.totalHours": { en: "Total labor hours", ru: "Всего рабочих часов" },
-  "report.totalPayroll": { en: "Total gross payroll", ru: "Начислено всего" },
+  "report.totalPayroll": { en: "Paid gross payroll", ru: "Оплачено всего" },
   "report.totalMaterials": { en: "Total material cost", ru: "Стоимость материалов" },
   "report.totalProjects": { en: "Projects", ru: "Проекты" },
   "report.activeWorkers": { en: "Active workers", ru: "Активные рабочие" },
