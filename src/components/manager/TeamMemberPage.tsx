@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { formatDateTime, formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
 import type {
   ManagerProfileSummary,
@@ -82,6 +83,8 @@ function formatPayrollPeriodDate(value: string): string {
 export function TeamMemberPage({
   orgId,
   managerId,
+  managerName,
+  managerRole,
   hasFinanceAccess,
   profile,
   projects,
@@ -102,6 +105,8 @@ export function TeamMemberPage({
 }: {
   orgId: string;
   managerId: string;
+  managerName: string;
+  managerRole: UserRole;
   hasFinanceAccess: boolean;
   profile: ManagerProfileSummary;
   projects: ManagerProjectSummary[];
@@ -671,6 +676,26 @@ export function TeamMemberPage({
     setShowResetConfirm(false);
     setMessage(t("member.resetSuccess"));
     setMessageType("success");
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "worker_hours_manual_close",
+      targetType: "profile",
+      targetId: profile.id,
+      beforeData: {
+        worker_name: profile.name,
+        unpaid_minutes: minutesToZero,
+      },
+      afterData: {
+        worker_name: profile.name,
+        project_id: projectId,
+        adjust_minutes: -minutesToZero,
+        reason,
+        kind: "reset_to_zero",
+      },
+    });
     router.refresh();
   }
 
@@ -722,6 +747,25 @@ export function TeamMemberPage({
     setShowAdjustForm(false);
     setMessage(t("member.adjustmentApplied"));
     setMessageType("success");
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "worker_hours_adjusted",
+      targetType: "profile",
+      targetId: profile.id,
+      beforeData: {
+        worker_name: profile.name,
+      },
+      afterData: {
+        worker_name: profile.name,
+        project_id: projectId,
+        adjust_minutes: signedMinutes,
+        reason,
+        show_to_worker: showToWorker,
+      },
+    });
     router.refresh();
   }
 

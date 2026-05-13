@@ -65,7 +65,10 @@ export default async function ManagerTasksRoutePage() {
 
   return (
     <ManagerTasksPage
+      orgId={data.manager.org_id}
       managerId={data.manager.id}
+      managerName={data.manager.name}
+      managerRole={data.manager.role}
       projects={projects}
       workers={workers}
       initialTasks={tasks}

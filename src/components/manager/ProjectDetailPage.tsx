@@ -22,6 +22,7 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
+import { logAudit } from "@/lib/audit";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
 import {
@@ -84,6 +85,7 @@ import type {
   Task,
   TaskPriority,
   TaskStatus,
+  UserRole,
 } from "@/types/database";
 
 async function readRouteError(response: Response): Promise<string> {
@@ -301,6 +303,8 @@ function setInputElementValue(
 export function ProjectDetailPage({
   orgId,
   managerId,
+  managerName,
+  managerRole,
   project,
   assignedProfiles,
   availableProfiles,
@@ -317,6 +321,8 @@ export function ProjectDetailPage({
 }: {
   orgId: string;
   managerId: string;
+  managerName: string;
+  managerRole: UserRole;
   project: ManagerProjectSummary;
   assignedProfiles: ManagerProfileSummary[];
   availableProfiles: ManagerProfileSummary[];
@@ -1035,6 +1041,25 @@ export function ProjectDetailPage({
     setTaskComposerOpen(false);
     setBusyKey(null);
     setMessage(t("projectDetail.taskCreated"));
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "task_created",
+      targetType: "task",
+      targetId: insertedTask.id,
+      beforeData: null,
+      afterData: {
+        title,
+        project_id: project.id,
+        project_name: project.name,
+        assigned_to: assignedTo || null,
+        priority,
+        due_date: dueDate || null,
+        attachment_media_ids: uploadedMediaIds,
+      },
+    });
     router.refresh();
   }
 
@@ -1203,6 +1228,7 @@ export function ProjectDetailPage({
   async function handleUpdateTask(taskId: string, nextStatus: TaskStatus) {
     setBusyKey(`task-${taskId}`);
     setMessage("");
+    const previousTask = taskList.find((task) => task.id === taskId) ?? null;
 
     const completedAt = nextStatus === "done" ? new Date().toISOString() : null;
     const completedBy = nextStatus === "done" ? managerId : null;
@@ -1236,6 +1262,34 @@ export function ProjectDetailPage({
 
     setBusyKey(null);
     setMessage(t("projectDetail.taskUpdated"));
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "task_status_changed",
+      targetType: "task",
+      targetId: taskId,
+      beforeData: previousTask
+        ? {
+            title: previousTask.title,
+            project_id: previousTask.project_id,
+            assigned_to: previousTask.assigned_to,
+            status: previousTask.status,
+            effective_status: getEffectiveTaskStatus(previousTask),
+            completed_at: previousTask.completed_at,
+            completed_by: previousTask.completed_by,
+          }
+        : null,
+      afterData: {
+        title: previousTask?.title ?? null,
+        project_id: previousTask?.project_id ?? project.id,
+        assigned_to: previousTask?.assigned_to ?? null,
+        status: nextStatus,
+        completed_at: completedAt,
+        completed_by: completedBy,
+      },
+    });
     router.refresh();
   }
 
@@ -1251,10 +1305,12 @@ export function ProjectDetailPage({
 
     setBusyKey(`task-delete-${taskId}`);
     setMessage("");
+    const previousTask = taskList.find((task) => task.id === taskId) ?? null;
+    const deletedAt = new Date().toISOString();
 
     const { error } = await supabase
       .from("tasks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ deleted_at: deletedAt })
       .eq("id", taskId);
 
     if (error) {
@@ -1267,6 +1323,27 @@ export function ProjectDetailPage({
     setPendingDeleteTaskId(null);
     setBusyKey(null);
     setMessage(t("tasks.deleted"));
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "task_deleted",
+      targetType: "task",
+      targetId: taskId,
+      beforeData: previousTask
+        ? {
+            title: previousTask.title,
+            project_id: previousTask.project_id,
+            assigned_to: previousTask.assigned_to,
+            status: previousTask.status,
+            completed_at: previousTask.completed_at,
+          }
+        : null,
+      afterData: {
+        deleted_at: deletedAt,
+      },
+    });
     router.refresh();
   }
 
@@ -2502,6 +2579,8 @@ export function ProjectDetailPage({
         orgId={orgId}
         projectId={project.id}
         managerId={managerId}
+        managerName={managerName}
+        managerRole={managerRole}
         hasFinanceAccess={hasFinanceAccess}
       />
       {/* ── Store Visits ── */}
@@ -3723,11 +3802,15 @@ function ReceiptsSection({
   orgId,
   projectId,
   managerId,
+  managerName,
+  managerRole,
   hasFinanceAccess,
 }: {
   orgId: string;
   projectId: string;
   managerId: string;
+  managerName: string;
+  managerRole: UserRole;
   hasFinanceAccess: boolean;
 }) {
   const { t } = useTranslation();
@@ -3938,6 +4021,24 @@ function ReceiptsSection({
         },
         ...prev,
       ]);
+      void logAudit({
+        orgId,
+        actorId: managerId,
+        actorName: managerName,
+        actorRole: managerRole,
+        action: "receipt_uploaded",
+        targetType: "media",
+        targetId: row.id,
+        beforeData: null,
+        afterData: {
+          project_id: projectId,
+          filename: file.name,
+          media_type: mediaType,
+          amount,
+          store_name: finalStore || null,
+          purchase_date: purchaseDate,
+        },
+      });
     }
 
     setUploading(false);
@@ -3950,12 +4051,36 @@ function ReceiptsSection({
   }
 
   async function handleDelete(receipt: ReceiptItem) {
-    await supabase
+    const deletedAt = new Date().toISOString();
+    const { error } = await supabase
       .from("media")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ deleted_at: deletedAt })
       .eq("id", receipt.id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
     setReceipts((prev) => prev.filter((r) => r.id !== receipt.id));
     setMessage(t("receipts.deleted"));
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "receipt_deleted",
+      targetType: "media",
+      targetId: receipt.id,
+      beforeData: {
+        project_id: projectId,
+        filename: receipt.filename,
+        amount: receipt.amount,
+        store_name: receipt.storeName || null,
+        purchase_date: receipt.purchaseDate || null,
+      },
+      afterData: {
+        deleted_at: deletedAt,
+      },
+    });
     setTimeout(() => setMessage(""), 2000);
   }
 

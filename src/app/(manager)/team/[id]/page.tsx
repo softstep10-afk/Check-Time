@@ -274,6 +274,8 @@ export default async function TeamMemberRoutePage({
     <TeamMemberPage
       orgId={data.manager.org_id}
       managerId={data.manager.id}
+      managerName={data.manager.name}
+      managerRole={data.manager.role}
       hasFinanceAccess={managerHasFinanceAccess}
       profile={profile}
       projects={projectSummaries}

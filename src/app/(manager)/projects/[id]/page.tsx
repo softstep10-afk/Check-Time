@@ -215,6 +215,8 @@ export default async function ProjectDetailRoutePage({
     <ProjectDetailPage
       orgId={data.manager.org_id}
       managerId={data.manager.id}
+      managerName={data.manager.name}
+      managerRole={data.manager.role}
       project={project}
       assignedProfiles={assignedProfiles}
       availableProfiles={availableProfiles}

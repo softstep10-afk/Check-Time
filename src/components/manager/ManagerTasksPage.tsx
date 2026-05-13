@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
+import { logAudit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import {
@@ -56,13 +57,19 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
 };
 
 export function ManagerTasksPage({
+  orgId,
   managerId,
+  managerName,
+  managerRole,
   projects,
   workers,
   initialTasks,
   attachmentMedia = [],
 }: {
+  orgId: string;
   managerId: string;
+  managerName: string;
+  managerRole: UserRole;
   projects: ProjectOption[];
   workers: WorkerOption[];
   initialTasks: TaskRow[];
@@ -115,6 +122,7 @@ export function ManagerTasksPage({
 
   async function handleStatusChange(taskId: string, status: TaskStatus) {
     setBusyKey(`status-${taskId}`);
+    const previousTask = tasks.find((task) => task.id === taskId) ?? null;
     const patch: Record<string, unknown> = { status };
     const completedAt = status === "done" ? new Date().toISOString() : null;
     const completedBy = status === "done" ? managerId : null;
@@ -139,6 +147,34 @@ export function ManagerTasksPage({
           : t,
       ),
     );
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "task_status_changed",
+      targetType: "task",
+      targetId: taskId,
+      beforeData: previousTask
+        ? {
+            title: previousTask.title,
+            project_id: previousTask.project_id,
+            assigned_to: previousTask.assigned_to,
+            status: previousTask.status,
+            effective_status: getEffectiveTaskStatus(previousTask),
+            completed_at: previousTask.completed_at,
+            completed_by: previousTask.completed_by,
+          }
+        : null,
+      afterData: {
+        title: previousTask?.title ?? null,
+        project_id: previousTask?.project_id ?? null,
+        assigned_to: previousTask?.assigned_to ?? null,
+        status,
+        completed_at: completedAt,
+        completed_by: completedBy,
+      },
+    });
   }
 
   async function handleDelete(taskId: string) {
@@ -151,9 +187,11 @@ export function ManagerTasksPage({
     }
 
     setBusyKey(`delete-${taskId}`);
+    const previousTask = tasks.find((task) => task.id === taskId) ?? null;
+    const deletedAt = new Date().toISOString();
     const { error } = await supabase
       .from("tasks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ deleted_at: deletedAt })
       .eq("id", taskId);
     setBusyKey(null);
     if (error) {
@@ -165,6 +203,27 @@ export function ManagerTasksPage({
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     setMessage(t("tasks.deleted"));
     setMessageTone("success");
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "task_deleted",
+      targetType: "task",
+      targetId: taskId,
+      beforeData: previousTask
+        ? {
+            title: previousTask.title,
+            project_id: previousTask.project_id,
+            assigned_to: previousTask.assigned_to,
+            status: previousTask.status,
+            completed_at: previousTask.completed_at,
+          }
+        : null,
+      afterData: {
+        deleted_at: deletedAt,
+      },
+    });
   }
 
   async function handleClearCompleted() {
@@ -182,9 +241,10 @@ export function ManagerTasksPage({
     }
 
     setBusyKey("clear-completed");
+    const deletedAt = new Date().toISOString();
     const { error } = await supabase
       .from("tasks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({ deleted_at: deletedAt })
       .in("id", ids);
     setBusyKey(null);
     if (error) {
@@ -196,6 +256,21 @@ export function ManagerTasksPage({
     setTasks((prev) => prev.filter((task) => !isEffectiveCompletedTask(task)));
     setMessage(t("tasks.completedCleared").replace("{count}", String(ids.length)));
     setMessageTone("success");
+    void logAudit({
+      orgId,
+      actorId: managerId,
+      actorName: managerName,
+      actorRole: managerRole,
+      action: "tasks_completed_cleared",
+      targetType: "task",
+      beforeData: {
+        task_ids: ids,
+        count: ids.length,
+      },
+      afterData: {
+        deleted_at: deletedAt,
+      },
+    });
   }
 
   return (
