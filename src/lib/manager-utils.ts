@@ -1018,6 +1018,8 @@ export function buildPayrollDraftRows(args: {
   transferGaps?: Pick<TransferGap, "profileId" | "inTime">[];
   /** Restrict to one worker. */
   profileId?: string;
+  /** Latest paid/closed cutoff by worker id. New payroll drafts ignore time at or before this. */
+  closedThroughByProfileId?: Record<string, string | null | undefined>;
 }): PayrollDraftRow[] {
   const startMs = new Date(`${args.startDate}T00:00:00`).getTime();
   const endMs = new Date(`${args.endDate}T23:59:59.999`).getTime();
@@ -1029,12 +1031,37 @@ export function buildPayrollDraftRows(args: {
   for (const session of args.sessions) {
     if (args.profileId && session.profileId !== args.profileId) continue;
     const inMs = new Date(session.clockInTime).getTime();
+    const isOpenSession = session.clockOutTime === null;
     const outMs = session.clockOutTime
       ? new Date(session.clockOutTime).getTime()
-      : Date.now();
-    // Any overlap with the window keeps the shift visible.
-    if (outMs < startMs) continue;
-    if (inMs > endMs) continue;
+      : inMs + session.durationMinutes * 60_000;
+    const closedThroughRaw = args.closedThroughByProfileId?.[session.profileId];
+    const closedThroughMs = closedThroughRaw
+      ? new Date(closedThroughRaw).getTime()
+      : Number.NEGATIVE_INFINITY;
+    const payableStartMs = Math.max(
+      inMs,
+      startMs,
+      Number.isFinite(closedThroughMs)
+        ? closedThroughMs
+        : Number.NEGATIVE_INFINITY,
+    );
+    const payableEndMs = Math.min(outMs, endMs);
+    const includeOpenZeroMinuteRow =
+      isOpenSession &&
+      session.durationMinutes <= 0 &&
+      inMs >= startMs &&
+      inMs <= endMs &&
+      payableStartMs <= inMs;
+    // Any unpaid overlap with the window keeps the shift visible.
+    if (payableEndMs <= payableStartMs && !includeOpenZeroMinuteRow) continue;
+    const payableMinutes = includeOpenZeroMinuteRow
+      ? 0
+      : Math.max(
+          0,
+          Math.round((payableEndMs - payableStartMs) / 60_000),
+        );
+    if (payableMinutes <= 0 && !includeOpenZeroMinuteRow) continue;
 
     rows.push({
       sessionId: session.id,
@@ -1044,8 +1071,8 @@ export function buildPayrollDraftRows(args: {
       projectName: session.projectName,
       clockInTime: session.clockInTime,
       clockOutTime: session.clockOutTime,
-      dayKey: session.clockInTime.slice(0, 10),
-      durationMinutes: session.durationMinutes,
+      dayKey: new Date(payableStartMs).toISOString().slice(0, 10),
+      durationMinutes: payableMinutes,
       hasGps: Boolean(args.hasGpsBySessionId[session.id]),
       missingCheckout: session.clockOutTime === null,
       missingVideo:

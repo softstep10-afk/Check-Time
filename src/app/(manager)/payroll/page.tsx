@@ -58,6 +58,7 @@ export default async function PayrollPage() {
         profiles={data.profiles}
         sessions={sessions}
         hasGpsBySessionId={hasGpsBySessionId}
+        payrollClosures={data.payrollClosures}
       />
     </div>
   );

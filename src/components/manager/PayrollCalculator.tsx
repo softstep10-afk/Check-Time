@@ -24,7 +24,7 @@ import {
   getPaidWorkerIdsAfter,
   rollupPayPeriodStatus,
 } from "@/lib/payroll-period-utils";
-import type { Profile, UserRole } from "@/types/database";
+import type { PayrollClosure, Profile, UserRole } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
 import { formatEventTime } from "@/lib/worker-utils";
 
@@ -103,6 +103,7 @@ function buildWorkerLines(
   startDate: string,
   endDate: string,
   hasGpsBySessionId: Record<string, boolean>,
+  closedThroughByProfileId: Record<string, string | null | undefined> = {},
 ): WorkerLine[] {
   const startMs = new Date(`${startDate}T00:00:00`).getTime();
   const endMs = new Date(`${endDate}T23:59:59`).getTime();
@@ -128,8 +129,20 @@ function buildWorkerLines(
 
   for (const s of sessions) {
     const sStart = new Date(s.clockInTime).getTime();
-    const sEnd = s.clockOutTime ? new Date(s.clockOutTime).getTime() : Date.now();
-    const effStart = Math.max(sStart, startMs);
+    const sEnd = s.clockOutTime
+      ? new Date(s.clockOutTime).getTime()
+      : sStart + s.durationMinutes * 60_000;
+    const closedThroughRaw = closedThroughByProfileId[s.profileId];
+    const closedThroughMs = closedThroughRaw
+      ? new Date(closedThroughRaw).getTime()
+      : Number.NEGATIVE_INFINITY;
+    const effStart = Math.max(
+      sStart,
+      startMs,
+      Number.isFinite(closedThroughMs)
+        ? closedThroughMs
+        : Number.NEGATIVE_INFINITY,
+    );
     const effEnd = Math.min(sEnd, endMs);
     if (effEnd <= effStart) continue;
 
@@ -194,6 +207,21 @@ function buildWorkerLines(
       };
     })
     .sort((a, b) => a.workerName.localeCompare(b.workerName));
+}
+
+function buildClosedThroughByProfileId(
+  closures: Pick<PayrollClosure, "profile_id" | "closed_through">[],
+): Record<string, string> {
+  const byProfile: Record<string, string> = {};
+  for (const closure of closures) {
+    const valueMs = new Date(closure.closed_through).getTime();
+    if (!Number.isFinite(valueMs)) continue;
+    const current = byProfile[closure.profile_id];
+    if (!current || valueMs > new Date(current).getTime()) {
+      byProfile[closure.profile_id] = closure.closed_through;
+    }
+  }
+  return byProfile;
 }
 
 function presetDates(preset: string): { start: string; end: string } {
@@ -378,6 +406,7 @@ export function PayrollCalculator({
   profiles,
   sessions,
   hasGpsBySessionId,
+  payrollClosures,
 }: {
   orgId: string;
   managerId: string;
@@ -387,6 +416,7 @@ export function PayrollCalculator({
   profiles: Profile[];
   sessions: ManagerSession[];
   hasGpsBySessionId: Record<string, boolean>;
+  payrollClosures: PayrollClosure[];
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -410,6 +440,10 @@ export function PayrollCalculator({
   // narrows the displayed rows AND the visible selection / bulk-action
   // surface; pay_period_items themselves are unchanged.
   const [workerFilter, setWorkerFilter] = useState<string>("");
+  const closedThroughByProfileId = useMemo(
+    () => buildClosedThroughByProfileId(payrollClosures),
+    [payrollClosures],
+  );
   // Per-worker expand/collapse for the byWorker mode.
   const [collapsedWorkerIds, setCollapsedWorkerIds] = useState<Set<string>>(
     new Set(),
@@ -549,7 +583,14 @@ export function PayrollCalculator({
     const scopedProfiles = workerFilter
       ? profiles.filter((profile) => profile.id === workerFilter)
       : profiles;
-    const lines = buildWorkerLines(scopedProfiles, sessions, start, end, hasGpsBySessionId);
+    const lines = buildWorkerLines(
+      scopedProfiles,
+      sessions,
+      start,
+      end,
+      hasGpsBySessionId,
+      closedThroughByProfileId,
+    );
     const label = `${start} → ${end}`;
 
     if (AUTH_BYPASS_ENABLED) {
@@ -643,7 +684,14 @@ export function PayrollCalculator({
     const scopedProfiles = workerFilter
       ? profiles.filter((profile) => profile.id === workerFilter)
       : profiles;
-    const lines = buildWorkerLines(scopedProfiles, sessions, startDate, endDate, hasGpsBySessionId);
+    const lines = buildWorkerLines(
+      scopedProfiles,
+      sessions,
+      startDate,
+      endDate,
+      hasGpsBySessionId,
+      closedThroughByProfileId,
+    );
     const label = `${startDate} → ${endDate}`;
 
     if (AUTH_BYPASS_ENABLED) {
@@ -1295,8 +1343,17 @@ export function PayrollCalculator({
       startDate: period.startDate,
       endDate: period.endDate,
       profileId: workerFilter || undefined,
+      closedThroughByProfileId:
+        period.status === "draft" ? closedThroughByProfileId : {},
     });
-  }, [period, sessions, hasGpsBySessionId, requireVideoByProfileId, workerFilter]);
+  }, [
+    period,
+    sessions,
+    hasGpsBySessionId,
+    requireVideoByProfileId,
+    workerFilter,
+    closedThroughByProfileId,
+  ]);
 
   const workerGroups = useMemo(
     () => groupPayrollRowsByWorker(draftRows),

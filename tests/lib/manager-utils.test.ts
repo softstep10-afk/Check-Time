@@ -856,6 +856,36 @@ describe("buildPayrollDraftRows", () => {
     expect(rows[0].sessionId).toBe("s1");
   });
 
+  it("excludes already-paid hours at or before a payroll closure cutoff", () => {
+    const sessions: ManagerSession[] = [
+      makeSession({
+        id: "paid",
+        profileId: "w1",
+        projectId: "p1",
+        clockInTime: "2026-04-01T08:00:00Z",
+        clockOutTime: "2026-04-01T16:00:00Z",
+      }),
+      makeSession({
+        id: "partial",
+        profileId: "w1",
+        projectId: "p1",
+        clockInTime: "2026-04-02T08:00:00Z",
+        clockOutTime: "2026-04-02T16:00:00Z",
+      }),
+    ];
+    const rows = buildPayrollDraftRows({
+      sessions,
+      hasGpsBySessionId: { paid: true, partial: true },
+      requireVideoByProfileId: {},
+      startDate: "2026-04-01",
+      endDate: "2026-04-30",
+      closedThroughByProfileId: { w1: "2026-04-02T12:00:00Z" },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].sessionId).toBe("partial");
+    expect(rows[0].durationMinutes).toBe(240);
+  });
+
   it("attaches GPS / missingCheckout / missingVideo flags", () => {
     const sessions: ManagerSession[] = [
       makeSession({
