@@ -717,6 +717,9 @@ export const translations = {
   "teamMember.hideUnpaidBreakdown": { en: "Hide breakdown", ru: "Скрыть раскладку" },
   "teamMember.payOff": { en: "Pay off", ru: "Оплатить" },
   "teamMember.openPayrollForWorker": { en: "Open worker payroll", ru: "Открыть оплату рабочего" },
+  "teamMember.payrollClosed": { en: "Payment closed", ru: "Оплата закрыта" },
+  "teamMember.openPayrollHistory": { en: "Open payroll history", ru: "Открыть историю зарплаты" },
+  "teamMember.noOpenBalance": { en: "No open balance", ru: "Открытого баланса нет" },
   "teamMember.unpaidBreakdownTitle": { en: "Unpaid balance breakdown", ru: "Раскладка неоплаченного баланса" },
   "teamMember.unpaidBreakdownHint": {
     en: "Closed shifts create the worked total; paid/closed adjustments reduce the open payroll balance.",

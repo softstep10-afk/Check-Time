@@ -1384,28 +1384,53 @@ export function TeamMemberPage({
                       </div>
                     ) : null}
                   </button>
-                  <Link
-                    href={`/payroll?worker=${profile.id}&preset=thisMonth`}
-                    className="flex rounded-[var(--radius-md)] p-3 transition-colors hover:border-[var(--brand-yellow)]"
-                    style={{
-                      background: "rgba(191, 162, 52, 0.16)",
-                      border: "1px solid rgba(191, 162, 52, 0.3)",
-                      color: "var(--brand-yellow)",
-                    }}
-                  >
-                    <span className="flex w-full flex-col">
-                      <span className="text-[10px] uppercase tracking-[0.16em]">
-                        {t("teamMember.payOff")}
+                  {unpaidMinutes > 0 ? (
+                    <Link
+                      href={`/payroll?worker=${profile.id}&preset=thisMonth`}
+                      className="flex rounded-[var(--radius-md)] p-3 transition-colors hover:border-[var(--brand-yellow)]"
+                      style={{
+                        background: "rgba(191, 162, 52, 0.16)",
+                        border: "1px solid rgba(191, 162, 52, 0.3)",
+                        color: "var(--brand-yellow)",
+                      }}
+                    >
+                      <span className="flex w-full flex-col">
+                        <span className="text-[10px] uppercase tracking-[0.16em]">
+                          {t("teamMember.payOff")}
+                        </span>
+                        <span className="mt-1 text-sm font-bold text-[var(--text-primary)]">
+                          {t("teamMember.openPayrollForWorker")}
+                        </span>
+                        <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
+                          {t("payroll.thisMonth")}
+                          <ArrowRight size={12} />
+                        </span>
                       </span>
-                      <span className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                        {t("teamMember.openPayrollForWorker")}
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/payroll/history"
+                      className="flex rounded-[var(--radius-md)] p-3 transition-colors hover:border-[var(--green)]"
+                      style={{
+                        background: "rgba(15, 168, 120, 0.10)",
+                        border: "1px solid rgba(15, 168, 120, 0.28)",
+                        color: "var(--green)",
+                      }}
+                    >
+                      <span className="flex w-full flex-col">
+                        <span className="text-[10px] uppercase tracking-[0.16em]">
+                          {t("teamMember.payrollClosed")}
+                        </span>
+                        <span className="mt-1 text-sm font-bold text-[var(--text-primary)]">
+                          {t("teamMember.openPayrollHistory")}
+                        </span>
+                        <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
+                          {latestPaidPeriodLabel ?? t("teamMember.noOpenBalance")}
+                          <ArrowRight size={12} />
+                        </span>
                       </span>
-                      <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
-                        {t("payroll.thisMonth")}
-                        <ArrowRight size={12} />
-                      </span>
-                    </span>
-                  </Link>
+                    </Link>
+                  )}
                 </div>
 
                 {showUnpaidBreakdown ? (
@@ -1420,11 +1445,13 @@ export function TeamMemberPage({
                         </p>
                       </div>
                       <Link
-                        href={`/payroll?worker=${profile.id}&preset=thisMonth`}
+                        href={unpaidMinutes > 0 ? `/payroll?worker=${profile.id}&preset=thisMonth` : "/payroll/history"}
                         className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold"
                         style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
                       >
-                        {t("teamMember.payOff")}
+                        {unpaidMinutes > 0
+                          ? t("teamMember.payOff")
+                          : t("teamMember.openPayrollHistory")}
                         <ArrowRight size={13} />
                       </Link>
                     </div>
