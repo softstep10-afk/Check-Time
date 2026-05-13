@@ -1,14 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
-import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
-import { DateField } from "@/components/shared/DateField";
-import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
 import {
   buildProfileNameMap,
   getCompletionMediaIds,
@@ -18,9 +14,7 @@ import {
 } from "@/lib/task-notifications";
 import {
   getAttachmentMediaIds,
-  linkMediaToTask,
   type TaskAttachmentRef,
-  uploadTaskAttachment,
 } from "@/lib/task-attachments";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { formatDateTime } from "@/lib/worker-utils";
@@ -41,7 +35,6 @@ type TaskRow = Task & {
   completedByName?: string | null;
 };
 
-const PRIORITY_OPTIONS: TaskPriority[] = ["low", "medium", "high", "urgent"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "done", "cancelled"];
 
 const PRIORITY_COLORS: Record<TaskPriority, string> = {
@@ -59,21 +52,18 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
 };
 
 export function ManagerTasksPage({
-  orgId,
   managerId,
   projects,
   workers,
   initialTasks,
   attachmentMedia = [],
 }: {
-  orgId: string;
   managerId: string;
   projects: ProjectOption[];
   workers: WorkerOption[];
   initialTasks: TaskRow[];
   attachmentMedia?: TaskAttachmentRef[];
 }) {
-  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { t } = useTranslation();
 
@@ -87,11 +77,6 @@ export function ManagerTasksPage({
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
 
-  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
-  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
-
-  const projectsById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
-  const workersById = useMemo(() => new Map(workers.map((w) => [w.id, w])), [workers]);
   const workerNameById = useMemo(() => buildProfileNameMap(workers), [workers]);
   const attachmentById = useMemo(
     () => new Map(attachmentMedia.map((m) => [m.id, m])),
@@ -122,128 +107,6 @@ export function ManagerTasksPage({
     if (status === "done") return t("tasks.statusDone");
     if (status === "cancelled") return t("tasks.statusCancelled");
     return t("tasks.statusPending");
-  }
-
-  async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-
-    const title = formData.get("title")?.toString().trim() ?? "";
-    if (!title) {
-      setMessage(t("projectDetail.taskTitleRequired"));
-      setMessageTone("error");
-      return;
-    }
-
-    const projectId = formData.get("project_id")?.toString() || null;
-    const assignedTo = formData.get("assigned_to")?.toString() || null;
-    const priority = (formData.get("priority")?.toString() ?? "medium") as TaskPriority;
-    const dueDate = formData.get("due_date")?.toString() || null;
-    const description = formData.get("description")?.toString().trim() || null;
-
-    setBusyKey("create");
-    setMessage("");
-
-    // Attachments require a project (storage path includes projectId).
-    if (attachmentFiles.length > 0 && !projectId) {
-      setMessage(t("tasks.attachmentNeedsProject"));
-      setMessageTone("error");
-      setBusyKey(null);
-      return;
-    }
-
-    console.log("[task-attach] ManagerTasksPage create: file count", attachmentFiles.length);
-
-    const uploadedMediaIds: string[] = [];
-    for (const file of attachmentFiles) {
-      // Cloud-picker guard: see ProjectDetailPage.handleCreateTask.
-      if (!file || file.size === 0 || !file.name) {
-        console.error("[task-attach] invalid File detected (likely cloud picker)", {
-          name: file?.name,
-          size: file?.size,
-          type: file?.type,
-        });
-        setMessage(t("tasks.attachmentCloudFallback"));
-        setMessageTone("error");
-        setBusyKey(null);
-        return;
-      }
-      const validation = validateUploadFile(file);
-      if (!validation.ok) {
-        console.error("[task-attach] ManagerTasksPage validation FAIL", validation.error);
-        setMessage(t("tasks.attachmentCloudFallback"));
-        setMessageTone("error");
-        setBusyKey(null);
-        return;
-      }
-      const result = await uploadTaskAttachment(supabase, {
-        orgId,
-        projectId: projectId!,
-        uploadedBy: managerId,
-        file,
-      });
-      if (!result.ok) {
-        console.error("[task-attach] ManagerTasksPage upload FAIL", result.error);
-        setMessage(t("tasks.attachmentCloudFallback"));
-        setMessageTone("error");
-        setBusyKey(null);
-        return;
-      }
-      uploadedMediaIds.push(result.mediaId);
-    }
-
-    console.log("[task-attach] ManagerTasksPage task insert begin", {
-      hasAttachments: uploadedMediaIds.length > 0,
-    });
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert({
-        org_id: orgId,
-        project_id: projectId,
-        assigned_to: assignedTo,
-        assigned_by: managerId,
-        title,
-        description,
-        priority,
-        status: "pending",
-        due_date: dueDate,
-        metadata: uploadedMediaIds.length > 0
-          ? { attachment_media_ids: uploadedMediaIds }
-          : {},
-      })
-      .select("*")
-      .single<Task>();
-
-    setBusyKey(null);
-
-    if (error || !data) {
-      console.error("[task-attach] ManagerTasksPage task insert FAIL", error);
-      setMessage(`task-insert: ${error?.message ?? "no data"}`);
-      setMessageTone("error");
-      return;
-    }
-    console.log("[task-attach] ManagerTasksPage task insert ok", { taskId: data.id });
-
-    if (uploadedMediaIds.length > 0) {
-      void linkMediaToTask(supabase, data.id, uploadedMediaIds);
-    }
-
-    setTasks((prev) => [
-      {
-        ...data,
-        projectName: projectId ? projectsById.get(projectId)?.name ?? null : null,
-        assigneeName: assignedTo ? workersById.get(assignedTo)?.name ?? null : null,
-        completedByName: null,
-      },
-      ...prev,
-    ]);
-    form.reset();
-    setAttachmentFiles([]);
-    if (attachmentInputRef.current) attachmentInputRef.current.value = "";
-    setMessage(t("tasks.created"));
-    setMessageTone("success");
-    router.refresh();
   }
 
   async function handleStatusChange(taskId: string, status: TaskStatus) {
