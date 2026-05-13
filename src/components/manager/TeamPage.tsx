@@ -128,18 +128,6 @@ export function TeamPage({
     router.refresh();
   }
 
-  const totals = useMemo(() => {
-    let minutes = 0;
-    let earned = 0;
-    for (const p of initialProfiles) {
-      minutes += p.weekMinutes;
-      if (hasFinanceAccess) {
-        earned += earnedAmount(p);
-      }
-    }
-    return { minutes, earned: Math.round(earned * 100) / 100 };
-  }, [initialProfiles, hasFinanceAccess]);
-
   const visibleProfiles = useMemo(() => {
     let filtered = initialProfiles;
 
@@ -166,6 +154,18 @@ export function TeamPage({
 
     return filtered;
   }, [initialProfiles, query, roleFilter, showInactive]);
+
+  const totals = useMemo(() => {
+    let minutes = 0;
+    let earned = 0;
+    for (const p of visibleProfiles) {
+      minutes += p.weekMinutes;
+      if (hasFinanceAccess) {
+        earned += earnedAmount(p);
+      }
+    }
+    return { minutes, earned: Math.round(earned * 100) / 100 };
+  }, [visibleProfiles, hasFinanceAccess]);
 
   const groupedProfiles = useMemo(() => {
     return ROLE_GROUPS
@@ -376,12 +376,15 @@ export function TeamPage({
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs text-[var(--text-primary)] outline-none"
               >
                 <option value="">{t("team.allCategories")}</option>
-                <option value="worker">Worker</option>
-                <option value="driver">Driver</option>
-                <option value="supervisor">Supervisor</option>
-                <option value="sales">Sales</option>
-                <option value="subcontractor">Subcontractor</option>
-                <option value="manager">Manager</option>
+                {ROLE_GROUPS.map((group) => (
+                  <optgroup key={group.key} label={t(group.labelKey)}>
+                    {group.roles.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
               <TextInputWithVoice
                 value={query}
@@ -827,11 +830,19 @@ export function TeamPage({
                       defaultValue="worker"
                       className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                     >
-                      {roleOptions.map((role) => (
-                        <option key={role} value={role}>
-                          {role}
-                        </option>
-                      ))}
+                      {ROLE_GROUPS.map((group) => {
+                        const roles = group.roles.filter((role) => roleOptions.includes(role) && role !== "owner");
+                        if (roles.length === 0) return null;
+                        return (
+                          <optgroup key={group.key} label={t(group.labelKey)}>
+                            {roles.map((role) => (
+                              <option key={role} value={role}>
+                                {role}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>

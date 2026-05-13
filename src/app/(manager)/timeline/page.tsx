@@ -120,6 +120,12 @@ export default async function TimelinePage({
       .filter((event) => event.event_type === "clock_in")
       .map((event) => [event.id, event]),
   );
+  const clockOutEventsById = new Map(
+    data.timeEvents
+      .filter((event) => event.event_type === "clock_out" || event.event_type === "auto_out")
+      .map((event) => [event.id, event]),
+  );
+  const eventTypeById = new Map(data.timeEvents.map((event) => [event.id, event.event_type]));
   const acknowledgedShiftEventIds = buildShiftReviewAckEventIds(data.timeEvents);
   const ackByReviewedEventId = new Map(
     data.timeEvents
@@ -141,6 +147,18 @@ export default async function TimelinePage({
     needs_review: t("shiftReview.needsReview"),
     video_missing: t("shiftReview.videoMissing"),
   };
+  const filteredSessions = sessions.filter((session) => {
+    if (worker && session.profileId !== worker) return false;
+    if (project && session.projectId !== project) return false;
+    if (type && !session.eventIds.some((eventId) => eventTypeById.get(eventId) === type)) {
+      return false;
+    }
+
+    const sessionEnd = session.clockOutTime ?? session.clockInTime;
+    if (start && sessionEnd < start) return false;
+    if (endExclusive && session.clockInTime >= endExclusive) return false;
+    return true;
+  });
   const timeline = buildTimelineItems(data).filter((item) => {
     if (worker && item.profile_id !== worker) {
       return false;
@@ -164,6 +182,18 @@ export default async function TimelinePage({
 
     return true;
   });
+  const profileSelectGroups = [
+    { key: "managers", label: t("team.groupManagers"), roles: ["owner", "admin", "manager"] },
+    { key: "supervisors", label: t("team.groupSupervisors"), roles: ["supervisor"] },
+    { key: "sales", label: t("team.groupSales"), roles: ["sales"] },
+    { key: "drivers", label: t("team.groupDrivers"), roles: ["driver"] },
+    { key: "workers", label: t("team.groupWorkers"), roles: ["worker", "subcontractor"] },
+  ]
+    .map((group) => ({
+      ...group,
+      profiles: data.profiles.filter((profile) => !profile.deleted_at && group.roles.includes(profile.role)),
+    }))
+    .filter((group) => group.profiles.length > 0);
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
@@ -193,13 +223,15 @@ export default async function TimelinePage({
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           >
             <option value="">{t("timeline.allWorkers")}</option>
-            {data.profiles
-              .filter((profile) => !profile.deleted_at)
-              .map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
+            {profileSelectGroups.map((group) => (
+              <optgroup key={group.key} label={group.label}>
+                {group.profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
           </select>
           <select
             name="project"
@@ -238,7 +270,105 @@ export default async function TimelinePage({
 
       <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("timeline.events")}</h2>
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("timeline.shifts")}</h2>
+          <div className="text-sm text-[var(--text-secondary)]">{filteredSessions.length} {t("timeline.rows")}</div>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+          {t("timeline.shiftsDescription")}
+        </p>
+        <div className="mt-4 space-y-3">
+          {filteredSessions.length === 0 ? (
+            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+              {t("timeline.noShifts")}
+            </div>
+          ) : (
+            filteredSessions.map((session) => {
+              const profile = profilesById.get(session.profileId);
+              const clockInEvent = clockInEventsById.get(session.clockInEventId);
+              const closeEvent = session.clockOutEventId ? clockOutEventsById.get(session.clockOutEventId) : null;
+              const review = deriveShiftReview({
+                isOpen: session.isOpen,
+                durationMinutes: session.durationMinutes,
+                hadGpsAtClockIn: clockInEvent?.gps_point != null,
+                gpsFreshness: null,
+                requireVideo: profile?.require_video ?? false,
+                videoStatus: session.isOpen ? "not_required" : session.checkoutStatus,
+              });
+              const ack = closeEvent
+                ? ackByReviewedEventId.get(closeEvent.id) ?? getShiftReviewAck(closeEvent.metadata)
+                : null;
+              const reviewNeedsAction =
+                !session.isOpen &&
+                Boolean(closeEvent) &&
+                review.status !== "normal" &&
+                !acknowledgedShiftEventIds.has(closeEvent?.id ?? "");
+              const videoLabel = session.isOpen ? null : videoStatusLabel(session.checkoutStatus, t);
+
+              return (
+                <article
+                  key={session.id}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-[var(--text-primary)]">
+                        <Link href={`/team/${session.profileId}`} className="hover:text-[var(--brand-yellow)]">
+                          {session.profileName}
+                        </Link>
+                        <span className="text-[var(--text-muted)]">•</span>
+                        <Link href={`/projects/${session.projectId}`} className="text-[var(--brand-yellow)]">
+                          {session.projectName}
+                        </Link>
+                      </div>
+                      <div className="text-xs text-[var(--text-secondary)]">
+                        {formatDateTime(session.clockInTime)} → {session.clockOutTime ? formatDateTime(session.clockOutTime) : t("timeline.openShift")}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-sm font-bold text-[var(--text-primary)]">
+                        {formatDurationCompact(session.durationMinutes)}
+                      </div>
+                      <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
+                        {session.isOpen ? t("timeline.openShift") : t("timeline.closedShift")}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {chip(
+                      clockInEvent?.gps_point ? t("timeline.gpsCaptured") : t("timeline.noGps"),
+                      clockInEvent?.gps_point ? "good" : "warning",
+                    )}
+                    {videoLabel ? chip(videoLabel, session.checkoutStatus === "pending" ? "warning" : "good") : null}
+                    {review.status === "normal"
+                      ? chip(shiftReviewLabel.normal, "good")
+                      : chip(
+                          shiftReviewLabel[review.status],
+                          review.status === "needs_review" || review.status === "gps_lost" ? "danger" : "warning",
+                        )}
+                    {reviewNeedsAction ? chip(t("timeline.notReviewed"), "danger") : null}
+                    {ack ? chip(`${t("timeline.reviewed")} ${ack.reviewedAt.slice(0, 10)}`, "good") : null}
+                  </div>
+
+                  {reviewNeedsAction && closeEvent ? (
+                    <div className="mt-3 flex justify-end">
+                      <ShiftReviewAckButton
+                        eventId={closeEvent.id}
+                        managerId={data.manager.id}
+                        status={review.status}
+                      />
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("timeline.eventJournal")}</h2>
           <div className="flex items-center gap-3">
             {hasFilters ? (
               <Link href="/timeline" className="text-sm font-semibold text-[var(--brand-yellow)]">
@@ -248,6 +378,9 @@ export default async function TimelinePage({
             <div className="text-sm text-[var(--text-secondary)]">{timeline.length} {t("timeline.rows")}</div>
           </div>
         </div>
+        <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+          {t("timeline.eventJournalDescription")}
+        </p>
         <div className="mt-4 space-y-3">
           {timeline.length === 0 ? (
             <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">

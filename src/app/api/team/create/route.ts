@@ -119,6 +119,19 @@ export async function POST(request: NextRequest) {
     if (profileInsertError) {
       await adminClient.auth.admin.deleteUser(userResult.user.id);
 
+      if (
+        profileInsertError.message.includes("user_role") &&
+        profileInsertError.message.includes("sales")
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "The sales role is not enabled in Supabase yet. Run migration 00027_sales_role.sql, then create this user again.",
+          },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.json(
         { error: profileInsertError.message },
         { status: 500 },
