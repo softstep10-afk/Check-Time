@@ -76,6 +76,16 @@ const ACTION_COLORS: Record<string, string> = {
   settings_change: "var(--blue)",
 };
 
+const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+function numberValue(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 export default function AuditLogPage() {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -229,6 +239,19 @@ export default function AuditLogPage() {
                 filtered.map((entry) => {
                   const color = ACTION_COLORS[entry.action] ?? "var(--text-muted)";
                   const expanded = expandedId === entry.id;
+                  const after = entry.after ?? {};
+                  const externalPayment = after.external_payment &&
+                    typeof after.external_payment === "object" &&
+                    !Array.isArray(after.external_payment)
+                    ? after.external_payment as Record<string, unknown>
+                    : null;
+                  const payrollSummary = entry.action.startsWith("payroll_")
+                    ? t("audit.payrollSummary")
+                        .replace("{workers}", String(numberValue(after.worker_count) ?? 0))
+                        .replace("{hours}", String(numberValue(after.total_hours) ?? 0))
+                        .replace("{total}", currency.format(numberValue(after.net_total) ?? 0))
+                        .replace("{ref}", stringValue(externalPayment?.reference) ?? "—")
+                    : null;
                   return (
                     <tr key={entry.id} className="border-b border-[var(--border-subtle)]">
                       <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
@@ -250,6 +273,11 @@ export default function AuditLogPage() {
                         >
                           {entry.action.replace(/_/g, " ")}
                         </span>
+                        {payrollSummary ? (
+                          <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                            {payrollSummary}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3 pr-3 text-xs text-[var(--text-muted)]">
                         {entry.targetType}{entry.targetId ? `:${entry.targetId.slice(0, 8)}` : ""}

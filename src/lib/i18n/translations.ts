@@ -1440,6 +1440,10 @@ export const translations = {
   "audit.empty": { en: "No audit events recorded.", ru: "Событий аудита нет." },
   "audit.roleChange": { en: "Role change", ru: "Смена роли" },
   "audit.payrollApproval": { en: "Payroll approval", ru: "Утверждение зарплаты" },
+  "audit.payrollSummary": {
+    en: "{workers} workers · {hours}h · {total} · ref {ref}",
+    ru: "{workers} рабочих · {hours}ч · {total} · ref {ref}",
+  },
   "audit.forceCheckout": { en: "Force checkout", ru: "Принудительный выход" },
   "audit.ownerTransfer": { en: "Ownership transfer", ru: "Передача владения" },
   "audit.dataPurge": { en: "Data purge", ru: "Удаление данных" },

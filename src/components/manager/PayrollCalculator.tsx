@@ -29,6 +29,11 @@ import {
   makeBigBooksPayrollCsv,
   type BigBooksPayrollExportLine,
 } from "@/lib/payroll-export-utils";
+import {
+  buildPayrollActionAuditPayload,
+  type PayrollAuditLineInput,
+  type PayrollExternalPaymentAudit,
+} from "@/lib/payroll-audit-utils";
 import type { PayrollClosure, Profile, UserRole } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
 import { formatEventTime } from "@/lib/worker-utils";
@@ -87,13 +92,7 @@ type PayPeriod = {
   lines: WorkerLine[];
 };
 
-type ExternalPaymentRecord = {
-  provider: "BigBooks";
-  reference: string | null;
-  worker_ids: string[];
-  recorded_at: string;
-  recorded_by: string;
-};
+type ExternalPaymentRecord = PayrollExternalPaymentAudit;
 
 // ── Helpers ──
 
@@ -299,6 +298,23 @@ function downloadCsvFile(filename: string, csv: string) {
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
+}
+
+function toPayrollAuditLines(lines: WorkerLine[]): PayrollAuditLineInput[] {
+  return lines
+    .filter((line) => line.hasHours)
+    .map((line) => ({
+      workerId: line.workerId,
+      workerName: line.workerName,
+      workerRole: line.workerRole,
+      status: line.status,
+      regularHours: line.regHours,
+      overtimeHours: line.otHours,
+      grossTotal: line.grossTotal,
+      netTotal: line.netTotal,
+      projectNames: [...new Set(line.projectBreakdown.map((project) => project.projectName))]
+        .sort((left, right) => left.localeCompare(right)),
+    }));
 }
 
 function appendExternalPaymentRecord(
@@ -927,7 +943,18 @@ export function PayrollCalculator({
         targetType: "pay_period",
         targetId: period.id,
         beforeData: { status: "draft" },
-        afterData: { status: "approved", label: period.label },
+        afterData: buildPayrollActionAuditPayload({
+          period: {
+            id: period.id,
+            label: period.label,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            status: "approved",
+          },
+          lines: toPayrollAuditLines(
+            period.lines.map((line) => ({ ...line, status: "approved" as ItemStatus })),
+          ),
+        }),
       });
     } finally {
       setPayrollActionBusy(false);
@@ -1206,7 +1233,19 @@ export function PayrollCalculator({
         targetType: "pay_period",
         targetId: period.id,
         beforeData: { status: "approved" },
-        afterData: { status: "paid", label: period.label },
+        afterData: buildPayrollActionAuditPayload({
+          period: {
+            id: period.id,
+            label: period.label,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            status: "paid",
+          },
+          lines: toPayrollAuditLines(
+            period.lines.map((line) => ({ ...line, status: "paid" as ItemStatus })),
+          ),
+          externalPayment,
+        }),
       });
     } finally {
       setPayrollActionBusy(false);
@@ -1327,7 +1366,18 @@ export function PayrollCalculator({
         targetType: "pay_period_items",
         targetId: period.id,
         beforeData: { count: ids.length, status: period.status },
-        afterData: { count: ids.length, status: nextStatus, workerIds: ids },
+        afterData: buildPayrollActionAuditPayload({
+          period: {
+            id: period.id,
+            label: period.label,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            status: nextStatus,
+          },
+          lines: toPayrollAuditLines(nextLines),
+          workerIds: ids,
+          externalPayment,
+        }),
       });
     } finally {
       setPayrollActionBusy(false);
