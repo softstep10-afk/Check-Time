@@ -709,6 +709,8 @@ export const translations = {
   "teamMember.bucketCurrentMonth": { en: "Current month", ru: "Текущий месяц" },
   "teamMember.bucketTotalWorked": { en: "Total worked", ru: "Всего отработано" },
   "teamMember.bucketPaidClosed": { en: "Paid / closed", ru: "Оплачено / закрыто" },
+  "teamMember.lastPaidPeriod": { en: "Last paid period", ru: "Последний период" },
+  "teamMember.closedThrough": { en: "Closed through", ru: "Закрыто до" },
   "teamMember.bucketUnpaid": { en: "Unpaid (open)", ru: "Не оплачено (открыто)" },
   "teamMember.bucketAdjustments": { en: "Adjustments", ru: "Корректировки" },
   "teamMember.showUnpaidBreakdown": { en: "Show shifts and adjustments", ru: "Показать смены и корректировки" },

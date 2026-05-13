@@ -111,7 +111,7 @@ describe("deriveWorkerHourBuckets", () => {
     expect(result.totalWorkedMinutes).toBe(240 + 480 + 360 + 480 + 480 + 600);
   });
 
-  it("subtracts paid/closed adjustments from total to compute unpaid", () => {
+  it("subtracts paid/closed adjustments from total without showing them as active corrections", () => {
     // Vasya regression scenario: 3000 minutes worked, a -3000 minute
     // reset_to_zero adjustment marked the period as paid. UI must show
     // worked=3000, paid/closed=3000, unpaid=0 — not "data missing".
@@ -125,7 +125,7 @@ describe("deriveWorkerHourBuckets", () => {
     expect(result.totalWorkedMinutes).toBe(3000);
     expect(result.paidOrClosedMinutes).toBe(3000);
     expect(result.unpaidMinutes).toBe(0);
-    expect(result.adjustmentsTotalMinutes).toBe(-3000);
+    expect(result.adjustmentsTotalMinutes).toBe(0);
   });
 
   it("uses the latest payroll closure cutoff to move older sessions out of unpaid", () => {
@@ -159,7 +159,24 @@ describe("deriveWorkerHourBuckets", () => {
     expect(result.totalWorkedMinutes).toBe(960);
     expect(result.paidOrClosedMinutes).toBe(960);
     expect(result.unpaidMinutes).toBe(0);
-    expect(result.adjustmentsTotalMinutes).toBe(-480);
+    expect(result.adjustmentsTotalMinutes).toBe(0);
+  });
+
+  it("hides regular corrections that were already applied inside a paid payroll closure", () => {
+    const result = deriveWorkerHourBuckets({
+      sessions: [
+        session("2026-04-01T08:00:00.000Z", 480, "2026-04-01T16:00:00.000Z"),
+      ],
+      adjustments: [
+        adjustment("2026-04-01T20:00:00.000Z", -120, "Manager correction"),
+        adjustment("2026-04-03T20:00:00.000Z", 30, "Later bonus"),
+      ],
+      closures: [{ closedThrough: "2026-04-02T23:59:59.000Z" }],
+      now: NOW,
+    });
+    expect(result.paidOrClosedMinutes).toBe(480);
+    expect(result.adjustmentsTotalMinutes).toBe(30);
+    expect(result.unpaidMinutes).toBe(0);
   });
 
   it("keeps manual reset adjustments after the latest payroll closure", () => {

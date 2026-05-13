@@ -16,7 +16,7 @@ import {
 } from "@/lib/manager-utils";
 import { deriveGpsFreshness } from "@/lib/gps-freshness";
 import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
-import type { Media, PayrollClosure, TimeEvent } from "@/types/database";
+import type { Media, PayrollClosure, PayrollRun, TimeEvent } from "@/types/database";
 
 // F5 must reflect the worker's latest shifts, tasks, and media.
 export const revalidate = 0;
@@ -181,7 +181,11 @@ export default async function TeamMemberRoutePage({
       };
     });
 
-  let workerClosures: Array<{ closedThrough: string }> = [];
+  let workerClosures: Array<{
+    closedThrough: string;
+    periodStart: string | null;
+    periodEnd: string | null;
+  }> = [];
   if (managerHasFinanceAccess) {
     const { data: workerClosureRows, error: workerClosureError } = await supabase
       .from("payroll_closures")
@@ -195,8 +199,28 @@ export default async function TeamMemberRoutePage({
       throw new Error(`Worker payroll closures query failed: ${workerClosureError.message}`);
     }
 
+    const runIds = [
+      ...new Set((workerClosureRows ?? []).map((closure) => closure.payroll_run_id)),
+    ];
+    let payrollRunsById = new Map<string, Pick<PayrollRun, "id" | "period_start" | "period_end">>();
+    if (runIds.length > 0) {
+      const { data: workerRunRows, error: workerRunError } = await supabase
+        .from("payroll_runs")
+        .select("id, period_start, period_end")
+        .in("id", runIds)
+        .returns<Pick<PayrollRun, "id" | "period_start" | "period_end">[]>();
+
+      if (workerRunError) {
+        throw new Error(`Worker payroll run query failed: ${workerRunError.message}`);
+      }
+
+      payrollRunsById = new Map((workerRunRows ?? []).map((run) => [run.id, run]));
+    }
+
     workerClosures = (workerClosureRows ?? []).map((closure) => ({
       closedThrough: closure.closed_through,
+      periodStart: payrollRunsById.get(closure.payroll_run_id)?.period_start ?? null,
+      periodEnd: payrollRunsById.get(closure.payroll_run_id)?.period_end ?? null,
     }));
   }
 

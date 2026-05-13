@@ -58,6 +58,21 @@ type DailyTotal = {
   otLevel: "ok" | "warning" | "critical";
 };
 
+type WorkerClosureView = {
+  closedThrough: string;
+  periodStart: string | null;
+  periodEnd: string | null;
+};
+
+function formatPayrollPeriodDate(value: string): string {
+  const normalized = value.length <= 10 ? `${value}T12:00:00` : value;
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(normalized));
+}
+
 export function TeamMemberPage({
   orgId,
   managerId,
@@ -105,9 +120,7 @@ export function TeamMemberPage({
     reason: string;
     kind: string | null;
   }>;
-  workerClosures: Array<{
-    closedThrough: string;
-  }>;
+  workerClosures: WorkerClosureView[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -278,6 +291,29 @@ export function TeamMemberPage({
       }),
     [sessions, workerAdjustments, workerClosures],
   );
+  const latestClosure = useMemo(
+    () =>
+      workerClosures.reduce<WorkerClosureView | null>((latest, closure) => {
+        const closedThroughMs = new Date(closure.closedThrough).getTime();
+        if (!Number.isFinite(closedThroughMs)) return latest;
+        if (
+          !latest ||
+          closedThroughMs > new Date(latest.closedThrough).getTime()
+        ) {
+          return closure;
+        }
+        return latest;
+      }, null),
+    [workerClosures],
+  );
+  const latestClosureMs = latestClosure
+    ? new Date(latestClosure.closedThrough).getTime()
+    : null;
+  const latestPaidPeriodLabel = latestClosure
+    ? latestClosure.periodStart && latestClosure.periodEnd
+      ? `${formatPayrollPeriodDate(latestClosure.periodStart)} - ${formatPayrollPeriodDate(latestClosure.periodEnd)}`
+      : `${t("teamMember.closedThrough")} ${formatDateTime(latestClosure.closedThrough)}`
+    : null;
   const unpaidMinutes = hourBuckets.unpaidMinutes;
   const unpaidHours = Math.round((unpaidMinutes / 60) * 100) / 100;
   const sessionMinutes = useMemo(
@@ -290,8 +326,18 @@ export function TeamMemberPage({
   );
   const sessionRows = sessions;
   const adjustmentRows = useMemo(
-    () => workerAdjustments.filter((adjustment) => adjustment.minutes !== 0),
-    [workerAdjustments],
+    () =>
+      workerAdjustments.filter((adjustment) => {
+        if (adjustment.minutes === 0) return false;
+        if (isPaidOrClosedAdjustment(adjustment)) return false;
+        const adjustmentMs = new Date(adjustment.eventTime).getTime();
+        return (
+          latestClosureMs === null ||
+          !Number.isFinite(adjustmentMs) ||
+          adjustmentMs > latestClosureMs
+        );
+      }),
+    [workerAdjustments, latestClosureMs],
   );
 
   const assignedProjectIds = new Set(assignments.map((assignment) => assignment.project_id));
@@ -1282,6 +1328,11 @@ export function TeamMemberPage({
                     <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
                       {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
                     </div>
+                    {latestPaidPeriodLabel ? (
+                      <div className="mt-2 text-[10px] leading-snug text-[var(--text-secondary)]">
+                        {t("teamMember.lastPaidPeriod")}: {latestPaidPeriodLabel}
+                      </div>
+                    ) : null}
                   </div>
                   <button
                     type="button"

@@ -81,7 +81,11 @@ export interface WorkerHourBuckets {
    * labels this as "Paid / closed".
    */
   paidOrClosedMinutes: number;
-  /** Sum of every adjustment row, signed. Useful for an audit total. */
+  /**
+   * Active, unpaid adjustment total. Corrections already absorbed by the
+   * latest payroll closure are historical payroll detail, not an open
+   * worker-balance warning.
+   */
   adjustmentsTotalMinutes: number;
   /**
    * Hours still pending payroll = totalWorkedMinutes - paidOrClosedMinutes.
@@ -202,14 +206,18 @@ export function deriveWorkerHourBuckets(args: {
   }
 
   for (const adj of args.adjustments) {
-    adjustmentsTotalMinutes += adj.minutes;
+    const adjustmentMs = new Date(adj.eventTime).getTime();
+    const afterLatestClosure =
+      latestClosureMs === null ||
+      !Number.isFinite(adjustmentMs) ||
+      adjustmentMs > latestClosureMs;
+
+    if (afterLatestClosure && !isPaidOrClosedAdjustment(adj)) {
+      adjustmentsTotalMinutes += adj.minutes;
+    }
+
     if (isPaidOrClosedAdjustment(adj)) {
-      const adjustmentMs = new Date(adj.eventTime).getTime();
-      if (
-        latestClosureMs !== null &&
-        Number.isFinite(adjustmentMs) &&
-        adjustmentMs <= latestClosureMs
-      ) {
+      if (!afterLatestClosure) {
         continue;
       }
       // A reset_to_zero is recorded as a NEGATIVE minutes value; the

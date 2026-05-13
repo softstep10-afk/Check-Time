@@ -7,7 +7,10 @@ import {
   formatDurationCompact,
   formatEventDate,
 } from "@/lib/worker-utils";
-import { deriveWorkerHourBuckets } from "@/lib/worker-hour-summary";
+import {
+  deriveWorkerHourBuckets,
+  isPaidOrClosedAdjustment,
+} from "@/lib/worker-hour-summary";
 import { useTranslation } from "@/lib/i18n";
 
 export function HoursPage() {
@@ -40,6 +43,29 @@ export function HoursPage() {
         closures: shell.closures,
       }),
     [shell.sessions, shell.adjustments, shell.closures],
+  );
+  const latestClosureMs = useMemo(
+    () =>
+      shell.closures.reduce<number | null>((latest, closure) => {
+        const closedThroughMs = new Date(closure.closedThrough).getTime();
+        if (!Number.isFinite(closedThroughMs)) return latest;
+        return latest === null ? closedThroughMs : Math.max(latest, closedThroughMs);
+      }, null),
+    [shell.closures],
+  );
+  const activeAdjustments = useMemo(
+    () =>
+      shell.adjustments.filter((adjustment) => {
+        if (adjustment.minutes === 0) return false;
+        if (isPaidOrClosedAdjustment(adjustment)) return false;
+        const adjustmentMs = new Date(adjustment.eventTime).getTime();
+        return (
+          latestClosureMs === null ||
+          !Number.isFinite(adjustmentMs) ||
+          adjustmentMs > latestClosureMs
+        );
+      }),
+    [shell.adjustments, latestClosureMs],
   );
 
   return (
@@ -231,18 +257,18 @@ export function HoursPage() {
         </div>
       </section>
 
-      {shell.adjustments.length > 0 ? (
+      {activeAdjustments.length > 0 ? (
         <section className="surface-card surface-card--muted p-4">
           <div className="flex items-center justify-between gap-3">
             <div className="text-lg font-bold text-[var(--text-primary)]">
               {t("hours.adjustments")}
             </div>
             <div className="text-xs text-[var(--text-muted)]">
-              {shell.adjustments.length} {t("hours.entries")}
+              {activeAdjustments.length} {t("hours.entries")}
             </div>
           </div>
           <div className="mt-4 space-y-2">
-            {shell.adjustments.map((adj) => {
+            {activeAdjustments.map((adj) => {
               const positive = adj.minutes >= 0;
               const sign = positive ? "+" : "−";
               const absMin = Math.abs(adj.minutes);
