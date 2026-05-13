@@ -1345,6 +1345,39 @@ export function PayrollCalculator({
       : "approve";
   }, [period, visibleSelectedIds]);
 
+  const selectedWorkerLine = useMemo(() => {
+    if (!period || visibleSelectedIds.size !== 1) return null;
+    const [workerId] = [...visibleSelectedIds];
+    return period.lines.find((line) => line.workerId === workerId) ?? null;
+  }, [period, visibleSelectedIds]);
+
+  const selectedActionLabel = useMemo(() => {
+    if (selectedAction === "pay") {
+      const prefix =
+        selectedWorkerLine && selectionSummary.count === 1
+          ? `${t("payroll.completePayment")}: ${selectedWorkerLine.workerName}`
+          : t("payroll.completePayment");
+      const amount =
+        showFinancialFields && selectedWorkerLine
+          ? ` · ${currency.format(selectedWorkerLine.netTotal)}`
+          : "";
+      return selectionSummary.count > 0
+        ? `${prefix} · ${selectionSummary.totalHours.toFixed(1)}h${amount}`
+        : prefix;
+    }
+
+    return selectionSummary.count > 0
+      ? `${t("payroll.approveSelected")} · ${selectionSummary.count} · ${selectionSummary.totalHours.toFixed(1)}h`
+      : t("payroll.approveSelected");
+  }, [
+    selectedAction,
+    selectedWorkerLine,
+    selectionSummary.count,
+    selectionSummary.totalHours,
+    showFinancialFields,
+    t,
+  ]);
+
   const summary = useMemo(() => {
     if (!period) return null;
     const active = period.lines.filter((l) => l.hasHours);
@@ -1608,24 +1641,31 @@ export function PayrollCalculator({
                 type="button"
                 onClick={() => void processSelected()}
                 disabled={selectionSummary.count === 0}
-                className="rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                className="rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
                 style={{
-                  background: selectionSummary.count === 0 ? "var(--border-default)" : "var(--brand-yellow)",
+                  background:
+                    selectionSummary.count === 0
+                      ? "var(--border-default)"
+                      : selectedAction === "pay"
+                        ? "var(--green)"
+                        : "var(--brand-yellow)",
                   color: selectionSummary.count === 0 ? "var(--text-muted)" : "var(--text-inverse)",
                 }}
               >
-                {selectedAction === "pay"
-                  ? t("payroll.markSelectedPaid")
-                  : t("payroll.approveSelected")}
-                {selectionSummary.count > 0
-                  ? ` · ${selectionSummary.count} · ${selectionSummary.totalHours.toFixed(1)}h`
-                  : ""}
+                {selectedActionLabel}
               </button>
             ) : null}
             <button type="button" onClick={exportCsv} className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold" style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}>
               <Download size={13} />
               {t("payroll.exportCsv")}
             </button>
+            {selectionSummary.count > 0 && period.status !== "paid" ? (
+              <span className="max-w-[56ch] text-xs text-[var(--text-secondary)]">
+                {selectedAction === "pay"
+                  ? t("payroll.finalPayHint")
+                  : t("payroll.approveThenPayHint")}
+              </span>
+            ) : null}
           </section>
 
           {/* Tab switcher */}

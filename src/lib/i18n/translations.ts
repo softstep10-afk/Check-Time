@@ -999,6 +999,15 @@ export const translations = {
   "payroll.processSelected": { en: "Process selected", ru: "Обработать выбранные" },
   "payroll.approveSelected": { en: "Approve selected", ru: "Утвердить выбранные" },
   "payroll.markSelectedPaid": { en: "Pay selected", ru: "Оплатить выбранные" },
+  "payroll.completePayment": { en: "Complete payment", ru: "Завершить оплату" },
+  "payroll.finalPayHint": {
+    en: "Final step: closes these hours, moves the payout into payroll history, and resets the unpaid balance.",
+    ru: "Финальный шаг: закрывает эти часы, переносит выплату в историю зарплаты и обнуляет неоплаченный баланс.",
+  },
+  "payroll.approveThenPayHint": {
+    en: "First approve the selected row; after that this same button becomes the final payment action.",
+    ru: "Сначала утвердите выбранную строку; после этого эта же кнопка станет финальной оплатой.",
+  },
   "payroll.selectAll": { en: "Select all", ru: "Выбрать все" },
   "payroll.selectAllVisible": { en: "Select all visible", ru: "Выбрать все видимые" },
   "payroll.selectedCount": { en: "{n} selected", ru: "Выбрано: {n}" },
