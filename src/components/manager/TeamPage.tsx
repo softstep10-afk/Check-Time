@@ -49,11 +49,11 @@ const ROLE_TAG_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 const ROLE_GROUPS: Array<{ key: string; labelKey: TranslationKey; roles: UserRole[] }> = [
-  { key: "managers", labelKey: "team.groupManagers", roles: ["owner", "admin", "manager"] },
-  { key: "supervisors", labelKey: "team.groupSupervisors", roles: ["supervisor"] },
-  { key: "sales", labelKey: "team.groupSales", roles: ["sales"] },
-  { key: "drivers", labelKey: "team.groupDrivers", roles: ["driver"] },
   { key: "workers", labelKey: "team.groupWorkers", roles: ["worker", "subcontractor"] },
+  { key: "supervisors", labelKey: "team.groupSupervisors", roles: ["supervisor"] },
+  { key: "drivers", labelKey: "team.groupDrivers", roles: ["driver"] },
+  { key: "sales", labelKey: "team.groupSales", roles: ["sales"] },
+  { key: "managers", labelKey: "team.groupManagers", roles: ["owner", "admin", "manager"] },
 ];
 
 const AVATAR_COLORS = ["#f59e0b", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#06b6d4", "#f97316", "#ec4899"];

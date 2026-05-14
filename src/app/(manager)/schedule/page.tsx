@@ -78,11 +78,14 @@ const CALENDAR_ROLES: UserRole[] = [
 const TEXT = {
   en: {
     eyebrow: "Schedule",
-    title: "Year calendar",
-    subtitle: "Click any day to add meetings, notes, project work, or delivery runs. Project deadlines stay visible across the year.",
+    title: "Team calendar",
+    subtitle: "One full-screen month for meetings, notes, project work, deliveries, and project deadlines.",
     today: "Today",
-    previousYear: "Previous year",
-    nextYear: "Next year",
+    previousMonth: "Previous month",
+    nextMonth: "Next month",
+    dateFrom: "From",
+    dateTo: "To",
+    resetRange: "Reset dates",
     generalCalendar: "Team calendar",
     deliveryCalendar: "Delivery calendar",
     newItem: "New calendar item",
@@ -135,11 +138,14 @@ const TEXT = {
   },
   ru: {
     eyebrow: "Расписание",
-    title: "Годовой календарь",
-    subtitle: "Нажмите на любой день, чтобы добавить встречу, заметку, проектную работу или доставку. Дедлайны проектов видны по всему году.",
+    title: "Календарь команды",
+    subtitle: "Один большой месяц на весь экран для встреч, заметок, проектных работ, доставок и дедлайнов.",
     today: "Сегодня",
-    previousYear: "Предыдущий год",
-    nextYear: "Следующий год",
+    previousMonth: "Предыдущий месяц",
+    nextMonth: "Следующий месяц",
+    dateFrom: "От",
+    dateTo: "До",
+    resetRange: "Сбросить даты",
     generalCalendar: "Календарь команды",
     deliveryCalendar: "Календарь доставок",
     newItem: "Новая запись",
@@ -246,17 +252,18 @@ function defaultItemForm(dayIso?: string, kind: ScheduleKind = "meeting"): ItemF
   };
 }
 
-function yearStartIso(year: number): string {
-  return `${year}-01-01`;
+function monthStartIso(month: Date): string {
+  return isoDay(new Date(month.getFullYear(), month.getMonth(), 1));
 }
 
-function yearEndIso(year: number): string {
-  return `${year}-12-31`;
+function monthEndIso(month: Date): string {
+  return isoDay(new Date(month.getFullYear(), month.getMonth() + 1, 0));
 }
 
 function monthLabel(date: Date, locale: "en" | "ru"): string {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
     month: "long",
+    year: "numeric",
   }).format(date);
 }
 
@@ -351,7 +358,12 @@ export default function SchedulePage() {
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("general");
-  const [anchorYear, setAnchorYear] = useState(() => new Date().getFullYear());
+  const [anchorMonth, setAnchorMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd, setRangeEnd] = useState("");
   const [itemForm, setItemForm] = useState<ItemForm>(() => defaultItemForm());
   const [projectForm, setProjectForm] = useState<ProjectDateForm>({
     projectId: "",
@@ -364,22 +376,21 @@ export default function SchedulePage() {
       ? ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
       : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-  const yearMonths = useMemo(() => {
-    return Array.from({ length: 12 }, (_, monthIndex) => {
-      const month = new Date(anchorYear, monthIndex, 1);
-      const gridStart = startOfCalendarGrid(month);
-      const days = Array.from({ length: 42 }, (_, index) => {
-        const date = addDays(gridStart, index);
-        return {
-          date,
-          iso: isoDay(date),
-          inMonth: date.getMonth() === month.getMonth(),
-          isToday: isoDay(date) === isoDay(new Date()),
-        };
-      });
-      return { month, days };
+  const monthGridStart = useMemo(() => startOfCalendarGrid(anchorMonth), [anchorMonth]);
+  const monthDays = useMemo(() => {
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = addDays(monthGridStart, index);
+      return {
+        date,
+        iso: isoDay(date),
+        inMonth: date.getMonth() === anchorMonth.getMonth(),
+        isToday: isoDay(date) === isoDay(new Date()),
+      };
     });
-  }, [anchorYear]);
+  }, [anchorMonth, monthGridStart]);
+  const monthGridEnd = monthDays[monthDays.length - 1]?.iso ?? isoDay(monthGridStart);
+  const loadStart = [isoDay(monthGridStart), rangeStart].filter(Boolean).sort()[0] ?? isoDay(monthGridStart);
+  const loadEnd = [monthGridEnd, rangeEnd].filter(Boolean).sort().at(-1) ?? monthGridEnd;
 
   const loadSchedule = useCallback(async () => {
     setLoading(true);
@@ -411,8 +422,8 @@ export default function SchedulePage() {
         .from("tasks")
         .select("*")
         .is("deleted_at", null)
-        .gte("due_date", yearStartIso(anchorYear))
-        .lte("due_date", yearEndIso(anchorYear))
+        .gte("due_date", loadStart)
+        .lte("due_date", loadEnd)
         .order("due_date", { ascending: true })
         .returns<Task[]>(),
     ]);
@@ -436,7 +447,7 @@ export default function SchedulePage() {
       };
     });
     setLoading(false);
-  }, [anchorYear, supabase, text.loadFailed]);
+  }, [loadEnd, loadStart, supabase, text.loadFailed]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -521,7 +532,7 @@ export default function SchedulePage() {
         endDate: project.end_date,
       });
       const out: CalendarEntry[] = [];
-      if (project.start_date?.startsWith(String(anchorYear))) {
+      if (project.start_date && project.start_date >= loadStart && project.start_date <= loadEnd) {
         out.push({
           id: `${project.id}-start`,
           source: "project",
@@ -536,7 +547,7 @@ export default function SchedulePage() {
           tone: "green",
         });
       }
-      if (project.end_date?.startsWith(String(anchorYear))) {
+      if (project.end_date && project.end_date >= loadStart && project.end_date <= loadEnd) {
         out.push({
           id: `${project.id}-deadline`,
           source: "project",
@@ -559,14 +570,17 @@ export default function SchedulePage() {
       const bTime = b.startsAt ? new Date(b.startsAt).getTime() : 0;
       return aTime - bTime;
     });
-  }, [anchorYear, locale, profilesById, projects, projectsById, tasks, text]);
+  }, [loadEnd, loadStart, locale, profilesById, projects, projectsById, tasks, text]);
 
   const visibleEntries = useMemo(() => {
     return entries.filter((entry) => {
+      if (rangeStart && entry.dayIso < rangeStart) return false;
+      if (rangeEnd && entry.dayIso > rangeEnd) return false;
       if (calendarMode === "deliveries") return entry.type === "delivery";
-      return entry.type !== "delivery";
+      if (entry.type === "delivery") return false;
+      return true;
     });
-  }, [calendarMode, entries]);
+  }, [calendarMode, entries, rangeEnd, rangeStart]);
 
   const entriesByDay = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
@@ -797,28 +811,31 @@ export default function SchedulePage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setAnchorYear((year) => year - 1)}
-            title={text.previousYear}
-            aria-label={text.previousYear}
+            onClick={() => setAnchorMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+            title={text.previousMonth}
+            aria-label={text.previousMonth}
             className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] text-[var(--text-secondary)]"
           >
             <ChevronLeft size={18} />
           </button>
-          <div className="min-w-[90px] text-center text-2xl font-black text-[var(--text-primary)]">
-            {anchorYear}
+          <div className="min-w-[220px] text-center text-2xl font-black capitalize text-[var(--text-primary)]">
+            {monthLabel(anchorMonth, locale)}
           </div>
           <button
             type="button"
-            onClick={() => setAnchorYear((year) => year + 1)}
-            title={text.nextYear}
-            aria-label={text.nextYear}
+            onClick={() => setAnchorMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+            title={text.nextMonth}
+            aria-label={text.nextMonth}
             className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] text-[var(--text-secondary)]"
           >
             <ChevronRight size={18} />
           </button>
           <button
             type="button"
-            onClick={() => setAnchorYear(new Date().getFullYear())}
+            onClick={() => {
+              const today = new Date();
+              setAnchorMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+            }}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)]"
           >
             {text.today}
@@ -853,7 +870,37 @@ export default function SchedulePage() {
             );
           })}
         </div>
-        {loading ? <span className="px-2 text-xs text-[var(--text-muted)]">{text.loading}</span> : null}
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+            {text.dateFrom}
+            <input
+              type="date"
+              value={rangeStart}
+              onChange={(event) => setRangeStart(event.target.value)}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 text-xs normal-case tracking-normal text-[var(--text-primary)] outline-none"
+            />
+          </label>
+          <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+            {text.dateTo}
+            <input
+              type="date"
+              value={rangeEnd}
+              onChange={(event) => setRangeEnd(event.target.value)}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 text-xs normal-case tracking-normal text-[var(--text-primary)] outline-none"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setRangeStart("");
+              setRangeEnd("");
+            }}
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+          >
+            {text.resetRange}
+          </button>
+          {loading ? <span className="px-2 pb-2 text-xs text-[var(--text-muted)]">{text.loading}</span> : null}
+        </div>
       </section>
 
       {notice ? (
@@ -869,104 +916,111 @@ export default function SchedulePage() {
         </div>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-          {yearMonths.map(({ month, days }) => (
-            <section key={month.toISOString()} className="surface-card overflow-hidden p-0">
-              <div className="border-b border-[var(--border-default)] px-3 py-2">
-                <h2 className="text-sm font-black capitalize text-[var(--text-primary)]">
-                  {monthLabel(month, locale)}
-                </h2>
+      <section className="space-y-5">
+        <div className="surface-card overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <CalendarDays size={18} className="text-[var(--brand-yellow)]" />
+              <h2 className="text-xl font-black capitalize text-[var(--text-primary)]">
+                {monthLabel(anchorMonth, locale)}
+              </h2>
+            </div>
+            <div className="text-xs text-[var(--text-muted)]">
+              {monthStartIso(anchorMonth)} → {monthEndIso(anchorMonth)}
+            </div>
+          </div>
+          <div className="grid grid-cols-7 border-b border-[var(--border-default)]">
+            {weekdayLabels.map((label) => (
+              <div
+                key={label}
+                className="px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]"
+              >
+                {label}
               </div>
-              <div className="grid grid-cols-7 border-b border-[var(--border-default)]">
-                {weekdayLabels.map((label) => (
-                  <div
-                    key={label}
-                    className="px-1 py-1.5 text-center text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]"
-                  >
-                    {label}
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-7">
-                {days.map((day) => {
-                  const dayEntries = entriesByDay.get(day.iso) ?? [];
-                  return (
-                    <div
-                      key={day.iso}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => openDay(day)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          openDay(day);
-                        }
-                      }}
-                      title={`${text.openDay}: ${dayLongLabel(day.iso, locale)}`}
-                      className="min-h-[82px] cursor-pointer border-b border-r border-[var(--border-subtle)] p-1.5 outline-none transition hover:bg-[rgba(191,162,52,0.08)]"
+            ))}
+          </div>
+          <div className="grid grid-cols-7">
+            {monthDays.map((day) => {
+              const dayEntries = entriesByDay.get(day.iso) ?? [];
+              const outsideRange = (rangeStart && day.iso < rangeStart) || (rangeEnd && day.iso > rangeEnd);
+              return (
+                <div
+                  key={day.iso}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openDay(day)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openDay(day);
+                    }
+                  }}
+                  title={`${text.openDay}: ${dayLongLabel(day.iso, locale)}`}
+                  className="min-h-[138px] cursor-pointer border-b border-r border-[var(--border-subtle)] p-2 outline-none transition hover:bg-[rgba(191,162,52,0.08)] md:min-h-[168px]"
+                  style={{
+                    background: day.inMonth ? "transparent" : "rgba(15, 17, 23, 0.24)",
+                    opacity: outsideRange ? 0.42 : 1,
+                  }}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span
+                      className="inline-flex h-7 min-w-7 items-center justify-center rounded-full px-1.5 text-xs font-bold"
                       style={{
-                        background: day.inMonth ? "transparent" : "rgba(15, 17, 23, 0.24)",
+                        background: day.isToday ? "var(--brand-yellow)" : "transparent",
+                        color: day.isToday
+                          ? "var(--text-inverse)"
+                          : day.inMonth
+                            ? "var(--text-primary)"
+                            : "var(--text-muted)",
                       }}
                     >
-                      <div className="mb-1 flex items-center justify-between gap-1">
-                        <span
-                          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold"
-                          style={{
-                            background: day.isToday ? "var(--brand-yellow)" : "transparent",
-                            color: day.isToday
-                              ? "var(--text-inverse)"
-                              : day.inMonth
-                                ? "var(--text-primary)"
-                                : "var(--text-muted)",
+                      {day.date.getDate()}
+                    </span>
+                    {dayEntries.length > 0 ? (
+                      <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.16)] px-2 py-0.5 text-[10px] font-bold text-[var(--brand-yellow)]">
+                        {dayEntries.length}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="space-y-1">
+                    {dayEntries.slice(0, 5).map((entry) => {
+                      const style = entryStyle(entry.tone);
+                      const time = timeLabel(entry.startsAt, locale);
+                      return (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelectedEntry(entry);
                           }}
+                          className="block w-full rounded-[var(--radius-sm)] border px-2 py-1 text-left"
+                          style={style}
                         >
-                          {day.date.getDate()}
-                        </span>
-                        {dayEntries.length > 0 ? (
-                          <span className="text-[9px] font-bold text-[var(--brand-yellow)]">
-                            {dayEntries.length}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="space-y-1">
-                        {dayEntries.slice(0, 3).map((entry) => {
-                          const style = entryStyle(entry.tone);
-                          const time = timeLabel(entry.startsAt, locale);
-                          return (
-                            <button
-                              key={entry.id}
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSelectedEntry(entry);
-                              }}
-                              className="block w-full rounded-[var(--radius-sm)] border px-1.5 py-1 text-left"
-                              style={style}
-                            >
-                              <div className="truncate text-[10px] font-semibold">{entry.title}</div>
-                              <div className="truncate text-[9px] opacity-80">
-                                {time ? `${time} · ` : ""}
-                                {entryTypeLabel(entry.type, text)}
-                              </div>
-                            </button>
-                          );
-                        })}
-                        {dayEntries.length > 3 ? (
-                          <div className="text-[9px] font-semibold text-[var(--text-muted)]">
-                            +{dayEntries.length - 3} {text.more}
+                          <div className="truncate text-[11px] font-semibold">{entry.title}</div>
+                          <div className="mt-0.5 truncate text-[10px] opacity-80">
+                            {time ? `${time} · ` : ""}
+                            {entryTypeLabel(entry.type, text)}
                           </div>
-                        ) : null}
+                        </button>
+                      );
+                    })}
+                    {dayEntries.length === 0 ? (
+                      <div className="pt-2 text-[10px] text-[var(--text-muted)]">{text.noEntries}</div>
+                    ) : null}
+                    {dayEntries.length > 5 ? (
+                      <div className="text-[10px] font-semibold text-[var(--text-muted)]">
+                        +{dayEntries.length - 5} {text.more}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        <aside className="space-y-5">
+        <div className="grid gap-5 xl:grid-cols-3">
           <section className="surface-card p-4">
             {renderCalendarItemForm(text.newItem, text.create)}
             {currentProfile ? (
@@ -1069,7 +1123,7 @@ export default function SchedulePage() {
               </div>
             )}
           </section>
-        </aside>
+        </div>
       </section>
 
       {selectedDay ? (
