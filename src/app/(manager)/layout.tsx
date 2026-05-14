@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, Archive, BarChart3, FolderKanban, Users, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, Store, ScrollText, Sliders } from "lucide-react";
+import { Activity, Archive, BarChart3, FolderKanban, Users, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, ShieldCheck, Trash2, ScrollText, Sliders } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
@@ -26,7 +26,6 @@ const sidebarItems: SidebarItem[] = [
   { href: "/archive", icon: Archive, label: "Archive", labelKey: "nav.archive" },
   { href: "/payroll", icon: Wallet, label: "Payroll", labelKey: "manager.navPayroll", financeOnly: true },
   { href: "/managers", icon: ShieldCheck, label: "Managers", labelKey: "nav.managers", ownerOnly: true },
-  { href: "/stores", icon: Store, label: "Stores", labelKey: "stores.title", ownerOnly: true },
   { href: "/admin/audit", icon: ScrollText, label: "Audit Log", labelKey: "audit.title", ownerOnly: true },
   { href: "/admin/settings", icon: Sliders, label: "Admin Settings", labelKey: "admin.settings.title", ownerOnly: true },
   { href: "/settings", icon: SettingsIcon, label: "Settings", labelKey: "manager.navSettings" },
@@ -38,6 +37,7 @@ const mobileNav: Array<{ href: string; icon: typeof BarChart3; labelKey: Transla
   { href: "/command-center", icon: Activity, labelKey: "manager.navCommandCenter" },
   { href: "/projects", icon: FolderKanban, labelKey: "manager.navProjects" },
   { href: "/team", icon: Users, labelKey: "manager.navTeam" },
+  { href: "/schedule", icon: CalendarDays, labelKey: "nav.schedule" },
   { href: "/ai", icon: Sparkles, labelKey: "manager.navAi" },
   { href: "/payroll", icon: Wallet, labelKey: "manager.navPayroll", financeOnly: true },
 ];
@@ -102,6 +102,7 @@ export default function ManagerLayout({
     const channel = supabase
       .channel("manager-global-refresh")
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleRefresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "time_events" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "media" }, scheduleRefresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "project_assignments" }, scheduleRefresh)
@@ -120,11 +121,15 @@ export default function ManagerLayout({
   const isOwnerUser = userRole === "owner" || userRole === "admin";
 
   const visibleSidebar = sidebarItems.filter((item) => {
+    if ("href" in item && userRole === "sales" && item.href !== "/schedule" && item.href !== "/settings") return false;
     if ("ownerOnly" in item && item.ownerOnly && !isOwnerUser) return false;
     if ("financeOnly" in item && item.financeOnly && !hasFinanceMenu) return false;
     return true;
   });
-  const visibleMobileNav = mobileNav.filter((item) => !item.financeOnly || hasFinanceMenu);
+  const visibleMobileNav = mobileNav.filter((item) => {
+    if (userRole === "sales") return item.href === "/schedule";
+    return !item.financeOnly || hasFinanceMenu;
+  });
 
   async function handleLogout() {
     await supabase.auth.signOut();

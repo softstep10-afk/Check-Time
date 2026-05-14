@@ -22,6 +22,11 @@ import {
 import type { ProjectAddressGeocodeResult } from "@/lib/project-geocoding";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
 import { normalizeStoragePath } from "@/lib/task-attachments";
+import {
+  deriveProjectScheduleHealth,
+  formatProjectCountdown,
+  projectScheduleToneStyle,
+} from "@/lib/project-schedule";
 import type {
   ProjectBudgetStatus,
   ProjectStatus,
@@ -450,7 +455,7 @@ export function ProjectsPage({
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [showCreatePanel, setShowCreatePanel] = useState(false);
@@ -1418,6 +1423,42 @@ export function ProjectsPage({
               ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
               : undefined;
           const hasSiteCoordinates = project.hasValidSiteCoordinates;
+          const scheduleHealth = deriveProjectScheduleHealth({
+            startDate: project.start_date,
+            endDate: project.end_date,
+          });
+          const scheduleStyle = projectScheduleToneStyle(scheduleHealth.tone);
+          const hasSchedule = Boolean(project.start_date || project.end_date);
+          const scheduleLabel =
+            locale === "ru"
+              ? scheduleHealth.state === "not_started"
+                ? "ещё не стартовал"
+                : scheduleHealth.state === "half_elapsed"
+                  ? "прошли 50%"
+                  : scheduleHealth.state === "almost_due"
+                    ? "осталось 10%"
+                    : scheduleHealth.state === "overdue"
+                      ? "просрочен"
+                      : "в графике"
+              : scheduleHealth.state === "not_started"
+                ? "not started"
+                : scheduleHealth.state === "half_elapsed"
+                  ? "past 50%"
+                  : scheduleHealth.state === "almost_due"
+                    ? "last 10%"
+                    : scheduleHealth.state === "overdue"
+                      ? "overdue"
+                      : "on track";
+          const displayedTimeline = hasSchedule
+            ? scheduleHealth.tone === "red"
+              ? "delayed"
+              : scheduleHealth.tone === "yellow"
+                ? "at_risk"
+                : "on_track"
+            : ((project.timeline_status ?? "on_track") as ProjectTimelineStatus);
+          const displayedTimelineLabel = hasSchedule
+            ? scheduleLabel
+            : timelineLabel(t, project.timeline_status);
 
           return (
             <article
@@ -1442,11 +1483,11 @@ export function ProjectsPage({
                     <div className="flex items-center gap-2">
                       <TrafficLights
                         state={state}
-                        timeline={(project.timeline_status ?? "on_track") as ProjectTimelineStatus}
+                        timeline={displayedTimeline}
                         budget={(project.budget_status ?? "on_budget") as ProjectBudgetStatus}
                         onTimelineClick={() => void handleCycleTimeline(project)}
                         onBudgetClick={() => void handleCycleBudget(project)}
-                        timelineLabel={timelineLabel(t, project.timeline_status)}
+                        timelineLabel={displayedTimelineLabel}
                         budgetLabel={budgetLabel(t, project.budget_status)}
                       />
                       <div className="text-base font-semibold text-[var(--text-primary)]">
@@ -1477,6 +1518,14 @@ export function ProjectsPage({
                       <span className="text-[11px] text-[var(--text-secondary)]">
                         {hasSiteCoordinates ? t("projects.gpsOkHint") : t("projects.noSiteCoords")}
                       </span>
+                      {hasSchedule ? (
+                        <span
+                          className="rounded-[var(--radius-pill)] border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                          style={scheduleStyle}
+                        >
+                          {scheduleLabel} · {formatProjectCountdown(scheduleHealth, locale)}
+                        </span>
+                      ) : null}
                     </div>
                     {state === "stale" ? (
                       <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--red)" }}>

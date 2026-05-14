@@ -62,6 +62,11 @@ import {
 import type { ProjectAddressGeocodeResult } from "@/lib/project-geocoding";
 import { GPS_STATUS_COLOR, type WorkerGpsStatus } from "@/lib/gps-status";
 import {
+  deriveProjectScheduleHealth,
+  formatProjectCountdown,
+  projectScheduleToneStyle,
+} from "@/lib/project-schedule";
+import {
   GPS_FRESHNESS_COLOR,
   formatGpsAge,
   type GpsFreshness,
@@ -561,7 +566,7 @@ export function ProjectDetailPage({
   }
   const [message, setMessage] = useState("");
   const site = project.siteCoordinates;
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const taskCounts = useMemo(() => {
     let active = 0;
     let completed = 0;
@@ -1449,47 +1454,56 @@ export function ProjectDetailPage({
       {/* ── Project Timer ── */}
       <section className="surface-card p-4">
         {project.start_date || project.end_date ? (() => {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const start = project.start_date ? new Date(project.start_date + "T00:00:00") : null;
-          const end = project.end_date ? new Date(project.end_date + "T00:00:00") : null;
-          const dayMs = 86_400_000;
-          const durationDays = start ? Math.floor((today.getTime() - start.getTime()) / dayMs) : null;
-          const remainingDays = end ? Math.floor((end.getTime() - today.getTime()) / dayMs) : null;
-          const isOverdue = remainingDays !== null && remainingDays < 0;
-          const totalSpan = start && end ? Math.max(1, Math.floor((end.getTime() - start.getTime()) / dayMs)) : null;
-          const elapsed = start && totalSpan ? Math.max(0, Math.min(totalSpan, Math.floor((today.getTime() - start.getTime()) / dayMs))) : null;
-          const progress = elapsed !== null && totalSpan ? Math.min(100, Math.max(0, Math.round((elapsed / totalSpan) * 100))) : null;
+          const health = deriveProjectScheduleHealth({
+            startDate: project.start_date,
+            endDate: project.end_date,
+          });
+          const style = projectScheduleToneStyle(health.tone);
+          const progress = Math.round(health.elapsedPercent ?? 0);
+          const stateLabel =
+            locale === "ru"
+              ? health.state === "not_started"
+                ? "Ещё не стартовал"
+                : health.state === "half_elapsed"
+                  ? "Прошли 50%"
+                  : health.state === "almost_due"
+                    ? "Осталось 10%"
+                    : health.state === "overdue"
+                      ? "Просрочен"
+                      : "В графике"
+              : health.state === "not_started"
+                ? "Not started"
+                : health.state === "half_elapsed"
+                  ? "Past 50%"
+                  : health.state === "almost_due"
+                    ? "Last 10%"
+                    : health.state === "overdue"
+                      ? "Overdue"
+                      : "On track";
 
           return (
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-4 text-sm">
-                {durationDays !== null && durationDays >= 0 ? (
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                {project.start_date ? (
                   <div className="text-[var(--text-secondary)]">
-                    <span className="font-semibold text-[var(--text-primary)]">{t("schedule.duration")}:</span>{" "}
-                    {durationDays} {t("schedule.days")}
+                    <span className="font-semibold text-[var(--text-primary)]">{t("projects.startDate")}:</span>{" "}
+                    {project.start_date}
                   </div>
                 ) : null}
-                {end ? (
+                {project.end_date ? (
                   <div className="text-[var(--text-secondary)]">
                     <span className="font-semibold text-[var(--text-primary)]">{t("schedule.deadline")}:</span>{" "}
                     {project.end_date}
                   </div>
                 ) : null}
-                {remainingDays !== null ? (
-                  isOverdue ? (
-                    <div className="font-semibold" style={{ color: "#ef4444" }}>
-                      {t("schedule.overdueDays")} {Math.abs(remainingDays)} {t("schedule.days")}
-                    </div>
-                  ) : (
-                    <div className="text-[var(--text-secondary)]">
-                      <span className="font-semibold text-[var(--brand-yellow)]">{remainingDays}</span>{" "}
-                      {t("schedule.daysRemaining")}
-                    </div>
-                  )
-                ) : null}
+                <div
+                  className="rounded-[var(--radius-pill)] border px-2.5 py-1 text-xs font-semibold"
+                  style={style}
+                >
+                  {stateLabel} · {formatProjectCountdown(health, locale)}
+                </div>
               </div>
-              {progress !== null ? (
+              {health.elapsedPercent !== null ? (
                 <div>
                   <div
                     className="h-2 w-full overflow-hidden rounded-full"
@@ -1499,12 +1513,13 @@ export function ProjectDetailPage({
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${progress}%`,
-                        background: isOverdue ? "#ef4444" : "var(--brand-yellow)",
+                        background: style.color,
                       }}
                     />
                   </div>
                   <div className="mt-1 flex justify-between text-[10px] text-[var(--text-muted)]">
                     <span>{project.start_date}</span>
+                    <span>{progress}%</span>
                     <span>{project.end_date}</span>
                   </div>
                 </div>

@@ -25,6 +25,10 @@ export default async function RootPage() {
   // straight to the clock screen. Keep this list aligned with the
   // user_role enum (see supabase/migrations/00001_foundation.sql +
   // 00003_schema_gap.sql which adds 'owner').
+  if (profile?.role === "sales") {
+    redirect("/schedule");
+  }
+
   if (
     profile?.role === "owner" ||
     profile?.role === "admin" ||
