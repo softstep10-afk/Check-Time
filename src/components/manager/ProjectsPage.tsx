@@ -36,6 +36,7 @@ import type {
 const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
 type ActivityState = "live" | "open" | "stale" | "inactive";
+type ClientTone = "green" | "yellow" | "red";
 
 function activityState(project: ManagerProjectSummary): ActivityState {
   if (project.status !== "active") return "inactive";
@@ -69,6 +70,18 @@ const BUDGET_NEXT: Record<ProjectBudgetStatus, ProjectBudgetStatus> = {
   critical: "on_budget",
 };
 
+const CLIENT_TONE_COLOR: Record<ClientTone, string> = {
+  green: "#0fa878",
+  yellow: "#f59e0b",
+  red: "#ef4444",
+};
+
+const CLIENT_TONE_NEXT: Record<ClientTone, ClientTone> = {
+  green: "yellow",
+  yellow: "red",
+  red: "green",
+};
+
 type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
 
 type AddressLookupState = ProjectAddressGeocodeResult & {
@@ -87,42 +100,93 @@ function budgetLabel(t: TFn, status: string | null): string {
   return t("projects.budget.on_budget");
 }
 
+function getClientTone(project: ManagerProjectSummary): ClientTone {
+  const value = project.settings?.client_tone;
+  if (value === "yellow" || value === "red" || value === "green") return value;
+  return "green";
+}
+
+function clientToneLabel(locale: "en" | "ru", tone: ClientTone): string {
+  if (locale === "ru") {
+    if (tone === "green") return "Клиент: лояльный";
+    if (tone === "yellow") return "Клиент: средний";
+    return "Клиент: сложный";
+  }
+
+  if (tone === "green") return "Client: loyal";
+  if (tone === "yellow") return "Client: medium";
+  return "Client: sensitive";
+}
+
+function scheduleHealthLabel(
+  locale: "en" | "ru",
+  state: ReturnType<typeof deriveProjectScheduleHealth>["state"],
+): string {
+  if (locale === "ru") {
+    if (state === "not_started") return "ещё не стартовал";
+    if (state === "half_elapsed") return "прошли 50%";
+    if (state === "almost_due") return "осталось 10%";
+    if (state === "overdue") return "просрочен";
+    return "в графике";
+  }
+
+  if (state === "not_started") return "not started";
+  if (state === "half_elapsed") return "past 50%";
+  if (state === "almost_due") return "last 10%";
+  if (state === "overdue") return "overdue";
+  return "on track";
+}
+
 function TrafficLights({
-  state,
+  clientTone,
   timeline,
   budget,
+  onClientToneClick,
   onTimelineClick,
   onBudgetClick,
+  clientToneLabel,
   timelineLabel,
   budgetLabel,
+  timelineLocked,
 }: {
-  state: ActivityState;
+  clientTone: ClientTone;
   timeline: ProjectTimelineStatus;
   budget: ProjectBudgetStatus;
+  onClientToneClick: () => void;
   onTimelineClick: () => void;
   onBudgetClick: () => void;
+  clientToneLabel: string;
   timelineLabel: string;
   budgetLabel: string;
+  timelineLocked?: boolean;
 }) {
-  const isLive = state === "live";
-  const dim = "color-mix(in srgb, currentColor 18%, transparent)";
-
   return (
-    <div className="flex items-center gap-1">
-      <span
-        aria-hidden
-        className="inline-block h-2.5 w-2.5 rounded-full"
-        style={{ background: isLive ? "var(--green)" : dim, color: "var(--green)" }}
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClientToneClick();
+        }}
+        title={clientToneLabel}
+        aria-label={clientToneLabel}
+        className="inline-block h-3.5 w-3.5 cursor-pointer rounded-full border-0 p-0"
+        style={{
+          background: CLIENT_TONE_COLOR[clientTone],
+          boxShadow: `0 0 0 2px rgba(255,255,255,0.16), 0 0 12px ${CLIENT_TONE_COLOR[clientTone]}`,
+        }}
       />
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
+          if (timelineLocked) return;
           onTimelineClick();
         }}
+        disabled={timelineLocked}
         title={timelineLabel}
         aria-label={timelineLabel}
-        className="inline-block h-2.5 w-2.5 cursor-pointer rounded-full border-0 p-0"
+        className="inline-block h-2.5 w-2.5 rounded-full border-0 p-0 disabled:cursor-default"
         style={{ background: TIMELINE_COLOR[timeline] }}
       />
       <button
@@ -970,6 +1034,25 @@ export function ProjectsPage({
     router.refresh();
   }
 
+  async function handleCycleClientTone(project: ManagerProjectSummary) {
+    const current = getClientTone(project);
+    const next = CLIENT_TONE_NEXT[current];
+    const { error } = await supabase
+      .from("projects")
+      .update({
+        settings: {
+          ...(project.settings ?? {}),
+          client_tone: next,
+        },
+      })
+      .eq("id", project.id);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    router.refresh();
+  }
+
   async function handleCycleBudget(project: ManagerProjectSummary) {
     const current = (project.budget_status ?? "on_budget") as ProjectBudgetStatus;
     const next = BUDGET_NEXT[current];
@@ -1412,16 +1495,12 @@ export function ProjectsPage({
       <section className="grid gap-4 xl:grid-cols-2">
         {visibleProjects.map((project) => {
           const state = activityState(project);
-          const cardBorder =
+          const fallbackCardBorder =
             state === "live"
               ? "2px solid var(--green)"
               : state === "stale"
                 ? "1px solid var(--red)"
                 : "1px solid var(--border-default)";
-          const cardShadow =
-            state === "live"
-              ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
-              : undefined;
           const hasSiteCoordinates = project.hasValidSiteCoordinates;
           const scheduleHealth = deriveProjectScheduleHealth({
             startDate: project.start_date,
@@ -1429,26 +1508,15 @@ export function ProjectsPage({
           });
           const scheduleStyle = projectScheduleToneStyle(scheduleHealth.tone);
           const hasSchedule = Boolean(project.start_date || project.end_date);
-          const scheduleLabel =
-            locale === "ru"
-              ? scheduleHealth.state === "not_started"
-                ? "ещё не стартовал"
-                : scheduleHealth.state === "half_elapsed"
-                  ? "прошли 50%"
-                  : scheduleHealth.state === "almost_due"
-                    ? "осталось 10%"
-                    : scheduleHealth.state === "overdue"
-                      ? "просрочен"
-                      : "в графике"
-              : scheduleHealth.state === "not_started"
-                ? "not started"
-                : scheduleHealth.state === "half_elapsed"
-                  ? "past 50%"
-                  : scheduleHealth.state === "almost_due"
-                    ? "last 10%"
-                    : scheduleHealth.state === "overdue"
-                      ? "overdue"
-                      : "on track";
+          const scheduleLabel = scheduleHealthLabel(locale, scheduleHealth.state);
+          const deadlineCountdown = formatProjectCountdown(scheduleHealth, locale);
+          const clientTone = getClientTone(project);
+          const cardBorder = hasSchedule ? `2px solid ${scheduleStyle.color}` : fallbackCardBorder;
+          const cardShadow = hasSchedule
+            ? `0 0 0 1px ${scheduleStyle.borderColor}, 0 0 22px ${scheduleStyle.background}`
+            : state === "live"
+              ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
+              : undefined;
           const displayedTimeline = hasSchedule
             ? scheduleHealth.tone === "red"
               ? "delayed"
@@ -1482,13 +1550,16 @@ export function ProjectsPage({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <TrafficLights
-                        state={state}
+                        clientTone={clientTone}
                         timeline={displayedTimeline}
                         budget={(project.budget_status ?? "on_budget") as ProjectBudgetStatus}
+                        onClientToneClick={() => void handleCycleClientTone(project)}
                         onTimelineClick={() => void handleCycleTimeline(project)}
                         onBudgetClick={() => void handleCycleBudget(project)}
+                        clientToneLabel={clientToneLabel(locale, clientTone)}
                         timelineLabel={displayedTimelineLabel}
                         budgetLabel={budgetLabel(t, project.budget_status)}
+                        timelineLocked={hasSchedule}
                       />
                       <div className="text-base font-semibold text-[var(--text-primary)]">
                         {project.name}
@@ -1523,7 +1594,7 @@ export function ProjectsPage({
                           className="rounded-[var(--radius-pill)] border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
                           style={scheduleStyle}
                         >
-                          {scheduleLabel} · {formatProjectCountdown(scheduleHealth, locale)}
+                          {scheduleLabel} · {deadlineCountdown}
                         </span>
                       ) : null}
                     </div>
@@ -1596,6 +1667,50 @@ export function ProjectsPage({
                     </div>
                   </button>
                 </div>
+
+                {hasSchedule ? (
+                  <div
+                    className="rounded-[var(--radius-md)] border p-3"
+                    style={{
+                      borderColor: scheduleStyle.borderColor,
+                      background: scheduleStyle.background,
+                    }}
+                  >
+                    <div className="flex flex-wrap items-end justify-between gap-3">
+                      <div>
+                        <div
+                          className="text-[10px] font-semibold uppercase tracking-[0.16em]"
+                          style={{ color: scheduleStyle.color }}
+                        >
+                          {scheduleLabel}
+                        </div>
+                        <div className="mt-1 text-[28px] font-black leading-none text-[var(--text-primary)]">
+                          {deadlineCountdown}
+                        </div>
+                      </div>
+                      <div className="text-right text-[11px] text-[var(--text-secondary)]">
+                        <div>{project.start_date ?? "—"}</div>
+                        <div className="font-semibold text-[var(--text-primary)]">→ {project.end_date ?? "—"}</div>
+                      </div>
+                    </div>
+                    {scheduleHealth.elapsedPercent !== null ? (
+                      <div className="mt-3">
+                        <div className="h-2 overflow-hidden rounded-full bg-[rgba(0,0,0,0.28)]">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.round(scheduleHealth.elapsedPercent)}%`,
+                              background: scheduleStyle.color,
+                            }}
+                          />
+                        </div>
+                        <div className="mt-1 text-right text-[10px] font-semibold text-[var(--text-muted)]">
+                          {Math.round(scheduleHealth.elapsedPercent)}%
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 <InlineNotesEditor
                   projectId={project.id}
