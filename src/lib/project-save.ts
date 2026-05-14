@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseCoordinateInputPair, parseGeoPoint, toSupabasePoint } from "@/lib/worker-utils";
-import type { Project, ProjectStatus } from "@/types/database";
+import type {
+  Project,
+  ProjectBudgetStatus,
+  ProjectStatus,
+  ProjectTimelineStatus,
+} from "@/types/database";
 
 export const PROJECT_GPS_RADIUS_MIN = 25;
 export const PROJECT_GPS_RADIUS_MAX = 300;
@@ -9,10 +14,24 @@ export const PROJECT_RADIUS_DEFAULT = 200;
 export const PROJECT_RATE_DEFAULT = 25;
 
 const PROJECT_STATUSES: ProjectStatus[] = ["active", "paused", "completed", "archived"];
+const PROJECT_TIMELINE_STATUSES: ProjectTimelineStatus[] = ["on_track", "at_risk", "delayed"];
+const PROJECT_BUDGET_STATUSES: ProjectBudgetStatus[] = ["on_budget", "over_budget", "critical"];
+const CLIENT_TONES = ["green", "yellow", "red"] as const;
+type ClientTone = (typeof CLIENT_TONES)[number];
 
 export type ProjectWriteRecord = Pick<
   Project,
-  "id" | "org_id" | "rate" | "radius_m" | "status" | "site_point" | "start_date" | "end_date"
+  | "id"
+  | "org_id"
+  | "rate"
+  | "radius_m"
+  | "status"
+  | "site_point"
+  | "start_date"
+  | "end_date"
+  | "settings"
+  | "timeline_status"
+  | "budget_status"
 > & {
   gps_radius_m?: number | null;
 };
@@ -96,6 +115,26 @@ function isProjectStatus(value: unknown): value is ProjectStatus {
   return typeof value === "string" && PROJECT_STATUSES.includes(value as ProjectStatus);
 }
 
+function isProjectTimelineStatus(value: unknown): value is ProjectTimelineStatus {
+  return typeof value === "string" && PROJECT_TIMELINE_STATUSES.includes(value as ProjectTimelineStatus);
+}
+
+function isProjectBudgetStatus(value: unknown): value is ProjectBudgetStatus {
+  return typeof value === "string" && PROJECT_BUDGET_STATUSES.includes(value as ProjectBudgetStatus);
+}
+
+function readClientTone(value: unknown, fallback: ClientTone): ClientTone {
+  return typeof value === "string" && CLIENT_TONES.includes(value as ClientTone)
+    ? (value as ClientTone)
+    : fallback;
+}
+
+function readSettings(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+}
+
 export function clampProjectGpsRadius(
   value: unknown,
   fallback = PROJECT_GPS_RADIUS_DEFAULT,
@@ -130,6 +169,9 @@ export function validateProjectSaveBody(
     defaultStatus?: ProjectStatus;
     fallbackStartDate?: string | null;
     fallbackEndDate?: string | null;
+    fallbackSettings?: Record<string, unknown> | null;
+    fallbackTimelineStatus?: ProjectTimelineStatus | null;
+    fallbackBudgetStatus?: ProjectBudgetStatus | null;
     requireConfirmation?: boolean;
   },
 ): ProjectSaveValidationResult {
@@ -165,6 +207,9 @@ export function validateProjectSaveBody(
   const fallbackRadius = options.fallbackRadius ?? PROJECT_RADIUS_DEFAULT;
   const fallbackGpsRadius = options.fallbackGpsRadius ?? PROJECT_GPS_RADIUS_DEFAULT;
   const defaultStatus = options.defaultStatus ?? "active";
+  const fallbackSettings = readSettings(options.fallbackSettings);
+  const fallbackClientTone = readClientTone(fallbackSettings.client_tone, "green");
+  const clientTone = readClientTone(body.client_tone, fallbackClientTone);
 
   const payload: Record<string, unknown> = {
     name,
@@ -178,6 +223,16 @@ export function validateProjectSaveBody(
     status: isProjectStatus(body.status) ? body.status : defaultStatus,
     start_date: readOptionalDate(body, "start_date", options.fallbackStartDate ?? null),
     end_date: readOptionalDate(body, "end_date", options.fallbackEndDate ?? null),
+    timeline_status: isProjectTimelineStatus(body.timeline_status)
+      ? body.timeline_status
+      : options.fallbackTimelineStatus ?? "on_track",
+    budget_status: isProjectBudgetStatus(body.budget_status)
+      ? body.budget_status
+      : options.fallbackBudgetStatus ?? "on_budget",
+    settings: {
+      ...fallbackSettings,
+      client_tone: clientTone,
+    },
   };
 
   if (coordinates.point) {

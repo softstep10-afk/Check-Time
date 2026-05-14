@@ -54,7 +54,6 @@ export async function POST(request: NextRequest) {
       org_id: profile.org_id,
       ...validation.payload,
       status: "active",
-      settings: {},
     });
 
     if (error) {

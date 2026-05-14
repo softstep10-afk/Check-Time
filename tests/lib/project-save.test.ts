@@ -117,6 +117,11 @@ describe("validateProjectSaveBody", () => {
         status: "active",
         start_date: "2026-04-26",
         end_date: null,
+        timeline_status: "on_track",
+        budget_status: "on_budget",
+        settings: {
+          client_tone: "green",
+        },
         site_point: "SRID=4326;POINT(-122.4194 37.7749)",
       },
     });
@@ -155,6 +160,11 @@ describe("validateProjectSaveBody", () => {
         status: "paused",
         start_date: "2026-04-01",
         end_date: "2026-04-30",
+        timeline_status: "on_track",
+        budget_status: "on_budget",
+        settings: {
+          client_tone: "green",
+        },
       },
     });
   });

@@ -139,6 +139,9 @@ export async function PATCH(
       defaultStatus: existingProject.status,
       fallbackStartDate: existingProject.start_date,
       fallbackEndDate: existingProject.end_date,
+      fallbackSettings: existingProject.settings,
+      fallbackTimelineStatus: existingProject.timeline_status,
+      fallbackBudgetStatus: existingProject.budget_status,
     });
 
     if (!validation.ok) {

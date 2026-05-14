@@ -137,6 +137,83 @@ function scheduleHealthLabel(
   return "on track";
 }
 
+function indicatorFieldLabel(locale: "en" | "ru", key: "client" | "timeline" | "budget"): string {
+  if (locale === "ru") {
+    if (key === "client") return "Клиент";
+    if (key === "timeline") return "План";
+    return "Бюджет";
+  }
+
+  if (key === "client") return "Client";
+  if (key === "timeline") return "Plan";
+  return "Budget";
+}
+
+function indicatorChoiceLabel(locale: "en" | "ru", color: ClientTone): string {
+  if (locale === "ru") {
+    if (color === "green") return "Зелёный";
+    if (color === "yellow") return "Жёлтый";
+    return "Красный";
+  }
+
+  if (color === "green") return "Green";
+  if (color === "yellow") return "Yellow";
+  return "Red";
+}
+
+function IndicatorSelects({
+  locale,
+  clientTone,
+  timelineStatus,
+  budgetStatus,
+}: {
+  locale: "en" | "ru";
+  clientTone: ClientTone;
+  timelineStatus: ProjectTimelineStatus;
+  budgetStatus: ProjectBudgetStatus;
+}) {
+  return (
+    <div className="grid gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.2)] p-3 sm:grid-cols-3">
+      <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+        <span className="uppercase tracking-[0.14em]">{indicatorFieldLabel(locale, "client")}</span>
+        <select
+          name="client_tone"
+          defaultValue={clientTone}
+          className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+        >
+          <option value="green">{indicatorChoiceLabel(locale, "green")}</option>
+          <option value="yellow">{indicatorChoiceLabel(locale, "yellow")}</option>
+          <option value="red">{indicatorChoiceLabel(locale, "red")}</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+        <span className="uppercase tracking-[0.14em]">{indicatorFieldLabel(locale, "timeline")}</span>
+        <select
+          name="timeline_status"
+          defaultValue={timelineStatus}
+          className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+        >
+          <option value="on_track">{indicatorChoiceLabel(locale, "green")}</option>
+          <option value="at_risk">{indicatorChoiceLabel(locale, "yellow")}</option>
+          <option value="delayed">{indicatorChoiceLabel(locale, "red")}</option>
+        </select>
+      </label>
+      <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+        <span className="uppercase tracking-[0.14em]">{indicatorFieldLabel(locale, "budget")}</span>
+        <select
+          name="budget_status"
+          defaultValue={budgetStatus}
+          className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+        >
+          <option value="on_budget">{indicatorChoiceLabel(locale, "green")}</option>
+          <option value="over_budget">{indicatorChoiceLabel(locale, "yellow")}</option>
+          <option value="critical">{indicatorChoiceLabel(locale, "red")}</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
 function TrafficLights({
   clientTone,
   timeline,
@@ -147,7 +224,6 @@ function TrafficLights({
   clientToneLabel,
   timelineLabel,
   budgetLabel,
-  timelineLocked,
 }: {
   clientTone: ClientTone;
   timeline: ProjectTimelineStatus;
@@ -158,8 +234,10 @@ function TrafficLights({
   clientToneLabel: string;
   timelineLabel: string;
   budgetLabel: string;
-  timelineLocked?: boolean;
 }) {
+  const dotClass = "inline-block h-3.5 w-3.5 cursor-pointer rounded-full border-0 p-0";
+  const glow = (color: string) => `0 0 0 2px rgba(255,255,255,0.16), 0 0 12px ${color}`;
+
   return (
     <div className="flex items-center gap-1.5">
       <button
@@ -170,24 +248,25 @@ function TrafficLights({
         }}
         title={clientToneLabel}
         aria-label={clientToneLabel}
-        className="inline-block h-3.5 w-3.5 cursor-pointer rounded-full border-0 p-0"
+        className={dotClass}
         style={{
           background: CLIENT_TONE_COLOR[clientTone],
-          boxShadow: `0 0 0 2px rgba(255,255,255,0.16), 0 0 12px ${CLIENT_TONE_COLOR[clientTone]}`,
+          boxShadow: glow(CLIENT_TONE_COLOR[clientTone]),
         }}
       />
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          if (timelineLocked) return;
           onTimelineClick();
         }}
-        disabled={timelineLocked}
         title={timelineLabel}
         aria-label={timelineLabel}
-        className="inline-block h-2.5 w-2.5 rounded-full border-0 p-0 disabled:cursor-default"
-        style={{ background: TIMELINE_COLOR[timeline] }}
+        className={dotClass}
+        style={{
+          background: TIMELINE_COLOR[timeline],
+          boxShadow: glow(TIMELINE_COLOR[timeline]),
+        }}
       />
       <button
         type="button"
@@ -197,8 +276,11 @@ function TrafficLights({
         }}
         title={budgetLabel}
         aria-label={budgetLabel}
-        className="inline-block h-2.5 w-2.5 cursor-pointer rounded-full border-0 p-0"
-        style={{ background: BUDGET_COLOR[budget] }}
+        className={dotClass}
+        style={{
+          background: BUDGET_COLOR[budget],
+          boxShadow: glow(BUDGET_COLOR[budget]),
+        }}
       />
     </div>
   );
@@ -873,6 +955,9 @@ export function ProjectsPage({
     );
     const startDate = formData.get("start_date")?.toString() ?? "";
     const endDate = formData.get("end_date")?.toString() ?? "";
+    const clientTone = formData.get("client_tone")?.toString() ?? "green";
+    const timelineStatus = formData.get("timeline_status")?.toString() ?? "on_track";
+    const budgetStatus = formData.get("budget_status")?.toString() ?? "on_budget";
 
     if (!name) {
       setMessage(t("projects.nameRequired"));
@@ -924,6 +1009,9 @@ export function ProjectsPage({
         coordinatesConfirmed: createCoordinatesConfirmed,
         start_date: startDate || null,
         end_date: endDate || null,
+        client_tone: clientTone,
+        timeline_status: timelineStatus,
+        budget_status: budgetStatus,
       }),
     });
 
@@ -960,6 +1048,9 @@ export function ProjectsPage({
     const status = (formData.get("status")?.toString() ?? "active") as ProjectStatus;
     const startDate = formData.get("start_date")?.toString() ?? "";
     const endDate = formData.get("end_date")?.toString() ?? "";
+    const clientTone = formData.get("client_tone")?.toString() ?? (existingProject ? getClientTone(existingProject) : "green");
+    const timelineStatus = formData.get("timeline_status")?.toString() ?? existingProject?.timeline_status ?? "on_track";
+    const budgetStatus = formData.get("budget_status")?.toString() ?? existingProject?.budget_status ?? "on_budget";
 
     if (!name) {
       setMessage(t("projects.nameRequired"));
@@ -1005,6 +1096,9 @@ export function ProjectsPage({
         coordinatesConfirmed: editCoordinatesConfirmed,
         start_date: startDate || null,
         end_date: endDate || null,
+        client_tone: clientTone,
+        timeline_status: timelineStatus,
+        budget_status: budgetStatus,
       }),
     });
 
@@ -1422,6 +1516,14 @@ export function ProjectsPage({
             label={t("projects.endDate")}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
+          <div className="md:col-span-2">
+            <IndicatorSelects
+              locale={locale}
+              clientTone="green"
+              timelineStatus="on_track"
+              budgetStatus="on_budget"
+            />
+          </div>
           <TextInputWithVoice
             multiline
             name="notes"
@@ -1517,16 +1619,15 @@ export function ProjectsPage({
             : state === "live"
               ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
               : undefined;
-          const displayedTimeline = hasSchedule
-            ? scheduleHealth.tone === "red"
-              ? "delayed"
-              : scheduleHealth.tone === "yellow"
-                ? "at_risk"
-                : "on_track"
-            : ((project.timeline_status ?? "on_track") as ProjectTimelineStatus);
-          const displayedTimelineLabel = hasSchedule
-            ? scheduleLabel
-            : timelineLabel(t, project.timeline_status);
+          const displayedTimeline = (project.timeline_status ?? "on_track") as ProjectTimelineStatus;
+          const displayedTimelineLabel = timelineLabel(t, project.timeline_status);
+          const statusPillStyle = hasSchedule
+            ? {
+                background: scheduleStyle.background,
+                color: scheduleStyle.color,
+                borderColor: scheduleStyle.borderColor,
+              }
+            : undefined;
 
           return (
             <article
@@ -1559,7 +1660,6 @@ export function ProjectsPage({
                         clientToneLabel={clientToneLabel(locale, clientTone)}
                         timelineLabel={displayedTimelineLabel}
                         budgetLabel={budgetLabel(t, project.budget_status)}
-                        timelineLocked={hasSchedule}
                       />
                       <div className="text-base font-semibold text-[var(--text-primary)]">
                         {project.name}
@@ -1589,14 +1689,6 @@ export function ProjectsPage({
                       <span className="text-[11px] text-[var(--text-secondary)]">
                         {hasSiteCoordinates ? t("projects.gpsOkHint") : t("projects.noSiteCoords")}
                       </span>
-                      {hasSchedule ? (
-                        <span
-                          className="rounded-[var(--radius-pill)] border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
-                          style={scheduleStyle}
-                        >
-                          {scheduleLabel} · {deadlineCountdown}
-                        </span>
-                      ) : null}
                     </div>
                     {state === "stale" ? (
                       <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: "var(--red)" }}>
@@ -1604,8 +1696,18 @@ export function ProjectsPage({
                       </div>
                     ) : null}
                   </div>
-                  <div className="status-pill" data-tone={getProjectTone(project.status)}>
-                    {project.status}
+                  <div
+                    className="status-pill min-w-[96px] text-center"
+                    data-tone={getProjectTone(project.status)}
+                    style={statusPillStyle}
+                    title={hasSchedule ? `${scheduleLabel} · ${deadlineCountdown}` : project.status}
+                  >
+                    <div>{project.status}</div>
+                    {hasSchedule ? (
+                      <div className="mt-0.5 text-[10px] font-black tracking-[0.1em]">
+                        {deadlineCountdown}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1667,50 +1769,6 @@ export function ProjectsPage({
                     </div>
                   </button>
                 </div>
-
-                {hasSchedule ? (
-                  <div
-                    className="rounded-[var(--radius-md)] border p-3"
-                    style={{
-                      borderColor: scheduleStyle.borderColor,
-                      background: scheduleStyle.background,
-                    }}
-                  >
-                    <div className="flex flex-wrap items-end justify-between gap-3">
-                      <div>
-                        <div
-                          className="text-[10px] font-semibold uppercase tracking-[0.16em]"
-                          style={{ color: scheduleStyle.color }}
-                        >
-                          {scheduleLabel}
-                        </div>
-                        <div className="mt-1 text-[28px] font-black leading-none text-[var(--text-primary)]">
-                          {deadlineCountdown}
-                        </div>
-                      </div>
-                      <div className="text-right text-[11px] text-[var(--text-secondary)]">
-                        <div>{project.start_date ?? "—"}</div>
-                        <div className="font-semibold text-[var(--text-primary)]">→ {project.end_date ?? "—"}</div>
-                      </div>
-                    </div>
-                    {scheduleHealth.elapsedPercent !== null ? (
-                      <div className="mt-3">
-                        <div className="h-2 overflow-hidden rounded-full bg-[rgba(0,0,0,0.28)]">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${Math.round(scheduleHealth.elapsedPercent)}%`,
-                              background: scheduleStyle.color,
-                            }}
-                          />
-                        </div>
-                        <div className="mt-1 text-right text-[10px] font-semibold text-[var(--text-muted)]">
-                          {Math.round(scheduleHealth.elapsedPercent)}%
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
 
                 <InlineNotesEditor
                   projectId={project.id}
@@ -2034,6 +2092,12 @@ export function ProjectsPage({
                   className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 />
               </div>
+              <IndicatorSelects
+                locale={locale}
+                clientTone={getClientTone(editingProject)}
+                timelineStatus={(editingProject.timeline_status ?? "on_track") as ProjectTimelineStatus}
+                budgetStatus={(editingProject.budget_status ?? "on_budget") as ProjectBudgetStatus}
+              />
               <TextInputWithVoice
                 multiline
                 name="notes"
