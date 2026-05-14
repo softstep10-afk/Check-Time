@@ -9,6 +9,7 @@ import {
   Flag,
   Plus,
   Save,
+  Truck,
   UserRound,
   X,
 } from "lucide-react";
@@ -21,7 +22,8 @@ import {
 } from "@/lib/project-schedule";
 import type { Profile, Project, Task, UserRole } from "@/types/database";
 
-type ScheduleKind = "meeting" | "task" | "note";
+type ScheduleKind = "meeting" | "task" | "note" | "delivery";
+type CalendarMode = "general" | "deliveries";
 type EntrySource = "task" | "project";
 type EntryType = ScheduleKind | "project_start" | "project_deadline";
 
@@ -37,6 +39,13 @@ type CalendarEntry = {
   assigneeName: string | null;
   description: string | null;
   tone: "neutral" | "green" | "yellow" | "red" | "blue";
+};
+
+type CalendarDay = {
+  date: Date;
+  iso: string;
+  inMonth: boolean;
+  isToday: boolean;
 };
 
 type ItemForm = {
@@ -55,33 +64,47 @@ type ProjectDateForm = {
   endDate: string;
 };
 
-const CALENDAR_ROLES: UserRole[] = ["owner", "admin", "manager", "supervisor", "sales"];
+const CALENDAR_ROLES: UserRole[] = [
+  "owner",
+  "admin",
+  "manager",
+  "supervisor",
+  "sales",
+  "driver",
+  "worker",
+  "subcontractor",
+];
 
 const TEXT = {
   en: {
     eyebrow: "Schedule",
-    title: "Team calendar",
-    subtitle: "Meetings, tasks, sales appointments, and project deadlines in one calendar.",
+    title: "Year calendar",
+    subtitle: "Click any day to add meetings, notes, project work, or delivery runs. Project deadlines stay visible across the year.",
     today: "Today",
-    previousMonth: "Previous month",
-    nextMonth: "Next month",
+    previousYear: "Previous year",
+    nextYear: "Next year",
+    generalCalendar: "Team calendar",
+    deliveryCalendar: "Delivery calendar",
     newItem: "New calendar item",
+    addToDay: "Add to this day",
     titleLabel: "Title",
     typeLabel: "Type",
     projectLabel: "Project",
     assigneeLabel: "Person",
+    driverLabel: "Driver",
     startLabel: "Start",
     endLabel: "End",
     notesLabel: "Notes",
     noProject: "No project",
     noAssignee: "No person",
+    noDriver: "No driver",
     create: "Create item",
     creating: "Creating...",
     datesTitle: "Project dates",
     saveDates: "Save dates",
     saving: "Saving...",
     deadlines: "Project deadlines",
-    noEntries: "No items",
+    noEntries: "No items yet.",
     noDeadlines: "No project deadlines yet.",
     noProjects: "No projects",
     starts: "Start",
@@ -89,6 +112,7 @@ const TEXT = {
     meeting: "Meeting",
     task: "Task",
     note: "Note",
+    delivery: "Delivery",
     projectStart: "Project start",
     projectDeadline: "Project deadline",
     notStarted: "Not started",
@@ -102,31 +126,42 @@ const TEXT = {
     loadFailed: "Could not load schedule.",
     writeFailed: "Could not save schedule.",
     loading: "Loading...",
+    openDay: "Open day",
+    dayPlanner: "Day planner",
+    itemsOnDay: "Items on this day",
+    useAsStart: "Set as project start",
+    useAsDeadline: "Set as deadline",
+    more: "more",
   },
   ru: {
     eyebrow: "Расписание",
-    title: "Календарь команды",
-    subtitle: "Встречи, задачи, выезды sales и дедлайны проектов в одном календаре.",
+    title: "Годовой календарь",
+    subtitle: "Нажмите на любой день, чтобы добавить встречу, заметку, проектную работу или доставку. Дедлайны проектов видны по всему году.",
     today: "Сегодня",
-    previousMonth: "Предыдущий месяц",
-    nextMonth: "Следующий месяц",
+    previousYear: "Предыдущий год",
+    nextYear: "Следующий год",
+    generalCalendar: "Календарь команды",
+    deliveryCalendar: "Календарь доставок",
     newItem: "Новая запись",
+    addToDay: "Добавить в этот день",
     titleLabel: "Название",
     typeLabel: "Тип",
     projectLabel: "Проект",
     assigneeLabel: "Кому",
+    driverLabel: "Водитель",
     startLabel: "Начало",
     endLabel: "Конец",
     notesLabel: "Заметки",
     noProject: "Без проекта",
     noAssignee: "Без человека",
+    noDriver: "Без водителя",
     create: "Создать запись",
     creating: "Создаю...",
     datesTitle: "Даты проекта",
     saveDates: "Сохранить даты",
     saving: "Сохраняю...",
     deadlines: "Дедлайны проектов",
-    noEntries: "Нет записей",
+    noEntries: "Пока нет записей.",
     noDeadlines: "Пока нет дедлайнов проектов.",
     noProjects: "Нет проектов",
     starts: "Старт",
@@ -134,6 +169,7 @@ const TEXT = {
     meeting: "Встреча",
     task: "Задача",
     note: "Заметка",
+    delivery: "Доставка",
     projectStart: "Старт проекта",
     projectDeadline: "Дедлайн проекта",
     notStarted: "Ещё не стартовал",
@@ -147,6 +183,12 @@ const TEXT = {
     loadFailed: "Не удалось загрузить расписание.",
     writeFailed: "Не удалось сохранить расписание.",
     loading: "Загружаю...",
+    openDay: "Открыть день",
+    dayPlanner: "План дня",
+    itemsOnDay: "Записи на этот день",
+    useAsStart: "Этот день = старт",
+    useAsDeadline: "Этот день = дедлайн",
+    more: "ещё",
   },
 } as const;
 
@@ -178,15 +220,24 @@ function toDatetimeLocalValue(date: Date): string {
   return local.toISOString().slice(0, 16);
 }
 
-function defaultItemForm(): ItemForm {
-  const start = new Date();
-  start.setMinutes(0, 0, 0);
-  start.setHours(start.getHours() + 1);
+function dateFromIsoDay(dayIso: string, hour = 9): Date {
+  const date = new Date(`${dayIso}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return new Date();
+  date.setHours(hour, 0, 0, 0);
+  return date;
+}
+
+function defaultItemForm(dayIso?: string, kind: ScheduleKind = "meeting"): ItemForm {
+  const start = dayIso ? dateFromIsoDay(dayIso) : new Date();
+  if (!dayIso) {
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+  }
   const end = new Date(start);
   end.setHours(end.getHours() + 1);
   return {
     title: "",
-    kind: "meeting",
+    kind,
     projectId: "",
     assignedTo: "",
     startsAt: toDatetimeLocalValue(start),
@@ -195,11 +246,27 @@ function defaultItemForm(): ItemForm {
   };
 }
 
+function yearStartIso(year: number): string {
+  return `${year}-01-01`;
+}
+
+function yearEndIso(year: number): string {
+  return `${year}-12-31`;
+}
+
 function monthLabel(date: Date, locale: "en" | "ru"): string {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
     month: "long",
-    year: "numeric",
   }).format(date);
+}
+
+function dayLongLabel(value: string, locale: "en" | "ru"): string {
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(dateFromIsoDay(value, 12));
 }
 
 function timeLabel(value: string | null, locale: "en" | "ru"): string | null {
@@ -228,6 +295,7 @@ function entryTypeLabel(type: EntryType, text: ScheduleText): string {
   if (type === "meeting") return text.meeting;
   if (type === "task") return text.task;
   if (type === "note") return text.note;
+  if (type === "delivery") return text.delivery;
   if (type === "project_start") return text.projectStart;
   return text.projectDeadline;
 }
@@ -257,7 +325,7 @@ function entryStyle(tone: CalendarEntry["tone"]) {
 
 function scheduleKindFromMetadata(metadata: Record<string, unknown> | null | undefined): ScheduleKind {
   const kind = metadata?.schedule_kind;
-  if (kind === "meeting" || kind === "task" || kind === "note") return kind;
+  if (kind === "meeting" || kind === "task" || kind === "note" || kind === "delivery") return kind;
   return "task";
 }
 
@@ -281,10 +349,9 @@ export default function SchedulePage() {
   const [busy, setBusy] = useState<"item" | "dates" | null>(null);
   const [notice, setNotice] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
-  const [anchorMonth, setAnchorMonth] = useState(() => {
-    const today = new Date();
-    return new Date(today.getFullYear(), today.getMonth(), 1);
-  });
+  const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
+  const [calendarMode, setCalendarMode] = useState<CalendarMode>("general");
+  const [anchorYear, setAnchorYear] = useState(() => new Date().getFullYear());
   const [itemForm, setItemForm] = useState<ItemForm>(() => defaultItemForm());
   const [projectForm, setProjectForm] = useState<ProjectDateForm>({
     projectId: "",
@@ -292,19 +359,27 @@ export default function SchedulePage() {
     endDate: "",
   });
 
-  const gridStart = useMemo(() => startOfCalendarGrid(anchorMonth), [anchorMonth]);
-  const gridDays = useMemo(() => {
-    return Array.from({ length: 42 }, (_, index) => {
-      const date = addDays(gridStart, index);
-      return {
-        date,
-        iso: isoDay(date),
-        inMonth: date.getMonth() === anchorMonth.getMonth(),
-        isToday: isoDay(date) === isoDay(new Date()),
-      };
+  const weekdayLabels =
+    locale === "ru"
+      ? ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  const yearMonths = useMemo(() => {
+    return Array.from({ length: 12 }, (_, monthIndex) => {
+      const month = new Date(anchorYear, monthIndex, 1);
+      const gridStart = startOfCalendarGrid(month);
+      const days = Array.from({ length: 42 }, (_, index) => {
+        const date = addDays(gridStart, index);
+        return {
+          date,
+          iso: isoDay(date),
+          inMonth: date.getMonth() === month.getMonth(),
+          isToday: isoDay(date) === isoDay(new Date()),
+        };
+      });
+      return { month, days };
     });
-  }, [anchorMonth, gridStart]);
-  const gridEnd = gridDays[gridDays.length - 1]?.iso ?? isoDay(gridStart);
+  }, [anchorYear]);
 
   const loadSchedule = useCallback(async () => {
     setLoading(true);
@@ -336,8 +411,8 @@ export default function SchedulePage() {
         .from("tasks")
         .select("*")
         .is("deleted_at", null)
-        .gte("due_date", isoDay(gridStart))
-        .lte("due_date", gridEnd)
+        .gte("due_date", yearStartIso(anchorYear))
+        .lte("due_date", yearEndIso(anchorYear))
         .order("due_date", { ascending: true })
         .returns<Task[]>(),
     ]);
@@ -361,7 +436,7 @@ export default function SchedulePage() {
       };
     });
     setLoading(false);
-  }, [gridEnd, gridStart, supabase, text.loadFailed]);
+  }, [anchorYear, supabase, text.loadFailed]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -383,12 +458,25 @@ export default function SchedulePage() {
     };
   }, [loadSchedule, supabase]);
 
+  useEffect(() => {
+    setItemForm((prev) => {
+      const nextKind = calendarMode === "deliveries" ? "delivery" : prev.kind === "delivery" ? "meeting" : prev.kind;
+      return prev.kind === nextKind ? prev : { ...prev, kind: nextKind };
+    });
+  }, [calendarMode]);
+
   const profilesById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
 
-  const scheduleProfiles = useMemo(() => {
+  const activeProfiles = useMemo(() => {
     return profiles.filter((profile) => profile.is_active && CALENDAR_ROLES.includes(profile.role));
   }, [profiles]);
+
+  const deliveryProfiles = useMemo(() => {
+    return activeProfiles.filter((profile) => profile.role === "driver");
+  }, [activeProfiles]);
+
+  const assignmentOptions = itemForm.kind === "delivery" ? deliveryProfiles : activeProfiles;
 
   const entries = useMemo<CalendarEntry[]>(() => {
     const taskEntries = tasks
@@ -415,7 +503,14 @@ export default function SchedulePage() {
           projectName: task.project_id ? projectsById.get(task.project_id)?.name ?? null : null,
           assigneeName: task.assigned_to ? profilesById.get(task.assigned_to)?.name ?? null : null,
           description: task.description,
-          tone: kind === "meeting" ? "blue" : kind === "note" ? "neutral" : "yellow",
+          tone:
+            kind === "delivery"
+              ? "blue"
+              : kind === "meeting"
+                ? "blue"
+                : kind === "note"
+                  ? "neutral"
+                  : "yellow",
         };
       })
       .filter((entry): entry is CalendarEntry => entry !== null);
@@ -426,7 +521,7 @@ export default function SchedulePage() {
         endDate: project.end_date,
       });
       const out: CalendarEntry[] = [];
-      if (project.start_date) {
+      if (project.start_date?.startsWith(String(anchorYear))) {
         out.push({
           id: `${project.id}-start`,
           source: "project",
@@ -441,7 +536,7 @@ export default function SchedulePage() {
           tone: "green",
         });
       }
-      if (project.end_date) {
+      if (project.end_date?.startsWith(String(anchorYear))) {
         out.push({
           id: `${project.id}-deadline`,
           source: "project",
@@ -464,17 +559,26 @@ export default function SchedulePage() {
       const bTime = b.startsAt ? new Date(b.startsAt).getTime() : 0;
       return aTime - bTime;
     });
-  }, [locale, profilesById, projects, projectsById, tasks, text]);
+  }, [anchorYear, locale, profilesById, projects, projectsById, tasks, text]);
+
+  const visibleEntries = useMemo(() => {
+    return entries.filter((entry) => {
+      if (calendarMode === "deliveries") return entry.type === "delivery";
+      return entry.type !== "delivery";
+    });
+  }, [calendarMode, entries]);
 
   const entriesByDay = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
-    for (const entry of entries) {
+    for (const entry of visibleEntries) {
       const list = map.get(entry.dayIso) ?? [];
       list.push(entry);
       map.set(entry.dayIso, list);
     }
     return map;
-  }, [entries]);
+  }, [visibleEntries]);
+
+  const selectedDayEntries = selectedDay ? entriesByDay.get(selectedDay.iso) ?? [] : [];
 
   const projectDeadlines = useMemo(() => {
     return projects
@@ -488,6 +592,16 @@ export default function SchedulePage() {
       }))
       .sort((a, b) => (a.project.end_date ?? "").localeCompare(b.project.end_date ?? ""));
   }, [projects]);
+
+  function openDay(day: CalendarDay) {
+    setSelectedDay(day);
+    setSelectedEntry(null);
+    setItemForm((prev) => ({
+      ...defaultItemForm(day.iso, calendarMode === "deliveries" ? "delivery" : prev.kind === "delivery" ? "meeting" : prev.kind),
+      projectId: prev.projectId,
+      assignedTo: calendarMode === "deliveries" ? prev.assignedTo : prev.assignedTo,
+    }));
+  }
 
   async function createCalendarItem(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -516,8 +630,7 @@ export default function SchedulePage() {
     }
 
     setItemForm((prev) => ({
-      ...defaultItemForm(),
-      kind: prev.kind,
+      ...defaultItemForm(selectedDay?.iso, calendarMode === "deliveries" ? "delivery" : prev.kind),
       projectId: prev.projectId,
       assignedTo: prev.assignedTo,
     }));
@@ -563,53 +676,184 @@ export default function SchedulePage() {
     });
   }
 
-  const weekdayLabels =
-    locale === "ru"
-      ? ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-      : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  function renderCalendarItemForm(title: string, buttonText: string) {
+    return (
+      <form className="space-y-3" onSubmit={(event) => void createCalendarItem(event)}>
+        <div className="flex items-center gap-2">
+          <Plus size={17} className="text-[var(--brand-yellow)]" />
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">{title}</h2>
+        </div>
+
+        <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+          <span className="uppercase tracking-[0.14em]">{text.titleLabel}</span>
+          <input
+            value={itemForm.title}
+            onChange={(event) => setItemForm((prev) => ({ ...prev, title: event.target.value }))}
+            required
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+          />
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+            <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
+            <select
+              value={itemForm.kind}
+              onChange={(event) => setItemForm((prev) => ({ ...prev, kind: event.target.value as ScheduleKind }))}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            >
+              <option value="meeting">{text.meeting}</option>
+              <option value="task">{text.task}</option>
+              <option value="note">{text.note}</option>
+              <option value="delivery">{text.delivery}</option>
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+            <span className="uppercase tracking-[0.14em]">{text.projectLabel}</span>
+            <select
+              value={itemForm.projectId}
+              onChange={(event) => setItemForm((prev) => ({ ...prev, projectId: event.target.value }))}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            >
+              <option value="">{text.noProject}</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+          <span className="uppercase tracking-[0.14em]">
+            {itemForm.kind === "delivery" ? text.driverLabel : text.assigneeLabel}
+          </span>
+          <select
+            value={itemForm.assignedTo}
+            onChange={(event) => setItemForm((prev) => ({ ...prev, assignedTo: event.target.value }))}
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+          >
+            <option value="">{itemForm.kind === "delivery" ? text.noDriver : text.noAssignee}</option>
+            {assignmentOptions.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name} · {profile.role}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+          <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+            <span className="uppercase tracking-[0.14em]">{text.startLabel}</span>
+            <input
+              type="datetime-local"
+              value={itemForm.startsAt}
+              onChange={(event) => setItemForm((prev) => ({ ...prev, startsAt: event.target.value }))}
+              required
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+          </label>
+          <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+            <span className="uppercase tracking-[0.14em]">{text.endLabel}</span>
+            <input
+              type="datetime-local"
+              value={itemForm.endsAt}
+              onChange={(event) => setItemForm((prev) => ({ ...prev, endsAt: event.target.value }))}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+          </label>
+        </div>
+
+        <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+          <span className="uppercase tracking-[0.14em]">{text.notesLabel}</span>
+          <textarea
+            value={itemForm.description}
+            onChange={(event) => setItemForm((prev) => ({ ...prev, description: event.target.value }))}
+            className="min-h-[110px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+          />
+        </label>
+
+        <button type="submit" disabled={busy === "item"} className="button-base button-primary w-full">
+          {busy === "item" ? text.creating : buttonText}
+        </button>
+      </form>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-5 p-5">
+    <div className="mx-auto max-w-[1800px] space-y-5 p-5">
       <section className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
             {text.eyebrow}
           </p>
           <h1 className="text-[30px] font-bold text-[var(--text-primary)]">{text.title}</h1>
-          <p className="max-w-[760px] text-sm leading-6 text-[var(--text-secondary)]">
+          <p className="max-w-[820px] text-sm leading-6 text-[var(--text-secondary)]">
             {text.subtitle}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setAnchorMonth((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
-            title={text.previousMonth}
-            aria-label={text.previousMonth}
+            onClick={() => setAnchorYear((year) => year - 1)}
+            title={text.previousYear}
+            aria-label={text.previousYear}
             className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] text-[var(--text-secondary)]"
           >
             <ChevronLeft size={18} />
           </button>
+          <div className="min-w-[90px] text-center text-2xl font-black text-[var(--text-primary)]">
+            {anchorYear}
+          </div>
           <button
             type="button"
-            onClick={() => {
-              const now = new Date();
-              setAnchorMonth(new Date(now.getFullYear(), now.getMonth(), 1));
-            }}
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)]"
-          >
-            {text.today}
-          </button>
-          <button
-            type="button"
-            onClick={() => setAnchorMonth((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
-            title={text.nextMonth}
-            aria-label={text.nextMonth}
+            onClick={() => setAnchorYear((year) => year + 1)}
+            title={text.nextYear}
+            aria-label={text.nextYear}
             className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[var(--border-default)] text-[var(--text-secondary)]"
           >
             <ChevronRight size={18} />
           </button>
+          <button
+            type="button"
+            onClick={() => setAnchorYear(new Date().getFullYear())}
+            className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)]"
+          >
+            {text.today}
+          </button>
         </div>
+      </section>
+
+      <section className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-2">
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              { key: "general", label: text.generalCalendar, icon: CalendarDays },
+              { key: "deliveries", label: text.deliveryCalendar, icon: Truck },
+            ] as const
+          ).map(({ key, label, icon: Icon }) => {
+            const active = calendarMode === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setCalendarMode(key)}
+                className="inline-flex items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-sm font-semibold transition"
+                style={{
+                  background: active ? "rgba(191, 162, 52, 0.2)" : "transparent",
+                  color: active ? "var(--brand-yellow)" : "var(--text-secondary)",
+                  border: active ? "1px solid rgba(191, 162, 52, 0.34)" : "1px solid transparent",
+                }}
+              >
+                <Icon size={16} />
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {loading ? <span className="px-2 text-xs text-[var(--text-muted)]">{text.loading}</span> : null}
       </section>
 
       {notice ? (
@@ -625,197 +869,115 @@ export default function SchedulePage() {
         </div>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="surface-card overflow-hidden p-0">
-          <div className="flex items-center justify-between border-b border-[var(--border-default)] px-4 py-3">
-            <div className="flex items-center gap-2">
-              <CalendarDays size={18} className="text-[var(--brand-yellow)]" />
-              <h2 className="text-lg font-bold capitalize text-[var(--text-primary)]">
-                {monthLabel(anchorMonth, locale)}
-              </h2>
-            </div>
-            {loading ? <span className="text-xs text-[var(--text-muted)]">{text.loading}</span> : null}
-          </div>
-
-          <div className="grid grid-cols-7 border-b border-[var(--border-default)]">
-            {weekdayLabels.map((label) => (
-              <div
-                key={label}
-                className="px-2 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]"
-              >
-                {label}
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          {yearMonths.map(({ month, days }) => (
+            <section key={month.toISOString()} className="surface-card overflow-hidden p-0">
+              <div className="border-b border-[var(--border-default)] px-3 py-2">
+                <h2 className="text-sm font-black capitalize text-[var(--text-primary)]">
+                  {monthLabel(month, locale)}
+                </h2>
               </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7">
-            {gridDays.map((day) => {
-              const dayEntries = entriesByDay.get(day.iso) ?? [];
-              return (
-                <div
-                  key={day.iso}
-                  className="min-h-[138px] border-b border-r border-[var(--border-subtle)] p-2"
-                  style={{
-                    background: day.inMonth ? "transparent" : "rgba(15, 17, 23, 0.24)",
-                  }}
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <span
-                      className="inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-bold"
+              <div className="grid grid-cols-7 border-b border-[var(--border-default)]">
+                {weekdayLabels.map((label) => (
+                  <div
+                    key={label}
+                    className="px-1 py-1.5 text-center text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]"
+                  >
+                    {label}
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {days.map((day) => {
+                  const dayEntries = entriesByDay.get(day.iso) ?? [];
+                  return (
+                    <div
+                      key={day.iso}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openDay(day)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openDay(day);
+                        }
+                      }}
+                      title={`${text.openDay}: ${dayLongLabel(day.iso, locale)}`}
+                      className="min-h-[82px] cursor-pointer border-b border-r border-[var(--border-subtle)] p-1.5 outline-none transition hover:bg-[rgba(191,162,52,0.08)]"
                       style={{
-                        background: day.isToday ? "var(--brand-yellow)" : "transparent",
-                        color: day.isToday
-                          ? "var(--text-inverse)"
-                          : day.inMonth
-                            ? "var(--text-primary)"
-                            : "var(--text-muted)",
+                        background: day.inMonth ? "transparent" : "rgba(15, 17, 23, 0.24)",
                       }}
                     >
-                      {day.date.getDate()}
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    {dayEntries.slice(0, 5).map((entry) => {
-                      const style = entryStyle(entry.tone);
-                      const time = timeLabel(entry.startsAt, locale);
-                      return (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          onClick={() => setSelectedEntry(entry)}
-                          className="block w-full rounded-[var(--radius-sm)] border px-2 py-1 text-left"
-                          style={style}
+                      <div className="mb-1 flex items-center justify-between gap-1">
+                        <span
+                          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold"
+                          style={{
+                            background: day.isToday ? "var(--brand-yellow)" : "transparent",
+                            color: day.isToday
+                              ? "var(--text-inverse)"
+                              : day.inMonth
+                                ? "var(--text-primary)"
+                                : "var(--text-muted)",
+                          }}
                         >
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate text-[11px] font-semibold">{entry.title}</span>
-                          </div>
-                          <div className="mt-0.5 truncate text-[10px] opacity-80">
-                            {time ? `${time} · ` : ""}
-                            {entryTypeLabel(entry.type, text)}
-                          </div>
-                        </button>
-                      );
-                    })}
-                    {dayEntries.length === 0 ? (
-                      <div className="pt-2 text-[10px] text-[var(--text-muted)]">{text.noEntries}</div>
-                    ) : null}
-                    {dayEntries.length > 5 ? (
-                      <div className="text-[10px] font-semibold text-[var(--text-muted)]">
-                        +{dayEntries.length - 5}
+                          {day.date.getDate()}
+                        </span>
+                        {dayEntries.length > 0 ? (
+                          <span className="text-[9px] font-bold text-[var(--brand-yellow)]">
+                            {dayEntries.length}
+                          </span>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                      <div className="space-y-1">
+                        {dayEntries.slice(0, 3).map((entry) => {
+                          const style = entryStyle(entry.tone);
+                          const time = timeLabel(entry.startsAt, locale);
+                          return (
+                            <button
+                              key={entry.id}
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelectedEntry(entry);
+                              }}
+                              className="block w-full rounded-[var(--radius-sm)] border px-1.5 py-1 text-left"
+                              style={style}
+                            >
+                              <div className="truncate text-[10px] font-semibold">{entry.title}</div>
+                              <div className="truncate text-[9px] opacity-80">
+                                {time ? `${time} · ` : ""}
+                                {entryTypeLabel(entry.type, text)}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {dayEntries.length > 3 ? (
+                          <div className="text-[9px] font-semibold text-[var(--text-muted)]">
+                            +{dayEntries.length - 3} {text.more}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
 
         <aside className="space-y-5">
-          <form className="surface-card space-y-3 p-4" onSubmit={(event) => void createCalendarItem(event)}>
-            <div className="flex items-center gap-2">
-              <Plus size={17} className="text-[var(--brand-yellow)]" />
-              <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.newItem}</h2>
-            </div>
-
-            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-              <span className="uppercase tracking-[0.14em]">{text.titleLabel}</span>
-              <input
-                value={itemForm.title}
-                onChange={(event) => setItemForm((prev) => ({ ...prev, title: event.target.value }))}
-                required
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
-                <select
-                  value={itemForm.kind}
-                  onChange={(event) => setItemForm((prev) => ({ ...prev, kind: event.target.value as ScheduleKind }))}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                >
-                  <option value="meeting">{text.meeting}</option>
-                  <option value="task">{text.task}</option>
-                  <option value="note">{text.note}</option>
-                </select>
-              </label>
-
-              <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                <span className="uppercase tracking-[0.14em]">{text.projectLabel}</span>
-                <select
-                  value={itemForm.projectId}
-                  onChange={(event) => setItemForm((prev) => ({ ...prev, projectId: event.target.value }))}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                >
-                  <option value="">{text.noProject}</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-              <span className="uppercase tracking-[0.14em]">{text.assigneeLabel}</span>
-              <select
-                value={itemForm.assignedTo}
-                onChange={(event) => setItemForm((prev) => ({ ...prev, assignedTo: event.target.value }))}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="">{text.noAssignee}</option>
-                {scheduleProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name} · {profile.role}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                <span className="uppercase tracking-[0.14em]">{text.startLabel}</span>
-                <input
-                  type="datetime-local"
-                  value={itemForm.startsAt}
-                  onChange={(event) => setItemForm((prev) => ({ ...prev, startsAt: event.target.value }))}
-                  required
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                />
-              </label>
-              <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-                <span className="uppercase tracking-[0.14em]">{text.endLabel}</span>
-                <input
-                  type="datetime-local"
-                  value={itemForm.endsAt}
-                  onChange={(event) => setItemForm((prev) => ({ ...prev, endsAt: event.target.value }))}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                />
-              </label>
-            </div>
-
-            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-              <span className="uppercase tracking-[0.14em]">{text.notesLabel}</span>
-              <textarea
-                value={itemForm.description}
-                onChange={(event) => setItemForm((prev) => ({ ...prev, description: event.target.value }))}
-                className="min-h-[84px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              />
-            </label>
-
-            <button type="submit" disabled={busy === "item"} className="button-base button-primary w-full">
-              {busy === "item" ? text.creating : text.create}
-            </button>
+          <section className="surface-card p-4">
+            {renderCalendarItemForm(text.newItem, text.create)}
             {currentProfile ? (
-              <div className="flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
+              <div className="mt-3 flex items-center gap-2 text-[11px] text-[var(--text-muted)]">
                 <UserRound size={13} />
-                <span>{currentProfile.name} · {currentProfile.role}</span>
+                <span>
+                  {currentProfile.name} · {currentProfile.role}
+                </span>
               </div>
             ) : null}
-          </form>
+          </section>
 
           <form className="surface-card space-y-3 p-4" onSubmit={(event) => void saveProjectDates(event)}>
             <div className="flex items-center gap-2">
@@ -873,7 +1035,7 @@ export default function SchedulePage() {
                 {text.noDeadlines}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="max-h-[520px] space-y-2 overflow-auto pr-1">
                 {projectDeadlines.map(({ project, health }) => {
                   const style = projectScheduleToneStyle(health.tone);
                   const progress = Math.round(health.elapsedPercent ?? 0);
@@ -910,10 +1072,145 @@ export default function SchedulePage() {
         </aside>
       </section>
 
-      {selectedEntry ? (
+      {selectedDay ? (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.58)" }}
+          onClick={() => setSelectedDay(null)}
+        >
+          <div
+            className="surface-card max-h-[92vh] w-full max-w-[900px] overflow-auto p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                  {calendarMode === "deliveries" ? text.deliveryCalendar : text.dayPlanner}
+                </div>
+                <h2 className="mt-1 text-xl font-bold capitalize text-[var(--text-primary)]">
+                  {dayLongLabel(selectedDay.iso, locale)}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedDay(null)}
+                aria-label="Close"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)]"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <section className="space-y-3">
+                <h3 className="text-sm font-bold text-[var(--text-primary)]">{text.itemsOnDay}</h3>
+                {selectedDayEntries.length === 0 ? (
+                  <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+                    {text.noEntries}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedDayEntries.map((entry) => {
+                      const style = entryStyle(entry.tone);
+                      return (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          onClick={() => setSelectedEntry(entry)}
+                          className="block w-full rounded-[var(--radius-md)] border p-3 text-left"
+                          style={style}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-bold">{entry.title}</div>
+                              <div className="mt-1 text-xs opacity-80">
+                                {timeLabel(entry.startsAt, locale) ?? "—"} · {entryTypeLabel(entry.type, text)}
+                              </div>
+                            </div>
+                            {entry.assigneeName ? (
+                              <div className="shrink-0 text-xs font-semibold opacity-80">{entry.assigneeName}</div>
+                            ) : null}
+                          </div>
+                          {entry.projectName ? (
+                            <div className="mt-2 text-xs opacity-80">{entry.projectName}</div>
+                          ) : null}
+                          {entry.description ? (
+                            <div className="mt-2 line-clamp-3 text-xs opacity-80">{entry.description}</div>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.32)] p-3">
+                <form className="mb-4 space-y-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3" onSubmit={(event) => void saveProjectDates(event)}>
+                  <div className="flex items-center gap-2">
+                    <Flag size={15} className="text-[var(--brand-yellow)]" />
+                    <h3 className="text-sm font-bold text-[var(--text-primary)]">{text.datesTitle}</h3>
+                  </div>
+                  <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+                    <span className="uppercase tracking-[0.14em]">{text.projectLabel}</span>
+                    <select
+                      value={projectForm.projectId}
+                      onChange={(event) => selectProjectForDates(event.target.value)}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                    >
+                      {projects.length === 0 ? <option value="">{text.noProjects}</option> : null}
+                      {projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setProjectForm((prev) => ({ ...prev, startDate: selectedDay.iso }))}
+                      className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+                    >
+                      {text.useAsStart}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProjectForm((prev) => ({ ...prev, endDate: selectedDay.iso }))}
+                      className="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+                    >
+                      {text.useAsDeadline}
+                    </button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input
+                      type="date"
+                      value={projectForm.startDate}
+                      onChange={(event) => setProjectForm((prev) => ({ ...prev, startDate: event.target.value }))}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                    />
+                    <input
+                      type="date"
+                      value={projectForm.endDate}
+                      onChange={(event) => setProjectForm((prev) => ({ ...prev, endDate: event.target.value }))}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                    />
+                  </div>
+                  <button type="submit" disabled={busy === "dates" || !projectForm.projectId} className="button-base button-primary w-full">
+                    <Save size={15} />
+                    {busy === "dates" ? text.saving : text.saveDates}
+                  </button>
+                </form>
+                {renderCalendarItemForm(text.addToDay, text.create)}
+              </section>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedEntry ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,0.62)" }}
           onClick={() => setSelectedEntry(null)}
         >
           <div className="surface-card w-full max-w-[560px] p-4" onClick={(event) => event.stopPropagation()}>
@@ -954,7 +1251,9 @@ export default function SchedulePage() {
               ) : null}
               {selectedEntry.assigneeName ? (
                 <div>
-                  <span className="font-semibold text-[var(--text-primary)]">{text.assigneeLabel}:</span>{" "}
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {selectedEntry.type === "delivery" ? text.driverLabel : text.assigneeLabel}:
+                  </span>{" "}
                   {selectedEntry.assigneeName}
                 </div>
               ) : null}

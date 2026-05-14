@@ -119,15 +119,18 @@ export default function ManagerLayout({
   }, [supabase, router]);
 
   const isOwnerUser = userRole === "owner" || userRole === "admin";
+  const scheduleOnlyUser = userRole === "worker" || userRole === "driver" || userRole === "subcontractor";
 
   const visibleSidebar = sidebarItems.filter((item) => {
     if ("href" in item && userRole === "sales" && item.href !== "/schedule" && item.href !== "/settings") return false;
+    if ("href" in item && scheduleOnlyUser && item.href !== "/schedule" && item.href !== "/settings") return false;
     if ("ownerOnly" in item && item.ownerOnly && !isOwnerUser) return false;
     if ("financeOnly" in item && item.financeOnly && !hasFinanceMenu) return false;
     return true;
   });
   const visibleMobileNav = mobileNav.filter((item) => {
     if (userRole === "sales") return item.href === "/schedule";
+    if (scheduleOnlyUser) return item.href === "/schedule";
     return !item.financeOnly || hasFinanceMenu;
   });
 

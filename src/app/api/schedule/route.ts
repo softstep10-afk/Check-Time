@@ -3,18 +3,21 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, UserRole } from "@/types/database";
 
-type ScheduleKind = "meeting" | "task" | "note";
+type ScheduleKind = "meeting" | "task" | "note" | "delivery";
 
 const CALENDAR_ROLES = new Set<UserRole>([
-  "owner",
-  "admin",
-  "manager",
+  "worker",
+  "driver",
+  "subcontractor",
   "supervisor",
   "sales",
+  "manager",
+  "admin",
+  "owner",
 ]);
 
 function isScheduleKind(value: unknown): value is ScheduleKind {
-  return value === "meeting" || value === "task" || value === "note";
+  return value === "meeting" || value === "task" || value === "note" || value === "delivery";
 }
 
 function stringOrNull(value: unknown): string | null {
@@ -134,7 +137,7 @@ export async function POST(request: Request) {
         assigned_by: actor.profile.id,
         title,
         description,
-        priority: kind === "task" ? "medium" : "low",
+        priority: kind === "task" || kind === "delivery" ? "medium" : "low",
         status: "pending",
         due_date: localDateOnly(startsAt),
         metadata: {
