@@ -46,40 +46,10 @@ function activityState(project: ManagerProjectSummary): ActivityState {
   return ageMs > STALE_THRESHOLD_MS ? "stale" : "open";
 }
 
-const TIMELINE_COLOR: Record<ProjectTimelineStatus, string> = {
-  on_track: "#84cc16",
-  at_risk: "#f59e0b",
-  delayed: "#ef4444",
-};
-
-const BUDGET_COLOR: Record<ProjectBudgetStatus, string> = {
-  on_budget: "#84cc16",
-  over_budget: "#f59e0b",
-  critical: "#ef4444",
-};
-
-const TIMELINE_NEXT: Record<ProjectTimelineStatus, ProjectTimelineStatus> = {
-  on_track: "at_risk",
-  at_risk: "delayed",
-  delayed: "on_track",
-};
-
-const BUDGET_NEXT: Record<ProjectBudgetStatus, ProjectBudgetStatus> = {
-  on_budget: "over_budget",
-  over_budget: "critical",
-  critical: "on_budget",
-};
-
 const CLIENT_TONE_COLOR: Record<ClientTone, string> = {
   green: "#0fa878",
   yellow: "#f59e0b",
   red: "#ef4444",
-};
-
-const CLIENT_TONE_NEXT: Record<ClientTone, ClientTone> = {
-  green: "yellow",
-  yellow: "red",
-  red: "green",
 };
 
 type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
@@ -87,18 +57,6 @@ type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
 type AddressLookupState = ProjectAddressGeocodeResult & {
   requestedAddress: string;
 };
-
-function timelineLabel(t: TFn, status: string | null): string {
-  if (status === "at_risk") return t("projects.timeline.at_risk");
-  if (status === "delayed") return t("projects.timeline.delayed");
-  return t("projects.timeline.on_track");
-}
-
-function budgetLabel(t: TFn, status: string | null): string {
-  if (status === "over_budget") return t("projects.budget.over_budget");
-  if (status === "critical") return t("projects.budget.critical");
-  return t("projects.budget.on_budget");
-}
 
 function getClientTone(project: ManagerProjectSummary): ClientTone {
   const value = project.settings?.client_tone;
@@ -123,6 +81,7 @@ function scheduleHealthLabel(
   state: ReturnType<typeof deriveProjectScheduleHealth>["state"],
 ): string {
   if (locale === "ru") {
+    if (state === "unscheduled") return "без дедлайна";
     if (state === "not_started") return "ещё не стартовал";
     if (state === "half_elapsed") return "прошли 50%";
     if (state === "almost_due") return "осталось 10%";
@@ -130,11 +89,20 @@ function scheduleHealthLabel(
     return "в графике";
   }
 
+  if (state === "unscheduled") return "no deadline";
   if (state === "not_started") return "not started";
   if (state === "half_elapsed") return "past 50%";
   if (state === "almost_due") return "last 10%";
   if (state === "overdue") return "overdue";
   return "on track";
+}
+
+function projectStatusLabel(t: TFn, status: ProjectStatus): string {
+  if (status === "active") return t("common.active");
+  if (status === "paused") return t("common.paused");
+  if (status === "completed") return t("common.completed");
+  if (status === "archived") return t("common.archived");
+  return status;
 }
 
 function indicatorFieldLabel(locale: "en" | "ru", key: "client" | "timeline" | "budget"): string {
@@ -214,74 +182,47 @@ function IndicatorSelects({
   );
 }
 
-function TrafficLights({
-  clientTone,
-  timeline,
-  budget,
-  onClientToneClick,
-  onTimelineClick,
-  onBudgetClick,
-  clientToneLabel,
-  timelineLabel,
-  budgetLabel,
+function ClientTonePicker({
+  value,
+  onSelect,
+  locale,
 }: {
-  clientTone: ClientTone;
-  timeline: ProjectTimelineStatus;
-  budget: ProjectBudgetStatus;
-  onClientToneClick: () => void;
-  onTimelineClick: () => void;
-  onBudgetClick: () => void;
-  clientToneLabel: string;
-  timelineLabel: string;
-  budgetLabel: string;
+  value: ClientTone;
+  onSelect: (tone: ClientTone) => void;
+  locale: "en" | "ru";
 }) {
-  const dotClass = "inline-block h-3.5 w-3.5 cursor-pointer rounded-full border-0 p-0";
-  const glow = (color: string) => `0 0 0 2px rgba(255,255,255,0.16), 0 0 12px ${color}`;
+  const tones: ClientTone[] = ["green", "yellow", "red"];
 
   return (
-    <div className="flex items-center gap-1.5">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onClientToneClick();
-        }}
-        title={clientToneLabel}
-        aria-label={clientToneLabel}
-        className={dotClass}
-        style={{
-          background: CLIENT_TONE_COLOR[clientTone],
-          boxShadow: glow(CLIENT_TONE_COLOR[clientTone]),
-        }}
-      />
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onTimelineClick();
-        }}
-        title={timelineLabel}
-        aria-label={timelineLabel}
-        className={dotClass}
-        style={{
-          background: TIMELINE_COLOR[timeline],
-          boxShadow: glow(TIMELINE_COLOR[timeline]),
-        }}
-      />
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onBudgetClick();
-        }}
-        title={budgetLabel}
-        aria-label={budgetLabel}
-        className={dotClass}
-        style={{
-          background: BUDGET_COLOR[budget],
-          boxShadow: glow(BUDGET_COLOR[budget]),
-        }}
-      />
+    <div className="relative z-[2] flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+      {tones.map((tone) => {
+        const selected = value === tone;
+        const color = CLIENT_TONE_COLOR[tone];
+        return (
+          <button
+            key={tone}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSelect(tone);
+            }}
+            title={clientToneLabel(locale, tone)}
+            aria-label={clientToneLabel(locale, tone)}
+            aria-pressed={selected}
+            className="h-4 w-4 shrink-0 rounded-full border-0 p-0 transition"
+            style={{
+              background: color,
+              opacity: selected ? 1 : 0.46,
+              boxShadow: selected
+                ? `0 0 0 2px rgba(255,255,255,0.22), 0 0 14px ${color}`
+                : "none",
+              transform: selected ? "scale(1.08)" : "scale(1)",
+              cursor: "pointer",
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -578,18 +519,6 @@ function setInputElementValue(
   }
 
   input.value = value;
-}
-
-function getProjectTone(status: ProjectStatus) {
-  if (status === "paused" || status === "archived") {
-    return "neutral";
-  }
-
-  if (status === "completed") {
-    return "success";
-  }
-
-  return "warning";
 }
 
 export function ProjectsPage({
@@ -1114,23 +1043,9 @@ export function ProjectsPage({
     router.refresh();
   }
 
-  async function handleCycleTimeline(project: ManagerProjectSummary) {
-    const current = (project.timeline_status ?? "on_track") as ProjectTimelineStatus;
-    const next = TIMELINE_NEXT[current];
-    const { error } = await supabase
-      .from("projects")
-      .update({ timeline_status: next })
-      .eq("id", project.id);
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-    router.refresh();
-  }
+  async function handleSetClientTone(project: ManagerProjectSummary, next: ClientTone) {
+    if (getClientTone(project) === next) return;
 
-  async function handleCycleClientTone(project: ManagerProjectSummary) {
-    const current = getClientTone(project);
-    const next = CLIENT_TONE_NEXT[current];
     const { error } = await supabase
       .from("projects")
       .update({
@@ -1139,20 +1054,6 @@ export function ProjectsPage({
           client_tone: next,
         },
       })
-      .eq("id", project.id);
-    if (error) {
-      setMessage(error.message);
-      return;
-    }
-    router.refresh();
-  }
-
-  async function handleCycleBudget(project: ManagerProjectSummary) {
-    const current = (project.budget_status ?? "on_budget") as ProjectBudgetStatus;
-    const next = BUDGET_NEXT[current];
-    const { error } = await supabase
-      .from("projects")
-      .update({ budget_status: next })
       .eq("id", project.id);
     if (error) {
       setMessage(error.message);
@@ -1597,12 +1498,6 @@ export function ProjectsPage({
       <section className="grid gap-4 xl:grid-cols-2">
         {visibleProjects.map((project) => {
           const state = activityState(project);
-          const fallbackCardBorder =
-            state === "live"
-              ? "2px solid var(--green)"
-              : state === "stale"
-                ? "1px solid var(--red)"
-                : "1px solid var(--border-default)";
           const hasSiteCoordinates = project.hasValidSiteCoordinates;
           const scheduleHealth = deriveProjectScheduleHealth({
             startDate: project.start_date,
@@ -1613,21 +1508,12 @@ export function ProjectsPage({
           const scheduleLabel = scheduleHealthLabel(locale, scheduleHealth.state);
           const deadlineCountdown = formatProjectCountdown(scheduleHealth, locale);
           const clientTone = getClientTone(project);
-          const cardBorder = hasSchedule ? `2px solid ${scheduleStyle.color}` : fallbackCardBorder;
-          const cardShadow = hasSchedule
-            ? `0 0 0 1px ${scheduleStyle.borderColor}, 0 0 22px ${scheduleStyle.background}`
-            : state === "live"
-              ? "0 0 0 1px rgba(15, 168, 120, 0.18), 0 0 18px rgba(15, 168, 120, 0.18)"
-              : undefined;
-          const displayedTimeline = (project.timeline_status ?? "on_track") as ProjectTimelineStatus;
-          const displayedTimelineLabel = timelineLabel(t, project.timeline_status);
-          const statusPillStyle = hasSchedule
-            ? {
-                background: scheduleStyle.background,
-                color: scheduleStyle.color,
-                borderColor: scheduleStyle.borderColor,
-              }
-            : undefined;
+          const effectiveScheduleStyle = hasSchedule
+            ? scheduleStyle
+            : projectScheduleToneStyle("green");
+          const cardBorder = `2px solid ${effectiveScheduleStyle.color}`;
+          const cardShadow = `0 0 0 1px ${effectiveScheduleStyle.borderColor}, 0 0 18px ${effectiveScheduleStyle.background}`;
+          const statusPanelTitle = `${projectStatusLabel(t, project.status)} · ${scheduleLabel} · ${deadlineCountdown}`;
 
           return (
             <article
@@ -1650,16 +1536,10 @@ export function ProjectsPage({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <TrafficLights
-                        clientTone={clientTone}
-                        timeline={displayedTimeline}
-                        budget={(project.budget_status ?? "on_budget") as ProjectBudgetStatus}
-                        onClientToneClick={() => void handleCycleClientTone(project)}
-                        onTimelineClick={() => void handleCycleTimeline(project)}
-                        onBudgetClick={() => void handleCycleBudget(project)}
-                        clientToneLabel={clientToneLabel(locale, clientTone)}
-                        timelineLabel={displayedTimelineLabel}
-                        budgetLabel={budgetLabel(t, project.budget_status)}
+                      <ClientTonePicker
+                        value={clientTone}
+                        locale={locale}
+                        onSelect={(tone) => void handleSetClientTone(project, tone)}
                       />
                       <div className="text-base font-semibold text-[var(--text-primary)]">
                         {project.name}
@@ -1697,17 +1577,30 @@ export function ProjectsPage({
                     ) : null}
                   </div>
                   <div
-                    className="status-pill min-w-[96px] text-center"
-                    data-tone={getProjectTone(project.status)}
-                    style={statusPillStyle}
-                    title={hasSchedule ? `${scheduleLabel} · ${deadlineCountdown}` : project.status}
+                    className="min-w-[150px] rounded-[var(--radius-md)] border px-3 py-2 text-right sm:min-w-[220px]"
+                    style={{
+                      background: effectiveScheduleStyle.background,
+                      borderColor: effectiveScheduleStyle.borderColor,
+                    }}
+                    title={statusPanelTitle}
                   >
-                    <div>{project.status}</div>
-                    {hasSchedule ? (
-                      <div className="mt-0.5 text-[10px] font-black tracking-[0.1em]">
-                        {deadlineCountdown}
-                      </div>
-                    ) : null}
+                    <div
+                      className="text-[10px] font-black uppercase tracking-[0.16em]"
+                      style={{ color: effectiveScheduleStyle.color }}
+                    >
+                      {projectStatusLabel(t, project.status)}
+                    </div>
+                    <div className="mt-1 font-mono text-sm font-black leading-none text-[var(--text-primary)] sm:text-base">
+                      {deadlineCountdown}
+                    </div>
+                    <div className="mt-1 flex flex-wrap justify-end gap-x-2 gap-y-0.5 text-[10px] font-semibold leading-tight text-[var(--text-secondary)]">
+                      <span>
+                        {locale === "ru" ? "старт" : "start"} {project.start_date ?? "—"}
+                      </span>
+                      <span>
+                        {locale === "ru" ? "до" : "due"} {project.end_date ?? "—"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
