@@ -1,30 +1,18 @@
 // Preview mode so the app can be browsed without a live session.
 //
-// Controlled by NEXT_PUBLIC_AUTH_BYPASS. Defaults to FALSE — i.e. real
-// auth is required unless the env var is explicitly the string "true".
+// Controlled by NEXT_PUBLIC_AUTH_BYPASS in local development only.
+// Defaults to FALSE — i.e. real auth is required unless the env var is
+// explicitly the string "true" AND the app is running in `next dev`.
 // Must use the NEXT_PUBLIC_ prefix because several client components
 // branch on this constant; Next.js only inlines NEXT_PUBLIC_* into the
 // browser bundle at build time.
 //
 // Local dev:        add `NEXT_PUBLIC_AUTH_BYPASS=true` to .env.local
 //                   (gitignored) to keep current auto-login UX.
-// Staging / prod:   omit the var (or set it to anything other than
-//                   "true") so PIN login is enforced.
+// Staging / prod:   bypass is forced OFF even if the env var is present.
 export const AUTH_BYPASS_ENABLED =
+  process.env.NODE_ENV !== "production" &&
   process.env.NEXT_PUBLIC_AUTH_BYPASS === "true";
-
-// Temporary diagnostic — confirms in the browser console exactly what
-// the deployed bundle resolved AUTH_BYPASS_ENABLED to. Remove once the
-// bypass-state question is settled.
-if (typeof window !== "undefined") {
-  console.log(
-    "[auth-bypass] AUTH_BYPASS_ENABLED =",
-    AUTH_BYPASS_ENABLED,
-    "(NEXT_PUBLIC_AUTH_BYPASS =",
-    JSON.stringify(process.env.NEXT_PUBLIC_AUTH_BYPASS),
-    ")",
-  );
-}
 
 /**
  * Hardcoded auth.users / profiles UUID for the seeded demo owner.

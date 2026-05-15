@@ -24,11 +24,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile ID is required." }, { status: 400 });
     }
 
+    const { data: targetProfile, error: targetProfileError } = await adminClient
+      .from("profiles")
+      .select("id, org_id")
+      .eq("id", profileId)
+      .eq("org_id", manager.org_id)
+      .maybeSingle<{ id: string; org_id: string }>();
+
+    if (targetProfileError) {
+      return NextResponse.json({ error: targetProfileError.message }, { status: 500 });
+    }
+
+    if (!targetProfile) {
+      return NextResponse.json({ error: "Team member not found." }, { status: 404 });
+    }
+
     // Soft-delete the profile (set deleted_at + deactivate)
     const { error: profileError } = await adminClient
       .from("profiles")
       .update({ deleted_at: new Date().toISOString(), is_active: false })
-      .eq("id", profileId)
+      .eq("id", targetProfile.id)
       .eq("org_id", manager.org_id);
 
     if (profileError) {
@@ -37,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     // Optionally delete the auth user
     if (deleteAuthUser) {
-      const { error: authError } = await adminClient.auth.admin.deleteUser(profileId);
+      const { error: authError } = await adminClient.auth.admin.deleteUser(targetProfile.id);
       if (authError) {
         return NextResponse.json(
           { error: `Profile deactivated but auth user removal failed: ${authError.message}` },

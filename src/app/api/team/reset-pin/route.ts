@@ -24,6 +24,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile ID is required." }, { status: 400 });
     }
 
+    const { data: targetProfile, error: targetProfileError } = await adminClient
+      .from("profiles")
+      .select("id, org_id")
+      .eq("id", profileId)
+      .eq("org_id", manager.org_id)
+      .maybeSingle<{ id: string; org_id: string }>();
+
+    if (targetProfileError) {
+      return NextResponse.json({ error: targetProfileError.message }, { status: 500 });
+    }
+
+    if (!targetProfile) {
+      return NextResponse.json({ error: "Team member not found." }, { status: 404 });
+    }
+
     // Generate a new random 4-digit PIN
     const newPin = String(Math.floor(1000 + Math.random() * 9000));
     const pinHash = await hash(newPin);
@@ -31,7 +46,7 @@ export async function POST(request: NextRequest) {
     const { error } = await adminClient
       .from("profiles")
       .update({ pin_hash: pinHash })
-      .eq("id", profileId)
+      .eq("id", targetProfile.id)
       .eq("org_id", manager.org_id);
 
     if (error) {

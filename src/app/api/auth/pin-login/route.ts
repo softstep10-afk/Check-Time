@@ -1,5 +1,11 @@
 import { verify } from "@node-rs/argon2";
 import { NextRequest, NextResponse } from "next/server";
+import {
+  buildPinLoginRateLimitKey,
+  checkPinLoginRateLimit,
+  clearPinLoginRateLimit,
+  recordPinLoginFailure,
+} from "@/lib/pin-login-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isValidTeamPasscode } from "@/lib/team-member-provisioning";
 import type { UserRole } from "@/types/database";
@@ -10,6 +16,16 @@ type PinProfile = {
   pin_hash: string | null;
   is_active: boolean;
 };
+
+function readClientIp(request: NextRequest): string {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || "unknown";
+  return (
+    request.headers.get("x-real-ip") ??
+    request.headers.get("cf-connecting-ip") ??
+    "unknown"
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,6 +47,26 @@ export async function POST(request: NextRequest) {
             "PIN login needs SUPABASE_SERVICE_ROLE_KEY on the server before sessions can be issued.",
         },
         { status: 503 },
+      );
+    }
+
+    const rateLimitKey = buildPinLoginRateLimitKey({
+      ipAddress: readClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? "unknown",
+    });
+    const rateLimit = await checkPinLoginRateLimit(adminClient, rateLimitKey);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: "Too many login attempts. Try again later.",
+          retryAfterSeconds: rateLimit.retryAfterSeconds,
+        },
+        {
+          status: 429,
+          headers: rateLimit.retryAfterSeconds
+            ? { "Retry-After": String(rateLimit.retryAfterSeconds) }
+            : undefined,
+        },
       );
     }
 
@@ -63,11 +99,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!matchedProfile) {
+      await recordPinLoginFailure(adminClient, rateLimitKey);
       return NextResponse.json(
         { error: "PIN not recognized." },
         { status: 401 },
       );
     }
+
+    await clearPinLoginRateLimit(adminClient, rateLimitKey);
 
     const { data: authUserResult, error: authUserError } =
       await adminClient.auth.admin.getUserById(matchedProfile.id);

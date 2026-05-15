@@ -274,12 +274,22 @@ export async function updateProjectTolerant(
   supabase: SupabaseClient,
   projectId: string,
   payload: Record<string, unknown>,
+  orgId?: string,
 ) {
-  const first = await supabase.from("projects").update(payload).eq("id", projectId);
+  let firstQuery = supabase.from("projects").update(payload).eq("id", projectId);
+  if (orgId) {
+    firstQuery = firstQuery.eq("org_id", orgId);
+  }
+
+  const first = await firstQuery;
   if (first.error && isMissingGpsRadiusColumnError(first.error)) {
     const { gps_radius_m: _omit, ...rest } = payload;
     void _omit;
-    return supabase.from("projects").update(rest).eq("id", projectId);
+    let fallbackQuery = supabase.from("projects").update(rest).eq("id", projectId);
+    if (orgId) {
+      fallbackQuery = fallbackQuery.eq("org_id", orgId);
+    }
+    return fallbackQuery;
   }
 
   return first;

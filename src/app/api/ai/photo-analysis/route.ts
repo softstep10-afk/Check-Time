@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
             analyzedAt: new Date().toISOString(),
           },
         })
-        .eq("id", media.id);
+        .eq("id", media.id)
+        .eq("org_id", media.org_id);
 
       persisted = !persistResult.error;
     }

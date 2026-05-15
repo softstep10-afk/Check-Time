@@ -148,7 +148,12 @@ export async function PATCH(
       return NextResponse.json({ error: validation.error }, { status: validation.status });
     }
 
-    const { error } = await updateProjectTolerant(adminClient, id, validation.payload);
+    const { error } = await updateProjectTolerant(
+      adminClient,
+      id,
+      validation.payload,
+      profile.org_id,
+    );
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

@@ -157,7 +157,8 @@ export async function POST(request: NextRequest) {
             transcoding_error: errorText.slice(0, 500),
           },
         })
-        .eq("id", mediaId);
+        .eq("id", mediaId)
+        .eq("org_id", media.org_id);
       return NextResponse.json(
         { error: "Mux create asset failed", detail: errorText },
         { status: muxResp.status },
@@ -189,7 +190,8 @@ export async function POST(request: NextRequest) {
           transcoding_status: "pending",
         },
       })
-      .eq("id", mediaId);
+      .eq("id", mediaId)
+      .eq("org_id", media.org_id);
 
     if (updateError) {
       return NextResponse.json(

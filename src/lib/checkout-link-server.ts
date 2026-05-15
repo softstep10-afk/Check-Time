@@ -246,6 +246,7 @@ export async function runLinkCheckoutVideo(
         .update({ video_status: "uploaded" })
         .eq("id", safeEvent.id)
         .eq("profile_id", userId)
+        .eq("org_id", safeEvent.org_id)
         .eq("video_status", "pending");
       if (statusResult?.error) {
         console.warn(
@@ -266,6 +267,7 @@ export async function runLinkCheckoutVideo(
       .from("profiles")
       .select("name, role")
       .eq("id", userId)
+      .eq("org_id", safeEvent.org_id)
       .maybeSingle();
     const actorName =
       (profileLookup.data as { name?: string } | null)?.name ?? "Worker";

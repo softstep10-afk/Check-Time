@@ -92,10 +92,11 @@ export async function POST(request: NextRequest) {
 
   const { data: row, error: lookupError } = await admin
     .from("media")
-    .select("id, metadata")
+    .select("id, org_id, metadata")
     .eq("metadata->>mux_asset_id", assetId)
     .maybeSingle<{
       id: string;
+      org_id: string;
       metadata: Record<string, unknown> | null;
     }>();
 
@@ -133,7 +134,8 @@ export async function POST(request: NextRequest) {
   const { error: updateError } = await admin
     .from("media")
     .update({ metadata: nextMetadata })
-    .eq("id", row.id);
+    .eq("id", row.id)
+    .eq("org_id", row.org_id);
 
   if (updateError) {
     return NextResponse.json(
