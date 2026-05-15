@@ -3,13 +3,36 @@ import { createClient } from "@/lib/supabase/server";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { answerManagerAssistant, buildAssistantSnapshot } from "@/lib/ai/service";
+import {
+  appendJarvisMemoryRule,
+  detectJarvisMemoryInstruction,
+  isJarvisMemoryWriter,
+  normalizeJarvisAttachments,
+} from "@/lib/ai/jarvis-memory";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import type { DailyReport } from "@/types/database";
+import type { AssistantConversationTurn } from "@/lib/ai/types";
 
 function assertNoError(error: { message: string } | null, label: string) {
   if (error) {
     throw new Error(`${label}: ${error.message}`);
   }
+}
+
+function normalizeConversationHistory(value: unknown): AssistantConversationTurn[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const record = item as Record<string, unknown>;
+      const role = record.role === "assistant" ? "assistant" : record.role === "user" ? "user" : null;
+      const text = typeof record.text === "string" ? record.text.trim() : "";
+      if (!role || !text) return null;
+      return { role, text: text.slice(0, 1200) };
+    })
+    .filter((item): item is AssistantConversationTurn => Boolean(item))
+    .slice(-10);
 }
 
 export async function POST(request: NextRequest) {
@@ -21,13 +44,46 @@ export async function POST(request: NextRequest) {
     }
     const body = (await request.json()) as Record<string, unknown>;
     const question = typeof body.question === "string" ? body.question.trim() : "";
+    const attachments = normalizeJarvisAttachments(body.attachments);
+    const history = normalizeConversationHistory(body.history);
 
     if (!question) {
       return NextResponse.json({ error: "Question is required." }, { status: 400 });
     }
 
-    const managerData =
+    let managerData =
       auth.kind === "preview" ? auth.managerData : await getManagerWorkspaceData();
+    const memoryInstruction = detectJarvisMemoryInstruction(question);
+    let memorySaved = null;
+    if (memoryInstruction) {
+      if (auth.kind !== "authenticated" || !isJarvisMemoryWriter(auth.context.profile)) {
+        return NextResponse.json(
+          { error: "Only owner/admin can teach Jarvis persistent rules." },
+          { status: 403 },
+        );
+      }
+
+      const updated = appendJarvisMemoryRule({
+        org: managerData.org,
+        text: memoryInstruction,
+        createdBy: auth.context.profile.id,
+        source: "chat",
+      });
+      const { error: settingsError } = await supabase
+        .from("organizations")
+        .update({ settings: updated.settings })
+        .eq("id", managerData.org.id);
+      assertNoError(settingsError, "Jarvis memory update failed");
+
+      memorySaved = updated.rule;
+      managerData = {
+        ...managerData,
+        org: {
+          ...managerData.org,
+          settings: updated.settings,
+        },
+      };
+    }
     const managerHasFinanceAccess =
       auth.kind === "preview"
         ? true
@@ -52,11 +108,30 @@ export async function POST(request: NextRequest) {
     const snapshot = buildAssistantSnapshot(managerData, reports, {
       includeFinancials: managerHasFinanceAccess,
     });
-    const assistant = await answerManagerAssistant(question, snapshot);
+    if (memorySaved) {
+      const ru = /[а-яё]/i.test(question);
+      return NextResponse.json({
+        ok: true,
+        assistant: {
+          answer: ru
+            ? "Запомнил. Буду учитывать это правило в следующих ответах Jarvis."
+            : "Remembered. Jarvis will apply this rule in future answers.",
+          bullets: [memorySaved.text],
+          links: [],
+          confidence: 0.94,
+          source: "fallback",
+          memorySaved,
+        },
+      });
+    }
+    const assistant = await answerManagerAssistant(question, snapshot, { attachments, history });
 
     return NextResponse.json({
       ok: true,
-      assistant,
+      assistant: {
+        ...assistant,
+        memorySaved,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";

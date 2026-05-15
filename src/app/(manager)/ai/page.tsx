@@ -47,7 +47,10 @@ export default async function AiPage() {
         pendingMediaCount: Math.max(0, media.length - media.filter((item) => item.existingAnalysis).length),
         recentUploadsCount: media.length,
       }}
-      hasAnthropic={Boolean(process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_MODEL)}
+      hasModelProvider={Boolean(
+        (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_MODEL) ||
+          process.env.OPENAI_API_KEY,
+      )}
       hasAnalysisPersistence={Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)}
     />
   );

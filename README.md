@@ -17,7 +17,7 @@ set and dark Binance-style UI, rebuilt on a proper architecture.
 | Storage | Supabase Storage (photos, videos, PDFs) |
 | Hosting | Vercel |
 | Styling | Tailwind CSS + CSS custom properties (tokens in `globals.css`, full system in `DESIGN.md`) |
-| AI | Anthropic Claude API via Next API routes |
+| AI | OpenAI Responses/Realtime via Next API routes, Anthropic fallback still supported |
 | Tests | Vitest |
 
 `CLAUDE.md` lists the stack choices we deliberately exclude (React Native,
@@ -39,7 +39,12 @@ npm run dev                         # http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-jwt>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-jwt>     # server-only; bypasses RLS
-ANTHROPIC_API_KEY=<key>                          # AI features
+OPENAI_API_KEY=<key>                             # Jarvis chat, vision, realtime token minting
+OPENAI_MODEL=gpt-5.4-mini                        # optional override: Jarvis app-data + image answers
+OPENAI_REALTIME_MODEL=gpt-realtime-mini          # optional override: live voice endpoint
+OPENAI_REALTIME_VOICE=marin                      # optional: live voice endpoint
+ANTHROPIC_API_KEY=<key>                          # optional fallback for older AI routes
+ANTHROPIC_MODEL=<model>                          # optional fallback for older AI routes
 ```
 
 ### Demo / preview mode

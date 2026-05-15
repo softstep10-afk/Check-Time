@@ -1,45 +1,90 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Activity, Archive, BarChart3, FolderKanban, Users, CalendarDays, Sparkles, Wallet, Settings as SettingsIcon, Trash2, ScrollText, Sliders } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
+import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { TopProgressBar } from "@/components/shared/TopProgressBar";
+import { JarvisDock } from "@/components/manager/JarvisDock";
+import { JarvisIcon, type JarvisIconName } from "@/components/shared/JarvisIcons";
+import { JarvisOrb } from "@/components/shared/JarvisOrb";
 
 type SidebarItem =
   | { section: string; sectionKey: TranslationKey; ownerOnly?: boolean }
-  | { href: string; icon: typeof BarChart3; label: string; labelKey: TranslationKey; ownerOnly?: boolean; financeOnly?: boolean };
+  | { href: string; icon: JarvisIconName; label: string; labelKey: TranslationKey; ownerOnly?: boolean; financeOnly?: boolean };
 
 const sidebarItems: SidebarItem[] = [
   { section: "Main", sectionKey: "manager.sectionMain" },
-  { href: "/overview", icon: BarChart3, label: "Overview", labelKey: "manager.navOverview" },
-  { href: "/command-center", icon: Activity, label: "Command Center", labelKey: "manager.navCommandCenter" },
-  { href: "/projects", icon: FolderKanban, label: "Projects", labelKey: "manager.navProjects" },
-  { href: "/team", icon: Users, label: "Team", labelKey: "manager.navTeam" },
+  { href: "/overview", icon: "overview", label: "Overview", labelKey: "manager.navOverview" },
+  { href: "/command-center", icon: "command", label: "Command Center", labelKey: "manager.navCommandCenter" },
+  { href: "/projects", icon: "projects", label: "Projects", labelKey: "manager.navProjects" },
+  { href: "/team", icon: "team", label: "Team", labelKey: "manager.navTeam" },
   { section: "Work", sectionKey: "manager.sectionWork" },
-  { href: "/schedule", icon: CalendarDays, label: "Schedule", labelKey: "nav.schedule" },
-  { href: "/ai", icon: Sparkles, label: "AI", labelKey: "manager.navAi" },
+  { href: "/schedule", icon: "schedule", label: "Schedule", labelKey: "nav.schedule" },
+  { href: "/ai", icon: "jarvis", label: "Jarvis", labelKey: "manager.navAi" },
   { section: "Admin", sectionKey: "manager.sectionAdmin" },
-  { href: "/archive", icon: Archive, label: "Archive", labelKey: "nav.archive" },
-  { href: "/payroll", icon: Wallet, label: "Payroll", labelKey: "manager.navPayroll", financeOnly: true },
-  { href: "/admin/audit", icon: ScrollText, label: "Audit Log", labelKey: "audit.title", ownerOnly: true },
-  { href: "/admin/settings", icon: Sliders, label: "Admin Settings", labelKey: "admin.settings.title", ownerOnly: true },
-  { href: "/settings", icon: SettingsIcon, label: "Settings", labelKey: "manager.navSettings" },
-  { href: "/trash", icon: Trash2, label: "Trash", labelKey: "nav.trash" },
+  { href: "/archive", icon: "archive", label: "Archive", labelKey: "nav.archive" },
+  { href: "/payroll", icon: "payroll", label: "Payroll", labelKey: "manager.navPayroll", financeOnly: true },
+  { href: "/admin/audit", icon: "audit", label: "Audit Log", labelKey: "audit.title", ownerOnly: true },
+  { href: "/admin/settings", icon: "admin", label: "Admin Settings", labelKey: "admin.settings.title", ownerOnly: true },
+  { href: "/settings", icon: "settings", label: "Settings", labelKey: "manager.navSettings" },
+  { href: "/trash", icon: "trash", label: "Trash", labelKey: "nav.trash" },
 ];
 
-const mobileNav: Array<{ href: string; icon: typeof BarChart3; labelKey: TranslationKey; financeOnly?: boolean }> = [
-  { href: "/overview", icon: BarChart3, labelKey: "manager.navOverview" },
-  { href: "/command-center", icon: Activity, labelKey: "manager.navCommandCenter" },
-  { href: "/projects", icon: FolderKanban, labelKey: "manager.navProjects" },
-  { href: "/team", icon: Users, labelKey: "manager.navTeam" },
-  { href: "/schedule", icon: CalendarDays, labelKey: "nav.schedule" },
-  { href: "/ai", icon: Sparkles, labelKey: "manager.navAi" },
-  { href: "/payroll", icon: Wallet, labelKey: "manager.navPayroll", financeOnly: true },
+const mobileNav: Array<{ href: string; icon: JarvisIconName; labelKey: TranslationKey; financeOnly?: boolean }> = [
+  { href: "/overview", icon: "overview", labelKey: "manager.navOverview" },
+  { href: "/command-center", icon: "command", labelKey: "manager.navCommandCenter" },
+  { href: "/projects", icon: "projects", labelKey: "manager.navProjects" },
+  { href: "/team", icon: "team", labelKey: "manager.navTeam" },
+  { href: "/schedule", icon: "schedule", labelKey: "nav.schedule" },
+  { href: "/ai", icon: "jarvis", labelKey: "manager.navAi" },
+  { href: "/payroll", icon: "payroll", labelKey: "manager.navPayroll", financeOnly: true },
 ];
+
+const managerRefreshTables = {
+  command: ["tasks", "projects", "time_events", "media", "messages", "project_assignments"],
+  projects: ["projects", "tasks", "time_events", "media", "project_assignments", "project_exclusions"],
+  team: [
+    "profiles",
+    "tasks",
+    "time_events",
+    "media",
+    "projects",
+    "project_assignments",
+    "project_exclusions",
+    "payroll_closures",
+    "worker_location_consents",
+  ],
+  payroll: ["time_events", "profiles", "payroll_runs", "payroll_line_items", "payroll_closures", "pay_periods", "pay_period_items"],
+  settings: ["profiles", "user_capabilities", "organizations"],
+} as const;
+
+function getManagerRealtimeTables(pathname: string | null): string[] {
+  if (!pathname) return [];
+
+  // These pages already own their own data refresh. A second global
+  // router.refresh() is expensive and was the main cause of page stutter.
+  if (
+    pathname.startsWith("/overview") ||
+    pathname.startsWith("/schedule") ||
+    pathname.startsWith("/archive") ||
+    pathname.startsWith("/admin/audit") ||
+    pathname.startsWith("/ai")
+  ) {
+    return [];
+  }
+
+  if (pathname.startsWith("/command-center")) return [...managerRefreshTables.command];
+  if (pathname.startsWith("/projects") || pathname.startsWith("/tasks")) return [...managerRefreshTables.projects];
+  if (pathname.startsWith("/team")) return [...managerRefreshTables.team];
+  if (pathname.startsWith("/payroll") || pathname.startsWith("/reports/annual")) return [...managerRefreshTables.payroll];
+  if (pathname.startsWith("/admin/settings") || pathname.startsWith("/settings")) return [...managerRefreshTables.settings];
+
+  return [];
+}
 
 export default function ManagerLayout({
   children,
@@ -56,6 +101,9 @@ export default function ManagerLayout({
   const [userName, setUserName] = useState<string>(AUTH_BYPASS_ENABLED ? "Preview Owner" : "");
   const [hasFinanceMenu, setHasFinanceMenu] = useState(AUTH_BYPASS_ENABLED);
   const liveRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const liveRefreshPendingWhileHiddenRef = useRef(false);
+  const liveRefreshLastRunRef = useRef(0);
+  const [, startTransition] = useTransition();
 
   useEffect(() => {
     if (AUTH_BYPASS_ENABLED) return;
@@ -90,34 +138,57 @@ export default function ManagerLayout({
 
   useEffect(() => {
     if (AUTH_BYPASS_ENABLED) return;
+    const tables = getManagerRealtimeTables(pathname);
+    if (tables.length === 0) return;
+
     function scheduleRefresh() {
+      if (document.visibilityState !== "visible") {
+        liveRefreshPendingWhileHiddenRef.current = true;
+        return;
+      }
       if (liveRefreshTimerRef.current) return;
+      if (isLiveRefreshBlocked()) {
+        liveRefreshTimerRef.current = setTimeout(() => {
+          liveRefreshTimerRef.current = null;
+          scheduleRefresh();
+        }, 2500);
+        return;
+      }
+      const elapsed = Date.now() - liveRefreshLastRunRef.current;
+      const delay = Math.max(1800, 4500 - elapsed);
       liveRefreshTimerRef.current = setTimeout(() => {
         liveRefreshTimerRef.current = null;
-        router.refresh();
-      }, 1200);
+        liveRefreshLastRunRef.current = Date.now();
+        startTransition(() => router.refresh());
+      }, delay);
     }
 
-    const channel = supabase
-      .channel("manager-global-refresh")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "time_events" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "media" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "project_assignments" }, scheduleRefresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleRefresh)
-      .subscribe();
+    let channel = supabase.channel(`manager-refresh-${pathname}`);
+    for (const table of tables) {
+      channel = channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleRefresh);
+    }
+    channel.subscribe();
+
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible" || !liveRefreshPendingWhileHiddenRef.current) return;
+      liveRefreshPendingWhileHiddenRef.current = false;
+      scheduleRefresh();
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       if (liveRefreshTimerRef.current) {
         clearTimeout(liveRefreshTimerRef.current);
         liveRefreshTimerRef.current = null;
       }
+      liveRefreshPendingWhileHiddenRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
     };
-  }, [supabase, router]);
+  }, [pathname, supabase, router, startTransition]);
 
   const isOwnerUser = userRole === "owner" || userRole === "admin";
+  const isManagerUser = isOwnerUser || userRole === "manager" || userRole === "supervisor";
   const scheduleOnlyUser = userRole === "worker" || userRole === "driver" || userRole === "subcontractor";
 
   const visibleSidebar = sidebarItems.filter((item) => {
@@ -140,23 +211,27 @@ export default function ManagerLayout({
   }
 
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className="app-shell h-screen flex overflow-hidden">
       <TopProgressBar />
       <aside
-        className="hidden w-[232px] flex-shrink-0 flex-col overflow-y-auto md:flex"
-        style={{
-          background: "var(--bg-surface)",
-          borderRight: "1px solid var(--border-default)",
-        }}
+        className="app-sidebar hidden w-[244px] flex-shrink-0 flex-col overflow-y-auto md:flex"
       >
         <div
           className="px-4 py-4"
-          style={{ borderBottom: "1px solid var(--border-default)" }}
+          style={{ borderBottom: "1px solid rgba(105, 231, 255, 0.13)" }}
         >
-          <div className="flex items-center justify-between">
-            <h1 className="text-[15px] font-bold">
-              Check-<span className="text-brand">Time</span>
-            </h1>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <JarvisOrb size="sm" state="idle" className="shrink-0" />
+              <div className="min-w-0">
+                <h1 className="truncate text-[15px] font-bold">
+                  Check-<span className="text-brand">Time</span>
+                </h1>
+                <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--ai-cyan)]">
+                  Jarvis core
+                </div>
+              </div>
+            </div>
             <LanguageSwitcher />
           </div>
           <div className="mt-0.5 flex items-center gap-2">
@@ -195,12 +270,16 @@ export default function ManagerLayout({
                 data-active={active}
                 className="sidebar-nav-item mt-1 flex w-full items-center gap-2.5 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-xs font-medium"
                 style={{
-                  background: active ? "rgba(191, 162, 52, 0.1)" : "transparent",
-                  color: active ? "var(--brand-yellow)" : "var(--text-secondary)",
+                  background: active ? "rgba(105, 231, 255, 0.08)" : "transparent",
+                  color: active ? "var(--ai-cyan-bright)" : "var(--text-secondary)",
                   border: "none",
                 }}
               >
-                <item.icon size={16} strokeWidth={1.9} className="shrink-0" />
+                {item.icon === "jarvis" ? (
+                  <JarvisOrb size="xs" state={active ? "notification" : "idle"} className="shrink-0" />
+                ) : (
+                  <JarvisIcon name={item.icon} size={17} active={active} className="shrink-0" />
+                )}
                 <span className="relative z-[1]">{t(item.labelKey)}</span>
               </button>
             );
@@ -211,10 +290,13 @@ export default function ManagerLayout({
           className="px-3 py-3"
           style={{ borderTop: "1px solid var(--border-default)" }}
         >
-          <div className="mb-2 flex items-center gap-2 rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-2.5 py-2">
+          <div className="mb-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[rgba(105,231,255,0.12)] bg-[rgba(7,11,18,0.72)] px-2.5 py-2">
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-black"
-              style={{ background: "var(--brand-yellow)" }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-[var(--text-inverse)]"
+              style={{
+                background: "linear-gradient(135deg, var(--ai-cyan-bright), var(--ai-cyan))",
+                boxShadow: "0 0 18px rgba(105, 231, 255, 0.28)",
+              }}
               aria-hidden
             >
               {(userName || "?").charAt(0).toUpperCase()}
@@ -250,15 +332,14 @@ export default function ManagerLayout({
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header
-          className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 md:hidden"
-          style={{
-            background: "var(--bg-surface)",
-            borderBottom: "1px solid var(--border-default)",
-          }}
+          className="app-topbar sticky top-0 z-10 flex items-center justify-between px-5 py-4 md:hidden"
         >
-          <h2 className="text-[15px] font-bold">
-            Check-<span className="text-brand">Time</span>
-          </h2>
+          <div className="flex items-center gap-2">
+            <JarvisOrb size="xs" state="idle" />
+            <h2 className="text-[15px] font-bold">
+              Check-<span className="text-brand">Time</span>
+            </h2>
+          </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
             <button
@@ -284,11 +365,13 @@ export default function ManagerLayout({
         </main>
       </div>
 
+      {isManagerUser ? <JarvisDock /> : null}
+
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50"
         style={{
-          background: "var(--bg-surface)",
-          borderTop: "1px solid var(--border-default)",
+          background: "linear-gradient(180deg, rgba(18,28,44,0.98), rgba(8,13,22,0.98))",
+          borderTop: "1px solid rgba(105, 231, 255, 0.14)",
         }}
       >
         <div className="flex justify-around items-center py-1.5 pb-3">
@@ -300,12 +383,16 @@ export default function ManagerLayout({
                 onClick={() => router.push(item.href)}
                 className="flex min-w-[48px] flex-col items-center gap-0.5 rounded-[var(--radius-md)] px-2 py-1.5"
                 style={{
-                  color: active ? "var(--brand-yellow)" : "var(--text-muted)",
-                  background: active ? "rgba(191, 162, 52, 0.1)" : "none",
+                  color: active ? "var(--ai-cyan-bright)" : "var(--text-muted)",
+                  background: active ? "rgba(105, 231, 255, 0.08)" : "none",
                   border: "none",
                 }}
               >
-                <item.icon size={22} strokeWidth={1.8} />
+                {item.icon === "jarvis" ? (
+                  <JarvisOrb size="xs" state={active ? "notification" : "idle"} />
+                ) : (
+                  <JarvisIcon name={item.icon} size={22} active={active} />
+                )}
                 <span className="text-[9px] font-semibold uppercase tracking-wide">
                   {t(item.labelKey)}
                 </span>

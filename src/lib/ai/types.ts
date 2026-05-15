@@ -7,6 +7,7 @@ import type {
   Task,
   TimeEvent,
 } from "@/types/database";
+import type { JarvisMemoryRule } from "@/lib/ai/jarvis-memory";
 
 export interface AiWorkspaceData {
   manager: Profile;
@@ -66,13 +67,41 @@ export interface PhotoAnalysisResult {
   source: "anthropic" | "fallback";
 }
 
+export interface SnapshotProjectMaterialSpecItem {
+  name: string;
+  quantity: string;
+  unit: string;
+  supplier: string;
+  link: string;
+  note: string;
+}
+
+export interface SnapshotProjectEstimate {
+  title: string;
+  status: string;
+  description: string;
+  clientPrice: number;
+  internalCost: number;
+  materialCost: number;
+  margin: number;
+  workItems: string[];
+}
+
 export interface SnapshotProject {
   id: string;
   name: string;
   status: string;
+  address: string | null;
+  notes: string | null;
+  startDate: string | null;
+  endDate: string | null;
   onSiteWorkerCount: number;
   openTaskCount: number;
   weekMinutes: number;
+  skillTags: string[];
+  openTaskTitles: string[];
+  materialSpec: SnapshotProjectMaterialSpecItem[];
+  estimates: SnapshotProjectEstimate[];
 }
 
 export interface SnapshotWorker {
@@ -96,6 +125,62 @@ export interface SnapshotWorkerMetric {
   role: string;
   monthHours: number;
   completedTasksThisMonth: number;
+  openTaskCount: number;
+  currentProjectName: string | null;
+  assignedProjectNames: string[];
+  skills: string[];
+  capabilitiesNote: string | null;
+}
+
+export interface SnapshotOpenTask {
+  id: string;
+  title: string;
+  projectId: string | null;
+  projectName: string;
+  priority: string;
+  dueDate: string | null;
+  assignedToName: string | null;
+  skillTags: string[];
+}
+
+export interface SnapshotAssignmentCandidate {
+  workerId: string;
+  name: string;
+  role: string;
+  skills: string[];
+  matchedSkills: string[];
+  score: number;
+  reason: string;
+}
+
+export interface SnapshotAssignmentSuggestion {
+  taskId: string;
+  taskTitle: string;
+  projectId: string | null;
+  projectName: string;
+  requiredSkills: string[];
+  candidates: SnapshotAssignmentCandidate[];
+}
+
+export interface SnapshotMediaItem {
+  id: string;
+  projectId: string | null;
+  projectName: string;
+  uploadedByName: string | null;
+  mediaType: string;
+  filename: string;
+  caption: string | null;
+  isCheckout: boolean;
+  createdAt: string;
+  tags: string[];
+  summary: string | null;
+}
+
+export interface SnapshotCodeReference {
+  topic: string;
+  summary: string;
+  sourceLabel: string;
+  url: string;
 }
 
 export interface AssistantSnapshot {
@@ -109,6 +194,11 @@ export interface AssistantSnapshot {
   projects: SnapshotProject[];
   liveWorkers: SnapshotWorker[];
   workerMetrics: SnapshotWorkerMetric[];
+  openTasks: SnapshotOpenTask[];
+  assignmentSuggestions: SnapshotAssignmentSuggestion[];
+  mediaIndex: SnapshotMediaItem[];
+  memoryRules: JarvisMemoryRule[];
+  codeReferences: SnapshotCodeReference[];
   recentReports: SnapshotReport[];
 }
 
@@ -117,12 +207,37 @@ export interface AssistantLink {
   href: string;
 }
 
+export type AssistantAction =
+  | {
+      kind: "navigate";
+      label: string;
+      href: string;
+    }
+  | {
+      kind: "create_project";
+      label: string;
+      payload: {
+        name: string;
+        address?: string | null;
+        notes?: string | null;
+        startDate?: string | null;
+        endDate?: string | null;
+      };
+    };
+
+export interface AssistantConversationTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface AssistantResult {
   answer: string;
   bullets: string[];
   links: AssistantLink[];
+  actions?: AssistantAction[];
   confidence: number;
-  source: "anthropic" | "fallback";
+  source: "anthropic" | "openai" | "fallback";
+  memorySaved?: JarvisMemoryRule | null;
 }
 
 export type VoiceCommandIntent = "navigate" | "report" | "assistant" | "unknown";
