@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
   Flag,
+  Hand,
   Plus,
   Save,
   Truck,
@@ -14,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { useTranslation } from "@/lib/i18n";
 import {
   deriveProjectScheduleHealth,
@@ -22,10 +25,20 @@ import {
 } from "@/lib/project-schedule";
 import type { Profile, Project, Task, UserRole } from "@/types/database";
 
-type ScheduleKind = "meeting" | "task" | "note" | "delivery";
+type ScheduleKind =
+  | "client_meeting"
+  | "worker_meeting"
+  | "inspection"
+  | "subcontractor_meeting"
+  | "site_visit"
+  | "meeting"
+  | "task"
+  | "note"
+  | "delivery";
 type CalendarMode = "general" | "deliveries";
 type EntrySource = "task" | "project";
 type EntryType = ScheduleKind | "project_start" | "project_deadline";
+type DeliveryStatus = "open" | "assigned" | "claimed" | "in_progress" | "delivered";
 
 type CalendarEntry = {
   id: string;
@@ -37,8 +50,11 @@ type CalendarEntry = {
   endsAt: string | null;
   projectName: string | null;
   assigneeName: string | null;
+  assigneeId: string | null;
   description: string | null;
   tone: "neutral" | "green" | "yellow" | "red" | "blue";
+  status: Task["status"] | null;
+  deliveryStatus: DeliveryStatus | null;
 };
 
 type CalendarDay = {
@@ -75,6 +91,29 @@ const CALENDAR_ROLES: UserRole[] = [
   "subcontractor",
 ];
 
+const DELIVERY_ONLY_ROLES = new Set<UserRole>(["worker", "driver", "subcontractor"]);
+
+const GENERAL_EVENT_KINDS: ScheduleKind[] = [
+  "client_meeting",
+  "worker_meeting",
+  "inspection",
+  "subcontractor_meeting",
+  "site_visit",
+  "task",
+  "note",
+];
+
+const DELIVERY_ASSIGNEE_ROLES = new Set<UserRole>([
+  "worker",
+  "driver",
+  "subcontractor",
+  "supervisor",
+  "sales",
+  "manager",
+  "admin",
+  "owner",
+]);
+
 const TEXT = {
   en: {
     eyebrow: "Schedule",
@@ -95,12 +134,16 @@ const TEXT = {
     projectLabel: "Project",
     assigneeLabel: "Person",
     driverLabel: "Driver",
+    deliveryPersonLabel: "Who takes it / assign to",
     startLabel: "Start",
     endLabel: "End",
     notesLabel: "Notes",
     noProject: "No project",
     noAssignee: "No person",
-    noDriver: "No driver",
+    noDriver: "Whole team",
+    allDeliveryPeople: "Leave this empty when anyone on the team can take it.",
+    deliveryTitlePlaceholder: "What needs to be delivered?",
+    eventTitlePlaceholder: "Meeting, inspection, visit, or note",
     create: "Create item",
     creating: "Creating...",
     datesTitle: "Project dates",
@@ -113,9 +156,24 @@ const TEXT = {
     starts: "Start",
     deadline: "Deadline",
     meeting: "Meeting",
+    clientMeeting: "Client meeting",
+    workerMeeting: "Worker meeting",
+    inspection: "Inspection",
+    subcontractorMeeting: "Subcontractor meeting",
+    siteVisit: "Site visit",
     task: "Task",
     note: "Note",
     delivery: "Delivery",
+    deliveryStatus: "Delivery status",
+    deliveryOpen: "Open to team",
+    deliveryAssigned: "Assigned",
+    deliveryClaimed: "Taken",
+    deliveryInProgress: "In progress",
+    deliveryDelivered: "Delivered",
+    takeDelivery: "I will take it",
+    markDelivered: "Mark delivered",
+    deliveryActionSaved: "Delivery updated.",
+    deliveryActionFailed: "Could not update delivery.",
     projectStart: "Project start",
     projectDeadline: "Project deadline",
     notStarted: "Not started",
@@ -135,6 +193,7 @@ const TEXT = {
     useAsStart: "Set as project start",
     useAsDeadline: "Set as deadline",
     more: "more",
+    deliveryOnlyHint: "Workers see only deliveries here. Meetings, project dates, and internal planning stay hidden.",
   },
   ru: {
     eyebrow: "Расписание",
@@ -155,12 +214,16 @@ const TEXT = {
     projectLabel: "Проект",
     assigneeLabel: "Кому",
     driverLabel: "Водитель",
+    deliveryPersonLabel: "Кто возьмёт / кому поручить",
     startLabel: "Начало",
     endLabel: "Конец",
     notesLabel: "Заметки",
     noProject: "Без проекта",
     noAssignee: "Без человека",
-    noDriver: "Без водителя",
+    noDriver: "Вся команда",
+    allDeliveryPeople: "Оставьте пустым, если доставку может взять любой из команды.",
+    deliveryTitlePlaceholder: "Что нужно доставить?",
+    eventTitlePlaceholder: "Встреча, инспекция, выезд или заметка",
     create: "Создать запись",
     creating: "Создаю...",
     datesTitle: "Даты проекта",
@@ -173,9 +236,24 @@ const TEXT = {
     starts: "Старт",
     deadline: "Дедлайн",
     meeting: "Встреча",
+    clientMeeting: "Встреча с клиентом",
+    workerMeeting: "Встреча с работником",
+    inspection: "Инспекция",
+    subcontractorMeeting: "Встреча с субконтрактором",
+    siteVisit: "Выезд на объект",
     task: "Задача",
     note: "Заметка",
     delivery: "Доставка",
+    deliveryStatus: "Статус доставки",
+    deliveryOpen: "Свободно для команды",
+    deliveryAssigned: "Назначено",
+    deliveryClaimed: "Взял в работу",
+    deliveryInProgress: "В дороге",
+    deliveryDelivered: "Доставлено",
+    takeDelivery: "Возьму",
+    markDelivered: "Доставлено",
+    deliveryActionSaved: "Доставка обновлена.",
+    deliveryActionFailed: "Не удалось обновить доставку.",
     projectStart: "Старт проекта",
     projectDeadline: "Дедлайн проекта",
     notStarted: "Ещё не стартовал",
@@ -195,6 +273,7 @@ const TEXT = {
     useAsStart: "Этот день = старт",
     useAsDeadline: "Этот день = дедлайн",
     more: "ещё",
+    deliveryOnlyHint: "Рабочие видят здесь только доставки. Встречи, даты проектов и внутренние планы скрыты.",
   },
 } as const;
 
@@ -233,7 +312,7 @@ function dateFromIsoDay(dayIso: string, hour = 9): Date {
   return date;
 }
 
-function defaultItemForm(dayIso?: string, kind: ScheduleKind = "meeting"): ItemForm {
+function defaultItemForm(dayIso?: string, kind: ScheduleKind = "client_meeting"): ItemForm {
   const start = dayIso ? dateFromIsoDay(dayIso) : new Date();
   if (!dayIso) {
     start.setMinutes(0, 0, 0);
@@ -299,12 +378,51 @@ function dateTimeLabel(value: string | null, locale: "en" | "ru"): string | null
 }
 
 function entryTypeLabel(type: EntryType, text: ScheduleText): string {
+  if (type === "client_meeting") return text.clientMeeting;
+  if (type === "worker_meeting") return text.workerMeeting;
+  if (type === "inspection") return text.inspection;
+  if (type === "subcontractor_meeting") return text.subcontractorMeeting;
+  if (type === "site_visit") return text.siteVisit;
   if (type === "meeting") return text.meeting;
   if (type === "task") return text.task;
   if (type === "note") return text.note;
   if (type === "delivery") return text.delivery;
   if (type === "project_start") return text.projectStart;
   return text.projectDeadline;
+}
+
+function deliveryStatusFromTask(
+  task: Task,
+  metadata: Record<string, unknown>,
+): DeliveryStatus | null {
+  if (metadata.schedule_kind !== "delivery") return null;
+  if (task.status === "done" || task.completed_at) return "delivered";
+  const raw = metadata.schedule_delivery_status;
+  if (
+    raw === "open" ||
+    raw === "assigned" ||
+    raw === "claimed" ||
+    raw === "in_progress" ||
+    raw === "delivered"
+  ) {
+    return raw;
+  }
+  if (task.assigned_to) return "assigned";
+  return "open";
+}
+
+function deliveryStatusLabel(status: DeliveryStatus, text: ScheduleText): string {
+  if (status === "open") return text.deliveryOpen;
+  if (status === "assigned") return text.deliveryAssigned;
+  if (status === "claimed") return text.deliveryClaimed;
+  if (status === "in_progress") return text.deliveryInProgress;
+  return text.deliveryDelivered;
+}
+
+function deliveryStatusTone(status: DeliveryStatus): CalendarEntry["tone"] {
+  if (status === "delivered") return "green";
+  if (status === "open") return "blue";
+  return "yellow";
 }
 
 function scheduleStateLabel(
@@ -332,8 +450,29 @@ function entryStyle(tone: CalendarEntry["tone"]) {
 
 function scheduleKindFromMetadata(metadata: Record<string, unknown> | null | undefined): ScheduleKind {
   const kind = metadata?.schedule_kind;
-  if (kind === "meeting" || kind === "task" || kind === "note" || kind === "delivery") return kind;
+  if (
+    kind === "client_meeting" ||
+    kind === "worker_meeting" ||
+    kind === "inspection" ||
+    kind === "subcontractor_meeting" ||
+    kind === "site_visit" ||
+    kind === "meeting" ||
+    kind === "task" ||
+    kind === "note" ||
+    kind === "delivery"
+  ) {
+    return kind;
+  }
   return "task";
+}
+
+function isMeetingKind(kind: EntryType): boolean {
+  return (
+    kind === "meeting" ||
+    kind === "client_meeting" ||
+    kind === "worker_meeting" ||
+    kind === "subcontractor_meeting"
+  );
 }
 
 async function readRouteError(response: Response): Promise<string> {
@@ -348,12 +487,14 @@ export default function SchedulePage() {
   const supabase = useMemo(() => createClient(), []);
   const { locale } = useTranslation();
   const text = TEXT[locale];
+  const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimePendingWhileHiddenRef = useRef(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"item" | "dates" | null>(null);
+  const [busy, setBusy] = useState<"item" | "dates" | "delivery" | null>(null);
   const [notice, setNotice] = useState("");
   const [selectedEntry, setSelectedEntry] = useState<CalendarEntry | null>(null);
   const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
@@ -370,6 +511,9 @@ export default function SchedulePage() {
     startDate: "",
     endDate: "",
   });
+  const deliveryOnlyCalendar = currentProfile ? DELIVERY_ONLY_ROLES.has(currentProfile.role) : false;
+  const canUseGeneralCalendar = !deliveryOnlyCalendar;
+  const showProjectDateTools = canUseGeneralCalendar && calendarMode === "general";
 
   const weekdayLabels =
     locale === "ru"
@@ -392,8 +536,9 @@ export default function SchedulePage() {
   const loadStart = [isoDay(monthGridStart), rangeStart].filter(Boolean).sort()[0] ?? isoDay(monthGridStart);
   const loadEnd = [monthGridEnd, rangeEnd].filter(Boolean).sort().at(-1) ?? monthGridEnd;
 
-  const loadSchedule = useCallback(async () => {
-    setLoading(true);
+  const loadSchedule = useCallback(async (options: { showLoading?: boolean } = {}) => {
+    const showLoading = options.showLoading ?? true;
+    if (showLoading) setLoading(true);
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -457,24 +602,67 @@ export default function SchedulePage() {
   }, [loadSchedule]);
 
   useEffect(() => {
+    function scheduleLoad() {
+      if (document.visibilityState !== "visible") {
+        realtimePendingWhileHiddenRef.current = true;
+        return;
+      }
+      if (realtimeTimerRef.current) return;
+      if (isLiveRefreshBlocked() || selectedDay || selectedEntry) {
+        realtimeTimerRef.current = setTimeout(() => {
+          realtimeTimerRef.current = null;
+          scheduleLoad();
+        }, 2500);
+        return;
+      }
+      realtimeTimerRef.current = setTimeout(() => {
+        realtimeTimerRef.current = null;
+        void loadSchedule({ showLoading: false });
+      }, 1800);
+    }
+
     const channel = supabase
       .channel("schedule-calendar-refresh")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => void loadSchedule())
-      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => void loadSchedule())
-      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => void loadSchedule())
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, scheduleLoad)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, scheduleLoad)
       .subscribe();
 
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible" || !realtimePendingWhileHiddenRef.current) return;
+      realtimePendingWhileHiddenRef.current = false;
+      scheduleLoad();
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
+      if (realtimeTimerRef.current) {
+        clearTimeout(realtimeTimerRef.current);
+        realtimeTimerRef.current = null;
+      }
+      realtimePendingWhileHiddenRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
     };
-  }, [loadSchedule, supabase]);
+  }, [loadSchedule, selectedDay, selectedEntry, supabase]);
 
   useEffect(() => {
     setItemForm((prev) => {
-      const nextKind = calendarMode === "deliveries" ? "delivery" : prev.kind === "delivery" ? "meeting" : prev.kind;
+      const nextKind =
+        calendarMode === "deliveries"
+          ? "delivery"
+          : prev.kind === "delivery" || prev.kind === "meeting"
+            ? "client_meeting"
+            : prev.kind;
       return prev.kind === nextKind ? prev : { ...prev, kind: nextKind };
     });
   }, [calendarMode]);
+
+  useEffect(() => {
+    if (!deliveryOnlyCalendar) return;
+    setCalendarMode("deliveries");
+    setItemForm((prev) => (prev.kind === "delivery" ? prev : { ...prev, kind: "delivery" }));
+  }, [deliveryOnlyCalendar]);
 
   const profilesById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
   const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
@@ -484,10 +672,13 @@ export default function SchedulePage() {
   }, [profiles]);
 
   const deliveryProfiles = useMemo(() => {
-    return activeProfiles.filter((profile) => profile.role === "driver");
+    return activeProfiles.filter((profile) => DELIVERY_ASSIGNEE_ROLES.has(profile.role));
   }, [activeProfiles]);
 
-  const assignmentOptions = itemForm.kind === "delivery" ? deliveryProfiles : activeProfiles;
+  const assignmentOptions =
+    calendarMode === "deliveries" || deliveryOnlyCalendar || itemForm.kind === "delivery"
+      ? deliveryProfiles
+      : activeProfiles;
 
   const entries = useMemo<CalendarEntry[]>(() => {
     const taskEntries = tasks
@@ -502,6 +693,7 @@ export default function SchedulePage() {
         const startDate = new Date(startsAt);
         const dayIso = Number.isNaN(startDate.getTime()) ? task.due_date : isoDay(startDate);
         const kind = scheduleKindFromMetadata(metadata);
+        const deliveryStatus = deliveryStatusFromTask(task, metadata);
 
         return {
           id: task.id,
@@ -513,15 +705,20 @@ export default function SchedulePage() {
           endsAt,
           projectName: task.project_id ? projectsById.get(task.project_id)?.name ?? null : null,
           assigneeName: task.assigned_to ? profilesById.get(task.assigned_to)?.name ?? null : null,
+          assigneeId: task.assigned_to,
           description: task.description,
           tone:
-            kind === "delivery"
-              ? "blue"
-              : kind === "meeting"
+            deliveryStatus
+              ? deliveryStatusTone(deliveryStatus)
+              : isMeetingKind(kind)
                 ? "blue"
-                : kind === "note"
-                  ? "neutral"
-                  : "yellow",
+                : kind === "site_visit"
+                  ? "green"
+                  : kind === "note"
+                    ? "neutral"
+                    : "yellow",
+          status: task.status,
+          deliveryStatus,
         };
       })
       .filter((entry): entry is CalendarEntry => entry !== null);
@@ -543,8 +740,11 @@ export default function SchedulePage() {
           endsAt: null,
           projectName: project.name,
           assigneeName: null,
+          assigneeId: null,
           description: project.address,
           tone: "green",
+          status: null,
+          deliveryStatus: null,
         });
       }
       if (project.end_date && project.end_date >= loadStart && project.end_date <= loadEnd) {
@@ -558,8 +758,11 @@ export default function SchedulePage() {
           endsAt: null,
           projectName: project.name,
           assigneeName: null,
+          assigneeId: null,
           description: `${scheduleStateLabel(health.state, text)} · ${formatProjectCountdown(health, locale)}`,
           tone: health.tone,
+          status: null,
+          deliveryStatus: null,
         });
       }
       return out;
@@ -576,11 +779,12 @@ export default function SchedulePage() {
     return entries.filter((entry) => {
       if (rangeStart && entry.dayIso < rangeStart) return false;
       if (rangeEnd && entry.dayIso > rangeEnd) return false;
+      if (deliveryOnlyCalendar) return entry.type === "delivery";
       if (calendarMode === "deliveries") return entry.type === "delivery";
       if (entry.type === "delivery") return false;
       return true;
     });
-  }, [calendarMode, entries, rangeEnd, rangeStart]);
+  }, [calendarMode, deliveryOnlyCalendar, entries, rangeEnd, rangeStart]);
 
   const entriesByDay = useMemo(() => {
     const map = new Map<string, CalendarEntry[]>();
@@ -611,9 +815,16 @@ export default function SchedulePage() {
     setSelectedDay(day);
     setSelectedEntry(null);
     setItemForm((prev) => ({
-      ...defaultItemForm(day.iso, calendarMode === "deliveries" ? "delivery" : prev.kind === "delivery" ? "meeting" : prev.kind),
+      ...defaultItemForm(
+        day.iso,
+        calendarMode === "deliveries" || deliveryOnlyCalendar
+          ? "delivery"
+          : prev.kind === "delivery" || prev.kind === "meeting"
+            ? "client_meeting"
+            : prev.kind,
+      ),
       projectId: prev.projectId,
-      assignedTo: calendarMode === "deliveries" ? prev.assignedTo : prev.assignedTo,
+      assignedTo: prev.assignedTo,
     }));
   }
 
@@ -628,7 +839,7 @@ export default function SchedulePage() {
       body: JSON.stringify({
         action: "create_item",
         title: itemForm.title,
-        kind: itemForm.kind,
+        kind: calendarMode === "deliveries" || deliveryOnlyCalendar ? "delivery" : itemForm.kind,
         projectId: itemForm.projectId || null,
         assignedTo: itemForm.assignedTo || null,
         startsAt: itemForm.startsAt,
@@ -644,7 +855,14 @@ export default function SchedulePage() {
     }
 
     setItemForm((prev) => ({
-      ...defaultItemForm(selectedDay?.iso, calendarMode === "deliveries" ? "delivery" : prev.kind),
+      ...defaultItemForm(
+        selectedDay?.iso,
+        calendarMode === "deliveries" || deliveryOnlyCalendar
+          ? "delivery"
+          : prev.kind === "meeting"
+            ? "client_meeting"
+            : prev.kind,
+      ),
       projectId: prev.projectId,
       assignedTo: prev.assignedTo,
     }));
@@ -681,6 +899,28 @@ export default function SchedulePage() {
     await loadSchedule();
   }
 
+  async function updateDeliveryStatus(action: "claim_delivery" | "complete_delivery", taskId: string) {
+    setBusy("delivery");
+    setNotice("");
+
+    const response = await fetch("/api/schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, taskId }),
+    });
+
+    if (!response.ok) {
+      setNotice(`${text.deliveryActionFailed} ${await readRouteError(response)}`);
+      setBusy(null);
+      return;
+    }
+
+    setNotice(text.deliveryActionSaved);
+    setBusy(null);
+    setSelectedEntry(null);
+    await loadSchedule();
+  }
+
   function selectProjectForDates(projectId: string) {
     const project = projectsById.get(projectId);
     setProjectForm({
@@ -691,6 +931,9 @@ export default function SchedulePage() {
   }
 
   function renderCalendarItemForm(title: string, buttonText: string) {
+    const isDeliveryForm = calendarMode === "deliveries" || deliveryOnlyCalendar;
+    const effectiveKind = isDeliveryForm ? "delivery" : itemForm.kind;
+
     return (
       <form className="space-y-3" onSubmit={(event) => void createCalendarItem(event)}>
         <div className="flex items-center gap-2">
@@ -704,24 +947,35 @@ export default function SchedulePage() {
             value={itemForm.title}
             onChange={(event) => setItemForm((prev) => ({ ...prev, title: event.target.value }))}
             required
+            placeholder={isDeliveryForm ? text.deliveryTitlePlaceholder : text.eventTitlePlaceholder}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-          <label className="grid gap-1 text-xs text-[var(--text-muted)]">
-            <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
-            <select
-              value={itemForm.kind}
-              onChange={(event) => setItemForm((prev) => ({ ...prev, kind: event.target.value as ScheduleKind }))}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            >
-              <option value="meeting">{text.meeting}</option>
-              <option value="task">{text.task}</option>
-              <option value="note">{text.note}</option>
-              <option value="delivery">{text.delivery}</option>
-            </select>
-          </label>
+          {isDeliveryForm ? (
+            <div className="grid gap-1 text-xs text-[var(--text-muted)]">
+              <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
+              <div className="rounded-[var(--radius-md)] border border-[rgba(59,130,246,0.35)] bg-[rgba(59,130,246,0.12)] px-3 py-3 text-sm font-semibold text-[#60a5fa]">
+                {text.delivery}
+              </div>
+            </div>
+          ) : (
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
+              <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
+              <select
+                value={itemForm.kind === "meeting" ? "client_meeting" : itemForm.kind}
+                onChange={(event) => setItemForm((prev) => ({ ...prev, kind: event.target.value as ScheduleKind }))}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              >
+                {GENERAL_EVENT_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {entryTypeLabel(kind, text)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="grid gap-1 text-xs text-[var(--text-muted)]">
             <span className="uppercase tracking-[0.14em]">{text.projectLabel}</span>
@@ -742,27 +996,31 @@ export default function SchedulePage() {
 
         <label className="grid gap-1 text-xs text-[var(--text-muted)]">
           <span className="uppercase tracking-[0.14em]">
-            {itemForm.kind === "delivery" ? text.driverLabel : text.assigneeLabel}
+            {effectiveKind === "delivery" ? text.deliveryPersonLabel : text.assigneeLabel}
           </span>
           <select
             value={itemForm.assignedTo}
             onChange={(event) => setItemForm((prev) => ({ ...prev, assignedTo: event.target.value }))}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           >
-            <option value="">{itemForm.kind === "delivery" ? text.noDriver : text.noAssignee}</option>
+            <option value="">{effectiveKind === "delivery" ? text.noDriver : text.noAssignee}</option>
             {assignmentOptions.map((profile) => (
               <option key={profile.id} value={profile.id}>
                 {profile.name} · {profile.role}
               </option>
             ))}
           </select>
+          {effectiveKind === "delivery" ? (
+            <span className="text-[11px] leading-4 text-[var(--text-muted)]">{text.allDeliveryPeople}</span>
+          ) : null}
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
           <label className="grid gap-1 text-xs text-[var(--text-muted)]">
             <span className="uppercase tracking-[0.14em]">{text.startLabel}</span>
             <input
-              type="datetime-local"
+              type="text"
+              placeholder="YYYY-MM-DD HH:MM"
               value={itemForm.startsAt}
               onChange={(event) => setItemForm((prev) => ({ ...prev, startsAt: event.target.value }))}
               required
@@ -772,7 +1030,8 @@ export default function SchedulePage() {
           <label className="grid gap-1 text-xs text-[var(--text-muted)]">
             <span className="uppercase tracking-[0.14em]">{text.endLabel}</span>
             <input
-              type="datetime-local"
+              type="text"
+              placeholder="YYYY-MM-DD HH:MM"
               value={itemForm.endsAt}
               onChange={(event) => setItemForm((prev) => ({ ...prev, endsAt: event.target.value }))}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
@@ -850,7 +1109,9 @@ export default function SchedulePage() {
               { key: "general", label: text.generalCalendar, icon: CalendarDays },
               { key: "deliveries", label: text.deliveryCalendar, icon: Truck },
             ] as const
-          ).map(({ key, label, icon: Icon }) => {
+          )
+            .filter(({ key }) => canUseGeneralCalendar || key === "deliveries")
+            .map(({ key, label, icon: Icon }) => {
             const active = calendarMode === key;
             return (
               <button
@@ -874,7 +1135,8 @@ export default function SchedulePage() {
           <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
             {text.dateFrom}
             <input
-              type="date"
+              type="text"
+              placeholder="YYYY-MM-DD"
               value={rangeStart}
               onChange={(event) => setRangeStart(event.target.value)}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 text-xs normal-case tracking-normal text-[var(--text-primary)] outline-none"
@@ -883,7 +1145,8 @@ export default function SchedulePage() {
           <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
             {text.dateTo}
             <input
-              type="date"
+              type="text"
+              placeholder="YYYY-MM-DD"
               value={rangeEnd}
               onChange={(event) => setRangeEnd(event.target.value)}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 text-xs normal-case tracking-normal text-[var(--text-primary)] outline-none"
@@ -1001,6 +1264,7 @@ export default function SchedulePage() {
                           <div className="mt-0.5 truncate text-[10px] opacity-80">
                             {time ? `${time} · ` : ""}
                             {entryTypeLabel(entry.type, text)}
+                            {entry.deliveryStatus ? ` · ${deliveryStatusLabel(entry.deliveryStatus, text)}` : ""}
                           </div>
                         </button>
                       );
@@ -1020,7 +1284,7 @@ export default function SchedulePage() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-3">
+        <div className={`grid gap-5 ${showProjectDateTools ? "xl:grid-cols-3" : "xl:grid-cols-2"}`}>
           <section className="surface-card p-4">
             {renderCalendarItemForm(text.newItem, text.create)}
             {currentProfile ? (
@@ -1031,8 +1295,14 @@ export default function SchedulePage() {
                 </span>
               </div>
             ) : null}
+            {deliveryOnlyCalendar ? (
+              <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(59,130,246,0.28)] bg-[rgba(59,130,246,0.1)] p-3 text-xs leading-5 text-[#93c5fd]">
+                {text.deliveryOnlyHint}
+              </div>
+            ) : null}
           </section>
 
+          {showProjectDateTools ? (
           <form className="surface-card space-y-3 p-4" onSubmit={(event) => void saveProjectDates(event)}>
             <div className="flex items-center gap-2">
               <Flag size={17} className="text-[var(--brand-yellow)]" />
@@ -1056,20 +1326,22 @@ export default function SchedulePage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <label className="grid gap-1 text-xs text-[var(--text-muted)]">
                 <span className="uppercase tracking-[0.14em]">{text.starts}</span>
-                <input
-                  type="date"
-                  value={projectForm.startDate}
-                  onChange={(event) => setProjectForm((prev) => ({ ...prev, startDate: event.target.value }))}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  <input
+                    type="text"
+                    placeholder="YYYY-MM-DD"
+                    value={projectForm.startDate}
+                    onChange={(event) => setProjectForm((prev) => ({ ...prev, startDate: event.target.value }))}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 />
               </label>
               <label className="grid gap-1 text-xs text-[var(--text-muted)]">
                 <span className="uppercase tracking-[0.14em]">{text.deadline}</span>
-                <input
-                  type="date"
-                  value={projectForm.endDate}
-                  onChange={(event) => setProjectForm((prev) => ({ ...prev, endDate: event.target.value }))}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  <input
+                    type="text"
+                    placeholder="YYYY-MM-DD"
+                    value={projectForm.endDate}
+                    onChange={(event) => setProjectForm((prev) => ({ ...prev, endDate: event.target.value }))}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 />
               </label>
             </div>
@@ -1078,7 +1350,9 @@ export default function SchedulePage() {
               {busy === "dates" ? text.saving : text.saveDates}
             </button>
           </form>
+          ) : null}
 
+          {showProjectDateTools ? (
           <section className="surface-card space-y-3 p-4">
             <div className="flex items-center gap-2">
               <Clock3 size={17} className="text-[var(--brand-yellow)]" />
@@ -1123,17 +1397,19 @@ export default function SchedulePage() {
               </div>
             )}
           </section>
+          ) : null}
         </div>
       </section>
 
       {selectedDay ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 pb-28 pt-3 sm:items-center sm:p-4"
           style={{ background: "rgba(0,0,0,0.58)" }}
           onClick={() => setSelectedDay(null)}
         >
           <div
-            className="surface-card max-h-[92vh] w-full max-w-[900px] overflow-auto p-4"
+            data-live-refresh-blocker="true"
+            className="surface-card max-h-[calc(100dvh-1.5rem)] w-full max-w-[900px] overflow-y-auto p-4 pb-24 sm:pb-4"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">
@@ -1155,7 +1431,7 @@ export default function SchedulePage() {
               </button>
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className={`mt-4 grid gap-4 ${showProjectDateTools ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "lg:grid-cols-[minmax(0,1fr)_360px]"}`}>
               <section className="space-y-3">
                 <h3 className="text-sm font-bold text-[var(--text-primary)]">{text.itemsOnDay}</h3>
                 {selectedDayEntries.length === 0 ? (
@@ -1179,6 +1455,7 @@ export default function SchedulePage() {
                               <div className="truncate text-sm font-bold">{entry.title}</div>
                               <div className="mt-1 text-xs opacity-80">
                                 {timeLabel(entry.startsAt, locale) ?? "—"} · {entryTypeLabel(entry.type, text)}
+                                {entry.deliveryStatus ? ` · ${deliveryStatusLabel(entry.deliveryStatus, text)}` : ""}
                               </div>
                             </div>
                             {entry.assigneeName ? (
@@ -1199,6 +1476,7 @@ export default function SchedulePage() {
               </section>
 
               <section className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.32)] p-3">
+                {showProjectDateTools ? (
                 <form className="mb-4 space-y-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-surface)] p-3" onSubmit={(event) => void saveProjectDates(event)}>
                   <div className="flex items-center gap-2">
                     <Flag size={15} className="text-[var(--brand-yellow)]" />
@@ -1237,13 +1515,15 @@ export default function SchedulePage() {
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <input
-                      type="date"
+                      type="text"
+                      placeholder="YYYY-MM-DD"
                       value={projectForm.startDate}
                       onChange={(event) => setProjectForm((prev) => ({ ...prev, startDate: event.target.value }))}
                       className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
                     />
                     <input
-                      type="date"
+                      type="text"
+                      placeholder="YYYY-MM-DD"
                       value={projectForm.endDate}
                       onChange={(event) => setProjectForm((prev) => ({ ...prev, endDate: event.target.value }))}
                       className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
@@ -1254,6 +1534,7 @@ export default function SchedulePage() {
                     {busy === "dates" ? text.saving : text.saveDates}
                   </button>
                 </form>
+                ) : null}
                 {renderCalendarItemForm(text.addToDay, text.create)}
               </section>
             </div>
@@ -1267,7 +1548,11 @@ export default function SchedulePage() {
           style={{ background: "rgba(0,0,0,0.62)" }}
           onClick={() => setSelectedEntry(null)}
         >
-          <div className="surface-card w-full max-w-[560px] p-4" onClick={(event) => event.stopPropagation()}>
+          <div
+            data-live-refresh-blocker="true"
+            className="surface-card w-full max-w-[560px] p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
@@ -1306,9 +1591,20 @@ export default function SchedulePage() {
               {selectedEntry.assigneeName ? (
                 <div>
                   <span className="font-semibold text-[var(--text-primary)]">
-                    {selectedEntry.type === "delivery" ? text.driverLabel : text.assigneeLabel}:
+                    {selectedEntry.type === "delivery" ? text.deliveryPersonLabel : text.assigneeLabel}:
                   </span>{" "}
                   {selectedEntry.assigneeName}
+                </div>
+              ) : selectedEntry.type === "delivery" ? (
+                <div>
+                  <span className="font-semibold text-[var(--text-primary)]">{text.deliveryPersonLabel}:</span>{" "}
+                  {text.noDriver}
+                </div>
+              ) : null}
+              {selectedEntry.deliveryStatus ? (
+                <div>
+                  <span className="font-semibold text-[var(--text-primary)]">{text.deliveryStatus}:</span>{" "}
+                  {deliveryStatusLabel(selectedEntry.deliveryStatus, text)}
                 </div>
               ) : null}
               {selectedEntry.description ? (
@@ -1317,6 +1613,36 @@ export default function SchedulePage() {
                 </div>
               ) : null}
             </div>
+            {selectedEntry.type === "delivery" && selectedEntry.deliveryStatus !== "delivered" ? (
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                {currentProfile && (!selectedEntry.assigneeId || selectedEntry.assigneeId === currentProfile.id) ? (
+                  <button
+                    type="button"
+                    onClick={() => void updateDeliveryStatus("claim_delivery", selectedEntry.id)}
+                    disabled={busy === "delivery"}
+                    className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] border px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+                    style={{ borderColor: "var(--brand-yellow)", color: "var(--brand-yellow)" }}
+                  >
+                    <Hand size={14} />
+                    {busy === "delivery" ? text.saving : text.takeDelivery}
+                  </button>
+                ) : null}
+                {currentProfile &&
+                (selectedEntry.assigneeId === currentProfile.id ||
+                  ["owner", "admin", "manager", "supervisor"].includes(currentProfile.role)) ? (
+                  <button
+                    type="button"
+                    onClick={() => void updateDeliveryStatus("complete_delivery", selectedEntry.id)}
+                    disabled={busy === "delivery"}
+                    className="inline-flex items-center justify-center gap-2 rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+                    style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
+                  >
+                    <CheckCircle2 size={14} />
+                    {busy === "delivery" ? text.saving : text.markDelivered}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

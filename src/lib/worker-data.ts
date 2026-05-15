@@ -21,6 +21,13 @@ function assertNoError(error: { message: string } | null, label: string) {
   }
 }
 
+function isUnclaimedDeliveryTask(task: Task): boolean {
+  if (task.assigned_to !== null) return false;
+  const metadata = task.metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+  return (metadata as Record<string, unknown>).schedule_kind === "delivery";
+}
+
 export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   const supabase = await createClient();
   const {
@@ -42,6 +49,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     eventsResult,
     closuresResult,
     tasksResult,
+    openDeliveryTasksResult,
     mediaResult,
   ] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
@@ -70,6 +78,18 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       .order("created_at", { ascending: false })
       .limit(60)
       .returns<Task[]>(),
+    // Open delivery calendar items are team-call tasks: any worker,
+    // driver, subcontractor, or supervisor can claim them even before a
+    // specific person is assigned. Keep them in the worker queue so the
+    // "I will take it" flow is visible from /my-tasks and project pages.
+    supabase
+      .from("tasks")
+      .select("*")
+      .is("assigned_to", null)
+      .eq("metadata->>schedule_kind", "delivery")
+      .order("created_at", { ascending: false })
+      .limit(80)
+      .returns<Task[]>(),
     // Worker journal feed: only the worker's own uploads.
     //
     // Wave X2 (00011_media_project_privacy.sql) tightens the media SELECT
@@ -91,6 +111,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   assertNoError(assignmentsResult.error, "Assignments query failed");
   assertNoError(eventsResult.error, "Time events query failed");
   assertNoError(tasksResult.error, "Tasks query failed");
+  assertNoError(openDeliveryTasksResult.error, "Open delivery tasks query failed");
   assertNoError(mediaResult.error, "Media query failed");
 
   const profile = profileResult.data;
@@ -116,6 +137,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     closedThrough: closure.closed_through,
   }));
   const personalTasks = tasksResult.data ?? [];
+  const openDeliveryTasks = openDeliveryTasksResult.data ?? [];
   let media = mediaResult.data ?? [];
 
   const earliestEventMs = events.reduce<number | null>((earliest, event) => {
@@ -240,9 +262,20 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   // Merge personal + project-level, dedupe by id (covers the edge case of
   // a project-level task that was later assigned to this worker explicitly).
   const seenIds = new Set(personalTasks.map((t) => t.id));
+  const dedupedOpenDeliveries = openDeliveryTasks.filter((task) => {
+    if (seenIds.has(task.id)) return false;
+    seenIds.add(task.id);
+    return true;
+  });
+  const dedupedProjectLevelTasks = projectLevelTasks.filter((task) => {
+    if (seenIds.has(task.id)) return false;
+    seenIds.add(task.id);
+    return true;
+  });
   let tasks: Task[] = [
     ...personalTasks,
-    ...projectLevelTasks.filter((t) => !seenIds.has(t.id)),
+    ...dedupedOpenDeliveries,
+    ...dedupedProjectLevelTasks,
   ].map((task) => ({
     ...task,
     status: getEffectiveTaskStatus(task),
@@ -285,7 +318,12 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   const workerProjects = enrichProjects(projects, assignedAtByProjectId);
   const projectsById = new Map(workerProjects.map((project) => [project.id, project]));
   const visibleProjectIds = new Set(workerProjects.map((project) => project.id));
-  tasks = tasks.filter((task) => !task.project_id || visibleProjectIds.has(task.project_id));
+  tasks = tasks.filter(
+    (task) =>
+      !task.project_id ||
+      visibleProjectIds.has(task.project_id) ||
+      isUnclaimedDeliveryTask(task),
+  );
   media = media.filter((entry) => !entry.project_id || visibleProjectIds.has(entry.project_id));
 
   // Eager-fetch attachment media rows referenced by any task.metadata.

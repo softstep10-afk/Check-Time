@@ -289,7 +289,8 @@ function WorkerTaskDetailModalBody({
 
   const isMine = task.assigned_to === profileId;
   const isUnassigned = task.assigned_to === null;
-  const isCommonClaimable = isUnassigned && Boolean(task.project_id) && Boolean(onClaim);
+  const isDeliveryTask = task.metadata?.schedule_kind === "delivery";
+  const isCommonClaimable = isUnassigned && (Boolean(task.project_id) || isDeliveryTask) && Boolean(onClaim);
   const effectiveStatus = getEffectiveTaskStatus(task);
   // Status-driven buttons only render for tasks the worker already
   // owns. Claim-then-start is a two-step flow: claim flips assigned_to,

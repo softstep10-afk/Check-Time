@@ -11,6 +11,7 @@ import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
+import { WorkerMaterialSpecSection } from "@/components/worker/WorkerMaterialSpecSection";
 import { validateUploadFile } from "@/lib/upload-limits";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
@@ -21,7 +22,7 @@ import {
 } from "@/lib/safety-acknowledgements";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
 import { splitWorkerProjectTasks } from "@/lib/task-notifications";
-import { getEffectiveTaskStatus } from "@/lib/task-status";
+import { getEffectiveTaskStatus, isEffectiveOpenTask } from "@/lib/task-status";
 import {
   openWorkerProjectTaskDetails,
   submitWorkerTaskCompletion,
@@ -347,6 +348,18 @@ export function WorkerProjectView({
     taskList,
     profileId,
   );
+  const activeProjectQueue = useMemo(
+    () => [...mineTasks, ...projectLevelTasks].filter(isEffectiveOpenTask),
+    [mineTasks, projectLevelTasks],
+  );
+  const personalTasksElsewhere = useMemo(() => {
+    return workerShell.shell.tasks
+      .filter((task) => task.assigned_to === profileId)
+      .filter((task) => task.project_id !== project.id)
+      .filter(isEffectiveOpenTask)
+      .slice(0, 5);
+  }, [profileId, project.id, workerShell.shell.tasks]);
+  const activeQueueCount = activeProjectQueue.length + personalTasksElsewhere.length;
   const projectMediaCounts = useMemo(() => {
     let photo = 0;
     let video = 0;
@@ -573,6 +586,55 @@ export function WorkerProjectView({
           queue, and require-video gate all flow through unchanged. */}
       <ProjectClockControls projectId={project.id} projectName={project.name} />
 
+      <section className="surface-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("workerProject.activeQueueTitle")}
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              {t("workerProject.activeQueueSubtitle")}
+            </p>
+          </div>
+          <span className="rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-secondary)]">
+            {activeQueueCount}
+          </span>
+        </div>
+        {activeQueueCount === 0 ? (
+          <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
+            {t("workerProject.activeQueueEmpty")}
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {activeProjectQueue.slice(0, 4).map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => openWorkerProjectTaskDetails(task, openDetails)}
+                className="block w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.5)] p-3 text-left"
+              >
+                <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
+                <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {project.name} · {getEffectiveTaskStatus(task).replace("_", " ")}
+                </div>
+              </button>
+            ))}
+            {personalTasksElsewhere.map((task) => (
+              <Link
+                key={task.id}
+                href="/my-tasks"
+                className="block rounded-[var(--radius-md)] border border-[rgba(191,162,52,0.26)] bg-[rgba(191,162,52,0.08)] p-3"
+              >
+                <div className="text-sm font-semibold text-[var(--text-primary)]">{task.title}</div>
+                <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                  {task.projectName ?? t("common.general")} · {t("workerProject.activeQueueOtherProject")}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Notes — visible to the whole crew. project.notes is on every Project row. */}
       <section className="surface-card p-4">
         <h2 className="text-lg font-bold text-[var(--text-primary)]">
@@ -588,6 +650,8 @@ export function WorkerProjectView({
           </div>
         )}
       </section>
+
+      <WorkerMaterialSpecSection project={project} />
 
       <CollapsibleSection
         id="media"

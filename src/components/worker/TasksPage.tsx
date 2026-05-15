@@ -307,6 +307,8 @@ export function TasksPage() {
     const accent = getPriorityAccent(task.priority);
     const ownership = classifyTaskForWorker(task, shell.profile.id);
     const effectiveStatus = getEffectiveTaskStatus(task);
+    const isMine = task.assigned_to === shell.profile.id;
+    const isClaimable = task.assigned_to === null;
 
     return (
       <div
@@ -420,7 +422,7 @@ export function TasksPage() {
             <Eye size={14} />
             {t("tasks.viewDetails")}
           </button>
-          {task.status === "pending" ? (
+          {isMine && task.status === "pending" ? (
             <button
               type="button"
               onClick={() => void updateTaskStatus(task.id, "in_progress")}
@@ -431,16 +433,28 @@ export function TasksPage() {
               {t("common.start")}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => openCompletion(task)}
-            disabled={updating}
-            data-testid="worker-task-mark-done-card"
-            className="button-base button-primary flex-1"
-          >
-            <CheckCircle2 size={14} />
-            {updating ? t("common.saving") : t("tasks.markDone")}
-          </button>
+          {isMine ? (
+            <button
+              type="button"
+              onClick={() => openCompletion(task)}
+              disabled={updating}
+              data-testid="worker-task-mark-done-card"
+              className="button-base button-primary flex-1"
+            >
+              <CheckCircle2 size={14} />
+              {updating ? t("common.saving") : t("tasks.markDone")}
+            </button>
+          ) : isClaimable ? (
+            <button
+              type="button"
+              onClick={() => void handleClaimTask(task.id)}
+              disabled={claimBusyTaskId === task.id}
+              className="button-base button-primary flex-1"
+            >
+              <Play size={14} />
+              {claimBusyTaskId === task.id ? t("common.saving") : t("tasks.claimCta")}
+            </button>
+          ) : null}
         </div>
       </div>
     );

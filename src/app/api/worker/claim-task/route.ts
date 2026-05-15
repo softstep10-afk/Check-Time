@@ -4,6 +4,17 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import type { Task } from "@/types/database";
 
+const DELIVERY_CLAIM_ROLES = new Set([
+  "worker",
+  "driver",
+  "subcontractor",
+  "supervisor",
+  "sales",
+  "manager",
+  "admin",
+  "owner",
+]);
+
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? { ...(value as Record<string, unknown>) }
@@ -99,27 +110,38 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     }
-    if (!task.project_id) {
+    const taskMetadata = asRecord(task.metadata);
+    const isDeliveryTask = taskMetadata.schedule_kind === "delivery";
+
+    if (!task.project_id && !isDeliveryTask) {
       return NextResponse.json(
         { error: "Common (no-project) tasks cannot be claimed here." },
         { status: 400 },
       );
     }
+    if (isDeliveryTask && !DELIVERY_CLAIM_ROLES.has(profile.role)) {
+      return NextResponse.json({ error: "This role cannot claim deliveries." }, { status: 403 });
+    }
     if (task.org_id !== profile.org_id) {
       return NextResponse.json({ error: "Org mismatch." }, { status: 403 });
     }
 
-    const { data: taskProject } = await supabase
-      .from("projects")
-      .select("id, status")
-      .eq("id", task.project_id)
-      .is("deleted_at", null)
-      .maybeSingle<{ id: string; status: string }>();
-    if (!taskProject || taskProject.status === "archived") {
-      return NextResponse.json(
-        { error: "Project is not available to this worker." },
-        { status: 403 },
-      );
+    let taskProject: { id: string; status: string } | null = null;
+    if (task.project_id) {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, status")
+        .eq("id", task.project_id)
+        .eq("org_id", profile.org_id)
+        .is("deleted_at", null)
+        .maybeSingle<{ id: string; status: string }>();
+      taskProject = data ?? null;
+      if (!taskProject || taskProject.status === "archived") {
+        return NextResponse.json(
+          { error: "Project is not available to this worker." },
+          { status: 403 },
+        );
+      }
     }
 
     // Reuse the same project-access predicate the worker project page
@@ -128,8 +150,8 @@ export async function POST(request: NextRequest) {
     // an active project. Keeps a worker from claiming tasks on
     // projects they can't see.
     const accessMode = profile.project_access_mode === "all_active" ? "all_active" : "list";
-    let allowed = false;
-    if (accessMode === "list") {
+    let allowed = isDeliveryTask;
+    if (!allowed && accessMode === "list" && task.project_id) {
       const { data: assignment } = await supabase
         .from("project_assignments")
         .select("project_id")
@@ -137,7 +159,7 @@ export async function POST(request: NextRequest) {
         .eq("profile_id", user.id)
         .maybeSingle();
       allowed = Boolean(assignment);
-    } else {
+    } else if (!allowed && taskProject) {
       if (taskProject.status === "active") {
         const { data: exclusion, error: exclusionError } = await supabase
           .from("project_exclusions")
@@ -163,24 +185,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const claimedAt = new Date().toISOString();
     const nextMetadata = {
-      ...asRecord(task.metadata),
+      ...taskMetadata,
       claimed_from_unassigned: true,
       original_assigned_to: null,
       claimed_by: user.id,
-      claimed_at: new Date().toISOString(),
+      claimed_at: claimedAt,
+      ...(isDeliveryTask
+        ? {
+            schedule_delivery_status: "claimed",
+            delivery_claimed_by: user.id,
+            delivery_claimed_at: claimedAt,
+          }
+        : {}),
     };
 
-    const { data: updated, error: updateError } = await admin
+    let updateQuery = admin
       .from("tasks")
       .update({ assigned_to: user.id, metadata: nextMetadata })
       .eq("id", taskId)
       .is("assigned_to", null)
       .is("deleted_at", null)
-      .eq("project_id", task.project_id)
       .eq("org_id", profile.org_id)
       .neq("status", "done")
-      .is("completed_at", null)
+      .is("completed_at", null);
+
+    updateQuery = task.project_id
+      ? updateQuery.eq("project_id", task.project_id)
+      : updateQuery.is("project_id", null);
+
+    const { data: updated, error: updateError } = await updateQuery
       .select("*")
       .maybeSingle<Task>();
 

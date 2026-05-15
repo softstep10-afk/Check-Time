@@ -61,6 +61,20 @@ describe("isTaskVisibleToWorker", () => {
     ).toBe(false);
   });
 
+  it("includes open team delivery tasks even before a person claims them", () => {
+    expect(
+      isTaskVisibleToWorker(
+        makeTask({
+          id: "delivery-open",
+          assigned_to: null,
+          project_id: null,
+          metadata: { schedule_kind: "delivery", schedule_delivery_status: "open" },
+        }),
+        args,
+      ),
+    ).toBe(true);
+  });
+
   it("excludes tasks assigned to another worker", () => {
     expect(
       isTaskVisibleToWorker(

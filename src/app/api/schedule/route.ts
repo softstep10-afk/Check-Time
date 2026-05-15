@@ -3,7 +3,16 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, UserRole } from "@/types/database";
 
-type ScheduleKind = "meeting" | "task" | "note" | "delivery";
+type ScheduleKind =
+  | "client_meeting"
+  | "worker_meeting"
+  | "inspection"
+  | "subcontractor_meeting"
+  | "site_visit"
+  | "meeting"
+  | "task"
+  | "note"
+  | "delivery";
 
 const CALENDAR_ROLES = new Set<UserRole>([
   "worker",
@@ -15,9 +24,30 @@ const CALENDAR_ROLES = new Set<UserRole>([
   "admin",
   "owner",
 ]);
+const DELIVERY_ONLY_ROLES = new Set<UserRole>(["worker", "driver", "subcontractor"]);
+const DELIVERY_CLAIM_ROLES = new Set<UserRole>([
+  "worker",
+  "driver",
+  "subcontractor",
+  "supervisor",
+  "sales",
+  "manager",
+  "admin",
+  "owner",
+]);
 
 function isScheduleKind(value: unknown): value is ScheduleKind {
-  return value === "meeting" || value === "task" || value === "note" || value === "delivery";
+  return (
+    value === "client_meeting" ||
+    value === "worker_meeting" ||
+    value === "inspection" ||
+    value === "subcontractor_meeting" ||
+    value === "site_visit" ||
+    value === "meeting" ||
+    value === "task" ||
+    value === "note" ||
+    value === "delivery"
+  );
 }
 
 function stringOrNull(value: unknown): string | null {
@@ -40,6 +70,12 @@ function validDateTime(value: string | null): Date | null {
 function localDateOnly(date: Date): string {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 10);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
 }
 
 async function getCalendarActor() {
@@ -87,7 +123,8 @@ export async function POST(request: Request) {
 
   if (action === "create_item") {
     const title = stringOrNull(body?.title);
-    const kind = isScheduleKind(body?.kind) ? body.kind : "meeting";
+    const rawKind = isScheduleKind(body?.kind) ? body.kind : "client_meeting";
+    const kind: ScheduleKind = rawKind === "meeting" ? "client_meeting" : rawKind;
     const description = stringOrNull(body?.description);
     const projectId = stringOrNull(body?.projectId);
     const assignedTo = stringOrNull(body?.assignedTo);
@@ -96,6 +133,10 @@ export async function POST(request: Request) {
 
     if (!title || !startsAt) {
       return NextResponse.json({ error: "Title and start time are required." }, { status: 400 });
+    }
+
+    if (DELIVERY_ONLY_ROLES.has(actor.profile.role) && kind !== "delivery") {
+      return NextResponse.json({ error: "Workers can create delivery calendar items only." }, { status: 403 });
     }
 
     if (endsAt && endsAt.getTime() < startsAt.getTime()) {
@@ -143,6 +184,15 @@ export async function POST(request: Request) {
         metadata: {
           schedule_entry: true,
           schedule_kind: kind,
+          schedule_scope: kind === "delivery" ? "delivery" : "general",
+          schedule_visible_to_workers: kind === "delivery",
+          schedule_delivery_status:
+            kind === "delivery"
+              ? assignedTo
+                ? "assigned"
+                : "open"
+              : null,
+          delivery_available_to: kind === "delivery" ? "team" : null,
           schedule_starts_at: startsAt.toISOString(),
           schedule_ends_at: endsAt ? endsAt.toISOString() : null,
           schedule_created_by_role: actor.profile.role,
@@ -159,6 +209,10 @@ export async function POST(request: Request) {
   }
 
   if (action === "update_project_dates") {
+    if (DELIVERY_ONLY_ROLES.has(actor.profile.role)) {
+      return NextResponse.json({ error: "Project date edits are not available from the delivery calendar." }, { status: 403 });
+    }
+
     const projectId = stringOrNull(body?.projectId);
     const startDate = validDateOnly(stringOrNull(body?.startDate));
     const endDate = validDateOnly(stringOrNull(body?.endDate));
@@ -206,6 +260,154 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ ok: true, project: data });
+  }
+
+  if (action === "claim_delivery") {
+    if (!DELIVERY_CLAIM_ROLES.has(actor.profile.role)) {
+      return NextResponse.json({ error: "This role cannot claim deliveries." }, { status: 403 });
+    }
+
+    const taskId = stringOrNull(body?.taskId);
+    if (!taskId) {
+      return NextResponse.json({ error: "taskId is required." }, { status: 400 });
+    }
+
+    const { data: task, error: taskError } = await admin
+      .from("tasks")
+      .select("id, org_id, project_id, assigned_to, status, completed_at, deleted_at, metadata")
+      .eq("id", taskId)
+      .eq("org_id", actor.profile.org_id)
+      .maybeSingle<{
+        id: string;
+        org_id: string;
+        project_id: string | null;
+        assigned_to: string | null;
+        status: string;
+        completed_at: string | null;
+        deleted_at: string | null;
+        metadata: Record<string, unknown> | null;
+      }>();
+
+    if (taskError || !task) {
+      return NextResponse.json({ error: taskError?.message ?? "Delivery not found." }, { status: 404 });
+    }
+    const metadata = asRecord(task.metadata);
+    if (metadata.schedule_kind !== "delivery") {
+      return NextResponse.json({ error: "Task is not a delivery." }, { status: 400 });
+    }
+    if (task.deleted_at || task.status === "done" || task.completed_at) {
+      return NextResponse.json({ error: "Delivery is already closed." }, { status: 409 });
+    }
+    if (task.assigned_to && task.assigned_to !== actor.profile.id) {
+      return NextResponse.json({ error: "Delivery is already claimed." }, { status: 409 });
+    }
+
+    const claimedAt = new Date().toISOString();
+    const nextMetadata = {
+      ...metadata,
+      schedule_delivery_status: "claimed",
+      delivery_claimed_by: actor.profile.id,
+      delivery_claimed_at: claimedAt,
+      claimed_by: actor.profile.id,
+      claimed_at: claimedAt,
+    };
+
+    const { data: updated, error } = await admin
+      .from("tasks")
+      .update({
+        assigned_to: actor.profile.id,
+        metadata: nextMetadata,
+      })
+      .eq("id", taskId)
+      .eq("org_id", actor.profile.org_id)
+      .is("deleted_at", null)
+      .neq("status", "done")
+      .is("completed_at", null)
+      .or(`assigned_to.is.null,assigned_to.eq.${actor.profile.id}`)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    if (!updated) {
+      return NextResponse.json({ error: "Delivery is already claimed or closed." }, { status: 409 });
+    }
+
+    return NextResponse.json({ ok: true, item: updated });
+  }
+
+  if (action === "complete_delivery") {
+    const taskId = stringOrNull(body?.taskId);
+    const note = stringOrNull(body?.note);
+    if (!taskId) {
+      return NextResponse.json({ error: "taskId is required." }, { status: 400 });
+    }
+
+    const { data: task, error: taskError } = await admin
+      .from("tasks")
+      .select("id, org_id, assigned_to, status, completed_at, deleted_at, metadata")
+      .eq("id", taskId)
+      .eq("org_id", actor.profile.org_id)
+      .maybeSingle<{
+        id: string;
+        org_id: string;
+        assigned_to: string | null;
+        status: string;
+        completed_at: string | null;
+        deleted_at: string | null;
+        metadata: Record<string, unknown> | null;
+      }>();
+
+    if (taskError || !task) {
+      return NextResponse.json({ error: taskError?.message ?? "Delivery not found." }, { status: 404 });
+    }
+    const metadata = asRecord(task.metadata);
+    if (metadata.schedule_kind !== "delivery") {
+      return NextResponse.json({ error: "Task is not a delivery." }, { status: 400 });
+    }
+    if (task.deleted_at) {
+      return NextResponse.json({ error: "Delivery has been deleted." }, { status: 410 });
+    }
+    if (task.status === "done" || task.completed_at) {
+      return NextResponse.json({ ok: true, item: task });
+    }
+    if (task.assigned_to && task.assigned_to !== actor.profile.id && !["owner", "admin", "manager", "supervisor"].includes(actor.profile.role)) {
+      return NextResponse.json({ error: "Delivery belongs to another team member." }, { status: 403 });
+    }
+
+    const completedAt = new Date().toISOString();
+    const completedBy = task.assigned_to ?? actor.profile.id;
+    const nextMetadata = {
+      ...metadata,
+      schedule_delivery_status: "delivered",
+      delivered_by: completedBy,
+      delivered_at: completedAt,
+      delivery_completed_by: completedBy,
+      delivery_completed_at: completedAt,
+      ...(note ? { completion_note: note } : {}),
+    };
+
+    const { data: updated, error } = await admin
+      .from("tasks")
+      .update({
+        assigned_to: completedBy,
+        status: "done",
+        completed_at: completedAt,
+        completed_by: completedBy,
+        metadata: nextMetadata,
+      })
+      .eq("id", taskId)
+      .eq("org_id", actor.profile.org_id)
+      .is("deleted_at", null)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, item: updated });
   }
 
   return NextResponse.json({ error: "Unknown calendar action." }, { status: 400 });

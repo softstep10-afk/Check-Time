@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskStatus, TimeEvent } from "@/types/database";
@@ -29,9 +29,9 @@ import type { TranslationKey } from "@/lib/i18n";
 import { NotificationBell } from "@/components/worker/NotificationBell";
 import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
+import { WorkerJarvisTextDock } from "@/components/worker/WorkerJarvisTextDock";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
 import { readLatestConsent, writeConsent } from "@/lib/gps-consent";
-import { closeOpenStoreVisits } from "@/lib/store-visits";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { validateUploadFile } from "@/lib/upload-limits";
 import {
@@ -63,6 +63,7 @@ import {
 } from "@/lib/task-notifications";
 import { uploadTaskAttachment } from "@/lib/task-attachments";
 import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
+import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 
 const navItems = [
   { href: "/clock", icon: Timer, label: "Clock", labelKey: "worker.navClock" as TranslationKey },
@@ -117,6 +118,7 @@ type TaskNotificationRow = {
   updated_at?: string | null;
   deleted_at?: string | null;
   title?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type WorkerShellContextValue = {
@@ -131,7 +133,7 @@ type WorkerShellContextValue = {
   draining: boolean;
   dismissBanner: () => void;
   clockIn: (projectId: string, options?: ClockOptions) => Promise<void>;
-  clockOut: (options?: ClockOptions) => Promise<void>;
+  clockOut: (options?: ClockOptions) => Promise<boolean>;
   uploadMedia: (files: FileList | File[], caption: string, mode: UploadMode) => Promise<void>;
   updateTaskStatus: (
     taskId: string,
@@ -395,6 +397,7 @@ export function WorkerShell({
   const router = useRouter();
   const pathname = usePathname();
   const supabase = useMemo(() => createClient(), []);
+  const [, startTransition] = useTransition();
   const [shell, setShell] = useState(initialData);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState>(null);
@@ -415,10 +418,58 @@ export function WorkerShell({
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState<number>(0);
   const { t } = useTranslation();
+  const shellRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const shellRefreshPendingWhileHiddenRef = useRef(false);
+  const shellRefreshLastRunRef = useRef(0);
+
+  const scheduleShellRefresh = useCallback(
+    (minDelayMs = 1400) => {
+      if (document.visibilityState !== "visible") {
+        shellRefreshPendingWhileHiddenRef.current = true;
+        return;
+      }
+      if (shellRefreshTimerRef.current) return;
+      if (isLiveRefreshBlocked()) {
+        shellRefreshTimerRef.current = setTimeout(() => {
+          shellRefreshTimerRef.current = null;
+          scheduleShellRefresh(minDelayMs);
+        }, 2500);
+        return;
+      }
+      const elapsed = Date.now() - shellRefreshLastRunRef.current;
+      const delay = Math.max(minDelayMs, 3500 - elapsed);
+      shellRefreshTimerRef.current = setTimeout(() => {
+        shellRefreshTimerRef.current = null;
+        shellRefreshLastRunRef.current = Date.now();
+        startTransition(() => router.refresh());
+      }, delay);
+    },
+    [router, startTransition],
+  );
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible" || !shellRefreshPendingWhileHiddenRef.current) {
+        return;
+      }
+      shellRefreshPendingWhileHiddenRef.current = false;
+      scheduleShellRefresh();
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      if (shellRefreshTimerRef.current) {
+        clearTimeout(shellRefreshTimerRef.current);
+        shellRefreshTimerRef.current = null;
+      }
+      shellRefreshPendingWhileHiddenRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [scheduleShellRefresh]);
 
   // ── Sound mute state ──
   // Source of truth: profiles.notif_mode (Wave 7 migration 00009).
@@ -689,14 +740,14 @@ export function WorkerShell({
           filter: `id=eq.${shell.profile.id}`,
         },
         () => {
-          router.refresh();
+          scheduleShellRefresh();
         },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, router, shell.profile.id]);
+  }, [supabase, scheduleShellRefresh, shell.profile.id]);
 
   // ── Task notifications (unseen badge + new-task banner) ─────────────
   //
@@ -771,9 +822,11 @@ export function WorkerShell({
       const projectName = row.project_id
         ? shell.projects.find((p) => p.id === row.project_id)?.name ?? null
         : null;
+      const isDelivery = row.metadata?.schedule_kind === "delivery";
+      const bannerText = isDelivery ? t("tasks.newDeliveryBanner") : t("tasks.newTaskBanner");
       const detail = projectName
-        ? `${t("tasks.newTaskBanner")} · ${projectName}`
-        : t("tasks.newTaskBanner");
+        ? `${bannerText} · ${projectName}`
+        : bannerText;
       setBanner({ tone: "info", text: detail });
       if (!muted) {
         playClockInSound();
@@ -781,10 +834,10 @@ export function WorkerShell({
       if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
         navigator.vibrate([120, 60, 120]);
       }
-      router.refresh();
+      scheduleShellRefresh(600);
       return true;
     },
-    [muted, router, shell.profile.id, shell.projects, t, visibleProjectIds],
+    [muted, scheduleShellRefresh, shell.profile.id, shell.projects, t, visibleProjectIds],
   );
 
   // ── Tasks realtime subscription ─────────────────────────────────────
@@ -826,14 +879,75 @@ export function WorkerShell({
         (payload) => {
           const row = payload.new as TaskNotificationRow | null;
           if (row && notifyVisibleTask(row)) return;
-          router.refresh();
+          scheduleShellRefresh();
         },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, router, notifyVisibleTask, shell.profile.id]);
+  }, [supabase, notifyVisibleTask, scheduleShellRefresh, shell.profile.id]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`worker-global-refresh-${shell.profile.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "time_events",
+          filter: `profile_id=eq.${shell.profile.id}`,
+        },
+        () => scheduleShellRefresh(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "media",
+          filter: `uploaded_by=eq.${shell.profile.id}`,
+        },
+        () => scheduleShellRefresh(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_assignments",
+          filter: `profile_id=eq.${shell.profile.id}`,
+        },
+        () => scheduleShellRefresh(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_exclusions",
+          filter: `profile_id=eq.${shell.profile.id}`,
+        },
+        () => scheduleShellRefresh(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "payroll_closures",
+          filter: `profile_id=eq.${shell.profile.id}`,
+        },
+        () => scheduleShellRefresh(),
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => scheduleShellRefresh())
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [supabase, scheduleShellRefresh, shell.profile.id]);
 
   useEffect(() => {
     if (!mounted || !isOnline) return;
@@ -842,7 +956,7 @@ export function WorkerShell({
     async function pollNewTasks() {
       const { data, error } = await supabase
         .from("tasks")
-        .select("id, assigned_to, project_id, status, created_at, updated_at, deleted_at, title")
+        .select("id, assigned_to, project_id, status, created_at, updated_at, deleted_at, title, metadata")
         .eq("org_id", shell.profile.org_id)
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
@@ -853,9 +967,7 @@ export function WorkerShell({
       for (const row of rows) {
         if (notifyVisibleTask(row)) notified = true;
       }
-      if (!notified && document.visibilityState === "visible") {
-        router.refresh();
-      }
+      if (notified) return;
     }
 
     const timer = window.setInterval(() => {
@@ -873,7 +985,7 @@ export function WorkerShell({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isOnline, mounted, notifyVisibleTask, router, shell.profile.org_id, supabase]);
+  }, [isOnline, mounted, notifyVisibleTask, shell.profile.org_id, supabase]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1220,7 +1332,7 @@ export function WorkerShell({
   async function clockOut(options?: ClockOptions) {
     if (!shell.clockState.isClockedIn || !shell.clockState.currentProjectId) {
       setBanner({ tone: "error", text: "There is no active shift to close." });
-      return;
+      return false;
     }
 
     setBusyAction("clock-out");
@@ -1236,7 +1348,7 @@ export function WorkerShell({
             setBusyAction(null);
             setGpsPrompt({ kind: "clockOut", errorKind: err.kind });
             playSound("error");
-            return;
+            return false;
           }
           throw err;
         }
@@ -1253,6 +1365,10 @@ export function WorkerShell({
           : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
 
       const trimmedNote = options?.note?.trim() ?? "";
+      const noGpsMetadata = buildNoGpsMetadata({
+        skippedGps: !gps,
+        errorKind: options?.gpsErrorKind ?? null,
+      });
       const insertPayload: QueuedTimeEventPayload = {
         org_id: shell.profile.org_id,
         profile_id: shell.profile.id,
@@ -1267,7 +1383,7 @@ export function WorkerShell({
           capturedBy: "worker-shell",
           gps,
           client_event_id,
-          ...(gps ? {} : { location_unverified: true }),
+          ...noGpsMetadata,
           ...(trimmedNote ? { checkout_note: trimmedNote } : {}),
         },
       };
@@ -1281,22 +1397,32 @@ export function WorkerShell({
 
       if (!offlineFromStart) {
         try {
-          const result = await supabase
-            .from("time_events")
-            .insert({ ...insertPayload, metadata: { ...insertPayload.metadata, queued_offline: false } })
-            .select("*")
-            .single<TimeEvent>();
-          if (result.error) {
-            if (
-              isNetworkLikeError(result.error) ||
-              (typeof window !== "undefined" && !window.navigator.onLine)
-            ) {
-              networkFailed = true;
-            } else {
-              hardError = result.error;
-            }
+          const response = await fetch("/api/worker/clock-out", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              eventTime: timestamp,
+              gps,
+              gpsErrorKind: options?.gpsErrorKind ?? null,
+              note: trimmedNote,
+              clientEventId: client_event_id,
+            }),
+          });
+          const result = (await response.json().catch(() => null)) as {
+            event?: TimeEvent;
+            error?: string;
+          } | null;
+
+          if (!response.ok || !result?.event) {
+            hardError = {
+              message:
+                result?.error ??
+                (response.status === 409
+                  ? "There is no active shift to close."
+                  : "Clock-out failed."),
+            };
           } else {
-            insertedEvent = result.data;
+            insertedEvent = result.event;
           }
         } catch (caught) {
           networkFailed = true;
@@ -1312,9 +1438,18 @@ export function WorkerShell({
 
       if (!insertedEvent && networkFailed) {
         // ── Offline path: queue locally, optimistic shell state, banner.
+        const offlineMarkers = buildNoGpsMetadata({
+          skippedGps: !gps,
+          errorKind: options?.gpsErrorKind ?? null,
+          offlineQueued: true,
+        });
         const queuedPayload: QueuedTimeEventPayload = {
           ...insertPayload,
-          metadata: { ...insertPayload.metadata, queued_offline: true },
+          metadata: {
+            ...insertPayload.metadata,
+            queued_offline: true,
+            ...offlineMarkers,
+          },
         };
         queueOfflineEvent({
           client_event_id,
@@ -1360,27 +1495,13 @@ export function WorkerShell({
           text: gps ? t("worker.queuedClockOut") : t("worker.queuedClockOutNoGps"),
         });
         playSound("clock-out");
-        return;
+        return true;
       }
 
       if (!insertedEvent) {
         throw new Error("Clock-out failed.");
       }
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          current_project: null,
-        })
-        .eq("id", shell.profile.id);
-
-      if (profileError) {
-        console.warn("Profile sync failed after clock-out:", profileError.message);
-      }
-
-      // Close any open store_visit rows so the worker isn't permanently
-      // "inside" a store after their shift ends.
-      await closeOpenStoreVisits(supabase, shell.profile.id, timestamp);
+      const serverVideoStatus = insertedEvent.video_status as WorkerSession["checkoutStatus"];
 
       // Link the worker's "before you leave" videos to this clock_out
       // event. The video was inserted with time_event_id=null before
@@ -1423,7 +1544,7 @@ export function WorkerShell({
       }
 
       const resolvedCheckoutStatus: WorkerSession["checkoutStatus"] =
-        videoStatus === "pending" && linkedCheckoutProof ? "uploaded" : videoStatus;
+        serverVideoStatus === "pending" && linkedCheckoutProof ? "uploaded" : serverVideoStatus;
 
       const nextSessions = shell.sessions.map((session) => {
         if (session.clockOutTime || session.clockInEventId !== shell.clockState.openEventId) {
@@ -1461,10 +1582,10 @@ export function WorkerShell({
       }));
 
       setBanner({
-        tone: !gps ? "info" : shell.profile.require_video ? "info" : "success",
+        tone: !gps ? "info" : serverVideoStatus === "pending" ? "info" : "success",
         text: !gps
           ? t("worker.closedWithoutGps")
-          : shell.profile.require_video
+          : serverVideoStatus === "pending"
             ? linkedCheckoutProof
               ? "Shift closed. Checkout video uploaded."
               : "Shift closed. Checkout video is waiting in Journal."
@@ -1472,10 +1593,12 @@ export function WorkerShell({
       });
       playSound("clock-out");
       router.refresh();
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Clock-out failed.";
       setBanner({ tone: "error", text: message });
       playSound("error");
+      return false;
     } finally {
       setBusyAction(null);
     }
@@ -1848,7 +1971,12 @@ export function WorkerShell({
         }
       }
 
-      const nextMetadata =
+      const existingMetadataRecord =
+        existingMetadata && typeof existingMetadata === "object" && !Array.isArray(existingMetadata)
+          ? existingMetadata
+          : {};
+      const isDeliveryTask = existingMetadataRecord.schedule_kind === "delivery";
+      let nextMetadata =
         nextStatus === "done"
           ? buildTaskCompletionMetadata(existingMetadata, {
               note: options?.note ?? null,
@@ -1858,6 +1986,23 @@ export function WorkerShell({
               completedById: shell.profile.id,
             })
           : null;
+      if (nextStatus === "done" && isDeliveryTask && nextMetadata) {
+        nextMetadata = {
+          ...nextMetadata,
+          schedule_delivery_status: "delivered",
+          delivered_by: shell.profile.id,
+          delivered_at: completedAt,
+          delivery_completed_by: shell.profile.id,
+          delivery_completed_at: completedAt,
+        };
+      } else if (nextStatus === "in_progress" && isDeliveryTask) {
+        nextMetadata = {
+          ...existingMetadataRecord,
+          schedule_delivery_status: "in_progress",
+          delivery_started_by: shell.profile.id,
+          delivery_started_at: new Date().toISOString(),
+        };
+      }
       const updatePayload: Record<string, unknown> = {
         status: nextStatus,
         completed_at: completedAt,
@@ -2251,6 +2396,11 @@ export function WorkerShell({
             {children}
           </main>
 
+          <WorkerJarvisTextDock
+            workerName={shell.profile.name}
+            language={shell.profile.language}
+          />
+
           <nav
             className="worker-nav fixed bottom-0 left-0 right-0 z-30"
             style={{
@@ -2300,7 +2450,7 @@ export function WorkerShell({
       ) : null}
       {gpsPrompt ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.5)" }}
           onClick={() => setGpsPrompt(null)}
         >

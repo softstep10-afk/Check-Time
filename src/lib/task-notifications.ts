@@ -39,6 +39,7 @@ export interface TaskLike {
   created_at: string;
   completed_at?: string | null;
   deleted_at?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 /**
@@ -56,6 +57,9 @@ export function isTaskVisibleToWorker(
 ): boolean {
   if (!isEffectiveOpenTask(task)) return false;
   if (task.assigned_to === args.profileId) return true;
+  if (task.assigned_to === null && task.metadata?.schedule_kind === "delivery") {
+    return true;
+  }
   if (
     task.assigned_to === null &&
     task.project_id &&

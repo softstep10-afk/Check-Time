@@ -5,6 +5,7 @@ import { Camera, Check, X } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { createClient } from "@/lib/supabase/client";
 
 function startOfTodayMs(): number {
   const d = new Date();
@@ -21,9 +22,11 @@ export function CheckoutModal({
 }) {
   const { shell, busyAction, clockOut, uploadMedia } = useWorkerShell();
   const { t } = useTranslation();
+  const supabase = useMemo(() => createClient(), []);
   const fileRef = useRef<HTMLInputElement>(null);
   const [pickedAt, setPickedAt] = useState<number | null>(null);
   const [checkoutNote, setCheckoutNote] = useState("");
+  const [liveRequireVideo, setLiveRequireVideo] = useState<boolean | null>(null);
 
   // A "today's checkout video" is any media row marked is_checkout=true
   // for the current project, captured today.
@@ -36,7 +39,7 @@ export function CheckoutModal({
     });
   }, [shell.media, shell.clockState.currentProjectId]);
 
-  const requireVideo = shell.profile.require_video;
+  const requireVideo = liveRequireVideo ?? shell.profile.require_video;
   const videoSatisfied = !requireVideo || hasVideoToday || pickedAt !== null;
   const uploading = busyAction === "before-leave-video";
   const checkingOut = busyAction === "clock-out";
@@ -47,6 +50,33 @@ export function CheckoutModal({
     setCheckoutNote("");
     onClose();
   }
+
+  useEffect(() => {
+    if (!open) {
+      setLiveRequireVideo(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadLiveProfileGate() {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("require_video")
+        .eq("id", shell.profile.id)
+        .maybeSingle<{ require_video: boolean }>();
+
+      if (!cancelled && !error && data) {
+        setLiveRequireVideo(Boolean(data.require_video));
+      }
+    }
+
+    void loadLiveProfileGate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, shell.profile.id, supabase]);
 
   useEffect(() => {
     if (!open) return;
@@ -80,8 +110,10 @@ export function CheckoutModal({
     // keeping both copies means the manager sees the note whether they
     // open the shift via Day Detail (clock_out row) or open the video
     // (caption under the player).
-    await clockOut({ note: checkoutNote });
-    handleClose();
+    const closed = await clockOut({ note: checkoutNote });
+    if (closed) {
+      handleClose();
+    }
   }
 
   return (
