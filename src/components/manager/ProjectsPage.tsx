@@ -97,6 +97,16 @@ function scheduleHealthLabel(
   return "on track";
 }
 
+function projectSchedulePriorityRank(project: ManagerProjectSummary): number {
+  const health = deriveProjectScheduleHealth({
+    startDate: project.start_date,
+    endDate: project.end_date,
+  });
+  if (health.tone === "red") return 0;
+  if (health.tone === "yellow") return 1;
+  return 2;
+}
+
 function projectStatusLabel(t: TFn, status: ProjectStatus): string {
   if (status === "active") return t("common.active");
   if (status === "paused") return t("common.paused");
@@ -577,8 +587,12 @@ export function ProjectsPage({
     } else if (sortBy === "cost" && hasFinanceAccess) {
       sorted.sort((a, b) => b.receiptTotal - a.receiptTotal);
     } else {
-      // activity: live (on-site now) first, then most-recent, then stale.
+      // activity: urgent schedule first (red -> yellow -> green/no deadline),
+      // then live/on-site activity, then most-recent.
       sorted.sort((a, b) => {
+        const aScheduleRank = projectSchedulePriorityRank(a);
+        const bScheduleRank = projectSchedulePriorityRank(b);
+        if (aScheduleRank !== bScheduleRank) return aScheduleRank - bScheduleRank;
         const aScore =
           a.onSiteWorkerCount > 0 ? 2 : a.lastActivityTime ? 1 : 0;
         const bScore =

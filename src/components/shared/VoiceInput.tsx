@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Mic, MicOff } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+import { normalizeVoiceTranscript } from "@/lib/voice-transcript";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -40,6 +41,8 @@ export function VoiceInput({
   const recognitionRef = useRef<any>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onTranscriptRef = useRef(onTranscript);
+  const emittedFinalsRef = useRef<Set<string>>(new Set());
+  const lastFinalRef = useRef<{ text: string; at: number } | null>(null);
 
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
@@ -76,6 +79,8 @@ export function VoiceInput({
     }
 
     const lang = locale === "ru" ? "ru-RU" : "en-US";
+    emittedFinalsRef.current = new Set();
+    lastFinalRef.current = null;
     recognition.lang = lang;
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -86,15 +91,25 @@ export function VoiceInput({
     recognition.onresult = (event: any) => {
       try {
         const results = event.results;
-        let finalText = "";
-        for (let i = 0; i < results.length; i++) {
+        const finalChunks: string[] = [];
+        for (let i = event.resultIndex ?? 0; i < results.length; i++) {
           if (results[i].isFinal) {
-            finalText += results[i][0].transcript;
+            const transcript = String(results[i][0]?.transcript ?? "").trim();
+            const key = normalizeVoiceTranscript(transcript);
+            const now = Date.now();
+            const recentDuplicate =
+              lastFinalRef.current?.text === key && now - lastFinalRef.current.at < 4000;
+            if (key && !emittedFinalsRef.current.has(key) && !recentDuplicate) {
+              emittedFinalsRef.current.add(key);
+              lastFinalRef.current = { text: key, at: now };
+              finalChunks.push(transcript);
+            }
           }
         }
-        if (finalText.trim()) {
-          console.log("[VoiceInput] Final transcript:", finalText.trim());
-          onTranscriptRef.current(finalText.trim());
+        if (finalChunks.length > 0) {
+          const finalText = finalChunks.join(" ").trim();
+          console.log("[VoiceInput] Final transcript:", finalText);
+          onTranscriptRef.current(finalText);
         }
       } catch (err) {
         console.error("[VoiceInput] Error extracting transcript:", err);

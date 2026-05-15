@@ -39,6 +39,7 @@ import {
   getTaskCompletionAudit,
 } from "@/lib/task-notifications";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { ProjectPlanningSections } from "@/components/manager/ProjectPlanningSections";
 import {
   MediaViewerModal,
   useMediaViewerOpenGuard,
@@ -2582,6 +2583,12 @@ export function ProjectDetailPage({
           </CollapsibleSection>
         </div>
       </section>
+
+      <ProjectPlanningSections
+        projectId={project.id}
+        projectSettings={project.settings}
+        hasFinanceAccess={hasFinanceAccess}
+      />
       {/* ── Materials & Deliveries ── */}
       <MaterialsSection
         orgId={orgId}

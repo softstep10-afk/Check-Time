@@ -1,4 +1,5 @@
 import { SettingsPage } from "@/components/manager/SettingsPage";
+import { getDisplayOrgName } from "@/lib/brand";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 
 export default async function SettingsRoutePage() {
@@ -7,7 +8,7 @@ export default async function SettingsRoutePage() {
   return (
     <SettingsPage
       orgId={data.org.id}
-      orgName={data.org.name}
+      orgName={getDisplayOrgName(data.org.name)}
       orgSlug={data.org.slug}
       managerName={data.manager.name}
       crewCount={data.profiles.length}

@@ -117,8 +117,89 @@ function RelativeTime({ iso }: { iso: string }) {
   );
 }
 
+function dayKey(iso: string): string {
+  return new Date(iso).toISOString().slice(0, 10);
+}
+
+function dayLabel(
+  key: string,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  const today = new Date();
+  const todayKey = today.toISOString().slice(0, 10);
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const yesterdayKey = yesterday.toISOString().slice(0, 10);
+  if (key === todayKey) return t("feed.today");
+  if (key === yesterdayKey) return t("feed.yesterday");
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+  }).format(new Date(`${key}T12:00:00`));
+}
+
 export function EventFeed({ events }: { events: FeedEvent[] }) {
   const { t } = useTranslation();
+  const groups = events.reduce<Array<{ key: string; events: FeedEvent[] }>>(
+    (acc, event) => {
+      const key = dayKey(event.timestamp);
+      const current = acc.at(-1);
+      if (current?.key === key) {
+        current.events.push(event);
+      } else {
+        acc.push({ key, events: [event] });
+      }
+      return acc;
+    },
+    [],
+  );
+
+  function renderEvent(event: FeedEvent) {
+    const config = KIND_CONFIG[event.kind];
+    const { Icon } = config;
+    const verb = t(config.translationKey as Parameters<typeof t>[0]);
+
+    const inner = (
+      <div
+        className="flex items-start gap-2.5 rounded-[var(--radius-md)] px-3 py-2 transition-colors"
+        style={{ background: "var(--bg-primary)" }}
+      >
+        <div
+          className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+          style={{ background: `color-mix(in srgb, ${config.color} 16%, transparent)` }}
+        >
+          <Icon size={12} style={{ color: config.color }} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-1 text-sm">
+            <span className="font-semibold text-[var(--text-primary)]">{event.actorName}</span>
+            <span className="text-[var(--text-secondary)]">{verb}</span>
+          </div>
+          {event.description ? (
+            <div className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
+              {event.description}
+              {event.projectName ? ` — ${event.projectName}` : ""}
+            </div>
+          ) : event.projectName ? (
+            <div className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
+              {event.projectName}
+            </div>
+          ) : null}
+        </div>
+        <RelativeTime iso={event.timestamp} />
+      </div>
+    );
+
+    if (event.href) {
+      return (
+        <Link key={event.id} href={event.href} className="block hover:opacity-80">
+          {inner}
+        </Link>
+      );
+    }
+
+    return <div key={event.id}>{inner}</div>;
+  }
 
   return (
     <div
@@ -131,52 +212,15 @@ export function EventFeed({ events }: { events: FeedEvent[] }) {
           <span className="text-sm">{t("feed.empty")}</span>
         </div>
       ) : (
-        events.map((event) => {
-          const config = KIND_CONFIG[event.kind];
-          const { Icon } = config;
-          const verb = t(config.translationKey as Parameters<typeof t>[0]);
-
-          const inner = (
-            <div
-              className="flex items-start gap-2.5 rounded-[var(--radius-md)] px-3 py-2 transition-colors"
-              style={{ background: "var(--bg-primary)" }}
-            >
-              <div
-                className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                style={{ background: `color-mix(in srgb, ${config.color} 16%, transparent)` }}
-              >
-                <Icon size={12} style={{ color: config.color }} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-1 text-sm">
-                  <span className="font-semibold text-[var(--text-primary)]">{event.actorName}</span>
-                  <span className="text-[var(--text-secondary)]">{verb}</span>
-                </div>
-                {event.description ? (
-                  <div className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
-                    {event.description}
-                    {event.projectName ? ` — ${event.projectName}` : ""}
-                  </div>
-                ) : event.projectName ? (
-                  <div className="mt-0.5 truncate text-xs text-[var(--text-muted)]">
-                    {event.projectName}
-                  </div>
-                ) : null}
-              </div>
-              <RelativeTime iso={event.timestamp} />
+        groups.map((group) => (
+          <div key={group.key} className="space-y-0.5">
+            <div className="sticky top-0 z-10 flex items-center justify-between bg-[var(--bg-card)] px-1 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <span>{dayLabel(group.key, t)}</span>
+              <span className="font-mono">{group.events.length}</span>
             </div>
-          );
-
-          if (event.href) {
-            return (
-              <Link key={event.id} href={event.href} className="block hover:opacity-80">
-                {inner}
-              </Link>
-            );
-          }
-
-          return <div key={event.id}>{inner}</div>;
-        })
+            {group.events.map(renderEvent)}
+          </div>
+        ))
       )}
     </div>
   );

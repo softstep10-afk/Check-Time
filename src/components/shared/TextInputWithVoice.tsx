@@ -2,6 +2,7 @@
 
 import { useCallback, useId, useRef } from "react";
 import { VoiceInput } from "./VoiceInput";
+import { appendVoiceTranscript } from "@/lib/voice-transcript";
 
 type CommonProps = {
   id?: string;
@@ -11,6 +12,7 @@ type CommonProps = {
   name?: string;
   placeholder?: string;
   className?: string;
+  style?: React.CSSProperties;
   required?: boolean;
   disabled?: boolean;
   maxLength?: number;
@@ -40,7 +42,8 @@ export function TextInputWithVoice(props: Props) {
       if (!el) return;
 
       const current = el.value;
-      const appended = current ? `${current} ${text}` : text;
+      const appended = appendVoiceTranscript(current, text);
+      if (appended === current) return;
 
       const setter = multiline
         ? Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set
