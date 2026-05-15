@@ -1,22 +1,52 @@
 import type { DailyReport } from "@/types/database";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
+import type { WorkerShellData } from "@/lib/worker-types";
 import {
   buildManagerSessions,
   buildProfileSummaries,
   buildProjectSummaries,
   getOverviewStats,
 } from "@/lib/manager-utils";
+import { isEffectiveOpenTask } from "@/lib/task-status";
 import {
+  inferSkillTagsFromText,
+  readProfileSkillSettings,
+  scoreWorkerForSkills,
+} from "@/lib/profile-skills";
+import {
+  formatJarvisAttachmentsForPrompt,
+  formatJarvisMemoryForPrompt,
+  hasJarvisImageData,
+  MAX_JARVIS_ATTACHMENT_CHARS,
+  readJarvisMemory,
+  type JarvisAttachment,
+} from "@/lib/ai/jarvis-memory";
+import {
+  findWashingtonCodeReferences,
+  WASHINGTON_CODE_REFERENCES,
+} from "@/lib/ai/washington-code-knowledge";
+import {
+  estimateMargin,
+  readProjectEstimations,
+  readProjectMaterialSpec,
+} from "@/lib/project-planning";
+import { getDisplayOrgName } from "@/lib/brand";
+import {
+  type AssistantAction,
   type AssistantResult,
+  type AssistantLink,
+  type AssistantConversationTurn,
   type AssistantSnapshot,
   type DailyReportInput,
   type GeneratedDailyReport,
   type PhotoAnalysisInput,
   type PhotoAnalysisResult,
+  type SnapshotMediaItem,
   type VoiceCommandResult,
 } from "@/lib/ai/types";
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
+const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: ORG_TIME_ZONE,
@@ -57,6 +87,54 @@ function uniqueList(values: string[], limit = 5): string[] {
   }
 
   return output;
+}
+
+function isRussianText(value: string): boolean {
+  return /[а-яё]/i.test(value);
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function formatHours(value: number): string {
+  return `${roundNumber(value).toFixed(2)}h`;
+}
+
+function skillLabel(skill: string, ru: boolean): string {
+  const labels: Record<string, { en: string; ru: string }> = {
+    framing: { en: "framing", ru: "фрейм/каркас" },
+    drywall: { en: "drywall", ru: "гипсокартон" },
+    mudding: { en: "mudding", ru: "шпаклевка" },
+    painting: { en: "painting", ru: "покраска" },
+    tile: { en: "tile", ru: "плитка" },
+    flooring: { en: "flooring", ru: "полы" },
+    plumbing: { en: "plumbing", ru: "сантехника" },
+    electrical: { en: "electrical", ru: "электрика" },
+    demo: { en: "demo", ru: "демонтаж" },
+    concrete: { en: "concrete", ru: "бетон" },
+    roofing: { en: "roofing", ru: "кровля" },
+    trim: { en: "trim", ru: "плинтусы/trim" },
+    finish: { en: "finish work", ru: "финишная отделка" },
+    cleanup: { en: "cleanup", ru: "уборка" },
+    delivery: { en: "delivery", ru: "доставка" },
+    inspection: { en: "inspection", ru: "проверка" },
+    driving: { en: "driving", ru: "вождение" },
+    sales: { en: "sales", ru: "продажи" },
+  };
+
+  return labels[skill]?.[ru ? "ru" : "en"] ?? skill;
+}
+
+function skillListLabel(skills: string[], ru: boolean): string {
+  return skills.map((skill) => skillLabel(skill, ru)).join(", ");
+}
+
+function isPdfAttachment(attachment: JarvisAttachment): boolean {
+  return (
+    attachment.mimeType?.toLowerCase() === "application/pdf" ||
+    attachment.filename.toLowerCase().endsWith(".pdf")
+  );
 }
 
 function monthWindow(now = new Date()): { start: string; end: string } {
@@ -224,10 +302,10 @@ function findProjectRoute(
   text: string,
   snapshot: AssistantSnapshot,
 ): { label: string; href: string } | null {
-  const normalized = text.toLowerCase();
+  const normalized = normalizeSearchText(text);
 
   for (const project of snapshot.projects) {
-    if (normalized.includes(project.name.toLowerCase())) {
+    if (normalized.includes(normalizeSearchText(project.name))) {
       return {
         label: `Open ${project.name}`,
         href: `/projects/${project.id}`,
@@ -236,6 +314,66 @@ function findProjectRoute(
   }
 
   return null;
+}
+
+function findProjectInSnapshot(text: string, snapshot: AssistantSnapshot) {
+  const normalized = normalizeSearchText(text);
+  return (
+    snapshot.projects.find((project) =>
+      normalized.includes(normalizeSearchText(project.name)),
+    ) ?? null
+  );
+}
+
+function findWorkerInSnapshot(text: string, snapshot: AssistantSnapshot) {
+  const normalized = normalizeSearchText(text);
+  return (
+    snapshot.workerMetrics.find((worker) =>
+      normalized.includes(normalizeSearchText(worker.name)),
+    ) ?? null
+  );
+}
+
+function wantsAssignmentAdvice(normalized: string): boolean {
+  return [
+    "assign",
+    "assignment",
+    "who should",
+    "best worker",
+    "recommend",
+    "suggest",
+    "подбери",
+    "кого",
+    "поставить",
+    "назнач",
+    "распредел",
+    "лучше",
+    "подскажи",
+    "умеет",
+    "навык",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
+function findBestAssignmentSuggestion(question: string, snapshot: AssistantSnapshot) {
+  const normalized = normalizeSearchText(question);
+  const project = findProjectInSnapshot(question, snapshot);
+  const requestedSkills = inferSkillTagsFromText(question);
+
+  return (
+    snapshot.assignmentSuggestions.find((suggestion) => {
+      const projectMatch = project ? suggestion.projectId === project.id : true;
+      const skillMatch =
+        requestedSkills.length === 0 ||
+        requestedSkills.some((skill) => suggestion.requiredSkills.includes(skill));
+      const titleMatch = normalized.includes(normalizeSearchText(suggestion.taskTitle));
+      return projectMatch && (skillMatch || titleMatch);
+    }) ??
+    snapshot.assignmentSuggestions.find((suggestion) =>
+      requestedSkills.some((skill) => suggestion.requiredSkills.includes(skill)),
+    ) ??
+    snapshot.assignmentSuggestions[0] ??
+    null
+  );
 }
 
 function isFinancialQuestion(normalized: string): boolean {
@@ -255,58 +393,708 @@ function isFinancialQuestion(normalized: string): boolean {
     "paid",
     "gross",
     "net",
+    "зарплат",
+    "деньг",
+    "оплат",
+    "ставк",
+    "чек",
+    "расход",
+    "стоим",
+    "прибыл",
+    "долг",
   ].some((keyword) => normalized.includes(keyword));
+}
+
+function isMediaSearchQuestion(normalized: string): boolean {
+  return [
+    "photo",
+    "photos",
+    "picture",
+    "image",
+    "video",
+    "media",
+    "upload",
+    "evidence",
+    "find",
+    "search",
+    "фото",
+    "фотк",
+    "картин",
+    "изображ",
+    "видео",
+    "медиа",
+    "загруз",
+    "доказ",
+    "найди",
+    "покажи",
+    "ищи",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
+function isEstimateQuestion(normalized: string): boolean {
+  return [
+    "estimate",
+    "estimation",
+    "bid",
+    "quote",
+    "cost to",
+    "how much",
+    "how long",
+    "timeline",
+    "labor",
+    "material",
+    "смет",
+    "эстим",
+    "оцен",
+    "сколько",
+    "стоить",
+    "цена",
+    "дней",
+    "часов",
+    "материал",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
+function isCodeQuestion(normalized: string): boolean {
+  return [
+    "code",
+    "wac",
+    "permit",
+    "inspection",
+    "inspector",
+    "washington",
+    "dosh",
+    "osha",
+    "safety",
+    "energy code",
+    "код",
+    "wac",
+    "разреш",
+    "инспек",
+    "штат вашингтон",
+    "безопас",
+    "энергокод",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
+const MEDIA_SEARCH_STOPWORDS = new Set([
+  "find",
+  "show",
+  "search",
+  "photo",
+  "photos",
+  "picture",
+  "image",
+  "video",
+  "media",
+  "upload",
+  "найди",
+  "покажи",
+  "фото",
+  "видео",
+  "медиа",
+  "где",
+  "что",
+  "это",
+  "мне",
+  "по",
+  "на",
+  "в",
+  "и",
+  "или",
+]);
+
+function getSearchTerms(question: string): string[] {
+  return uniqueList(
+    normalizeSearchText(question)
+      .split(/[^a-zа-яё0-9]+/i)
+      .filter((term) => term.length >= 3 && !MEDIA_SEARCH_STOPWORDS.has(term)),
+    12,
+  );
+}
+
+function findRelatedMemory(question: string, snapshot: AssistantSnapshot, limit = 3): string[] {
+  const terms = getSearchTerms(question);
+  if (terms.length === 0) return snapshot.memoryRules.slice(0, limit).map((rule) => rule.text);
+
+  return snapshot.memoryRules
+    .map((rule) => {
+      const text = rule.text.toLowerCase();
+      const score = terms.reduce((sum, term) => sum + (text.includes(term) ? 1 : 0), 0);
+      return { rule, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .map((entry) => entry.rule.text)
+    .slice(0, limit);
+}
+
+function mediaSearchText(item: SnapshotMediaItem): string {
+  return [
+    item.projectName,
+    item.uploadedByName ?? "",
+    item.mediaType,
+    item.filename,
+    item.caption ?? "",
+    item.tags.join(" "),
+    item.summary ?? "",
+    item.isCheckout ? "checkout выход смена proof доказательство" : "",
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function findMediaMatches(question: string, snapshot: AssistantSnapshot): SnapshotMediaItem[] {
+  const terms = getSearchTerms(question);
+  if (terms.length === 0) return snapshot.mediaIndex.slice(0, 6);
+
+  return snapshot.mediaIndex
+    .map((item) => {
+      const haystack = mediaSearchText(item);
+      const score = terms.reduce((sum, term) => sum + (haystack.includes(term) ? 1 : 0), 0);
+      return { item, score };
+    })
+    .filter((entry) => entry.score > 0)
+    .sort((left, right) => right.score - left.score || right.item.createdAt.localeCompare(left.item.createdAt))
+    .map((entry) => entry.item)
+    .slice(0, 8);
+}
+
+function buildMediaSearchFallback(
+  question: string,
+  snapshot: AssistantSnapshot,
+): AssistantResult | null {
+  const normalized = normalizeSearchText(question);
+  if (!isMediaSearchQuestion(normalized)) return null;
+
+  const ru = isRussianText(question);
+  const matches = findMediaMatches(question, snapshot);
+  if (matches.length === 0) {
+    return {
+      answer: ru
+        ? "В последних загрузках я не нашёл медиа под это описание. Лучше добавить подписи к фото/видео или запустить анализ медиа, тогда поиск станет точнее."
+        : "I could not find matching media in the recent uploads. Add captions or run media analysis to make this search sharper.",
+      bullets: snapshot.mediaIndex.slice(0, 4).map((item) =>
+        `${item.projectName} • ${item.filename} • ${item.mediaType}`,
+      ),
+      links: [{ label: ru ? "Открыть хронологию" : "Open timeline", href: "/timeline" }],
+      confidence: 0.46,
+      source: "fallback",
+    };
+  }
+
+  const firstProject = matches.find((item) => item.projectId)?.projectId ?? null;
+  return {
+    answer: ru
+      ? `Я нашёл ${matches.length} похожих загрузок. Самые близкие ниже.`
+      : `I found ${matches.length} likely matching uploads. The closest ones are below.`,
+    bullets: matches.map((item) =>
+      [
+        `${item.projectName} • ${item.mediaType}${item.isCheckout ? " checkout" : ""}`,
+        item.filename,
+        item.caption ? `caption: ${item.caption}` : "",
+        item.summary ? `AI: ${item.summary}` : "",
+      ]
+        .filter(Boolean)
+        .join(" — "),
+    ),
+    links: [
+      firstProject
+        ? { label: ru ? "Открыть проект" : "Open project", href: `/projects/${firstProject}` }
+        : { label: ru ? "Открыть хронологию" : "Open timeline", href: "/timeline" },
+      { label: ru ? "Настройки Jarvis" : "Jarvis settings", href: "/ai" },
+    ],
+    confidence: 0.72,
+    source: "fallback",
+  };
+}
+
+const ESTIMATE_HOUR_RANGES: Record<string, { low: number; high: number; label: string }> = {
+  framing: { low: 8, high: 28, label: "framing / каркас" },
+  drywall: { low: 10, high: 32, label: "drywall / гипсокартон" },
+  mudding: { low: 14, high: 42, label: "mudding / шпаклевка" },
+  painting: { low: 8, high: 30, label: "painting / покраска" },
+  tile: { low: 12, high: 48, label: "tile / плитка" },
+  flooring: { low: 10, high: 36, label: "flooring / полы" },
+  plumbing: { low: 6, high: 24, label: "plumbing / сантехника" },
+  electrical: { low: 6, high: 24, label: "electrical / электрика" },
+  demo: { low: 6, high: 22, label: "demo / демонтаж" },
+  concrete: { low: 12, high: 50, label: "concrete / бетон" },
+  roofing: { low: 16, high: 64, label: "roofing / кровля" },
+  trim: { low: 8, high: 32, label: "trim / финишные планки" },
+  finish: { low: 10, high: 40, label: "finish work / финиш" },
+  cleanup: { low: 4, high: 12, label: "cleanup / уборка" },
+  delivery: { low: 2, high: 8, label: "delivery / доставка" },
+  inspection: { low: 1, high: 4, label: "inspection / проверка" },
+};
+
+function buildEstimateFallback(
+  question: string,
+  snapshot: AssistantSnapshot,
+): AssistantResult | null {
+  const normalized = normalizeSearchText(question);
+  if (!isEstimateQuestion(normalized)) return null;
+
+  const ru = isRussianText(question);
+  const project = findProjectInSnapshot(question, snapshot);
+  const requestedSkills = uniqueList(
+    [
+      ...inferSkillTagsFromText(question),
+      ...(project?.skillTags ?? []),
+    ],
+    6,
+  );
+  const skills = requestedSkills.length > 0 ? requestedSkills : ["finish"];
+  const ranges = skills.map((skill) => ESTIMATE_HOUR_RANGES[skill]).filter(Boolean);
+  const low = ranges.reduce((sum, range) => sum + range.low, 0) || 8;
+  const high = ranges.reduce((sum, range) => sum + range.high, 0) || 28;
+  const candidates =
+    snapshot.assignmentSuggestions
+      .filter((suggestion) => (project ? suggestion.projectId === project.id : true))
+      .flatMap((suggestion) => suggestion.candidates)
+      .slice(0, 4);
+  const crewSize = Math.max(1, Math.min(3, candidates.length || snapshot.liveWorkers.length || 2));
+  const dailyCrewHours = crewSize * 7;
+  const lowDays = Math.max(1, Math.ceil(low / dailyCrewHours));
+  const highDays = Math.max(lowDays, Math.ceil(high / dailyCrewHours));
+
+  return {
+    answer: ru
+      ? `Черновой эстимейт: ${low}-${high} человеко-часов, примерно ${lowDays}-${highDays} рабочих дней бригадой ${crewSize} чел.`
+      : `Planning estimate: ${low}-${high} labor hours, roughly ${lowDays}-${highDays} work days with a ${crewSize}-person crew.`,
+    bullets: uniqueList(
+      [
+        ...findRelatedMemory(question, snapshot).map((rule) =>
+          ru ? `Правило: ${rule}` : `Saved rule: ${rule}`,
+        ),
+        ru
+          ? `Работы распознаны: ${ranges.map((range) => range.label).join(", ") || "общая отделка"}.`
+          : `Detected scopes: ${ranges.map((range) => range.label).join(", ") || "general finish work"}.`,
+        project
+          ? ru
+            ? `Проект: ${project.name}; открытые задачи: ${project.openTaskTitles.join("; ") || "нет в снимке"}.`
+            : `Project: ${project.name}; open tasks: ${project.openTaskTitles.join("; ") || "none in snapshot"}.`
+          : ru
+            ? "Проект не распознан из вопроса, поэтому оценка общая."
+            : "No specific project was recognized, so this is a generic estimate.",
+        candidates.length > 0
+          ? ru
+            ? `Потенциальные исполнители: ${uniqueList(candidates.map((candidate) => candidate.name), 4).join(", ")}.`
+            : `Potential crew: ${uniqueList(candidates.map((candidate) => candidate.name), 4).join(", ")}.`
+          : "",
+        ru
+          ? "Перед ценой для клиента нужно добавить материалы, доступность объекта, инспекции, риск переделки и city/AHJ требования."
+          : "Before quoting a customer, add materials, access constraints, inspections, rework risk, and local AHJ requirements.",
+      ],
+      5,
+    ),
+    links: [
+      project
+        ? { label: ru ? `Открыть ${project.name}` : `Open ${project.name}`, href: `/projects/${project.id}` }
+        : { label: ru ? "Открыть проекты" : "Open projects", href: "/projects" },
+      { label: ru ? "Открыть команду" : "Open team", href: "/team" },
+    ],
+    confidence: requestedSkills.length > 0 || project ? 0.66 : 0.44,
+    source: "fallback",
+  };
+}
+
+function buildCodeGuidanceFallback(
+  question: string,
+  snapshot: AssistantSnapshot,
+): AssistantResult | null {
+  const normalized = normalizeSearchText(question);
+  if (!isCodeQuestion(normalized)) return null;
+
+  const ru = isRussianText(question);
+  const references = findWashingtonCodeReferences(question).slice(0, 4);
+  return {
+    answer: ru
+      ? "По кодам Вашингтона я могу быть чеклистом и навигатором, но финальное слово всегда за permit set, городом/округом и инспектором AHJ."
+      : "For Washington code questions I can act as a checklist and navigator, but the permit set, local AHJ, and inspector are the final authority.",
+    bullets: [
+      ...(snapshot.memoryRules.length > 0
+        ? [
+            ru
+              ? `Учитываю ваши правила: ${snapshot.memoryRules.slice(0, 3).map((rule) => rule.text).join(" | ")}.`
+              : `Applying your saved rules: ${snapshot.memoryRules.slice(0, 3).map((rule) => rule.text).join(" | ")}.`,
+          ]
+        : []),
+      ...references.map((reference) => `${reference.topic}: ${reference.summary}`),
+      ru
+        ? "Для полевого решения: сделайте фото условия, привяжите к проекту, спросите Jarvis по этому объекту, затем сверяйте с AHJ."
+        : "For field decisions: attach a condition photo to the project, ask Jarvis against that project, then verify with AHJ.",
+    ],
+    links: references.map((reference) => ({
+      label: reference.sourceLabel,
+      href: reference.url,
+    })),
+    confidence: 0.63,
+    source: "fallback",
+  };
+}
+
+function buildAttachmentFallback(
+  question: string,
+  attachments: JarvisAttachment[],
+): AssistantResult | null {
+  if (attachments.length === 0) return null;
+  const ru = isRussianText(question);
+  const readable = attachments.filter((attachment) => attachment.content);
+  const images = attachments.filter((attachment) => attachment.dataUrl);
+
+  return {
+    answer: ru
+      ? `Я получил ${attachments.length} файл(ов). ${
+          images.length > 0
+            ? "Фото подготовлено для настоящего AI-зрения; если ответ остался резервным, значит OPENAI_API_KEY ещё не подключён или лимит API пуст."
+            : readable.length > 0
+              ? "Текстовые части могу использовать в ответе."
+              : "Текст внутри этих файлов не читается браузером, но имя и тип я вижу."
+        }`
+      : `I received ${attachments.length} file(s). ${
+          images.length > 0
+            ? "The image is ready for real AI vision; if this is still a fallback answer, OPENAI_API_KEY is missing or the API quota is empty."
+            : readable.length > 0
+              ? "I can use the readable text parts in the answer."
+              : "The browser did not provide readable text, but I can see names and types."
+        }`,
+    bullets: attachments.map((attachment) =>
+      `${attachment.filename}${attachment.mimeType ? ` • ${attachment.mimeType}` : ""}${
+        attachment.content ? ` • ${Math.min(attachment.content.length, MAX_JARVIS_ATTACHMENT_CHARS)} chars` : ""
+      }${
+        attachment.dataUrl ? " • image-ready" : ""
+      }`,
+    ),
+    links: [{ label: ru ? "Настройки Jarvis" : "Jarvis settings", href: "/ai" }],
+    confidence: images.length > 0 ? 0.52 : readable.length > 0 ? 0.58 : 0.34,
+    source: "fallback",
+  };
+}
+
+type JarvisCreateProjectPayload = Extract<AssistantAction, { kind: "create_project" }>["payload"];
+
+function extractProjectDraftFromCommand(question: string): JarvisCreateProjectPayload | null {
+  const patterns = [
+    /(?:создай|создать|добавь|добавить)\s+(?:новый\s+)?проект(?:\s+(?:с\s+названием|под\s+названием|по\s+имени))?\s+(.+)/i,
+    /(?:create|add)\s+(?:a\s+)?(?:new\s+)?project(?:\s+(?:called|named))?\s+(.+)/i,
+  ];
+  const match = patterns.map((pattern) => question.match(pattern)).find(Boolean);
+  if (!match?.[1]) return null;
+
+  const dateMatches = [...question.matchAll(/\b(20\d{2}-\d{2}-\d{2})\b/g)].map((item) => item[1]);
+  const addressMatch = question.match(/(?:по\s+адресу|адрес|address)\s*[:\-]?\s*([^,.;]+(?:,\s*[^,.;]+)?)/i);
+  const rawName = match[1]
+    .replace(/(?:по\s+адресу|адрес|address)\s*[:\-]?.*$/i, "")
+    .replace(/\b(?:с|от|from|start|начало|дедлайн|deadline)\b.*$/i, "")
+    .replace(/^["'«]+|["'»]+$/g, "")
+    .trim();
+  const name = rawName.slice(0, 80).trim();
+  if (name.length < 2) return null;
+
+  return {
+    name,
+    address: addressMatch?.[1]?.trim() || null,
+    notes: question.trim().slice(0, 500),
+    startDate: dateMatches[0] ?? null,
+    endDate: dateMatches[1] ?? null,
+  };
+}
+
+function buildSafeActionFallback(
+  question: string,
+  snapshot: AssistantSnapshot,
+): AssistantResult | null {
+  const normalized = normalizeSearchText(question);
+  const ru = isRussianText(question);
+  const wantsCreateProject =
+    normalized.includes("создай проект") ||
+    normalized.includes("создать проект") ||
+    normalized.includes("добавь проект") ||
+    normalized.includes("добавить проект") ||
+    normalized.includes("create project") ||
+    normalized.includes("add project");
+
+  if (!wantsCreateProject) return null;
+
+  const draft = extractProjectDraftFromCommand(question);
+  if (!draft) {
+    return {
+      answer: ru
+        ? "Могу создать проект, но мне нужно название. Скажите, например: «Jarvis, создай проект Home по адресу 30820 42nd Ave S»."
+        : "I can create a project, but I need the name. For example: “Jarvis, create project Home, address 30820 42nd Ave S.”",
+      bullets: [
+        ru
+          ? "Создание проекта безопасное, но я всё равно покажу кнопку подтверждения."
+          : "Project creation is a safe action, but I will still show a confirmation button.",
+      ],
+      links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
+      confidence: 0.7,
+      source: "fallback",
+    };
+  }
+
+  return {
+    answer: ru
+      ? `Я подготовил создание проекта "${draft.name}". Я не удаляю, не оплачиваю и не отправляю сообщения без отдельного подтверждения.`
+      : `I prepared project "${draft.name}". I do not delete, pay, or message workers without separate confirmation.`,
+    bullets: [
+      draft.address
+        ? ru
+          ? `Адрес: ${draft.address}.`
+          : `Address: ${draft.address}.`
+        : ru
+          ? "GPS/адрес можно уточнить после создания."
+          : "Address/GPS can be refined after creation.",
+      draft.startDate || draft.endDate
+        ? ru
+          ? `Даты: ${draft.startDate ?? "не задано"} -> ${draft.endDate ?? "не задано"}.`
+          : `Dates: ${draft.startDate ?? "not set"} -> ${draft.endDate ?? "not set"}.`
+        : "",
+      ru
+        ? `Сейчас в системе ${snapshot.activeProjectCount} активных проектов.`
+        : `${snapshot.activeProjectCount} active projects are currently in the system.`,
+    ].filter(Boolean),
+    links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
+    actions: [
+      {
+        kind: "create_project",
+        label: ru ? `Создать "${draft.name}"` : `Create "${draft.name}"`,
+        payload: draft,
+      },
+    ],
+    confidence: 0.82,
+    source: "fallback",
+  };
 }
 
 function buildAssistantFallback(
   question: string,
   snapshot: AssistantSnapshot,
+  attachments: JarvisAttachment[] = [],
 ): AssistantResult {
-  const normalized = question.toLowerCase();
+  const normalized = normalizeSearchText(question);
+  const ru = isRussianText(question);
   const liveWorkerNames = snapshot.liveWorkers.map((worker) => worker.name);
   const projectRoute = findProjectRoute(question, snapshot);
+  const worker = findWorkerInSnapshot(question, snapshot);
+
+  if (normalized.includes("что ты помнишь") || normalized.includes("what do you remember")) {
+    return {
+      answer: snapshot.memoryRules.length > 0
+        ? ru
+          ? `Я помню ${snapshot.memoryRules.length} правил(а) по вашей организации.`
+          : `I remember ${snapshot.memoryRules.length} operating rule(s) for this org.`
+        : ru
+          ? "Пока сохранённых правил нет. Напишите: «запомни: ...», и я начну учитывать это дальше."
+          : "No saved rules yet. Write: “remember: ...” and I will start using it.",
+      bullets: snapshot.memoryRules.slice(0, 10).map((rule) => rule.text),
+      links: [{ label: ru ? "Настройки Jarvis" : "Jarvis settings", href: "/ai" }],
+      confidence: 0.82,
+      source: "fallback",
+    };
+  }
+
+  const mediaAnswer = buildMediaSearchFallback(question, snapshot);
+  if (mediaAnswer) return mediaAnswer;
+
+  const estimateAnswer = buildEstimateFallback(question, snapshot);
+  if (estimateAnswer) return estimateAnswer;
+
+  const codeAnswer = buildCodeGuidanceFallback(question, snapshot);
+  if (codeAnswer) return codeAnswer;
+
+  const attachmentAnswer = buildAttachmentFallback(question, attachments);
+  if (attachmentAnswer && normalized.length < 24) return attachmentAnswer;
+
+  const safeActionAnswer = buildSafeActionFallback(question, snapshot);
+  if (safeActionAnswer) return safeActionAnswer;
 
   if (!snapshot.hasFinanceAccess && isFinancialQuestion(normalized)) {
     return {
-      answer:
-        "Financial details are restricted for this account. You can still review operational project status, tasks, media, and crew activity.",
+      answer: ru
+        ? "Финансовые данные для этого аккаунта закрыты. Я могу ответить по проектам, задачам, медиа и активности команды."
+        : "Financial details are restricted for this account. You can still review operational project status, tasks, media, and crew activity.",
       bullets: [
-        `${snapshot.onSiteCount} workers are currently on site.`,
-        `${snapshot.openTaskCount} tasks remain open across the org.`,
+        ru
+          ? `${snapshot.onSiteCount} сейчас на объекте.`
+          : `${snapshot.onSiteCount} workers are currently on site.`,
+        ru
+          ? `${snapshot.openTaskCount} открытых задач по организации.`
+          : `${snapshot.openTaskCount} tasks remain open across the org.`,
       ],
-      links: [{ label: "Open overview", href: "/overview" }],
+      links: [{ label: ru ? "Открыть обзор" : "Open overview", href: "/overview" }],
       confidence: 0.78,
       source: "fallback",
     };
   }
 
-  if (normalized.includes("who") && normalized.includes("site")) {
+  if (wantsAssignmentAdvice(normalized)) {
+    const suggestion = findBestAssignmentSuggestion(question, snapshot);
+    if (suggestion) {
+      const top = suggestion.candidates[0] ?? null;
+      return {
+        answer: top
+          ? ru
+            ? `Для задачи "${suggestion.taskTitle}" на проекте ${suggestion.projectName} я бы первым смотрел на ${top.name}.`
+            : `For "${suggestion.taskTitle}" on ${suggestion.projectName}, I would look at ${top.name} first.`
+          : ru
+            ? `Для задачи "${suggestion.taskTitle}" пока нет сильного совпадения по навыкам.`
+            : `I do not see a strong skill match yet for "${suggestion.taskTitle}".`,
+        bullets: uniqueList(
+          [
+            ...findRelatedMemory(question, snapshot).map((rule) =>
+              ru ? `Правило: ${rule}` : `Saved rule: ${rule}`,
+            ),
+            suggestion.requiredSkills.length > 0
+              ? ru
+                ? `Нужно: ${skillListLabel(suggestion.requiredSkills, true)}.`
+                : `Needed: ${skillListLabel(suggestion.requiredSkills, false)}.`
+              : "",
+            ...suggestion.candidates.slice(0, 5).map((candidate) =>
+              ru
+                ? `${candidate.name} (${candidate.role}) - ${
+                    candidate.matchedSkills.length > 0
+                      ? `совпадает: ${skillListLabel(candidate.matchedSkills, true)}`
+                      : candidate.reason
+                  }`
+                : `${candidate.name} (${candidate.role}) - ${candidate.reason}`,
+            ),
+          ],
+          6,
+        ),
+        links: [
+          suggestion.projectId
+            ? {
+                label: ru ? `Открыть ${suggestion.projectName}` : `Open ${suggestion.projectName}`,
+                href: `/projects/${suggestion.projectId}`,
+              }
+            : { label: ru ? "Открыть задачи" : "Open tasks", href: "/tasks" },
+          { label: ru ? "Открыть команду" : "Open team", href: "/team" },
+        ],
+        confidence: top ? 0.78 : 0.52,
+        source: "fallback",
+      };
+    }
+
+    const requestedSkills = inferSkillTagsFromText(question);
+    const skillMatches = requestedSkills.length > 0
+      ? snapshot.workerMetrics
+          .filter((candidate) =>
+            requestedSkills.some((skill) => candidate.skills.includes(skill)),
+          )
+          .slice(0, 8)
+      : [];
+    if (skillMatches.length > 0) {
+      return {
+        answer: ru
+          ? `По навыкам ${skillListLabel(requestedSkills, true)} подходят: ${skillMatches.map((candidate) => candidate.name).join(", ")}.`
+          : `For ${skillListLabel(requestedSkills, false)}, these people match: ${skillMatches.map((candidate) => candidate.name).join(", ")}.`,
+        bullets: skillMatches.map((candidate) =>
+          ru
+            ? `${candidate.name} (${candidate.role}) - ${skillListLabel(candidate.skills, true)}`
+            : `${candidate.name} (${candidate.role}) - ${skillListLabel(candidate.skills, false)}`,
+        ),
+        links: [{ label: ru ? "Открыть команду" : "Open team", href: "/team" }],
+        confidence: 0.7,
+        source: "fallback",
+      };
+    }
+  }
+
+  if (worker) {
     return {
-      answer:
-        liveWorkerNames.length > 0
-          ? `${liveWorkerNames.join(", ")} ${liveWorkerNames.length === 1 ? "is" : "are"} currently clocked in.`
+      answer: ru
+        ? `${worker.name}: ${formatHours(worker.monthHours)} за текущий месяц и ${worker.completedTasksThisMonth} закрытых задач.`
+        : `${worker.name}: ${formatHours(worker.monthHours)} this month and ${worker.completedTasksThisMonth} completed tasks.`,
+      bullets: uniqueList(
+        [
+          ...findRelatedMemory(question, snapshot).map((rule) =>
+            ru ? `Правило: ${rule}` : `Saved rule: ${rule}`,
+          ),
+          worker.currentProjectName
+            ? ru
+              ? `Сейчас на проекте: ${worker.currentProjectName}.`
+              : `Current project: ${worker.currentProjectName}.`
+            : ru
+              ? "Сейчас не на смене."
+              : "Not currently clocked in.",
+          worker.assignedProjectNames.length > 0
+            ? ru
+              ? `Доступ/назначения: ${worker.assignedProjectNames.join(", ")}.`
+              : `Assigned/visible projects: ${worker.assignedProjectNames.join(", ")}.`
+            : "",
+          worker.skills.length > 0
+            ? ru
+              ? `Навыки: ${skillListLabel(worker.skills, true)}.`
+              : `Skills: ${skillListLabel(worker.skills, false)}.`
+            : ru
+              ? "Навыки пока не заполнены в профиле."
+              : "No skills are recorded on this profile yet.",
+          worker.capabilitiesNote
+            ? ru
+              ? `Заметка: ${worker.capabilitiesNote}`
+              : `Note: ${worker.capabilitiesNote}`
+            : "",
+          ru
+            ? `Открытых задач на нём: ${worker.openTaskCount}.`
+            : `Open tasks assigned: ${worker.openTaskCount}.`,
+        ],
+        6,
+      ),
+      links: [{ label: ru ? "Открыть профиль" : "Open profile", href: `/team/${worker.id}` }],
+      confidence: 0.76,
+      source: "fallback",
+    };
+  }
+
+  if (
+    (normalized.includes("who") && normalized.includes("site")) ||
+    (normalized.includes("кто") && (normalized.includes("объект") || normalized.includes("смен")))
+  ) {
+    return {
+      answer: liveWorkerNames.length > 0
+        ? ru
+          ? `Сейчас на смене: ${liveWorkerNames.join(", ")}.`
+          : `${liveWorkerNames.join(", ")} ${liveWorkerNames.length === 1 ? "is" : "are"} currently clocked in.`
+        : ru
+          ? "Сейчас никто не на смене."
           : "Nobody is currently clocked in.",
       bullets: snapshot.liveWorkers.map((worker) => {
         const duration =
-          worker.currentSessionMinutes === null ? "live now" : `${worker.currentSessionMinutes}m on shift`;
-        return `${worker.name} • ${worker.projectName ?? "Unresolved project"} • ${duration}`;
+          worker.currentSessionMinutes === null
+            ? ru ? "на смене" : "live now"
+            : ru ? `${worker.currentSessionMinutes}м на смене` : `${worker.currentSessionMinutes}m on shift`;
+        return `${worker.name} • ${worker.projectName ?? (ru ? "Проект не определён" : "Unresolved project")} • ${duration}`;
       }),
-      links: [{ label: "Open overview", href: "/overview" }, { label: "Open team", href: "/team" }],
+      links: [
+        { label: ru ? "Открыть обзор" : "Open overview", href: "/overview" },
+        { label: ru ? "Открыть команду" : "Open team", href: "/team" },
+      ],
       confidence: 0.74,
       source: "fallback",
     };
   }
 
-  if (normalized.includes("payroll") || normalized.includes("unpaid")) {
+  if (
+    normalized.includes("payroll") ||
+    normalized.includes("unpaid") ||
+    normalized.includes("зарплат") ||
+    normalized.includes("оплат")
+  ) {
     return {
-      answer:
-        `There are ${snapshot.unpaidHours.toFixed(2)} unpaid hours worth ` +
-        `$${snapshot.unpaidAmount.toFixed(2)} in the current payroll preview.`,
+      answer: ru
+        ? `В текущем черновике зарплаты ${snapshot.unpaidHours.toFixed(2)} неоплаченных часов на $${snapshot.unpaidAmount.toFixed(2)}.`
+        : `There are ${snapshot.unpaidHours.toFixed(2)} unpaid hours worth $${snapshot.unpaidAmount.toFixed(2)} in the current payroll preview.`,
       bullets: [
-        `${snapshot.onSiteCount} workers are currently on site.`,
-        `${snapshot.openTaskCount} tasks remain open across the org.`,
+        ru
+          ? `${snapshot.onSiteCount} сейчас на объекте.`
+          : `${snapshot.onSiteCount} workers are currently on site.`,
+        ru
+          ? `${snapshot.openTaskCount} открытых задач по организации.`
+          : `${snapshot.openTaskCount} tasks remain open across the org.`,
       ],
-      links: [{ label: "Open payroll", href: "/payroll" }],
+      links: [{ label: ru ? "Открыть зарплату" : "Open payroll", href: "/payroll" }],
       confidence: 0.71,
       source: "fallback",
     };
@@ -329,22 +1117,35 @@ function buildAssistantFallback(
       .find((worker) => worker.completedTasksThisMonth > 0) ?? null;
 
     return {
-      answer: "Here is the current month operational leaderboard from the app data I can see.",
+      answer: ru
+        ? "Вот операционный рейтинг за текущий месяц по данным приложения."
+        : "Here is the current month operational leaderboard from the app data I can see.",
       bullets: uniqueList(
         [
           hoursLeader
-            ? `Most hours this month: ${hoursLeader.name} (${hoursLeader.monthHours.toFixed(2)}h).`
-            : "No hours are logged this month yet.",
+            ? ru
+              ? `Больше всего часов: ${hoursLeader.name} (${hoursLeader.monthHours.toFixed(2)}h).`
+              : `Most hours this month: ${hoursLeader.name} (${hoursLeader.monthHours.toFixed(2)}h).`
+            : ru
+              ? "За этот месяц часы пока не записаны."
+              : "No hours are logged this month yet.",
           taskLeader
-            ? `Most completed tasks this month: ${taskLeader.name} (${taskLeader.completedTasksThisMonth}).`
-            : "No completed tasks are recorded this month yet.",
+            ? ru
+              ? `Больше всего закрытых задач: ${taskLeader.name} (${taskLeader.completedTasksThisMonth}).`
+              : `Most completed tasks this month: ${taskLeader.name} (${taskLeader.completedTasksThisMonth}).`
+            : ru
+              ? "Закрытых задач за месяц пока нет."
+              : "No completed tasks are recorded this month yet.",
           ...snapshot.workerMetrics
             .slice(0, 5)
             .map((worker) => `${worker.name}: ${worker.monthHours.toFixed(2)}h · ${worker.completedTasksThisMonth} tasks`),
         ],
         7,
       ),
-      links: [{ label: "Open team", href: "/team" }, { label: "Open timeline", href: "/timeline" }],
+      links: [
+        { label: ru ? "Открыть команду" : "Open team", href: "/team" },
+        { label: ru ? "Открыть хронологию" : "Open timeline", href: "/timeline" },
+      ],
       confidence: 0.72,
       source: "fallback",
     };
@@ -357,56 +1158,91 @@ function buildAssistantFallback(
       null;
 
     return {
-      answer:
-        `${project?.name ?? "That project"} currently has ` +
-        `${project?.onSiteWorkerCount ?? 0} worker${project?.onSiteWorkerCount === 1 ? "" : "s"} on site and ` +
-        `${project?.openTaskCount ?? 0} open task${project?.openTaskCount === 1 ? "" : "s"}.`,
+      answer: ru
+        ? `${project?.name ?? "Этот проект"}: сейчас ${project?.onSiteWorkerCount ?? 0} на объекте и ${project?.openTaskCount ?? 0} открытых задач.`
+        : `${project?.name ?? "That project"} currently has ${project?.onSiteWorkerCount ?? 0} worker${project?.onSiteWorkerCount === 1 ? "" : "s"} on site and ${project?.openTaskCount ?? 0} open task${project?.openTaskCount === 1 ? "" : "s"}.`,
       bullets: uniqueList(
         [
-          project ? `${project.weekMinutes} minutes logged this week.` : "",
+          project
+            ? ru
+              ? `${project.weekMinutes} минут записано за неделю.`
+              : `${project.weekMinutes} minutes logged this week.`
+            : "",
+          project?.skillTags.length
+            ? ru
+              ? `Навыки по открытым задачам: ${skillListLabel(project.skillTags, true)}.`
+              : `Open-task skills: ${skillListLabel(project.skillTags, false)}.`
+            : "",
           recentReport?.summary ?? "",
-          project?.status ? `Status: ${project.status}.` : "",
+          project?.status ? (ru ? `Статус: ${project.status}.` : `Status: ${project.status}.`) : "",
         ],
-        3,
+        4,
       ),
-      links: [projectRoute, { label: "Open timeline", href: "/timeline" }],
+      links: [
+        projectRoute
+          ? {
+              ...projectRoute,
+              label: ru ? `Открыть ${project?.name ?? "проект"}` : projectRoute.label,
+            }
+          : { label: ru ? "Открыть проекты" : "Open projects", href: "/projects" },
+        { label: ru ? "Открыть хронологию" : "Open timeline", href: "/timeline" },
+      ],
       confidence: 0.7,
       source: "fallback",
     };
   }
 
-  if (normalized.includes("task")) {
+  if (normalized.includes("task") || normalized.includes("задач")) {
     const busiestProject = [...snapshot.projects].sort((left, right) => {
       return right.openTaskCount - left.openTaskCount;
     })[0];
 
     return {
-      answer: `${snapshot.openTaskCount} open tasks are active right now.`,
+      answer: ru
+        ? `Сейчас активно ${snapshot.openTaskCount} открытых задач.`
+        : `${snapshot.openTaskCount} open tasks are active right now.`,
       bullets: busiestProject
-        ? [`${busiestProject.name} carries the heaviest queue with ${busiestProject.openTaskCount} open tasks.`]
+        ? [
+            ru
+              ? `${busiestProject.name} сейчас самый нагруженный: ${busiestProject.openTaskCount} открытых задач.`
+              : `${busiestProject.name} carries the heaviest queue with ${busiestProject.openTaskCount} open tasks.`,
+          ]
         : [],
-      links: [{ label: "Open projects", href: "/projects" }, { label: "Open timeline", href: "/timeline" }],
+      links: [
+        { label: ru ? "Открыть проекты" : "Open projects", href: "/projects" },
+        { label: ru ? "Открыть хронологию" : "Open timeline", href: "/timeline" },
+      ],
       confidence: 0.68,
       source: "fallback",
     };
   }
 
   return {
-    answer:
-      `${snapshot.orgName} has ${snapshot.onSiteCount} workers on site, ` +
-      `${snapshot.activeProjectCount} active projects, and ${snapshot.openTaskCount} open tasks right now.`,
+    answer: ru
+      ? `${snapshot.orgName}: сейчас ${snapshot.onSiteCount} на объектах, ${snapshot.activeProjectCount} активных проектов и ${snapshot.openTaskCount} открытых задач.`
+      : `${snapshot.orgName} has ${snapshot.onSiteCount} workers on site, ${snapshot.activeProjectCount} active projects, and ${snapshot.openTaskCount} open tasks right now.`,
     bullets: uniqueList(
       [
+        ...findRelatedMemory(question, snapshot).map((rule) =>
+          ru ? `Правило: ${rule}` : `Saved rule: ${rule}`,
+        ),
         snapshot.hasFinanceAccess
-          ? `${snapshot.unpaidHours.toFixed(2)} unpaid hours remain in the payroll preview.`
+          ? ru
+            ? `${snapshot.unpaidHours.toFixed(2)} неоплаченных часов в черновике зарплаты.`
+            : `${snapshot.unpaidHours.toFixed(2)} unpaid hours remain in the payroll preview.`
           : "",
-        snapshot.recentReports[0]?.summary ?? "No daily reports have been generated yet.",
+        snapshot.assignmentSuggestions[0]
+          ? ru
+            ? `AI может предложить исполнителя для "${snapshot.assignmentSuggestions[0].taskTitle}".`
+            : `AI can suggest a crew match for "${snapshot.assignmentSuggestions[0].taskTitle}".`
+          : "",
+        snapshot.recentReports[0]?.summary ?? (ru ? "Ежедневных отчётов пока нет." : "No daily reports have been generated yet."),
       ],
-      2,
+      3,
     ),
     links: [
-      { label: "Open overview", href: "/overview" },
-      { label: "Open AI workspace", href: "/ai" },
+      { label: ru ? "Открыть обзор" : "Open overview", href: "/overview" },
+      { label: ru ? "Настройки Jarvis" : "Jarvis settings", href: "/ai" },
     ],
     confidence: 0.6,
     source: "fallback",
@@ -490,8 +1326,8 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "report",
-      answer: "Opening the AI workspace so you can generate or review daily reports.",
-      actionLabel: "Open AI",
+      answer: "Opening Jarvis settings and report skills.",
+      actionLabel: "Jarvis settings",
       route: "/ai",
       confidence: 0.79,
       source: "fallback",
@@ -541,6 +1377,15 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
   } catch {
     return null;
   }
+}
+
+function formatAssistantHistory(history: AssistantConversationTurn[]): string {
+  if (history.length === 0) return "None";
+
+  return history
+    .slice(-10)
+    .map((turn) => `${turn.role === "user" ? "Manager" : "Jarvis"}: ${turn.text.slice(0, 900)}`)
+    .join("\n");
 }
 
 async function tryAnthropicObject(
@@ -595,6 +1440,114 @@ async function tryAnthropicObject(
   }
 }
 
+async function tryOpenAiObject(
+  system: string,
+  prompt: string,
+  attachments: JarvisAttachment[] = [],
+): Promise<Record<string, unknown> | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const model = process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
+
+  if (!apiKey) {
+    return null;
+  }
+
+  const fileInputs = attachments
+    .filter((attachment) => attachment.dataUrl && isPdfAttachment(attachment))
+    .map((attachment) => ({
+      type: "input_file",
+      filename: attachment.filename,
+      file_data: attachment.dataUrl as string,
+    }));
+  const imageInputs = attachments
+    .filter((attachment) => attachment.dataUrl)
+    .filter((attachment) => !isPdfAttachment(attachment))
+    .map((attachment) => ({
+      type: "input_image",
+      image_url: attachment.dataUrl as string,
+    }));
+  const input =
+    imageInputs.length > 0 || fileInputs.length > 0
+      ? [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: prompt },
+              ...fileInputs,
+              ...imageInputs,
+            ],
+          },
+        ]
+      : prompt;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        instructions: system,
+        input,
+        max_output_tokens: 900,
+        text: {
+          format: { type: "json_object" },
+        },
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as {
+      output_text?: string;
+      output?: Array<{
+        content?: Array<{
+          type?: string;
+          text?: string;
+        }>;
+      }>;
+    };
+    const text =
+      payload.output_text ??
+      (payload.output ?? [])
+        .flatMap((item) => item.content ?? [])
+        .filter((item) => item.type === "output_text" && typeof item.text === "string")
+        .map((item) => item.text as string)
+        .join("\n");
+
+    return extractJsonObject(text);
+  } catch {
+    return null;
+  }
+}
+
+async function tryAssistantModelObject(
+  system: string,
+  prompt: string,
+  attachments: JarvisAttachment[] = [],
+): Promise<{ object: Record<string, unknown>; source: "anthropic" | "openai" } | null> {
+  const openAiObject = await tryOpenAiObject(system, prompt, attachments);
+  if (openAiObject) {
+    return { object: openAiObject, source: "openai" };
+  }
+
+  if (hasJarvisImageData(attachments)) {
+    return null;
+  }
+
+  const anthropicObject = await tryAnthropicObject(system, prompt);
+  if (anthropicObject) {
+    return { object: anthropicObject, source: "anthropic" };
+  }
+
+  return null;
+}
+
 function getStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -643,6 +1596,15 @@ export function coercePhotoAnalysis(value: unknown): PhotoAnalysisResult | null 
   };
 }
 
+function getAnalysisTags(value: unknown): string[] {
+  return coercePhotoAnalysis(value)?.tags ?? [];
+}
+
+function getAnalysisSummary(value: unknown): string | null {
+  const analysis = coercePhotoAnalysis(value);
+  return analysis?.summary || analysis?.progressObservation || null;
+}
+
 export function buildAssistantSnapshot(
   data: ManagerWorkspaceData,
   dailyReports: DailyReport[],
@@ -676,9 +1638,100 @@ export function buildAssistantSnapshot(
       (completedTasksByProfile.get(task.completed_by) ?? 0) + 1,
     );
   }
+  const projectById = new Map(data.projects.map((project) => [project.id, project]));
+  const profileById = new Map(data.profiles.map((profile) => [profile.id, profile]));
+  const profileSummaryById = new Map(profileSummaries.map((profile) => [profile.id, profile]));
+  const openTasks = data.tasks
+    .filter((task) => isEffectiveOpenTask(task))
+    .slice(0, 60);
+  const openTaskCountByProfile = new Map<string, number>();
+  const taskSkillsById = new Map<string, string[]>();
+  for (const task of openTasks) {
+    if (task.assigned_to) {
+      openTaskCountByProfile.set(
+        task.assigned_to,
+        (openTaskCountByProfile.get(task.assigned_to) ?? 0) + 1,
+      );
+    }
+    const project = task.project_id ? projectById.get(task.project_id) : null;
+    taskSkillsById.set(
+      task.id,
+      uniqueList(
+        inferSkillTagsFromText(
+          [
+            task.title,
+            task.description ?? "",
+            project?.name ?? "",
+            project?.notes ?? "",
+          ].join(" "),
+        ),
+        8,
+      ),
+    );
+  }
+  const skillsByProjectId = new Map<string, string[]>();
+  const openTaskTitlesByProjectId = new Map<string, string[]>();
+  for (const task of openTasks) {
+    if (!task.project_id) continue;
+    skillsByProjectId.set(
+      task.project_id,
+      uniqueList([
+        ...(skillsByProjectId.get(task.project_id) ?? []),
+        ...(taskSkillsById.get(task.id) ?? []),
+      ], 10),
+    );
+    openTaskTitlesByProjectId.set(
+      task.project_id,
+      uniqueList([
+        ...(openTaskTitlesByProjectId.get(task.project_id) ?? []),
+        task.title,
+      ], 6),
+    );
+  }
+  const fieldProfiles = data.profiles.filter(
+    (profile) =>
+      profile.is_active &&
+      !profile.deleted_at &&
+      ["worker", "supervisor", "driver", "subcontractor", "sales"].includes(profile.role),
+  );
+  const assignmentSuggestions = openTasks
+    .map((task) => {
+      const requiredSkills = taskSkillsById.get(task.id) ?? [];
+      if (requiredSkills.length === 0) return null;
+      const candidates = fieldProfiles
+        .map((profile) => scoreWorkerForSkills(profile, requiredSkills))
+        .filter((candidate) => candidate.score > 0)
+        .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
+        .slice(0, 5)
+        .map((candidate) => ({
+          workerId: candidate.profileId,
+          name: candidate.name,
+          role: candidate.role,
+          skills: candidate.skills,
+          matchedSkills: candidate.matchedSkills,
+          score: roundNumber(candidate.score),
+          reason:
+            candidate.matchedSkills.length > 0
+              ? `matches ${candidate.matchedSkills.join(", ")}`
+              : candidate.note
+                ? "has relevant profile notes"
+                : "role fit",
+        }));
+      const project = task.project_id ? projectById.get(task.project_id) : null;
+      return {
+        taskId: task.id,
+        taskTitle: task.title,
+        projectId: task.project_id,
+        projectName: project?.name ?? "Unlinked",
+        requiredSkills,
+        candidates,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .slice(0, 20);
 
   return {
-    orgName: data.org.name,
+    orgName: getDisplayOrgName(data.org.name),
     onSiteCount: stats.onSiteCount,
     activeProjectCount: stats.activeProjectCount,
     openTaskCount: stats.openTaskCount,
@@ -689,9 +1742,41 @@ export function buildAssistantSnapshot(
       id: project.id,
       name: project.name,
       status: project.status,
+      address: project.address,
+      notes: project.notes,
+      startDate: project.start_date,
+      endDate: project.end_date,
       onSiteWorkerCount: project.onSiteWorkerCount,
       openTaskCount: project.openTaskCount,
       weekMinutes: project.weekMinutes,
+      skillTags: skillsByProjectId.get(project.id) ?? [],
+      openTaskTitles: openTaskTitlesByProjectId.get(project.id) ?? [],
+      materialSpec: readProjectMaterialSpec(project.settings)
+        .slice(0, 40)
+        .map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          unit: item.unit,
+          supplier: item.supplier,
+          link: item.link,
+          note: item.note,
+        })),
+      estimates: includeFinancials
+        ? readProjectEstimations(project.settings)
+            .slice(0, 20)
+            .map((estimate) => ({
+              title: estimate.title,
+              status: estimate.status,
+              description: estimate.description,
+              clientPrice: roundNumber(estimate.clientPrice),
+              internalCost: roundNumber(estimate.internalCost),
+              materialCost: roundNumber(estimate.materialCost),
+              margin: roundNumber(estimateMargin(estimate)),
+              workItems: estimate.items
+                .slice(0, 12)
+                .map((item) => `${item.title}: ${item.quantity} ${item.unit}, $${item.totalPrice}`),
+            }))
+        : [],
     })),
     liveWorkers: profileSummaries
       .filter((profile) => profile.isOnSite)
@@ -704,15 +1789,84 @@ export function buildAssistantSnapshot(
       })),
     workerMetrics: data.profiles
       .filter((profile) => profile.is_active && !profile.deleted_at)
-      .map((profile) => ({
-        id: profile.id,
-        name: profile.name,
-        role: profile.role,
-        monthHours: roundNumber((monthMinutesByProfile.get(profile.id) ?? 0) / 60),
-        completedTasksThisMonth: completedTasksByProfile.get(profile.id) ?? 0,
-      }))
+      .map((profile) => {
+        const skillSettings = readProfileSkillSettings(profile.settings);
+        const summary = profileSummaryById.get(profile.id);
+        return {
+          id: profile.id,
+          name: profile.name,
+          role: profile.role,
+          monthHours: roundNumber((monthMinutesByProfile.get(profile.id) ?? 0) / 60),
+          completedTasksThisMonth: completedTasksByProfile.get(profile.id) ?? 0,
+          openTaskCount: openTaskCountByProfile.get(profile.id) ?? 0,
+          currentProjectName: summary?.currentProjectName ?? null,
+          assignedProjectNames: summary?.assignedProjectNames ?? [],
+          skills: skillSettings.skills,
+          capabilitiesNote: skillSettings.note || null,
+        };
+      })
       .sort((left, right) => right.monthHours - left.monthHours || right.completedTasksThisMonth - left.completedTasksThisMonth)
       .slice(0, 12),
+    openTasks: openTasks.slice(0, 30).map((task) => ({
+      id: task.id,
+      title: task.title,
+      projectId: task.project_id,
+      projectName: task.project_id
+        ? projectById.get(task.project_id)?.name ?? "Unknown project"
+        : "Unlinked",
+      priority: task.priority,
+      dueDate: task.due_date,
+      assignedToName: task.assigned_to
+        ? profileById.get(task.assigned_to)?.name ?? "Unknown worker"
+        : null,
+      skillTags: taskSkillsById.get(task.id) ?? [],
+    })),
+    assignmentSuggestions,
+    mediaIndex: data.media
+      .filter((item) => !item.deleted_at)
+      .slice(0, 120)
+      .map((item) => {
+        const project = item.project_id ? projectById.get(item.project_id) : null;
+        const uploader = item.uploaded_by ? profileById.get(item.uploaded_by) : null;
+        const summary = getAnalysisSummary(item.ai_analysis);
+        const tags = uniqueList(
+          [
+            ...getAnalysisTags(item.ai_analysis),
+            ...inferSkillTagsFromText(
+              [
+                item.filename ?? "",
+                item.caption ?? "",
+                project?.name ?? "",
+                project?.notes ?? "",
+                summary ?? "",
+              ].join(" "),
+            ),
+            item.is_checkout ? "checkout" : "",
+          ],
+          10,
+        );
+
+        return {
+          id: item.id,
+          projectId: item.project_id,
+          projectName: project?.name ?? "Unlinked",
+          uploadedByName: uploader?.name ?? null,
+          mediaType: item.media_type,
+          filename: item.filename ?? item.storage_path.split("/").pop() ?? item.storage_path,
+          caption: item.caption,
+          isCheckout: item.is_checkout,
+          createdAt: item.created_at,
+          tags,
+          summary,
+        };
+      }),
+    memoryRules: readJarvisMemory(data.org.settings),
+    codeReferences: WASHINGTON_CODE_REFERENCES.map((reference) => ({
+      topic: reference.topic,
+      summary: reference.summary,
+      sourceLabel: reference.sourceLabel,
+      url: reference.url,
+    })),
     recentReports: dailyReports.slice(0, 8).map((report) => ({
       id: report.id,
       projectName:
@@ -806,12 +1960,168 @@ export async function analyzePhotoEvidence(
   };
 }
 
+function buildWorkerJarvisFallback(question: string, shell: WorkerShellData): AssistantResult {
+  const ru = isRussianText(question) || shell.profile.language !== "en";
+  const normalized = normalizeSearchText(question);
+  const currentProject = shell.clockState.currentProjectName;
+  const openTasks = shell.tasks.filter((task) => task.status !== "done" && task.status !== "cancelled");
+  const matchingProject =
+    shell.projects.find((project) => normalized.includes(normalizeSearchText(project.name))) ??
+    (shell.clockState.currentProjectId
+      ? shell.projects.find((project) => project.id === shell.clockState.currentProjectId)
+      : null);
+  const projectMaterials = matchingProject
+    ? readProjectMaterialSpec(matchingProject.settings).slice(0, 8)
+    : [];
+
+  if (normalized.includes("material") || normalized.includes("материал")) {
+    return {
+      answer: matchingProject
+        ? ru
+          ? `По проекту ${matchingProject.name} вижу ${projectMaterials.length} позиций материалов.`
+          : `${matchingProject.name} has ${projectMaterials.length} material spec items visible to you.`
+        : ru
+          ? "Выберите или назовите проект, и я покажу видимый список материалов."
+          : "Name a project and I will show the visible material list.",
+      bullets:
+        projectMaterials.length > 0
+          ? projectMaterials.map((item) =>
+              [item.name, item.quantity, item.unit, item.supplier].filter(Boolean).join(" "),
+            )
+          : [ru ? "Материалы пока не записаны для этого проекта." : "No material spec is recorded for this project yet."],
+      links: matchingProject ? [{ label: matchingProject.name, href: `/project/${matchingProject.id}` }] : [],
+      confidence: 0.74,
+      source: "fallback",
+    };
+  }
+
+  if (normalized.includes("task") || normalized.includes("задач")) {
+    return {
+      answer: ru
+        ? `У тебя ${openTasks.length} открытых видимых задач.`
+        : `You have ${openTasks.length} visible open tasks.`,
+      bullets: openTasks.slice(0, 6).map((task) =>
+        `${task.projectName ?? (ru ? "Без проекта" : "No project")}: ${task.title} (${task.status})`,
+      ),
+      links: [{ label: ru ? "Открыть задачи" : "Open tasks", href: "/my-tasks" }],
+      confidence: 0.76,
+      source: "fallback",
+    };
+  }
+
+  if (normalized.includes("shift") || normalized.includes("смен")) {
+    return {
+      answer: shell.clockState.isClockedIn
+        ? ru
+          ? `Ты сейчас на смене${currentProject ? ` на проекте ${currentProject}` : ""}.`
+          : `You are currently clocked in${currentProject ? ` on ${currentProject}` : ""}.`
+        : ru
+          ? "Ты сейчас не на смене."
+          : "You are not currently clocked in.",
+      bullets: shell.sessions.slice(0, 4).map((session) =>
+        `${session.projectName}: ${formatHours(session.durationMinutes / 60)}${session.clockOutTime ? "" : ru ? " сейчас" : " live"}`,
+      ),
+      links: [{ label: ru ? "Открыть смену" : "Open clock", href: "/clock" }],
+      confidence: 0.72,
+      source: "fallback",
+    };
+  }
+
+  return {
+    answer: ru
+      ? "Я вижу только твои проекты, задачи, материалы и твои смены. Финансы, ставки и зарплату рабочему режиму Jarvis не показываю."
+      : "I can see only your projects, tasks, materials, and your own shifts. Finance, rates, and payroll are hidden in worker Jarvis mode.",
+    bullets: [
+      ru
+        ? `${shell.projects.length} видимых проектов`
+        : `${shell.projects.length} visible projects`,
+      ru
+        ? `${openTasks.length} открытых задач`
+        : `${openTasks.length} open tasks`,
+      shell.clockState.isClockedIn
+        ? ru
+          ? `Сейчас на объекте: ${currentProject ?? "проект не записан"}`
+          : `Currently on site: ${currentProject ?? "project not recorded"}`
+        : ru
+          ? "Сейчас не на смене"
+          : "Not clocked in right now",
+    ],
+    links: [
+      { label: ru ? "Мои задачи" : "My tasks", href: "/my-tasks" },
+      { label: ru ? "Мои проекты" : "My projects", href: "/my-projects" },
+    ],
+    confidence: 0.68,
+    source: "fallback",
+  };
+}
+
+export async function answerWorkerAssistant(
+  question: string,
+  shell: WorkerShellData,
+): Promise<AssistantResult> {
+  const fallback = buildWorkerJarvisFallback(question, shell);
+  const materialLines = shell.projects.flatMap((project) =>
+    readProjectMaterialSpec(project.settings)
+      .slice(0, 12)
+      .map((item) =>
+        `${project.name}: ${item.name} ${item.quantity} ${item.unit}${item.supplier ? ` from ${item.supplier}` : ""}${item.note ? ` note ${item.note}` : ""}`,
+      ),
+  );
+
+  const modelObject = await tryOpenAiObject(
+    "You are Jarvis in worker-safe field mode for a construction workforce app. Persona: a refined British technical adviser with calm executive presence. Address the worker as 'sir' in English or 'сэр' in Russian sparingly — at most once per response, only when natural. Allow dry, understated wit when context permits; never slapstick, never theatrical, never roleplay-heavy. Be brief and precise; proactively flag problems you notice in the supplied context. Do not imitate any real person, actor, celebrity, or specific voice performance. Never reference Iron Man, Tony Stark, Marvel, MCU, J.A.R.V.I.S. as a character, or any movie/TV AI by name — the persona is a generic British technical adviser, not a movie AI. Return JSON only. Answer in the same language as the worker. Use only the supplied worker-visible context. Never mention payroll, rates, receipt amounts, profit, owner-only analytics, company financials, or hidden manager data. If a fact is not in the context, say it is not recorded for this worker.",
+    [
+      "Create a JSON object with keys: answer, bullets, links, confidence.",
+      "links must be an array of objects with label and href.",
+      `Worker: ${shell.profile.name} (${shell.profile.role})`,
+      `Current shift: ${shell.clockState.isClockedIn ? `live on ${shell.clockState.currentProjectName ?? "unknown project"}` : "not clocked in"}`,
+      `Visible projects: ${shell.projects.map((project) => `${project.name}, address ${project.address ?? "none"}, status ${project.status}`).join(" | ") || "none"}`,
+      `Visible tasks: ${shell.tasks.slice(0, 50).map((task) => `${task.projectName ?? "No project"}: ${task.title}, status ${task.status}, priority ${task.priority}`).join(" | ") || "none"}`,
+      `Visible materials: ${materialLines.join(" | ") || "none"}`,
+      `Recent own uploads: ${shell.media.slice(0, 20).map((item) => `${item.projectName ?? "No project"} ${item.media_type} ${item.filename}, caption ${item.caption ?? "none"}`).join(" | ") || "none"}`,
+      `Recent own shifts: ${shell.sessions.slice(0, 12).map((session) => `${session.projectName}: ${session.clockInTime} to ${session.clockOutTime ?? "live"}, ${session.durationMinutes} minutes`).join(" | ") || "none"}`,
+      `Question: ${question}`,
+    ].join("\n"),
+  );
+
+  if (!modelObject) {
+    return fallback;
+  }
+
+  const rawLinks = Array.isArray(modelObject.links) ? modelObject.links : [];
+  const links = rawLinks
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const record = item as Record<string, unknown>;
+      const label = getStringValue(record.label, "");
+      const href = getStringValue(record.href, "");
+      if (!label || !href.startsWith("/")) return null;
+      return { label, href };
+    })
+    .filter((item): item is AssistantLink => Boolean(item))
+    .slice(0, 3);
+
+  return {
+    answer: getStringValue(modelObject.answer, fallback.answer),
+    bullets: getStringArray(modelObject.bullets),
+    links: links.length > 0 ? links : fallback.links,
+    confidence: roundNumber(getNumberValue(modelObject.confidence, 0.72)),
+    source: "openai",
+  };
+}
+
 export async function answerManagerAssistant(
   question: string,
   snapshot: AssistantSnapshot,
+  options: { attachments?: JarvisAttachment[]; history?: AssistantConversationTurn[] } = {},
 ): Promise<AssistantResult> {
-  const fallback = buildAssistantFallback(question, snapshot);
+  const attachments = options.attachments ?? [];
+  const history = options.history ?? [];
+  const fallback = buildAssistantFallback(question, snapshot, attachments);
   if (!snapshot.hasFinanceAccess && isFinancialQuestion(question.toLowerCase())) {
+    return fallback;
+  }
+  if ((fallback.actions?.length ?? 0) > 0) {
     return fallback;
   }
 
@@ -824,28 +2134,44 @@ export async function answerManagerAssistant(
         "Financial visibility: hidden for this user.",
         "Do not mention payroll, receipt totals, costs, unpaid hours, unpaid amounts, profit, or financial summaries.",
       ];
-  const anthropicObject = await tryAnthropicObject(
-    "You are a concise manager-side assistant for a construction workforce app. Return JSON only.",
+  const modelObject = await tryAssistantModelObject(
+    "You are Jarvis, an owner-side operating analyst inside a construction workforce app. Persona: a refined British technical adviser with calm executive presence. Address the owner as 'sir' in English or 'сэр' in Russian sparingly — at most once per response, only when natural. Allow dry, understated wit when context permits; never slapstick, never theatrical, never roleplay-heavy. Be brief and precise; proactively flag problems you notice in the snapshot (for example, 'Sir, three workers are approaching overtime today.'). Do not imitate any real person, actor, celebrity, or specific voice performance. Never reference Iron Man, Tony Stark, Marvel, MCU, J.A.R.V.I.S. as a character, or any movie/TV AI by name — the persona is a generic British technical adviser, not a movie AI. Return JSON only. Answer in the same language as the manager's question. Use only the supplied app snapshot; if the snapshot does not contain a fact, say that it is not recorded yet. Behave like a practical analyst, payroll reviewer, dispatcher, and chief manager, but never invent app data.",
     [
       "Create a JSON object with keys:",
       "answer, bullets, links, confidence",
       "links must be an array of objects with label and href.",
+      "If asked who should do work, use the worker skills and assignment suggestions below; never invent a skill.",
+      "If asked for accounting/payroll analysis, use financial fields only when financial visibility is present.",
+      "If asked for estimates, provide a planning range and clearly say when materials/AHJ/field inspection are missing.",
+      "If asked about Washington code, use the code reference pack as navigation only and say AHJ/permit set is final.",
+      "If attached images are supplied to the model, inspect them directly. If only filenames or metadata are supplied, say that visual content is not available.",
+      "Use the recent conversation to resolve follow-up words like 'him', 'that project', 'there', or 'same thing'.",
+      `Recent conversation:\n${formatAssistantHistory(history)}`,
       `Question: ${question}`,
       `Org: ${snapshot.orgName}`,
       `On site count: ${snapshot.onSiteCount}`,
       `Active projects: ${snapshot.activeProjectCount}`,
       `Open tasks: ${snapshot.openTaskCount}`,
       ...financialPromptLines,
-      `Projects: ${snapshot.projects.map((project) => `${project.name} (${project.onSiteWorkerCount} live, ${project.openTaskCount} open tasks)`).join(" | ")}`,
+      `Saved owner rules / Jarvis memory:\n${formatJarvisMemoryForPrompt(snapshot.memoryRules)}`,
+      `Attached files:\n${formatJarvisAttachmentsForPrompt(attachments)}`,
+      `Projects: ${snapshot.projects.map((project) => `${project.name} (${project.status}, address: ${project.address ?? "none"}, dates: ${project.startDate ?? "none"} to ${project.endDate ?? "none"}, ${project.onSiteWorkerCount} live, ${project.openTaskCount} open tasks, skills: ${project.skillTags.join(", ") || "none"}, tasks: ${project.openTaskTitles.join("; ") || "none"}, materials: ${project.materialSpec.map((item) => `${item.name} ${item.quantity} ${item.unit}${item.supplier ? ` from ${item.supplier}` : ""}${item.note ? ` note ${item.note}` : ""}`).join("; ") || "none"}, estimates: ${snapshot.hasFinanceAccess ? project.estimates.map((estimate) => `${estimate.title} ${estimate.status} client $${estimate.clientPrice} cost $${estimate.internalCost + estimate.materialCost} margin $${estimate.margin}; works ${estimate.workItems.join(", ") || "none"}`).join("; ") || "none" : "hidden"}, notes: ${project.notes ?? "none"})`).join(" | ")}`,
       `Live workers: ${snapshot.liveWorkers.map((worker) => `${worker.name} on ${worker.projectName ?? "unknown project"}`).join(" | ") || "None"}`,
-      `Current month worker metrics: ${snapshot.workerMetrics.map((worker) => `${worker.name} (${worker.role}): ${worker.monthHours.toFixed(2)}h, ${worker.completedTasksThisMonth} completed tasks`).join(" | ") || "None"}`,
+      `Current month worker metrics: ${snapshot.workerMetrics.map((worker) => `${worker.name} (${worker.role}): ${worker.monthHours.toFixed(2)}h, ${worker.completedTasksThisMonth} completed tasks, ${worker.openTaskCount} open assigned, skills: ${worker.skills.join(", ") || "none"}, note: ${worker.capabilitiesNote ?? "none"}`).join(" | ") || "None"}`,
+      `Open tasks: ${snapshot.openTasks.map((task) => `${task.title} on ${task.projectName}, priority ${task.priority}, assigned ${task.assignedToName ?? "unassigned"}, skills ${task.skillTags.join(", ") || "unknown"}`).join(" | ") || "None"}`,
+      `Assignment suggestions: ${snapshot.assignmentSuggestions.map((suggestion) => `${suggestion.taskTitle} on ${suggestion.projectName}, needs ${suggestion.requiredSkills.join(", ")}, candidates ${suggestion.candidates.map((candidate) => `${candidate.name} (${candidate.reason})`).join("; ") || "none"}`).join(" | ") || "None"}`,
+      `Recent media index: ${snapshot.mediaIndex.slice(0, 40).map((item) => `${item.projectName} ${item.mediaType} ${item.filename}, caption ${item.caption ?? "none"}, tags ${item.tags.join(", ") || "none"}, summary ${item.summary ?? "none"}, uploader ${item.uploadedByName ?? "unknown"}`).join(" | ") || "None"}`,
+      `Washington code reference pack: ${snapshot.codeReferences.map((reference) => `${reference.topic}: ${reference.summary} (${reference.url})`).join(" | ")}`,
       `Recent reports: ${snapshot.recentReports.map((report) => `${report.projectName} ${report.reportDate}: ${report.summary ?? "No summary"}`).join(" | ") || "None"}`,
     ].join("\n"),
+    attachments,
   );
 
-  if (!anthropicObject) {
+  if (!modelObject) {
     return fallback;
   }
+
+  const anthropicObject = modelObject.object;
 
   const rawLinks = Array.isArray(anthropicObject.links)
     ? anthropicObject.links
@@ -860,7 +2186,7 @@ export async function answerManagerAssistant(
       const label = getStringValue(record.label, "");
       const href = getStringValue(record.href, "");
 
-      if (!label || !href.startsWith("/")) {
+      if (!label || (!href.startsWith("/") && !href.startsWith("https://"))) {
         return null;
       }
 
@@ -873,8 +2199,9 @@ export async function answerManagerAssistant(
     answer: getStringValue(anthropicObject.answer, fallback.answer),
     bullets: getStringArray(anthropicObject.bullets),
     links: links.length > 0 ? links : fallback.links,
+    actions: fallback.actions,
     confidence: roundNumber(getNumberValue(anthropicObject.confidence, 0.78)),
-    source: "anthropic",
+    source: modelObject.source,
   };
 }
 
