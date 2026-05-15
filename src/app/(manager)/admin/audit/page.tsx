@@ -70,10 +70,41 @@ const ACTION_COLORS: Record<string, string> = {
   payroll_approved: "var(--green)",
   payroll_paid: "var(--green)",
   role_change: "var(--brand-yellow)",
+  role_changed: "var(--brand-yellow)",
   force_checkout: "var(--red)",
   ownership_transfer: "#a855f7",
   data_purge: "var(--red)",
   settings_change: "var(--blue)",
+  task_created: "var(--blue)",
+  task_deleted: "var(--red)",
+  worker_hours_adjusted: "var(--brand-yellow)",
+  worker_hours_manual_close: "var(--green)",
+};
+
+const ACTION_LABELS: Record<string, { en: string; ru: string }> = {
+  payroll_approved: { en: "Payroll approved", ru: "Зарплата утверждена" },
+  payroll_paid: { en: "Payroll paid", ru: "Зарплата оплачена" },
+  role_change: { en: "Role changed", ru: "Роль изменена" },
+  role_changed: { en: "Role changed", ru: "Роль изменена" },
+  force_checkout: { en: "Force checkout", ru: "Принудительный выход" },
+  ownership_transfer: { en: "Ownership transfer", ru: "Передача владения" },
+  data_purge: { en: "Data purge", ru: "Удаление данных" },
+  settings_change: { en: "Settings changed", ru: "Настройки изменены" },
+  task_created: { en: "Task created", ru: "Задача создана" },
+  task_deleted: { en: "Task deleted", ru: "Задача удалена" },
+  worker_hours_adjusted: { en: "Worker hours adjusted", ru: "Часы работника изменены" },
+  worker_hours_manual_close: { en: "Worker hours closed", ru: "Часы работника закрыты" },
+};
+
+const ROLE_LABELS: Record<string, { en: string; ru: string }> = {
+  owner: { en: "OWNER", ru: "ВЛАДЕЛЕЦ" },
+  admin: { en: "ADMIN", ru: "АДМИН" },
+  manager: { en: "MANAGER", ru: "МЕНЕДЖЕР" },
+  supervisor: { en: "SUPERVISOR", ru: "СУПЕРВАЙЗЕР" },
+  worker: { en: "WORKER", ru: "РАБОЧИЙ" },
+  driver: { en: "DRIVER", ru: "ВОДИТЕЛЬ" },
+  sales: { en: "SALES", ru: "ПРОДАЖИ" },
+  subcontractor: { en: "SUBCONTRACTOR", ru: "СУБПОДРЯДЧИК" },
 };
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -86,8 +117,16 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function humanizeAction(action: string, locale: "en" | "ru"): string {
+  return ACTION_LABELS[action]?.[locale] ?? action.replace(/_/g, " ");
+}
+
+function humanizeRole(role: string, locale: "en" | "ru"): string {
+  return ROLE_LABELS[role]?.[locale] ?? role.toUpperCase();
+}
+
 export default function AuditLogPage() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [entries, setEntries] = useState<AuditEntry[]>(() =>
     AUTH_BYPASS_ENABLED ? PREVIEW_ENTRIES : [],
@@ -149,7 +188,7 @@ export default function AuditLogPage() {
 
   function exportCsv() {
     const headers = "Timestamp,Actor,Role,Action,Target Type,Target ID";
-    const rows = filtered.map((e) => `"${e.timestamp}","${e.actorName}","${e.actorRole}","${e.action}","${e.targetType}","${e.targetId}"`);
+    const rows = filtered.map((e) => `"${e.timestamp}","${e.actorName}","${humanizeRole(e.actorRole, locale)}","${humanizeAction(e.action, locale)}","${e.targetType}","${e.targetId}"`);
     const csv = [headers, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -184,7 +223,7 @@ export default function AuditLogPage() {
         >
           <option value="">{t("timeline.allEventTypes")}</option>
           {actionTypes.map((a) => (
-            <option key={a} value={a}>{a.replace(/_/g, " ")}</option>
+            <option key={a} value={a}>{humanizeAction(a, locale)}</option>
           ))}
         </select>
         <button
@@ -263,7 +302,7 @@ export default function AuditLogPage() {
                           className="mt-0.5 inline-block rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
                           style={{ background: "rgba(191, 162, 52, 0.12)", color: "var(--brand-yellow)" }}
                         >
-                          {entry.actorRole}
+                          {humanizeRole(entry.actorRole, locale)}
                         </span>
                       </td>
                       <td className="py-3 pr-3">
@@ -271,7 +310,7 @@ export default function AuditLogPage() {
                           className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
                           style={{ background: `color-mix(in srgb, ${color} 16%, transparent)`, color }}
                         >
-                          {entry.action.replace(/_/g, " ")}
+                          {humanizeAction(entry.action, locale)}
                         </span>
                         {payrollSummary ? (
                           <div className="mt-1 text-xs text-[var(--text-secondary)]">

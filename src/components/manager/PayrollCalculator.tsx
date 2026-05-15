@@ -443,6 +443,14 @@ function ShiftRow({
             {t("payroll.billableTransferGap")}
           </span>
         ) : null}
+        {row.reviewAcknowledged ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+            style={{ background: "rgba(15, 168, 120, 0.14)", color: "var(--green)" }}
+          >
+            {t("timeline.reviewed")}
+          </span>
+        ) : null}
         {!row.hasGps ? (
           <span
             className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
@@ -507,6 +515,7 @@ export function PayrollCalculator({
   profiles,
   sessions,
   hasGpsBySessionId,
+  acknowledgedShiftEventIds,
   payrollClosures,
 }: {
   orgId: string;
@@ -517,6 +526,7 @@ export function PayrollCalculator({
   profiles: Profile[];
   sessions: ManagerSession[];
   hasGpsBySessionId: Record<string, boolean>;
+  acknowledgedShiftEventIds: string[];
   payrollClosures: PayrollClosure[];
 }) {
   const { t } = useTranslation();
@@ -544,6 +554,10 @@ export function PayrollCalculator({
   const closedThroughByProfileId = useMemo(
     () => buildClosedThroughByProfileId(payrollClosures),
     [payrollClosures],
+  );
+  const acknowledgedShiftEventIdSet = useMemo(
+    () => new Set(acknowledgedShiftEventIds),
+    [acknowledgedShiftEventIds],
   );
   // Per-worker expand/collapse for the byWorker mode.
   const [collapsedWorkerIds, setCollapsedWorkerIds] = useState<Set<string>>(
@@ -1217,6 +1231,10 @@ export function PayrollCalculator({
       const nextMetadata = appendExternalPaymentRecord(period.metadata, externalPayment);
       const nextLines = period.lines.map((line) => ({ ...line, status: "paid" as ItemStatus }));
 
+      if (blockPaymentIfUnreviewed(targetWorkerIds)) {
+        return;
+      }
+
       if (!AUTH_BYPASS_ENABLED && !(await assertWorkersNotAlreadyClosed(targetWorkerIds))) {
         return;
       }
@@ -1340,6 +1358,10 @@ export function PayrollCalculator({
       const nextMetadata = externalPayment
         ? appendExternalPaymentRecord(period.metadata, externalPayment)
         : period.metadata;
+
+      if (nextStatus === "paid" && blockPaymentIfUnreviewed(paymentWorkerIds)) {
+        return;
+      }
 
       if (nextStatus === "paid" && !AUTH_BYPASS_ENABLED) {
         if (!(await assertWorkersNotAlreadyClosed(paymentWorkerIds))) {
@@ -1501,7 +1523,7 @@ export function PayrollCalculator({
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.setTextColor(255, 255, 255);
-    doc.text("Andrew's Crew \u2014 Paystub", 14, 12);
+    doc.text("NW Build Pro \u2014 Paystub", 14, 12);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
@@ -1665,6 +1687,7 @@ export function PayrollCalculator({
       profileId: workerFilter || undefined,
       closedThroughByProfileId:
         period.status === "draft" ? closedThroughByProfileId : {},
+      acknowledgedShiftEventIds: acknowledgedShiftEventIdSet,
     });
   }, [
     period,
@@ -1673,6 +1696,7 @@ export function PayrollCalculator({
     requireVideoByProfileId,
     workerFilter,
     closedThroughByProfileId,
+    acknowledgedShiftEventIdSet,
   ]);
 
   const workerGroups = useMemo(
@@ -1709,6 +1733,33 @@ export function PayrollCalculator({
     const sum = sumDraftRowMinutes(filteredRows);
     return { count: visibleSelectedIds.size, totalHours: sum.totalHours };
   }, [draftRows, visibleSelectedIds]);
+
+  const unreviewedPayBlockByWorkerId = useMemo(() => {
+    const map = new Map<string, PayrollDraftRow[]>();
+    for (const row of draftRows) {
+      if (row.reviewAcknowledged || row.isBillableTransferGap) continue;
+      const needsReview =
+        row.missingCheckout ||
+        row.missingVideo ||
+        row.shiftSeverity === "warning" ||
+        row.shiftSeverity === "critical";
+      if (!needsReview) continue;
+      const rows = map.get(row.profileId) ?? [];
+      rows.push(row);
+      map.set(row.profileId, rows);
+    }
+    return map;
+  }, [draftRows]);
+
+  function blockPaymentIfUnreviewed(workerIds: string[]): boolean {
+    const blockedIds = workerIds.filter((id) => unreviewedPayBlockByWorkerId.has(id));
+    if (blockedIds.length === 0) return false;
+    const names = blockedIds
+      .map((id) => profiles.find((profile) => profile.id === id)?.name ?? id)
+      .join(", ");
+    setError(t("payroll.unreviewedBlock").replace("{workers}", names));
+    return true;
+  }
 
   const selectedAction = useMemo<"approve" | "pay">(() => {
     if (!period || visibleSelectedIds.size === 0) return "approve";

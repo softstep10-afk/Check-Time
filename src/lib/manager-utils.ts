@@ -302,10 +302,13 @@ export function detectTransferGaps(args: {
   sinceIso?: string;
   /** Optional filter — only return gaps for this worker. */
   profileId?: string;
+  /** Payroll/business day timezone. Defaults to Washington/Pacific. */
+  timeZone?: string;
 }): TransferGap[] {
   const projectsById = new Map(args.projects.map((p) => [p.id, p]));
   const profilesById = new Map(args.profiles.map((p) => [p.id, p]));
   const sinceMs = args.sinceIso ? new Date(args.sinceIso).getTime() : null;
+  const timeZone = args.timeZone ?? DEFAULT_PAYROLL_TIME_ZONE;
 
   const events = args.timeEvents
     .filter((e) => {
@@ -344,6 +347,12 @@ export function detectTransferGaps(args: {
       }
       if (next.event_type !== "clock_in") continue;
       if (out.project_id === next.project_id) continue;
+      if (
+        dateKeyInTimeZone(out.event_time, timeZone) !==
+        dateKeyInTimeZone(next.event_time, timeZone)
+      ) {
+        continue;
+      }
 
       const gapMinutes = Math.round(
         (new Date(next.event_time).getTime() -
@@ -1142,6 +1151,8 @@ export interface PayrollDraftRow {
   clockInTime: string;
   /** ISO. Null on shifts that never recorded a checkout. */
   clockOutTime: string | null;
+  /** Closing time_event id. Null for open shifts and synthetic transfer rows. */
+  clockOutEventId: string | null;
   /** Calendar day key (YYYY-MM-DD) for chronology grouping. */
   dayKey: string;
   durationMinutes: number;
@@ -1158,6 +1169,8 @@ export interface PayrollDraftRow {
   shiftSeverity: ShiftSeverity;
   /** Worker free-form note from CheckoutModal, or null. */
   checkoutNote: string | null;
+  /** True after a manager explicitly acknowledged this suspicious shift. */
+  reviewAcknowledged: boolean;
 }
 
 /**
@@ -1189,6 +1202,8 @@ export function buildPayrollDraftRows(args: {
   profileId?: string;
   /** Latest paid/closed cutoff by worker id. New payroll drafts ignore time at or before this. */
   closedThroughByProfileId?: Record<string, string | null | undefined>;
+  /** Closing event ids already acknowledged by a manager. */
+  acknowledgedShiftEventIds?: ReadonlySet<string>;
 }): PayrollDraftRow[] {
   const startMs = new Date(`${args.startDate}T00:00:00`).getTime();
   const endMs = new Date(`${args.endDate}T23:59:59.999`).getTime();
@@ -1243,16 +1258,29 @@ export function buildPayrollDraftRows(args: {
       dayKey: new Date(payableStartMs).toISOString().slice(0, 10),
       durationMinutes: payableMinutes,
       hasGps: Boolean(args.hasGpsBySessionId[session.id]),
+      clockOutEventId: session.clockOutEventId,
       missingCheckout: session.clockOutTime === null,
       missingVideo:
+        !(
+          session.clockOutEventId &&
+          args.acknowledgedShiftEventIds?.has(session.clockOutEventId)
+        ) &&
         Boolean(args.requireVideoByProfileId[session.profileId]) &&
         session.checkoutStatus === "pending",
       hasTransferGap: transferGapKeys.has(
         `${session.profileId}|${session.clockInTime}`,
       ),
       isBillableTransferGap: false,
-      shiftSeverity: shiftDurationSeverity(session.durationMinutes),
+      shiftSeverity:
+        session.clockOutEventId &&
+        args.acknowledgedShiftEventIds?.has(session.clockOutEventId)
+          ? "ok"
+          : shiftDurationSeverity(session.durationMinutes),
       checkoutNote: session.checkoutNote,
+      reviewAcknowledged: Boolean(
+        session.clockOutEventId &&
+          args.acknowledgedShiftEventIds?.has(session.clockOutEventId),
+      ),
     });
   }
 
@@ -1272,6 +1300,7 @@ export function buildPayrollDraftRows(args: {
       projectName: `${gap.fromProject} → ${gap.toProject}`,
       clockInTime: gap.outTime,
       clockOutTime: gap.inTime,
+      clockOutEventId: null,
       dayKey: gap.outTime.slice(0, 10),
       durationMinutes: gap.gapMinutes,
       hasGps: true,
@@ -1281,6 +1310,7 @@ export function buildPayrollDraftRows(args: {
       isBillableTransferGap: true,
       shiftSeverity: "ok",
       checkoutNote: null,
+      reviewAcknowledged: false,
     });
   }
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
-import type { ShiftReviewStatus } from "@/lib/shift-review";
+import { SHIFT_REVIEW_COLOR, type ShiftReviewStatus } from "@/lib/shift-review";
 
 export function ShiftReviewAckButton({
   eventId,
@@ -21,6 +21,7 @@ export function ShiftReviewAckButton({
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const actionColor = SHIFT_REVIEW_COLOR[status] ?? "var(--red)";
 
   async function handleClick() {
     setBusy(true);
@@ -71,7 +72,11 @@ export function ShiftReviewAckButton({
         onClick={handleClick}
         disabled={busy}
         className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2.5 py-1.5 text-xs font-semibold disabled:opacity-50"
-        style={{ borderColor: "rgba(15, 168, 120, 0.34)", color: "var(--green)" }}
+        style={{
+          borderColor: actionColor,
+          color: actionColor,
+          background: "rgba(212, 81, 94, 0.06)",
+        }}
       >
         <CheckCircle2 size={13} />
         {busy ? t("common.saving") : t("shiftReview.markReviewed")}

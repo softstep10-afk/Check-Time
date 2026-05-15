@@ -391,7 +391,7 @@ export function AnnualReportClient({
     doc.text(`Annual Report ${year}`, pageWidth / 2, 180, { align: "center" });
     doc.setFontSize(14);
     doc.setFont("helvetica", "normal");
-    doc.text("Andrew's Crew — Construction Clock", pageWidth / 2, 220, {
+    doc.text("NW Build Pro — Construction Clock", pageWidth / 2, 220, {
       align: "center",
     });
     doc.setFontSize(11);

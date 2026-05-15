@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getPayrollPageData } from "@/lib/manager-data";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { buildManagerSessions } from "@/lib/manager-utils";
+import { buildShiftReviewAckEventIds } from "@/lib/shift-review";
 import { PayrollCalculator } from "@/components/manager/PayrollCalculator";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
@@ -21,6 +22,7 @@ export default async function PayrollPage() {
   if (!allowed) redirect("/overview");
 
   const sessions = buildManagerSessions(data);
+  const acknowledgedShiftEventIds = [...buildShiftReviewAckEventIds(data.timeEvents)];
 
   // Map session id → whether its clock_in event captured GPS. Lets the
   // payroll UI surface "no-GPS hours" without bundling raw time_events
@@ -64,6 +66,7 @@ export default async function PayrollPage() {
         profiles={data.profiles}
         sessions={sessions}
         hasGpsBySessionId={hasGpsBySessionId}
+        acknowledgedShiftEventIds={acknowledgedShiftEventIds}
         payrollClosures={data.payrollClosures}
       />
     </div>

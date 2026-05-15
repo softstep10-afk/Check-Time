@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
+import { logAuditServer } from "@/lib/audit-server";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
+import type { ManagerWorkspaceData } from "@/lib/manager-types";
+import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
+import { buildPayrollActionAuditPayload } from "@/lib/payroll-audit-utils";
 import {
   buildShiftReviewAckEventIds,
   deriveShiftReview,
@@ -15,7 +18,6 @@ import type {
   Project,
   TimeEvent,
 } from "@/types/database";
-import type { ManagerWorkspaceData } from "@/lib/manager-types";
 
 function assertNoError(error: { message: string } | null, label: string) {
   if (error) {
@@ -23,25 +25,34 @@ function assertNoError(error: { message: string } | null, label: string) {
   }
 }
 
+function r2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { profile, org } = await requireManagerContext(supabase);
+    const { profile: manager, org } = await requireManagerContext(supabase);
     const allowed = await hasFinanceAccess(supabase, {
-      id: profile.id,
-      role: profile.role,
+      id: manager.id,
+      role: manager.role,
     });
+
     if (!allowed) {
       return NextResponse.json(
-        { error: "Finance access is required to run payroll." },
+        { error: "Finance access is required to pay a worker." },
         { status: 403 },
       );
     }
 
     const body = (await request.json()) as Record<string, unknown>;
+    const workerId = typeof body.workerId === "string" ? body.workerId : "";
     const periodEnd =
       typeof body.periodEnd === "string" && body.periodEnd ? body.periodEnd : undefined;
-    const notes = typeof body.notes === "string" ? body.notes.trim() : null;
+
+    if (!workerId) {
+      return NextResponse.json({ error: "workerId is required." }, { status: 400 });
+    }
 
     const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
       await Promise.all([
@@ -66,8 +77,13 @@ export async function POST(request: NextRequest) {
     assertNoError(timeEventsResult.error, "Time events query failed");
     assertNoError(closuresResult.error, "Payroll closures query failed");
 
+    const targetProfile = (profilesResult.data ?? []).find((entry) => entry.id === workerId);
+    if (!targetProfile) {
+      return NextResponse.json({ error: "Worker profile was not found." }, { status: 404 });
+    }
+
     const workspace: ManagerWorkspaceData = {
-      manager: profile,
+      manager,
       org,
       profiles: profilesResult.data ?? [],
       projects: projectsResult.data ?? [],
@@ -80,12 +96,13 @@ export async function POST(request: NextRequest) {
       storeVisits: [],
     };
 
-    const sessions = buildManagerSessions(workspace);
-    const preview = computePayrollPreview(workspace, sessions, periodEnd);
+    const workerSessions = buildManagerSessions(workspace)
+      .filter((session) => session.profileId === workerId);
+    const preview = computePayrollPreview(workspace, workerSessions, periodEnd);
 
     if (preview.lines.length === 0) {
       return NextResponse.json(
-        { error: "No unpaid hours found for the selected period." },
+        { error: "No unpaid hours found for this worker." },
         { status: 400 },
       );
     }
@@ -98,11 +115,13 @@ export async function POST(request: NextRequest) {
         .filter((event) => event.event_type === "clock_in")
         .map((event) => [event.id, event]),
     );
-    const unreviewedWorkers = new Set<string>();
-    for (const session of sessions) {
+    const unreviewedSessions: string[] = [];
+
+    for (const session of workerSessions) {
       if (session.isOpen || !session.clockOutEventId) continue;
       if (!payableEventIds.has(session.clockOutEventId)) continue;
       if (acknowledgedShiftEventIds.has(session.clockOutEventId)) continue;
+
       const worker = profilesById.get(session.profileId);
       const clockIn = clockInById.get(session.clockInEventId);
       const review = deriveShiftReview({
@@ -113,14 +132,18 @@ export async function POST(request: NextRequest) {
         requireVideo: worker?.require_video ?? false,
         videoStatus: session.checkoutStatus,
       });
+
       if (isShiftActionable(review)) {
-        unreviewedWorkers.add(session.profileName);
+        unreviewedSessions.push(session.projectName);
       }
     }
-    if (unreviewedWorkers.size > 0) {
+
+    if (unreviewedSessions.length > 0) {
+      const reviewProjects = [...new Set(unreviewedSessions)];
       return NextResponse.json(
         {
-          error: `Review suspicious shifts before payroll: ${[...unreviewedWorkers].join(", ")}`,
+          error: "unreviewed_shifts",
+          reviewProjects,
         },
         { status: 409 },
       );
@@ -128,20 +151,29 @@ export async function POST(request: NextRequest) {
 
     const periodStartDate = preview.periodStart.slice(0, 10);
     const periodEndDate = preview.periodEnd.slice(0, 10);
+    const paidAt = new Date().toISOString();
 
     const { data: payrollRun, error: payrollRunError } = await supabase
       .from("payroll_runs")
       .insert({
-        org_id: profile.org_id,
-        run_by: profile.id,
+        org_id: manager.org_id,
+        run_by: manager.id,
         period_start: periodStartDate,
         period_end: periodEndDate,
         status: "draft",
         total_hours: preview.totalHours,
         total_amount: preview.totalAmount,
-        notes,
+        notes: "Worker payment closed from Team member profile.",
         metadata: {
-          createdFrom: "manager-dashboard",
+          createdFrom: "team-member-payoff",
+          workerProfileId: workerId,
+          external_payment: {
+            provider: "BigBooks",
+            reference: null,
+            worker_ids: [workerId],
+            recorded_at: paidAt,
+            recorded_by: manager.id,
+          },
         },
       })
       .select("*")
@@ -164,6 +196,7 @@ export async function POST(request: NextRequest) {
         event_ids: line.eventIds,
         metadata: {
           session_ids: line.sessionIds,
+          created_from: "team-member-payoff",
         },
       })),
     );
@@ -172,7 +205,7 @@ export async function POST(request: NextRequest) {
 
     const { error: closuresInsertError } = await supabase.from("payroll_closures").insert(
       preview.workerTotals.map((worker) => ({
-        org_id: profile.org_id,
+        org_id: manager.org_id,
         payroll_run_id: payrollRun.id,
         profile_id: worker.profileId,
         closed_through: preview.periodEnd,
@@ -184,18 +217,64 @@ export async function POST(request: NextRequest) {
     const { error: finalizeError } = await supabase
       .from("payroll_runs")
       .update({
-        status: "confirmed",
-        confirmed_at: new Date().toISOString(),
+        status: "paid",
+        confirmed_at: paidAt,
       })
       .eq("id", payrollRun.id);
 
     assertNoError(finalizeError, "Payroll run finalize failed");
 
-    return NextResponse.json({ ok: true, payrollRunId: payrollRun.id });
+    await logAuditServer(supabase, {
+      orgId: manager.org_id,
+      actorId: manager.id,
+      actorName: manager.name,
+      actorRole: manager.role,
+      action: "payroll_paid",
+      targetType: "payroll_run",
+      targetId: payrollRun.id,
+      afterData: buildPayrollActionAuditPayload({
+        period: {
+          id: payrollRun.id,
+          label: `${periodStartDate} → ${periodEndDate}`,
+          startDate: periodStartDate,
+          endDate: periodEndDate,
+          status: "paid",
+        },
+        lines: preview.workerTotals.map((worker) => ({
+          workerId: worker.profileId,
+          workerName: worker.profileName,
+          workerRole: worker.profileRole,
+          status: "paid",
+          regularHours: worker.hours,
+          overtimeHours: 0,
+          grossTotal: worker.amount,
+          netTotal: worker.amount,
+          projectNames: [...new Set(worker.lines.map((line) => line.projectName))],
+        })),
+        workerIds: [workerId],
+        externalPayment: {
+          provider: "BigBooks",
+          reference: null,
+          worker_ids: [workerId],
+          recorded_at: paidAt,
+          recorded_by: manager.id,
+        },
+      }),
+    });
+
+    return NextResponse.json({
+      ok: true,
+      payrollRunId: payrollRun.id,
+      periodStart: periodStartDate,
+      periodEnd: periodEndDate,
+      totalHours: r2(preview.totalHours),
+      totalAmount: r2(preview.totalAmount),
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Internal server error";
+    const status = message.includes("payroll_overlap") ? 409 : 500;
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -559,6 +559,45 @@ describe("detectTransferGaps", () => {
     expect(gaps[0].severity).toBe("critical");
   });
 
+  it("ignores overnight project transfers because they are not same-day travel gaps", () => {
+    const data = makeWorkspace({
+      profiles: [makeProfile({ id: "w1", name: "Vasia" })],
+      projects: [
+        makeProject({ id: "p1", name: "P1" }),
+        makeProject({ id: "p2", name: "P2" }),
+      ],
+      timeEvents: [
+        makeEvent({
+          id: "e1",
+          profile_id: "w1",
+          project_id: "p1",
+          event_type: "clock_in",
+          event_time: "2026-04-02T01:00:00Z",
+        }),
+        makeEvent({
+          id: "e2",
+          profile_id: "w1",
+          project_id: "p1",
+          event_type: "clock_out",
+          event_time: "2026-04-02T03:15:00Z",
+        }),
+        makeEvent({
+          id: "e3",
+          profile_id: "w1",
+          project_id: "p2",
+          event_type: "clock_in",
+          event_time: "2026-04-02T16:00:00Z",
+        }),
+      ],
+    });
+    const gaps = detectTransferGaps({
+      timeEvents: data.timeEvents,
+      projects: data.projects,
+      profiles: data.profiles,
+    });
+    expect(gaps).toHaveLength(0);
+  });
+
   it("treats auto_out the same as clock_out for the leading edge", () => {
     const data = makeWorkspace({
       profiles: [makeProfile({ id: "w1", name: "Vasia" })],
@@ -1102,6 +1141,32 @@ describe("buildPayrollDraftRows", () => {
     });
     expect(rows).toHaveLength(1);
     expect(rows[0].shiftSeverity).toBe("critical");
+  });
+
+  it("clears payroll review flags after a manager acknowledges the closing event", () => {
+    const sessions: ManagerSession[] = [
+      makeSession({
+        id: "vasia",
+        profileId: "vasia-id",
+        profileName: "Vasia",
+        projectId: "p1",
+        clockInTime: "2026-04-01T08:00:00Z",
+        clockOutTime: "2026-04-07T08:00:00Z",
+        checkoutStatus: "pending",
+      }),
+    ];
+    const rows = buildPayrollDraftRows({
+      sessions,
+      hasGpsBySessionId: { vasia: true },
+      requireVideoByProfileId: { "vasia-id": true },
+      startDate: "2026-04-01",
+      endDate: "2026-04-30",
+      acknowledgedShiftEventIds: new Set(["vasia-out"]),
+    });
+
+    expect(rows[0].reviewAcknowledged).toBe(true);
+    expect(rows[0].shiftSeverity).toBe("ok");
+    expect(rows[0].missingVideo).toBe(false);
   });
 
   it("filters by profileId when provided", () => {

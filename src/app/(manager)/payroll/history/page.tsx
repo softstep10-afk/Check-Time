@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireManagerContext } from "@/lib/manager-data";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
-import type { Profile } from "@/types/database";
+import type { PayrollLineItem, PayrollRun, Profile } from "@/types/database";
 
 type PayPeriodRow = {
   id: string;
@@ -22,11 +22,38 @@ type PayPeriodItemRow = {
   gross_total: number;
 };
 
+type LedgerRunRow = Pick<
+  PayrollRun,
+  | "id"
+  | "run_by"
+  | "period_start"
+  | "period_end"
+  | "status"
+  | "total_hours"
+  | "total_amount"
+  | "metadata"
+  | "confirmed_at"
+  | "created_at"
+>;
+
+type HistoryRow = {
+  id: string;
+  source: "pay_period" | "payroll_run";
+  startDate: string;
+  endDate: string;
+  status: string;
+  workerCount: number;
+  gross: number;
+  actorId: string | null;
+  paidOn: string | null;
+};
+
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
 const COPY = {
   en: {
-    dateRange: "Date range",
+    dateRange: "Work period overlap",
+    dateRangeHint: "Rows are whole payroll periods/runs that overlap this range. The amount is for the full row period, not only the filtered days.",
     from: "From",
     to: "To",
     apply: "Apply",
@@ -34,7 +61,8 @@ const COPY = {
     showing: "periods shown",
   },
   ru: {
-    dateRange: "Диапазон дат",
+    dateRange: "Период работ пересекается с",
+    dateRangeHint: "Строки ниже — целые платёжные периоды/оплаты, которые пересекают этот диапазон. Сумма в строке считается за весь период строки, не только за выбранные дни.",
     from: "От",
     to: "До",
     apply: "Показать",
@@ -92,6 +120,23 @@ export default async function PayrollHistoryPage({
     return true;
   });
 
+  const { data: ledgerRows } = await supabase
+    .from("payroll_runs")
+    .select("id, run_by, period_start, period_end, status, total_hours, total_amount, metadata, confirmed_at, created_at")
+    .eq("org_id", org.id)
+    .order("period_end", { ascending: false })
+    .returns<LedgerRunRow[]>();
+
+  const directLedgerRuns = (ledgerRows ?? []).filter((run) => {
+    const metadata = run.metadata ?? {};
+    if (typeof metadata === "object" && !Array.isArray(metadata) && "pay_period_id" in metadata) {
+      return false;
+    }
+    if (from && run.period_end < from) return false;
+    if (to && run.period_start > to) return false;
+    return true;
+  });
+
   const periodIds = periods.map((p) => p.id);
   const { data: itemRows } = periodIds.length > 0
     ? await supabase
@@ -109,7 +154,57 @@ export default async function PayrollHistoryPage({
     totalsByPeriod.set(item.pay_period_id, entry);
   }
 
-  const approverIds = [...new Set(periods.map((p) => p.approved_by).filter(Boolean) as string[])];
+  const runIds = directLedgerRuns.map((run) => run.id);
+  const { data: ledgerItemRows } = runIds.length > 0
+    ? await supabase
+        .from("payroll_line_items")
+        .select("payroll_run_id, profile_id, amount")
+        .in("payroll_run_id", runIds)
+        .returns<Pick<PayrollLineItem, "payroll_run_id" | "profile_id" | "amount">[]>()
+    : { data: [] as Pick<PayrollLineItem, "payroll_run_id" | "profile_id" | "amount">[] };
+
+  const totalsByRun = new Map<string, { workers: Set<string>; gross: number }>();
+  for (const item of ledgerItemRows ?? []) {
+    const entry = totalsByRun.get(item.payroll_run_id) ?? { workers: new Set<string>(), gross: 0 };
+    entry.workers.add(item.profile_id);
+    entry.gross += Number(item.amount);
+    totalsByRun.set(item.payroll_run_id, entry);
+  }
+
+  const historyRows: HistoryRow[] = [
+    ...periods.map((period) => {
+      const totals = totalsByPeriod.get(period.id);
+      return {
+        id: period.id,
+        source: "pay_period" as const,
+        startDate: period.start_date,
+        endDate: period.end_date,
+        status: period.status,
+        workerCount: totals?.workers.size ?? 0,
+        gross: totals?.gross ?? 0,
+        actorId: period.approved_by,
+        paidOn: period.paid_at,
+      };
+    }),
+    ...directLedgerRuns.map((run) => {
+      const totals = totalsByRun.get(run.id);
+      return {
+        id: run.id,
+        source: "payroll_run" as const,
+        startDate: run.period_start,
+        endDate: run.period_end,
+        status: run.status,
+        workerCount: totals?.workers.size ?? 0,
+        gross: totals?.gross ?? Number(run.total_amount ?? 0),
+        actorId: run.run_by,
+        paidOn: run.confirmed_at ?? run.created_at,
+      };
+    }),
+  ].sort((left, right) => right.endDate.localeCompare(left.endDate));
+
+  const approverIds = [
+    ...new Set(historyRows.map((row) => row.actorId).filter(Boolean) as string[]),
+  ];
   const { data: approverRows } = approverIds.length > 0
     ? await supabase
         .from("profiles")
@@ -146,7 +241,10 @@ export default async function PayrollHistoryPage({
               {text.dateRange}
             </div>
             <div className="text-xs text-[var(--text-secondary)]">
-              {periods.length} {text.showing}
+              {historyRows.length} {text.showing}
+            </div>
+            <div className="mt-2 max-w-[340px] text-[11px] leading-5 text-[var(--text-muted)]">
+              {text.dateRangeHint}
             </div>
           </div>
           <label className="block min-w-[180px]">
@@ -189,7 +287,7 @@ export default async function PayrollHistoryPage({
       </section>
 
       <section className="surface-card overflow-x-auto p-4">
-        {periods.length === 0 ? (
+        {historyRows.length === 0 ? (
           <div className="py-8 text-center text-sm text-[var(--text-secondary)]">
             {t("payroll.emptyHeadline")}
           </div>
@@ -207,21 +305,28 @@ export default async function PayrollHistoryPage({
               </tr>
             </thead>
             <tbody>
-              {periods.map((p) => {
-                const totals = totalsByPeriod.get(p.id);
-                const approverName = p.approved_by ? approverNames.get(p.approved_by) ?? "—" : "—";
-                const paidLabel = p.paid_at ? p.paid_at.slice(0, 10) : "—";
+              {historyRows.map((p) => {
+                const approverName = p.actorId ? approverNames.get(p.actorId) ?? "—" : "—";
+                const paidLabel = p.paidOn ? p.paidOn.slice(0, 10) : "—";
                 return (
-                  <tr key={p.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-primary)]">
+                  <tr key={`${p.source}-${p.id}`} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-primary)]">
                     <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                      <Link href={`/payroll?period=${p.id}`} className="block">
-                        {p.start_date}
-                      </Link>
+                      {p.source === "pay_period" ? (
+                        <Link href={`/payroll?period=${p.id}`} className="block">
+                          {p.startDate}
+                        </Link>
+                      ) : (
+                        p.startDate
+                      )}
                     </td>
                     <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                      <Link href={`/payroll?period=${p.id}`} className="block">
-                        {p.end_date}
-                      </Link>
+                      {p.source === "pay_period" ? (
+                        <Link href={`/payroll?period=${p.id}`} className="block">
+                          {p.endDate}
+                        </Link>
+                      ) : (
+                        p.endDate
+                      )}
                     </td>
                     <td className="py-3 pr-3">
                       <span
@@ -235,10 +340,10 @@ export default async function PayrollHistoryPage({
                       </span>
                     </td>
                     <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-primary)]">
-                      {totals?.workers.size ?? 0}
+                      {p.workerCount}
                     </td>
                     <td className="py-3 pr-3 whitespace-nowrap font-mono font-semibold text-[var(--text-primary)]">
-                      {currency.format(totals?.gross ?? 0)}
+                      {currency.format(p.gross)}
                     </td>
                     <td className="py-3 pr-3 whitespace-nowrap text-[var(--text-secondary)]">
                       {approverName}

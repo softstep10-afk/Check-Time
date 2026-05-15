@@ -55,12 +55,13 @@ function eventTypeLabel(
 function videoStatusLabel(
   status: string | null | undefined,
   t: (key: Parameters<typeof serverT>[1]) => string,
+  reviewed = false,
 ): string | null {
   // not_required is the default — noise on the timeline, hide it.
   if (!status || status === "not_required") return null;
   switch (status) {
     case "pending":
-      return t("timeline.videoPending");
+      return reviewed ? t("timeline.videoMissing") : t("timeline.videoPending");
     case "uploaded":
       return t("timeline.videoUploaded");
     case "verified":
@@ -301,8 +302,11 @@ export default async function TimelinePage({
                 !session.isOpen &&
                 Boolean(closeEvent) &&
                 review.status !== "normal" &&
+                !ack &&
                 !acknowledgedShiftEventIds.has(closeEvent?.id ?? "");
-              const videoLabel = session.isOpen ? null : videoStatusLabel(session.checkoutStatus, t);
+              const videoLabel = session.isOpen
+                ? null
+                : videoStatusLabel(session.checkoutStatus, t, Boolean(ack));
 
               return (
                 <article
@@ -340,12 +344,14 @@ export default async function TimelinePage({
                       clockInEvent?.gps_point ? "good" : "warning",
                     )}
                     {videoLabel ? chip(videoLabel, session.checkoutStatus === "pending" ? "warning" : "good") : null}
-                    {review.status === "normal"
-                      ? chip(shiftReviewLabel.normal, "good")
-                      : chip(
-                          shiftReviewLabel[review.status],
-                          review.status === "needs_review" || review.status === "gps_lost" ? "danger" : "warning",
-                        )}
+                    {ack
+                      ? null
+                      : review.status === "normal"
+                        ? chip(shiftReviewLabel.normal, "good")
+                        : chip(
+                            shiftReviewLabel[review.status],
+                            review.status === "needs_review" || review.status === "gps_lost" ? "danger" : "warning",
+                          )}
                     {reviewNeedsAction ? chip(t("timeline.notReviewed"), "danger") : null}
                     {ack ? chip(`${t("timeline.reviewed")} ${ack.reviewedAt.slice(0, 10)}`, "good") : null}
                   </div>
@@ -390,7 +396,8 @@ export default async function TimelinePage({
             timeline.map((item) => {
                 const session = sessionsByEventId.get(item.id) ?? null;
                 const isCloseEvent = item.event_type === "clock_out" || item.event_type === "auto_out";
-                const videoLabel = videoStatusLabel(item.video_status, t);
+                const ack = ackByReviewedEventId.get(item.id) ?? getShiftReviewAck(item.metadata);
+                const videoLabel = videoStatusLabel(item.video_status, t, Boolean(ack));
                 const profile = profilesById.get(item.profile_id);
                 const clockInEvent = session ? clockInEventsById.get(session.clockInEventId) : null;
                 const review = session && isCloseEvent
@@ -403,10 +410,10 @@ export default async function TimelinePage({
                       videoStatus: item.video_status,
                     })
                   : null;
-                const ack = ackByReviewedEventId.get(item.id) ?? getShiftReviewAck(item.metadata);
                 const reviewNeedsAction =
                   Boolean(review) &&
                   review?.status !== "normal" &&
+                  !ack &&
                   !acknowledgedShiftEventIds.has(item.id);
                 const openDuration =
                   session?.isOpen && item.id === session.clockInEventId
@@ -448,7 +455,7 @@ export default async function TimelinePage({
                         : null}
                       {chip(item.gps_point ? t("timeline.gpsCaptured") : t("timeline.noGps"), item.gps_point ? "good" : "warning")}
                       {videoLabel ? chip(videoLabel, item.video_status === "pending" ? "warning" : "good") : null}
-                      {review && review.status !== "normal"
+                      {review && review.status !== "normal" && !ack
                         ? chip(
                             shiftReviewLabel[review.status],
                             review.status === "needs_review" || review.status === "gps_lost"

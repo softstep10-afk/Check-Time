@@ -39,6 +39,11 @@ import {
 } from "@/lib/shift-review";
 import { selectMediaPlayback } from "@/lib/media-playback";
 import {
+  formatProfileSkillInput,
+  mergeProfileSkillSettings,
+  readProfileSkillSettings,
+} from "@/lib/profile-skills";
+import {
   MediaGalleryDrawer,
   type GalleryItem,
 } from "@/components/shared/MediaGalleryDrawer";
@@ -70,9 +75,13 @@ type DailyTotal = {
 };
 
 type WorkerClosureView = {
+  payrollRunId: string;
   closedThrough: string;
   periodStart: string | null;
   periodEnd: string | null;
+  status: string | null;
+  totalHours: number | null;
+  totalAmount: number | null;
 };
 
 function formatPayrollPeriodDate(value: string): string {
@@ -95,6 +104,7 @@ export function TeamMemberPage({
   assignments,
   tasks,
   sessions,
+  acknowledgedShiftEventIds,
   storeVisits,
   media,
   hasGpsBySessionId,
@@ -117,6 +127,7 @@ export function TeamMemberPage({
   assignments: ProjectAssignment[];
   tasks: Task[];
   sessions: ManagerSession[];
+  acknowledgedShiftEventIds: string[];
   storeVisits: StoreVisit[];
   media: WorkerMediaRow[];
   hasGpsBySessionId: Record<string, boolean>;
@@ -160,7 +171,19 @@ export function TeamMemberPage({
     canOpenViewerItem: canOpenMediaViewerItem,
     suppressViewerItem: suppressMediaViewerItem,
   } = useMediaViewerOpenGuard();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-US", {
+        style: "currency",
+        currency: "USD",
+      }),
+    [locale],
+  );
+  const profileSkillSettings = useMemo(
+    () => readProfileSkillSettings(profile.settings),
+    [profile.settings],
+  );
 
   const mediaIds = useMemo(() => media.map((m) => m.id), [media]);
 
@@ -220,17 +243,6 @@ export function TeamMemberPage({
     anchor.remove();
   }
 
-  const closedProblemShifts = useMemo(
-    () =>
-      sessions.filter(
-        (session) =>
-          !session.isOpen &&
-          (session.durationMinutes >= LONG_SHIFT_MINUTES ||
-            session.checkoutStatus === "pending"),
-      ),
-    [sessions],
-  );
-
   // Journal timeline drawer feed — same media rows that already power the
   // existing "Journal entries" list, just shaped for the shared gallery
   // component (project / uploader names resolved). All filtering happens
@@ -265,6 +277,19 @@ export function TeamMemberPage({
     }
     return [...seen.entries()].map(([id, name]) => ({ id, name }));
   }, [media]);
+
+  const mediaSections = useMemo(() => {
+    const checkoutVideos = media.filter(
+      (entry) => entry.media_type === "video" && entry.is_checkout,
+    );
+    const otherUploads = media.filter(
+      (entry) => !(entry.media_type === "video" && entry.is_checkout),
+    );
+    return [
+      { key: "checkout", label: t("teamMember.checkoutVideos"), items: checkoutVideos },
+      { key: "other", label: t("teamMember.otherUploads"), items: otherUploads },
+    ].filter((section) => section.items.length > 0);
+  }, [media, t]);
 
   // Hour buckets for the "Hour summary" panel below profile
   // settings. Pulls from this worker's sessions + adjustments — the
@@ -303,13 +328,60 @@ export function TeamMemberPage({
   const latestClosureMs = latestClosure
     ? new Date(latestClosure.closedThrough).getTime()
     : null;
+  const acknowledgedShiftIdSet = useMemo(
+    () => new Set(acknowledgedShiftEventIds),
+    [acknowledgedShiftEventIds],
+  );
+  const paidClosedSessionIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (latestClosureMs === null) return ids;
+    for (const session of sessions) {
+      if (!session.clockOutTime) continue;
+      const outMs = new Date(session.clockOutTime).getTime();
+      if (Number.isFinite(outMs) && outMs <= latestClosureMs) {
+        ids.add(session.id);
+      }
+    }
+    return ids;
+  }, [sessions, latestClosureMs]);
+  const sessionRows = useMemo(
+    () => sessions.filter((session) => !paidClosedSessionIds.has(session.id)),
+    [sessions, paidClosedSessionIds],
+  );
+  const closedProblemShifts = useMemo(
+    () =>
+      sessions.filter((session) => {
+        if (session.isOpen) return false;
+        if (paidClosedSessionIds.has(session.id)) return false;
+        if (
+          session.clockOutEventId &&
+          acknowledgedShiftIdSet.has(session.clockOutEventId)
+        ) {
+          return false;
+        }
+        return (
+          session.durationMinutes >= LONG_SHIFT_MINUTES ||
+          session.checkoutStatus === "pending"
+        );
+      }),
+    [sessions, paidClosedSessionIds, acknowledgedShiftIdSet],
+  );
   const latestPaidPeriodLabel = latestClosure
     ? latestClosure.periodStart && latestClosure.periodEnd
       ? `${formatPayrollPeriodDate(latestClosure.periodStart)} - ${formatPayrollPeriodDate(latestClosure.periodEnd)}`
       : `${t("teamMember.closedThrough")} ${formatDateTime(latestClosure.closedThrough)}`
     : null;
+  const latestPaidAmountLabel =
+    latestClosure?.totalAmount !== null && latestClosure?.totalAmount !== undefined
+      ? currencyFormatter.format(latestClosure.totalAmount)
+      : null;
+  const latestPaidHoursLabel =
+    latestClosure?.totalHours !== null && latestClosure?.totalHours !== undefined
+      ? `${latestClosure.totalHours.toFixed(2)}h`
+      : null;
   const unpaidMinutes = hourBuckets.unpaidMinutes;
   const unpaidHours = Math.round((unpaidMinutes / 60) * 100) / 100;
+  const unpaidAmount = Math.round((unpaidHours * Number(profile.hourly_rate ?? 0)) * 100) / 100;
   const sessionMinutes = useMemo(
     () =>
       sessions.reduce(
@@ -318,7 +390,6 @@ export function TeamMemberPage({
       ),
     [sessions],
   );
-  const sessionRows = sessions;
   const adjustmentRows = useMemo(
     () =>
       workerAdjustments.filter((adjustment) => {
@@ -373,6 +444,14 @@ export function TeamMemberPage({
     const hourlyRate = hourlyRateRaw ? Number.parseFloat(hourlyRateRaw) : null;
     const requireVideo = roleIsOwnerAdmin ? false : formData.get("require_video") === "on";
     const isActive = formData.get("is_active") === "on";
+    const workerSkillsText = formData.get("worker_skills_text")?.toString() ?? "";
+    const workerCapabilitiesNote =
+      formData.get("worker_capabilities_note")?.toString() ?? "";
+    const nextSettings = mergeProfileSkillSettings(
+      profile.settings,
+      workerSkillsText,
+      workerCapabilitiesNote,
+    );
 
     setBusyKey("profile");
     setMessage("");
@@ -389,6 +468,7 @@ export function TeamMemberPage({
         role,
         require_video: requireVideo,
         is_active: isActive,
+        settings: nextSettings,
         ...(hasFinanceAccess && !roleIsOwnerAdmin
           ? {
               hourly_rate:
@@ -624,6 +704,70 @@ export function TeamMemberPage({
     router.refresh();
   }
 
+  async function handlePayWorkerNow() {
+    if (unpaidMinutes <= 0) {
+      setMessage(t("teamMember.payWorkerNoBalance"));
+      setMessageType("info");
+      return;
+    }
+
+    const amountLabel = currencyFormatter.format(unpaidAmount);
+    const ok = window.confirm(
+      t("teamMember.payWorkerConfirm")
+        .replace("{name}", profile.name)
+        .replace("{hours}", formatDurationCompact(unpaidMinutes))
+        .replace("{amount}", amountLabel),
+    );
+    if (!ok) return;
+
+    setBusyKey("pay-worker");
+    setMessage("");
+
+    const response = await fetch("/api/team/pay-worker", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workerId: profile.id }),
+    });
+    const result = (await response.json()) as {
+      error?: string;
+      reviewProjects?: string[];
+      totalHours?: number;
+      totalAmount?: number;
+      periodStart?: string;
+      periodEnd?: string;
+    };
+
+    if (!response.ok) {
+      setMessage(
+        result.error === "unreviewed_shifts"
+          ? t("teamMember.payWorkerReviewFirst").replace(
+              "{projects}",
+              (result.reviewProjects ?? []).join(", ") || profile.name,
+            )
+          : result.error?.includes("payroll_overlap")
+            ? t("payroll.alreadyPaidDbBlock")
+            : result.error ?? t("teamMember.payWorkerFailed"),
+      );
+      setMessageType("error");
+      setBusyKey(null);
+      return;
+    }
+
+    const paidAmount = currencyFormatter.format(result.totalAmount ?? unpaidAmount);
+    const paidHours =
+      typeof result.totalHours === "number"
+        ? `${result.totalHours.toFixed(2)}h`
+        : formatDurationCompact(unpaidMinutes);
+    setMessage(
+      t("teamMember.payWorkerSuccess")
+        .replace("{hours}", paidHours)
+        .replace("{amount}", paidAmount),
+    );
+    setMessageType("success");
+    setBusyKey(null);
+    router.refresh();
+  }
+
   async function handleResetToZero() {
     const minutesToZero = unpaidMinutes;
     if (minutesToZero <= 0) {
@@ -778,7 +922,7 @@ export function TeamMemberPage({
 
   if (isOwnerAdminProfile) {
     return (
-      <div className="mx-auto max-w-[1200px] space-y-5 p-5">
+      <div className="team-member-profile-screen mx-auto max-w-[1200px] space-y-5 p-5">
         <section className="space-y-2">
           <Link href="/team" className="text-sm font-semibold text-[var(--brand-yellow)]">
             {t("teamMember.backToTeam")}
@@ -811,7 +955,7 @@ export function TeamMemberPage({
 
         <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="space-y-4">
-            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+            <div className="surface-card p-4">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.profileSettings")}</h2>
               <form className="mt-4 grid gap-3" onSubmit={handleUpdateProfile}>
                 <TextInputWithVoice
@@ -843,6 +987,33 @@ export function TeamMemberPage({
                 </div>
                 <div className="rounded-[var(--radius-md)] border border-[rgba(191,162,52,0.24)] bg-[rgba(191,162,52,0.08)] px-3 py-3 text-xs leading-5 text-[var(--text-secondary)]">
                   {t("teamMember.ownerAdminAccessHint")}
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("teamMember.skillsLabel")}
+                  </label>
+                  <TextInputWithVoice
+                    name="worker_skills_text"
+                    defaultValue={formatProfileSkillInput(profile.settings)}
+                    placeholder={t("teamMember.skillsPlaceholder")}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {t("teamMember.capabilitiesNoteLabel")}
+                  </label>
+                  <TextInputWithVoice
+                    multiline
+                    rows={3}
+                    name="worker_capabilities_note"
+                    defaultValue={profileSkillSettings.note}
+                    placeholder={t("teamMember.capabilitiesNotePlaceholder")}
+                    className="min-h-[90px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  />
+                  <p className="text-xs leading-5 text-[var(--text-muted)]">
+                    {t("teamMember.skillsHelp")}
+                  </p>
                 </div>
                 <button
                   type="submit"
@@ -891,7 +1062,7 @@ export function TeamMemberPage({
               ) : null}
             </div>
 
-            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+            <div className="surface-card p-4">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">
                 {t("teamMember.ownerAdminRoleCard")}
               </h2>
@@ -920,7 +1091,7 @@ export function TeamMemberPage({
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+            <div className="surface-card p-4">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">
                 {t("teamMember.ownerProjectControl")}
               </h2>
@@ -1012,7 +1183,7 @@ export function TeamMemberPage({
   }
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-5 p-5">
+    <div className="team-member-profile-screen mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
         <Link href="/team" className="text-sm font-semibold text-[var(--brand-yellow)]">
           {t("teamMember.backToTeam")}
@@ -1085,7 +1256,7 @@ export function TeamMemberPage({
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="space-y-4">
-        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+        <div className="surface-card p-4">
           <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("teamMember.profileSettings")}</h2>
           <form className="mt-4 grid gap-3" onSubmit={handleUpdateProfile}>
             <TextInputWithVoice
@@ -1136,6 +1307,33 @@ export function TeamMemberPage({
                 {t("teamMember.allowPinAccess")}
               </label>
             </div>
+            <div className="grid gap-2">
+              <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                {t("teamMember.skillsLabel")}
+              </label>
+              <TextInputWithVoice
+                name="worker_skills_text"
+                defaultValue={formatProfileSkillInput(profile.settings)}
+                placeholder={t("teamMember.skillsPlaceholder")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+            <div className="grid gap-2">
+              <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                {t("teamMember.capabilitiesNoteLabel")}
+              </label>
+              <TextInputWithVoice
+                multiline
+                rows={3}
+                name="worker_capabilities_note"
+                defaultValue={profileSkillSettings.note}
+                placeholder={t("teamMember.capabilitiesNotePlaceholder")}
+                className="min-h-[90px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <p className="text-xs leading-5 text-[var(--text-muted)]">
+                {t("teamMember.skillsHelp")}
+              </p>
+            </div>
             <button
               type="submit"
               disabled={busyKey === "profile"}
@@ -1183,6 +1381,16 @@ export function TeamMemberPage({
           ) : null}
         </div>
 
+        <section id="message" className="surface-card p-4">
+          <h2 className="mb-4 text-lg font-bold text-[var(--text-primary)]">{t("messages.send")}</h2>
+          <SendMessageForm
+            orgId={orgId}
+            senderId={managerId}
+            recipientId={profile.id}
+            recipientName={profile.name}
+          />
+        </section>
+
         {/* ── Operational summary ──
             Fills the empty space below profile settings on wide screens.
             Compact, click-through views of the worker's current load.
@@ -1202,12 +1410,12 @@ export function TeamMemberPage({
               {t("teamMember.recentShifts")}
             </div>
             <div className="mt-2 space-y-1.5">
-              {sessions.length === 0 ? (
+              {sessionRows.length === 0 ? (
                 <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
                   {t("teamMember.noShifts")}
                 </div>
               ) : (
-                sessions.slice(0, 5).map((session) => {
+                sessionRows.slice(0, 5).map((session) => {
                   const isExtreme = session.durationMinutes >= EXTREME_SHIFT_MINUTES;
                   const isLong = session.durationMinutes >= LONG_SHIFT_MINUTES;
                   const missingVideo = session.checkoutStatus === "pending";
@@ -1607,6 +1815,11 @@ export function TeamMemberPage({
                     <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--green)" }}>
                       {formatDurationCompact(hourBuckets.paidOrClosedMinutes)}
                     </div>
+                    {latestPaidAmountLabel || latestPaidHoursLabel ? (
+                      <div className="mt-1 text-[10px] font-semibold text-[var(--text-primary)]">
+                        {[latestPaidHoursLabel, latestPaidAmountLabel].filter(Boolean).join(" · ")}
+                      </div>
+                    ) : null}
                     {latestPaidPeriodLabel ? (
                       <div className="mt-2 text-[10px] leading-snug text-[var(--text-secondary)]">
                         {t("teamMember.lastPaidPeriod")}: {latestPaidPeriodLabel}
@@ -1627,6 +1840,9 @@ export function TeamMemberPage({
                     </div>
                     <div className="mt-1 font-mono text-sm font-bold" style={{ color: "var(--brand-yellow)" }}>
                       {formatDurationCompact(hourBuckets.unpaidMinutes)}
+                    </div>
+                    <div className="mt-1 text-[10px] font-semibold text-[var(--text-primary)]">
+                      {t("teamMember.unpaidAmount")}: {currencyFormatter.format(unpaidAmount)}
                     </div>
                     <div className="mt-2 text-[10px] font-semibold text-[var(--text-secondary)]">
                       {showUnpaidBreakdown
@@ -1664,9 +1880,11 @@ export function TeamMemberPage({
                     ) : null}
                   </button>
                   {unpaidMinutes > 0 ? (
-                    <Link
-                      href={`/payroll?worker=${profile.id}&preset=thisMonth`}
-                      className="flex rounded-[var(--radius-md)] p-3 transition-colors hover:border-[var(--brand-yellow)]"
+                    <button
+                      type="button"
+                      onClick={() => void handlePayWorkerNow()}
+                      disabled={busyKey === "pay-worker"}
+                      className="flex rounded-[var(--radius-md)] p-3 text-left transition-colors hover:border-[var(--brand-yellow)] disabled:cursor-not-allowed disabled:opacity-70"
                       style={{
                         background: "rgba(191, 162, 52, 0.16)",
                         border: "1px solid rgba(191, 162, 52, 0.3)",
@@ -1678,14 +1896,15 @@ export function TeamMemberPage({
                           {t("teamMember.payOff")}
                         </span>
                         <span className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                          {t("teamMember.openPayrollForWorker")}
+                          {busyKey === "pay-worker"
+                            ? t("common.saving")
+                            : t("teamMember.payWorkerNow")}
                         </span>
-                        <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
-                          {t("payroll.thisMonth")}
-                          <ArrowRight size={12} />
+                        <span className="mt-2 text-[10px] font-semibold text-[var(--text-primary)]">
+                          {formatDurationCompact(unpaidMinutes)} = {currencyFormatter.format(unpaidAmount)}
                         </span>
                       </span>
-                    </Link>
+                    </button>
                   ) : (
                     <Link
                       href="/payroll/history"
@@ -1705,6 +1924,7 @@ export function TeamMemberPage({
                         </span>
                         <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
                           {latestPaidPeriodLabel ?? t("teamMember.noOpenBalance")}
+                          {latestPaidAmountLabel ? ` · ${latestPaidAmountLabel}` : ""}
                           <ArrowRight size={12} />
                         </span>
                       </span>
@@ -1723,16 +1943,21 @@ export function TeamMemberPage({
                           {t("teamMember.unpaidBreakdownHint")}
                         </p>
                       </div>
-                      <Link
-                        href={unpaidMinutes > 0 ? `/payroll?worker=${profile.id}&preset=thisMonth` : "/payroll/history"}
-                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold"
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (unpaidMinutes > 0) void handlePayWorkerNow();
+                          else router.push("/payroll/history");
+                        }}
+                        disabled={busyKey === "pay-worker"}
+                        className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-70"
                         style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
                       >
                         {unpaidMinutes > 0
-                          ? t("teamMember.payOff")
+                          ? `${t("teamMember.payOff")} · ${currencyFormatter.format(unpaidAmount)}`
                           : t("teamMember.openPayrollHistory")}
                         <ArrowRight size={13} />
-                      </Link>
+                      </button>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-3">
                       <div className="rounded-[var(--radius-sm)] bg-[rgba(255,255,255,0.03)] p-2">
@@ -2236,7 +2461,7 @@ export function TeamMemberPage({
 
       {hasFinanceAccess ? (
         <section>
-          <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+          <div className="surface-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-[var(--text-primary)]">
@@ -2296,19 +2521,6 @@ export function TeamMemberPage({
           </div>
         </section>
       ) : null}
-
-      {/* ── Send Message ── */}
-      <section id="message">
-        <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
-          <h2 className="mb-4 text-lg font-bold text-[var(--text-primary)]">{t("messages.send")}</h2>
-          <SendMessageForm
-            orgId={orgId}
-            senderId={managerId}
-            recipientId={profile.id}
-            recipientName={profile.name}
-          />
-        </div>
-      </section>
 
       <section className="grid gap-5 xl:grid-cols-[1fr_1fr]">
         <div className="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
@@ -2532,11 +2744,16 @@ export function TeamMemberPage({
                 {t("teamMember.noJournal")}
               </div>
             ) : (
-              media.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                >
+              mediaSections.map((section) => (
+                <div key={section.key} className="space-y-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    {section.label}
+                  </div>
+                  {section.items.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
+                    >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <button
@@ -2629,6 +2846,8 @@ export function TeamMemberPage({
                       );
                     })()
                   ) : null}
+                    </div>
+                  ))}
                 </div>
               ))
             )}

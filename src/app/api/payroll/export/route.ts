@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
 import { hasFinanceAccess } from "@/lib/finance-access";
+import { getDisplayOrgName } from "@/lib/brand";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -72,7 +73,7 @@ async function loadPreview(periodEnd?: string) {
 
   const sessions = buildManagerSessions(workspace);
   const preview = computePayrollPreview(workspace, sessions, periodEnd);
-  return { preview, orgName: org.name } as const;
+  return { preview, orgName: getDisplayOrgName(org.name) } as const;
 }
 
 function formatDate(iso: string): string {

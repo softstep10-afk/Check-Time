@@ -15,8 +15,12 @@ import {
   detectTransferGaps,
 } from "@/lib/manager-utils";
 import { deriveGpsFreshness } from "@/lib/gps-freshness";
-import { deriveShiftReview, type ShiftReview } from "@/lib/shift-review";
-import type { Media, PayrollClosure, PayrollRun, TimeEvent } from "@/types/database";
+import {
+  buildShiftReviewAckEventIds,
+  deriveShiftReview,
+  type ShiftReview,
+} from "@/lib/shift-review";
+import type { Media, PayrollClosure, PayrollLineItem, PayrollRun, TimeEvent } from "@/types/database";
 
 // F5 must reflect the worker's latest shifts, tasks, and media.
 export const revalidate = 0;
@@ -69,6 +73,7 @@ export default async function TeamMemberRoutePage({
   // is the audit surface for one worker, so it pulls that worker's full
   // event history and keeps old reset/payment adjustments visible.
   const workerEvents = workerTimeEvents ?? [];
+  const acknowledgedShiftEventIds = [...buildShiftReviewAckEventIds(workerEvents)];
   const workerWorkspaceData = { ...data, timeEvents: workerEvents };
   const allWorkerSessions = buildManagerSessions(workerWorkspaceData)
     .filter((session) => session.profileId === id);
@@ -182,9 +187,13 @@ export default async function TeamMemberRoutePage({
     });
 
   let workerClosures: Array<{
+    payrollRunId: string;
     closedThrough: string;
     periodStart: string | null;
     periodEnd: string | null;
+    status: string | null;
+    totalHours: number | null;
+    totalAmount: number | null;
   }> = [];
   if (managerHasFinanceAccess) {
     const { data: workerClosureRows, error: workerClosureError } = await supabase
@@ -202,26 +211,57 @@ export default async function TeamMemberRoutePage({
     const runIds = [
       ...new Set((workerClosureRows ?? []).map((closure) => closure.payroll_run_id)),
     ];
-    let payrollRunsById = new Map<string, Pick<PayrollRun, "id" | "period_start" | "period_end">>();
+    let payrollRunsById = new Map<
+      string,
+      Pick<PayrollRun, "id" | "period_start" | "period_end" | "status" | "total_hours" | "total_amount">
+    >();
+    let workerLineTotalsByRunId = new Map<string, { hours: number; amount: number }>();
     if (runIds.length > 0) {
       const { data: workerRunRows, error: workerRunError } = await supabase
         .from("payroll_runs")
-        .select("id, period_start, period_end")
+        .select("id, period_start, period_end, status, total_hours, total_amount")
         .in("id", runIds)
-        .returns<Pick<PayrollRun, "id" | "period_start" | "period_end">[]>();
+        .returns<Pick<PayrollRun, "id" | "period_start" | "period_end" | "status" | "total_hours" | "total_amount">[]>();
 
       if (workerRunError) {
         throw new Error(`Worker payroll run query failed: ${workerRunError.message}`);
       }
 
       payrollRunsById = new Map((workerRunRows ?? []).map((run) => [run.id, run]));
+
+      const { data: workerLineRows, error: workerLineError } = await supabase
+        .from("payroll_line_items")
+        .select("payroll_run_id, profile_id, hours, amount")
+        .in("payroll_run_id", runIds)
+        .eq("profile_id", id)
+        .returns<Pick<PayrollLineItem, "payroll_run_id" | "profile_id" | "hours" | "amount">[]>();
+
+      if (workerLineError) {
+        throw new Error(`Worker payroll line item query failed: ${workerLineError.message}`);
+      }
+
+      workerLineTotalsByRunId = new Map();
+      for (const item of workerLineRows ?? []) {
+        const current = workerLineTotalsByRunId.get(item.payroll_run_id) ?? { hours: 0, amount: 0 };
+        current.hours += Number(item.hours ?? 0);
+        current.amount += Number(item.amount ?? 0);
+        workerLineTotalsByRunId.set(item.payroll_run_id, current);
+      }
     }
 
-    workerClosures = (workerClosureRows ?? []).map((closure) => ({
-      closedThrough: closure.closed_through,
-      periodStart: payrollRunsById.get(closure.payroll_run_id)?.period_start ?? null,
-      periodEnd: payrollRunsById.get(closure.payroll_run_id)?.period_end ?? null,
-    }));
+    workerClosures = (workerClosureRows ?? []).map((closure) => {
+      const run = payrollRunsById.get(closure.payroll_run_id);
+      const lineTotals = workerLineTotalsByRunId.get(closure.payroll_run_id);
+      return {
+        payrollRunId: closure.payroll_run_id,
+        closedThrough: closure.closed_through,
+        periodStart: run?.period_start ?? null,
+        periodEnd: run?.period_end ?? null,
+        status: run?.status ?? null,
+        totalHours: lineTotals ? Math.round(lineTotals.hours * 100) / 100 : null,
+        totalAmount: lineTotals ? Math.round(lineTotals.amount * 100) / 100 : null,
+      };
+    });
   }
 
   // Migration 00018 — current exclusion rows for this worker. Empty when
@@ -282,6 +322,7 @@ export default async function TeamMemberRoutePage({
       assignments={assignments}
       tasks={tasks}
       sessions={workerSessions}
+      acknowledgedShiftEventIds={acknowledgedShiftEventIds}
       storeVisits={workerStoreVisits}
       media={workerMedia}
       hasGpsBySessionId={hasGpsBySessionId}
