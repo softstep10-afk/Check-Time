@@ -52,6 +52,11 @@ describe("project planning", () => {
             url: "https://example.com/scope.pdf",
             kind: "pdf",
           },
+          {
+            fileName: "Scope workbook.xlsx",
+            storagePath: "org-1/project-1/planning/scope-workbook.xlsx",
+            mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          },
         ],
         items: [
           {
@@ -75,6 +80,11 @@ describe("project planning", () => {
     expect(readProjectMaterialSpec(settings)[0]?.name).toBe("Frame lumber");
     expect(readProjectEstimations(settings)[0]?.clientPrice).toBe(2160);
     expect(readProjectEstimations(settings)[0]?.attachments[0]?.name).toBe("Client scope PDF");
+    expect(readProjectEstimations(settings)[0]?.attachments[1]).toMatchObject({
+      name: "Scope workbook.xlsx",
+      kind: "file",
+      storagePath: "org-1/project-1/planning/scope-workbook.xlsx",
+    });
     expect(settings[PROJECT_MATERIAL_SPEC_KEY]).toHaveLength(1);
     expect(settings[PROJECT_ESTIMATES_KEY]).toHaveLength(1);
     expect(estimateMargin(readProjectEstimations(settings)[0]!)).toBe(810);

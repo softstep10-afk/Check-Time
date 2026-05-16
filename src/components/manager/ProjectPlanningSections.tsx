@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, ExternalLink, FileDown, FileSpreadsheet, Lock, Paperclip, Plus, Save, Trash2 } from "lucide-react";
+import { Calculator, ExternalLink, FileDown, FileSpreadsheet, Lock, Paperclip, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
+import { uploadProjectPlanningAttachment } from "@/lib/project-planning-attachments";
 import {
   createProjectPlanningId,
   estimateMargin,
@@ -19,9 +20,13 @@ import {
   type ProjectEstimateWorkItem,
   type ProjectMaterialSpecItem,
 } from "@/lib/project-planning";
+import { createClient } from "@/lib/supabase/client";
+import { normalizeStoragePath } from "@/lib/task-attachments";
 
 type ProjectPlanningSectionsProps = {
+  orgId: string;
   projectId: string;
+  managerId: string;
   projectSettings: Record<string, unknown> | null;
   hasFinanceAccess: boolean;
 };
@@ -41,6 +46,7 @@ type EstimateDraft = {
   attachmentName: string;
   attachmentUrl: string;
   attachmentNote: string;
+  attachments: ProjectPlanningAttachment[];
 };
 
 const EMPTY_ESTIMATE_DRAFT: EstimateDraft = {
@@ -58,6 +64,7 @@ const EMPTY_ESTIMATE_DRAFT: EstimateDraft = {
   attachmentName: "",
   attachmentUrl: "",
   attachmentNote: "",
+  attachments: [],
 };
 
 const ESTIMATE_DOCUMENT_TYPES: ProjectEstimateDocumentType[] = [
@@ -108,8 +115,9 @@ function normalizeAttachmentUrl(link: string): string {
 function buildDraftAttachment(draft: EstimateDraft): ProjectPlanningAttachment[] {
   const url = normalizeAttachmentUrl(draft.attachmentUrl);
   const name = draft.attachmentName.trim() || url;
-  if (!name && !url) return [];
+  if (!name && !url) return draft.attachments;
   return [
+    ...draft.attachments,
     {
       id: createProjectPlanningId("att"),
       name,
@@ -243,7 +251,9 @@ async function downloadEstimatePdf(estimate: ProjectEstimate) {
 }
 
 export function ProjectPlanningSections({
+  orgId,
   projectId,
+  managerId,
   projectSettings,
   hasFinanceAccess,
 }: ProjectPlanningSectionsProps) {
@@ -251,7 +261,9 @@ export function ProjectPlanningSections({
     <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
       <ProjectMaterialSpecSection projectId={projectId} projectSettings={projectSettings} />
       <ProjectEstimatesSection
+        orgId={orgId}
         projectId={projectId}
+        managerId={managerId}
         projectSettings={projectSettings}
         hasFinanceAccess={hasFinanceAccess}
       />
@@ -538,21 +550,28 @@ function ProjectMaterialSpecSection({
 }
 
 function ProjectEstimatesSection({
+  orgId,
   projectId,
+  managerId,
   projectSettings,
   hasFinanceAccess,
 }: {
+  orgId: string;
   projectId: string;
+  managerId: string;
   projectSettings: Record<string, unknown> | null;
   hasFinanceAccess: boolean;
 }) {
   const router = useRouter();
   const { t } = useTranslation();
+  const [supabase] = useState(() => createClient());
+  const attachmentInputRef = useRef<HTMLInputElement | null>(null);
   const [estimations, setEstimations] = useState<ProjectEstimate[]>(() =>
     readProjectEstimations(projectSettings),
   );
   const [draft, setDraft] = useState<EstimateDraft>(EMPTY_ESTIMATE_DRAFT);
   const [busy, setBusy] = useState(false);
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [message, setMessage] = useState("");
   const summary = summarizeProjectEstimations(estimations);
 
@@ -580,6 +599,80 @@ function ProjectEstimatesSection({
     setEstimations(payload.estimations ?? nextEstimations);
     setMessage(t("projectEstimates.saved"));
     router.refresh();
+  }
+
+  function addDraftLinkAttachment() {
+    const url = normalizeAttachmentUrl(draft.attachmentUrl);
+    const name = draft.attachmentName.trim() || url;
+    if (!name && !url) {
+      setMessage(t("projectEstimates.attachmentRequired"));
+      return;
+    }
+    const attachment: ProjectPlanningAttachment = {
+      id: createProjectPlanningId("att"),
+      name,
+      url,
+      kind: "link",
+      note: draft.attachmentNote.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    setDraft((current) => ({
+      ...current,
+      attachmentName: "",
+      attachmentUrl: "",
+      attachmentNote: "",
+      attachments: [...current.attachments, attachment],
+    }));
+    setMessage(t("projectEstimates.attachmentAdded"));
+  }
+
+  async function addDraftFileAttachment(file: File | null) {
+    if (!file) return;
+    setAttachmentBusy(true);
+    setMessage("");
+    const result = await uploadProjectPlanningAttachment(supabase, {
+      orgId,
+      projectId,
+      uploadedBy: managerId,
+      file,
+    });
+    setAttachmentBusy(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    setDraft((current) => ({
+      ...current,
+      attachments: [...current.attachments, result.attachment],
+    }));
+    setMessage(t("projectEstimates.attachmentAdded"));
+  }
+
+  function removeDraftAttachment(id: string) {
+    setDraft((current) => ({
+      ...current,
+      attachments: current.attachments.filter((attachment) => attachment.id !== id),
+    }));
+  }
+
+  async function openPlanningAttachment(attachment: ProjectPlanningAttachment) {
+    const href = materialLinkHref(attachment.url);
+    if (href) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!attachment.storagePath) {
+      setMessage(t("projectEstimates.attachmentOpenFailed"));
+      return;
+    }
+    const { data, error } = await supabase.storage
+      .from("media")
+      .createSignedUrl(normalizeStoragePath(attachment.storagePath), 60 * 60);
+    if (error || !data?.signedUrl) {
+      setMessage(t("projectEstimates.attachmentOpenFailed"));
+      return;
+    }
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
   function addEstimate() {
@@ -809,6 +902,35 @@ function ProjectEstimatesSection({
               <Paperclip size={14} />
               {t("projectEstimates.attachments")}
             </div>
+            <input
+              ref={attachmentInputRef}
+              type="file"
+              accept=".pdf,.csv,.tsv,.txt,.xls,.xlsx,.doc,.docx,image/*,video/*"
+              className="hidden"
+              onChange={(event) => {
+                void addDraftFileAttachment(event.target.files?.[0] ?? null);
+                event.currentTarget.value = "";
+              }}
+            />
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => attachmentInputRef.current?.click()}
+                disabled={attachmentBusy}
+                className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
+              >
+                <Upload size={13} />
+                {attachmentBusy ? t("common.saving") : t("projectEstimates.uploadFile")}
+              </button>
+              <button
+                type="button"
+                onClick={addDraftLinkAttachment}
+                className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
+              >
+                <Paperclip size={13} />
+                {t("projectEstimates.addLinkAttachment")}
+              </button>
+            </div>
             <div className="grid gap-2 sm:grid-cols-2">
               <input
                 value={draft.attachmentName}
@@ -829,6 +951,38 @@ function ProjectEstimatesSection({
               placeholder={t("projectEstimates.attachmentNote")}
               className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
+            {draft.attachments.length > 0 ? (
+              <div className="mt-3 grid gap-1">
+                {draft.attachments.map((attachment) => (
+                  <div
+                    key={attachment.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-[rgba(0,0,0,0.22)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
+                  >
+                    <span className="min-w-0 truncate">
+                      {attachment.name}
+                      {attachment.note ? ` · ${attachment.note}` : ""}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void openPlanningAttachment(attachment)}
+                        className="text-[var(--ai-cyan-bright)] hover:underline"
+                      >
+                        {t("projectEstimates.openAttachment")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeDraftAttachment(attachment.id)}
+                        className="text-[var(--red)]"
+                        aria-label={t("projectEstimates.removeAttachment")}
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
           <button type="button" onClick={addEstimate} className="button-base button-secondary">
             <Plus size={15} />
@@ -991,25 +1145,24 @@ function ProjectEstimatesSection({
                       <Paperclip size={12} />
                       {t("projectEstimates.attachments")}
                     </div>
-                    {estimate.attachments.map((attachment) => {
-                      const href = materialLinkHref(attachment.url);
-                      return (
-                        <div
-                          key={attachment.id}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-[rgba(0,0,0,0.18)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
+                    {estimate.attachments.map((attachment) => (
+                      <div
+                        key={attachment.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-[rgba(0,0,0,0.18)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
+                      >
+                        <span>
+                          {attachment.name}
+                          {attachment.note ? ` · ${attachment.note}` : ""}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void openPlanningAttachment(attachment)}
+                          className="text-[var(--ai-cyan-bright)] hover:underline"
                         >
-                          <span>
-                            {attachment.name}
-                            {attachment.note ? ` · ${attachment.note}` : ""}
-                          </span>
-                          {href ? (
-                            <a href={href} target="_blank" rel="noreferrer" className="text-[var(--ai-cyan-bright)] hover:underline">
-                              {t("common.open")}
-                            </a>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+                          {t("projectEstimates.openAttachment")}
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 ) : null}
               </div>

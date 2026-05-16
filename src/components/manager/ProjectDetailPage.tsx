@@ -2585,7 +2585,9 @@ export function ProjectDetailPage({
       </section>
 
       <ProjectPlanningSections
+        orgId={orgId}
         projectId={project.id}
+        managerId={managerId}
         projectSettings={project.settings}
         hasFinanceAccess={hasFinanceAccess}
       />

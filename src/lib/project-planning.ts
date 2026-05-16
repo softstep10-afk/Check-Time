@@ -20,6 +20,10 @@ export type ProjectPlanningAttachment = {
   url: string;
   kind: string;
   note: string;
+  mediaId?: string;
+  storagePath?: string;
+  fileName?: string;
+  mimeType?: string;
   createdAt: string;
 };
 
@@ -101,19 +105,31 @@ function normalizePlanningAttachments(value: unknown): ProjectPlanningAttachment
   if (!Array.isArray(value)) return [];
   const stamp = nowIso();
   return value
-    .map((attachment) => {
+    .map((attachment): ProjectPlanningAttachment | null => {
       if (!isRecord(attachment)) return null;
       const url = asString(attachment.url || attachment.link || attachment.href);
       const name = asString(attachment.name || attachment.title || attachment.fileName || attachment.file_name, url);
-      if (!name && !url) return null;
-      return {
+      const storagePath = asString(attachment.storagePath || attachment.storage_path);
+      const mediaId = asString(attachment.mediaId || attachment.media_id);
+      if (!name && !url && !storagePath && !mediaId) return null;
+      const normalized: ProjectPlanningAttachment = {
         id: asString(attachment.id, createProjectPlanningId("att")),
-        name,
+        name: name || asString(attachment.fileName || attachment.file_name, "Attachment"),
         url,
-        kind: asString(attachment.kind || attachment.type || attachment.fileType || attachment.file_type, "link"),
+        kind: asString(
+          attachment.kind || attachment.type || attachment.fileType || attachment.file_type,
+          storagePath || mediaId ? "file" : "link",
+        ),
         note: asString(attachment.note || attachment.notes || attachment.description),
         createdAt: asString(attachment.createdAt || attachment.created_at, stamp),
       };
+      const fileName = asString(attachment.fileName || attachment.file_name);
+      const mimeType = asString(attachment.mimeType || attachment.mime_type);
+      if (mediaId) normalized.mediaId = mediaId;
+      if (storagePath) normalized.storagePath = storagePath;
+      if (fileName) normalized.fileName = fileName;
+      if (mimeType) normalized.mimeType = mimeType;
+      return normalized;
     })
     .filter((attachment): attachment is ProjectPlanningAttachment => Boolean(attachment))
     .slice(0, 40);
