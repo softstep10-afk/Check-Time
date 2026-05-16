@@ -78,6 +78,7 @@ export interface SnapshotProjectMaterialSpecItem {
 
 export interface SnapshotProjectEstimate {
   title: string;
+  documentType: string;
   status: string;
   description: string;
   clientPrice: number;
@@ -85,6 +86,19 @@ export interface SnapshotProjectEstimate {
   materialCost: number;
   margin: number;
   workItems: string[];
+  attachmentNames: string[];
+  attachmentCount: number;
+}
+
+export interface SnapshotReceiptItem {
+  id: string;
+  projectId: string | null;
+  projectName: string;
+  amount: number;
+  storeName: string | null;
+  filename: string;
+  createdAt: string;
+  purchaseDate: string | null;
 }
 
 export interface SnapshotProject {
@@ -100,6 +114,10 @@ export interface SnapshotProject {
   weekMinutes: number;
   skillTags: string[];
   openTaskTitles: string[];
+  receiptTotal: number;
+  receiptToday: number;
+  receiptCount: number;
+  recentReceipts: SnapshotReceiptItem[];
   materialSpec: SnapshotProjectMaterialSpecItem[];
   estimates: SnapshotProjectEstimate[];
 }
@@ -176,6 +194,29 @@ export interface SnapshotMediaItem {
   summary: string | null;
 }
 
+export interface SnapshotShiftSummary {
+  id: string;
+  workerName: string;
+  workerRole: string;
+  projectName: string;
+  clockInTime: string;
+  clockOutTime: string | null;
+  durationMinutes: number;
+  checkoutStatus: string;
+  checkoutNote: string | null;
+  isOpen: boolean;
+}
+
+export interface SnapshotPayrollRun {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  workerCount: number;
+  totalAmount: number;
+  paidAt: string | null;
+}
+
 export interface SnapshotCodeReference {
   topic: string;
   summary: string;
@@ -188,9 +229,14 @@ export interface AssistantSnapshot {
   onSiteCount: number;
   activeProjectCount: number;
   openTaskCount: number;
+  crewCount: number;
+  todayHours: number;
   hasFinanceAccess: boolean;
   unpaidHours: number;
   unpaidAmount: number;
+  receiptTotal: number;
+  receiptToday: number;
+  receiptCount: number;
   projects: SnapshotProject[];
   liveWorkers: SnapshotWorker[];
   workerMetrics: SnapshotWorkerMetric[];
@@ -200,6 +246,8 @@ export interface AssistantSnapshot {
   memoryRules: JarvisMemoryRule[];
   codeReferences: SnapshotCodeReference[];
   recentReports: SnapshotReport[];
+  recentShifts: SnapshotShiftSummary[];
+  recentPayrollRuns: SnapshotPayrollRun[];
 }
 
 export interface AssistantLink {

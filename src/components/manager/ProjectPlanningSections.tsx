@@ -2,22 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, ExternalLink, FileDown, FileSpreadsheet, Lock, Paperclip, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { ExternalLink, FileSpreadsheet, Lock, Paperclip, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
 import { uploadProjectPlanningAttachment } from "@/lib/project-planning-attachments";
 import {
   createProjectPlanningId,
-  estimateMargin,
   parseMaterialSpecText,
   readProjectEstimations,
   readProjectMaterialSpec,
-  summarizeProjectEstimations,
   type ProjectEstimate,
   type ProjectEstimateDocumentType,
   type ProjectPlanningAttachment,
-  type ProjectEstimateWorkItem,
   type ProjectMaterialSpecItem,
 } from "@/lib/project-planning";
 import { createClient } from "@/lib/supabase/client";
@@ -32,17 +29,8 @@ type ProjectPlanningSectionsProps = {
 };
 
 type EstimateDraft = {
-  title: string;
   documentType: ProjectEstimateDocumentType;
   status: ProjectEstimate["status"];
-  description: string;
-  workTitle: string;
-  quantity: string;
-  unit: string;
-  unitPrice: string;
-  materialCost: string;
-  laborHours: string;
-  internalCost: string;
   attachmentName: string;
   attachmentUrl: string;
   attachmentNote: string;
@@ -50,17 +38,8 @@ type EstimateDraft = {
 };
 
 const EMPTY_ESTIMATE_DRAFT: EstimateDraft = {
-  title: "",
   documentType: "estimate",
   status: "draft",
-  description: "",
-  workTitle: "",
-  quantity: "1",
-  unit: "item",
-  unitPrice: "",
-  materialCost: "",
-  laborHours: "",
-  internalCost: "",
   attachmentName: "",
   attachmentUrl: "",
   attachmentNote: "",
@@ -82,19 +61,6 @@ const ESTIMATE_STATUSES: ProjectEstimate["status"][] = [
   "done",
   "paid",
 ];
-
-function currency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function parseAmount(value: string): number {
-  const parsed = Number.parseFloat(value);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
 
 function materialLinkHref(link: string): string | null {
   const trimmed = link.trim();
@@ -129,125 +95,12 @@ function buildDraftAttachment(draft: EstimateDraft): ProjectPlanningAttachment[]
   ];
 }
 
-function labelFromToken(value: string): string {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
 function estimateTypeKey(type: ProjectEstimateDocumentType): TranslationKey {
   return `projectEstimates.type.${type}` as TranslationKey;
 }
 
 function estimateStatusKey(status: ProjectEstimate["status"]): TranslationKey {
   return `projectEstimates.status.${status}` as TranslationKey;
-}
-
-function sanitizeFileName(value: string): string {
-  const cleaned = value.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
-  return cleaned || "project-estimate";
-}
-
-function buildEstimateCsv(estimate: ProjectEstimate): string {
-  const rows = [
-    ["Document", estimate.title],
-    ["Type", labelFromToken(estimate.documentType)],
-    ["Status", labelFromToken(estimate.status)],
-    ["Description", estimate.description],
-    [],
-    ["Work item", "Description", "Qty", "Unit", "Client price", "Material cost", "Internal/labor cost"],
-    ...estimate.items.map((item) => [
-      item.title,
-      item.description,
-      String(item.quantity),
-      item.unit,
-      String(item.totalPrice),
-      String(item.materialCost),
-      String(item.internalCost),
-    ]),
-    [],
-    ["Client total", String(estimate.clientPrice)],
-    ["Material cost", String(estimate.materialCost)],
-    ["Internal/labor cost", String(estimate.internalCost)],
-    ["Margin", String(estimateMargin(estimate))],
-    [],
-    ["Attachments"],
-    ...estimate.attachments.map((attachment) => [
-      attachment.name,
-      attachment.kind,
-      attachment.url,
-      attachment.note,
-    ]),
-  ];
-
-  return rows
-    .map((row) =>
-      row
-        .map((cell) => {
-          const value = String(cell ?? "");
-          return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-        })
-        .join(","),
-    )
-    .join("\n");
-}
-
-function downloadEstimateCsv(estimate: ProjectEstimate) {
-  const blob = new Blob([buildEstimateCsv(estimate)], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${sanitizeFileName(estimate.title)}.csv`;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-async function downloadEstimatePdf(estimate: ProjectEstimate) {
-  const [{ jsPDF }, autoTableModule] = await Promise.all([
-    import("jspdf"),
-    import("jspdf-autotable"),
-  ]);
-  const autoTable = autoTableModule.default;
-  const doc = new jsPDF();
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text(estimate.title, 14, 18);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.text(`${labelFromToken(estimate.documentType)} · ${labelFromToken(estimate.status)}`, 14, 26);
-  if (estimate.description) {
-    doc.text(doc.splitTextToSize(estimate.description, 180), 14, 34);
-  }
-  autoTable(doc, {
-    startY: estimate.description ? 48 : 34,
-    head: [["Work", "Qty", "Unit", "Client", "Material", "Cost"]],
-    body: estimate.items.map((item) => [
-      item.title,
-      item.quantity,
-      item.unit,
-      currency(item.totalPrice),
-      currency(item.materialCost),
-      currency(item.internalCost),
-    ]),
-    foot: [["Totals", "", "", currency(estimate.clientPrice), currency(estimate.materialCost), currency(estimate.internalCost)]],
-    styles: { font: "helvetica", fontSize: 9 },
-    headStyles: { fillColor: [8, 31, 48], textColor: [230, 250, 255] },
-    footStyles: { fillColor: [230, 240, 245], textColor: [16, 24, 32] },
-  });
-  const finalY = ((doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 70) + 10;
-  doc.setFont("helvetica", "bold");
-  doc.text(`Margin: ${currency(estimateMargin(estimate))}`, 14, finalY);
-  if (estimate.attachments.length > 0) {
-    doc.setFontSize(10);
-    doc.text("Attachments:", 14, finalY + 10);
-    doc.setFont("helvetica", "normal");
-    estimate.attachments.slice(0, 8).forEach((attachment, index) => {
-      doc.text(
-        doc.splitTextToSize(`${attachment.name}${attachment.url ? ` - ${attachment.url}` : ""}`, 180),
-        14,
-        finalY + 18 + index * 8,
-      );
-    });
-  }
-  doc.save(`${sanitizeFileName(estimate.title)}.pdf`);
 }
 
 export function ProjectPlanningSections({
@@ -573,7 +426,6 @@ function ProjectEstimatesSection({
   const [busy, setBusy] = useState(false);
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const summary = summarizeProjectEstimations(estimations);
 
   useEffect(() => {
     setEstimations(readProjectEstimations(projectSettings));
@@ -675,45 +527,28 @@ function ProjectEstimatesSection({
     window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
-  function addEstimate() {
-    const title = draft.title.trim() || draft.workTitle.trim();
-    if (!title) {
-      setMessage(t("projectEstimates.titleRequired"));
+  function addDocument() {
+    const attachments = buildDraftAttachment(draft);
+    if (attachments.length === 0) {
+      setMessage(t("projectEstimates.attachmentRequired"));
       return;
     }
     const stamp = new Date().toISOString();
-    const quantity = parseAmount(draft.quantity) || 1;
-    const unitPrice = parseAmount(draft.unitPrice);
-    const materialCost = parseAmount(draft.materialCost);
-    const internalCost = parseAmount(draft.internalCost);
-    const laborHours = parseAmount(draft.laborHours);
-    const totalPrice = quantity * unitPrice;
-    const workItem: ProjectEstimateWorkItem = {
-      id: createProjectPlanningId("work"),
-      title: draft.workTitle.trim() || title,
-      description: draft.description.trim(),
-      quantity,
-      unit: draft.unit.trim() || "item",
-      unitPrice,
-      materialCost,
-      laborHours,
-      internalCost,
-      totalPrice,
-    };
+    const title = draft.attachmentName.trim() || attachments[0]?.name || t("projectEstimates.untitledDocument");
     const estimate: ProjectEstimate = {
-      id: createProjectPlanningId("est"),
+      id: createProjectPlanningId("doc"),
       title,
       documentType: draft.documentType,
       status: draft.status,
-      description: draft.description.trim(),
-      clientPrice: totalPrice,
-      materialCost,
-      laborHours,
-      internalCost,
+      description: draft.attachmentNote.trim(),
+      clientPrice: 0,
+      materialCost: 0,
+      laborHours: 0,
+      internalCost: 0,
       createdAt: stamp,
       updatedAt: stamp,
-      items: [workItem],
-      attachments: buildDraftAttachment(draft),
+      items: [],
+      attachments,
     };
     setEstimations((current) => [estimate, ...current]);
     setDraft(EMPTY_ESTIMATE_DRAFT);
@@ -791,7 +626,7 @@ function ProjectEstimatesSection({
       summary={
         <div>
           <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--text-primary)]">
-            <Calculator size={17} />
+            <Paperclip size={17} />
             {t("projectEstimates.title")}: {estimations.length}
           </h2>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
@@ -840,62 +675,6 @@ function ProjectEstimatesSection({
                 </option>
               ))}
             </select>
-          </div>
-          <TextInputWithVoice
-            value={draft.title}
-            onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-            placeholder={t("projectEstimates.estimateTitle")}
-            className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-          />
-          <TextInputWithVoice
-            multiline
-            rows={3}
-            value={draft.description}
-            onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
-            placeholder={t("projectEstimates.scope")}
-            className="min-h-[90px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-          />
-          <div className="grid gap-2 sm:grid-cols-2">
-            <input
-              value={draft.workTitle}
-              onChange={(event) => setDraft((current) => ({ ...current, workTitle: event.target.value }))}
-              placeholder={t("projectEstimates.workTitle")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <input
-              value={draft.unit}
-              onChange={(event) => setDraft((current) => ({ ...current, unit: event.target.value }))}
-              placeholder={t("projectEstimates.unit")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <input
-              value={draft.quantity}
-              onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))}
-              inputMode="decimal"
-              placeholder={t("projectEstimates.quantity")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <input
-              value={draft.unitPrice}
-              onChange={(event) => setDraft((current) => ({ ...current, unitPrice: event.target.value }))}
-              inputMode="decimal"
-              placeholder={t("projectEstimates.price")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <input
-              value={draft.materialCost}
-              onChange={(event) => setDraft((current) => ({ ...current, materialCost: event.target.value }))}
-              inputMode="decimal"
-              placeholder={t("projectEstimates.materialCost")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
-            <input
-              value={draft.internalCost}
-              onChange={(event) => setDraft((current) => ({ ...current, internalCost: event.target.value }))}
-              inputMode="decimal"
-              placeholder={t("projectEstimates.internalCost")}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
           </div>
           <div className="rounded-[var(--radius-md)] border border-[rgba(105,231,255,0.16)] bg-[rgba(4,10,18,0.5)] p-3">
             <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
@@ -984,7 +763,7 @@ function ProjectEstimatesSection({
               </div>
             ) : null}
           </div>
-          <button type="button" onClick={addEstimate} className="button-base button-secondary">
+          <button type="button" onClick={addDocument} className="button-base button-secondary">
             <Plus size={15} />
             {t("projectEstimates.addDraft")}
           </button>
@@ -995,178 +774,100 @@ function ProjectEstimatesSection({
             {t("projectEstimates.empty")}
           </div>
         ) : (
-          <div className="space-y-3">
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                  {t("projectEstimates.summaryClient")}
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
-                  {currency(summary.clientPrice)}
-                </div>
-              </div>
-              <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                  {t("projectEstimates.summaryCost")}
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
-                  {currency(summary.internalCost + summary.materialCost)}
-                </div>
-              </div>
-              <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                  {t("projectEstimates.summaryExtras")}
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--brand-yellow)]">
-                  {currency(summary.extras)}
-                </div>
-              </div>
-              <div className="metric-panel rounded-[var(--radius-md)] p-3">
-                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                  {t("projectEstimates.summaryMargin")}
-                </div>
-                <div className="mt-1 font-mono text-lg font-bold text-[var(--ai-cyan)]">
-                  {currency(summary.margin)}
-                </div>
-              </div>
-            </div>
-            {estimations.map((estimate) => (
-              <div
-                key={estimate.id}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.36)] p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-bold text-[var(--text-primary)]">
-                        {estimate.title}
-                      </div>
-                      <span className="rounded-[var(--radius-pill)] border border-[rgba(105,231,255,0.25)] bg-[rgba(105,231,255,0.08)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--ai-cyan-bright)]">
-                        {t(estimateTypeKey(estimate.documentType))}
-                      </span>
-                    </div>
-                    {estimate.description ? (
-                      <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
-                        {estimate.description}
-                      </p>
-                    ) : null}
+          <div className="space-y-4">
+            {ESTIMATE_DOCUMENT_TYPES.map((type) => {
+              const documents = estimations.filter((estimate) => estimate.documentType === type);
+              if (documents.length === 0) return null;
+
+              return (
+                <div key={type} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.28)] p-3">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    <Paperclip size={13} />
+                    {t(estimateTypeKey(type))}: {documents.length}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={estimate.status}
-                      onChange={(event) =>
-                        updateEstimate(estimate.id, {
-                          status: event.target.value as ProjectEstimate["status"],
-                        })
-                      }
-                      className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none"
-                    >
-                      {ESTIMATE_STATUSES.map((status) => (
-                        <option key={status} value={status}>
-                          {t(estimateStatusKey(status))}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => convertToInvoice(estimate)}
-                      disabled={estimate.documentType === "invoice"}
-                      className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
-                    >
-                      {t("projectEstimates.convertToInvoice")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void downloadEstimatePdf(estimate)}
-                      className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
-                    >
-                      <FileDown size={13} />
-                      PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => downloadEstimateCsv(estimate)}
-                      className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
-                    >
-                      CSV
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setEstimations((current) => current.filter((item) => item.id !== estimate.id))
-                      }
-                      className="button-base button-danger-ghost min-h-0 px-3 py-2 text-xs"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <div className="metric-panel rounded-[var(--radius-sm)] p-2">
-                    <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                      {t("projectEstimates.clientPrice")}
-                    </div>
-                    <div className="mt-1 font-mono font-bold text-[var(--text-primary)]">
-                      {currency(estimate.clientPrice)}
-                    </div>
-                  </div>
-                  <div className="metric-panel rounded-[var(--radius-sm)] p-2">
-                    <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                      {t("projectEstimates.internalCostShort")}
-                    </div>
-                    <div className="mt-1 font-mono font-bold text-[var(--text-primary)]">
-                      {currency(estimate.internalCost + estimate.materialCost)}
-                    </div>
-                  </div>
-                  <div className="metric-panel rounded-[var(--radius-sm)] p-2">
-                    <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                      {t("projectEstimates.margin")}
-                    </div>
-                    <div className="mt-1 font-mono font-bold text-[var(--ai-cyan)]">
-                      {currency(estimateMargin(estimate))}
-                    </div>
-                  </div>
-                </div>
-                {estimate.items.length > 0 ? (
-                  <div className="mt-2 space-y-1">
-                    {estimate.items.map((item) => (
+                  <div className="grid gap-2">
+                    {documents.map((estimate) => (
                       <div
-                        key={item.id}
-                        className="rounded-[var(--radius-sm)] bg-[rgba(0,0,0,0.18)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
+                        key={estimate.id}
+                        className="rounded-[var(--radius-sm)] border border-[rgba(105,231,255,0.12)] bg-[rgba(0,0,0,0.2)] px-3 py-2"
                       >
-                        {item.title} · {item.quantity} {item.unit} · {currency(item.totalPrice)}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-bold text-[var(--text-primary)]">
+                              {estimate.title || t("projectEstimates.untitledDocument")}
+                            </div>
+                            <div className="mt-1 text-xs text-[var(--text-muted)]">
+                              {t("projectEstimates.filesInDocument").replace(
+                                "{count}",
+                                String(estimate.attachments.length),
+                              )}
+                              {estimate.description ? ` · ${estimate.description}` : ""}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              value={estimate.status}
+                              onChange={(event) =>
+                                updateEstimate(estimate.id, {
+                                  status: event.target.value as ProjectEstimate["status"],
+                                })
+                              }
+                              className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none"
+                            >
+                              {ESTIMATE_STATUSES.map((status) => (
+                                <option key={status} value={status}>
+                                  {t(estimateStatusKey(status))}
+                                </option>
+                              ))}
+                            </select>
+                            {estimate.documentType === "estimate" ? (
+                              <button
+                                type="button"
+                                onClick={() => convertToInvoice(estimate)}
+                                className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
+                              >
+                                {t("projectEstimates.convertToInvoice")}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEstimations((current) => current.filter((item) => item.id !== estimate.id))
+                              }
+                              className="button-base button-danger-ghost min-h-0 px-3 py-2 text-xs"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        {estimate.attachments.length > 0 ? (
+                          <div className="mt-2 grid gap-1">
+                            {estimate.attachments.map((attachment) => (
+                              <div
+                                key={attachment.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-[rgba(0,0,0,0.18)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
+                              >
+                                <span className="min-w-0 truncate">
+                                  {attachment.name}
+                                  {attachment.note ? ` · ${attachment.note}` : ""}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => void openPlanningAttachment(attachment)}
+                                  className="text-[var(--ai-cyan-bright)] hover:underline"
+                                >
+                                  {t("projectEstimates.openAttachment")}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
-                ) : null}
-                {estimate.attachments.length > 0 ? (
-                  <div className="mt-3 grid gap-1">
-                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                      <Paperclip size={12} />
-                      {t("projectEstimates.attachments")}
-                    </div>
-                    {estimate.attachments.map((attachment) => (
-                      <div
-                        key={attachment.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-[rgba(0,0,0,0.18)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
-                      >
-                        <span>
-                          {attachment.name}
-                          {attachment.note ? ` · ${attachment.note}` : ""}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => void openPlanningAttachment(attachment)}
-                          className="text-[var(--ai-cyan-bright)] hover:underline"
-                        >
-                          {t("projectEstimates.openAttachment")}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
 

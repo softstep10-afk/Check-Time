@@ -9,7 +9,6 @@ import {
   isJarvisMemoryWriter,
   normalizeJarvisAttachments,
 } from "@/lib/ai/jarvis-memory";
-import { hasFinanceAccess } from "@/lib/finance-access";
 import type { DailyReport } from "@/types/database";
 import type { AssistantConversationTurn } from "@/lib/ai/types";
 
@@ -84,13 +83,10 @@ export async function POST(request: NextRequest) {
         },
       };
     }
-    const managerHasFinanceAccess =
+    const ownerJarvisAccess =
       auth.kind === "preview"
         ? true
-        : await hasFinanceAccess(supabase, {
-            id: auth.context.profile.id,
-            role: auth.context.profile.role,
-          });
+        : auth.context.profile.role === "owner" || auth.context.profile.role === "admin";
     let reports: DailyReport[];
     if (auth.kind === "preview") {
       reports = auth.reports;
@@ -106,7 +102,7 @@ export async function POST(request: NextRequest) {
     }
 
     const snapshot = buildAssistantSnapshot(managerData, reports, {
-      includeFinancials: managerHasFinanceAccess,
+      includeFinancials: ownerJarvisAccess,
     });
     if (memorySaved) {
       const ru = /[а-яё]/i.test(question);

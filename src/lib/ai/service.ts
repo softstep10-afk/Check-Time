@@ -26,7 +26,6 @@ import {
   WASHINGTON_CODE_REFERENCES,
 } from "@/lib/ai/washington-code-knowledge";
 import {
-  estimateMargin,
   readProjectEstimations,
   readProjectMaterialSpec,
 } from "@/lib/project-planning";
@@ -110,6 +109,14 @@ function normalizeSearchText(value: string): string {
 
 function formatHours(value: number): string {
   return `${roundNumber(value).toFixed(2)}h`;
+}
+
+function formatMoney(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function skillLabel(skill: string, ru: boolean): string {
@@ -400,6 +407,8 @@ function isFinancialQuestion(normalized: string): boolean {
     "cost",
     "costs",
     "profit",
+    "material",
+    "materials",
     "reimbursement",
     "paid",
     "gross",
@@ -409,6 +418,7 @@ function isFinancialQuestion(normalized: string): boolean {
     "оплат",
     "ставк",
     "чек",
+    "материал",
     "расход",
     "стоим",
     "прибыл",
@@ -620,6 +630,105 @@ function buildMediaSearchFallback(
   };
 }
 
+function isMaterialSpendQuestion(normalized: string): boolean {
+  const hasMaterial = ["material", "materials", "материал"].some((keyword) =>
+    normalized.includes(keyword),
+  );
+  const hasSpend = [
+    "spend",
+    "spent",
+    "cost",
+    "costs",
+    "receipt",
+    "receipts",
+    "expense",
+    "expenses",
+    "how much",
+    "сколько",
+    "потрач",
+    "расход",
+    "стоим",
+    "чек",
+  ].some((keyword) => normalized.includes(keyword));
+
+  return hasMaterial && hasSpend;
+}
+
+function buildMaterialSpendFallback(
+  question: string,
+  snapshot: AssistantSnapshot,
+): AssistantResult | null {
+  const normalized = normalizeSearchText(question);
+  if (!isMaterialSpendQuestion(normalized)) return null;
+
+  const ru = isRussianText(question);
+  if (!snapshot.hasFinanceAccess) {
+    return {
+      answer: ru
+        ? "Финансовые данные по материалам закрыты для этого аккаунта."
+        : "Material spending is financially restricted for this account.",
+      bullets: [
+        ru
+          ? `${snapshot.openTaskCount} открытых задач доступны без финансов.`
+          : `${snapshot.openTaskCount} open tasks are still visible without finance access.`,
+      ],
+      links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
+      confidence: 0.78,
+      source: "fallback",
+    };
+  }
+
+  const project = findProjectInSnapshot(question, snapshot);
+  const targetProjects = project ? [project] : snapshot.projects;
+  const total = project ? project.receiptTotal : snapshot.receiptTotal;
+  const today = project ? project.receiptToday : snapshot.receiptToday;
+  const count = project ? project.receiptCount : snapshot.receiptCount;
+  const recentReceipts = targetProjects
+    .flatMap((item) => item.recentReceipts)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, 6);
+  const topProjects = [...snapshot.projects]
+    .filter((item) => item.receiptTotal > 0)
+    .sort((left, right) => right.receiptTotal - left.receiptTotal)
+    .slice(0, 5);
+
+  return {
+    answer: project
+      ? ru
+        ? `По проекту ${project.name} по чекам материалов записано ${formatMoney(total)}. Сегодня: ${formatMoney(today)}. Чеков: ${count}.`
+        : `${project.name} has ${formatMoney(total)} in material receipts. Today: ${formatMoney(today)}. Receipts: ${count}.`
+      : ru
+        ? `По всем проектам по чекам материалов записано ${formatMoney(total)}. Сегодня: ${formatMoney(today)}. Чеков: ${count}.`
+        : `Across all projects, material receipts total ${formatMoney(total)}. Today: ${formatMoney(today)}. Receipts: ${count}.`,
+    bullets: uniqueList(
+      [
+        ...recentReceipts.map((receipt) =>
+          `${receipt.projectName} • ${formatMoney(receipt.amount)} • ${
+            receipt.storeName || receipt.filename
+          } • ${receipt.purchaseDate ?? receipt.createdAt.slice(0, 10)}`,
+        ),
+        ...(!project
+          ? topProjects.map((item) => `${item.name}: ${formatMoney(item.receiptTotal)} (${item.receiptCount} receipts)`)
+          : []),
+        count === 0
+          ? ru
+            ? "В текущем снимке нет чеков с суммой. Проверьте, что чеки загружены как receipt и заполнено поле amount."
+            : "No receipt amounts are present in the snapshot. Confirm uploads are marked as receipt and amount is filled."
+          : "",
+      ],
+      8,
+    ),
+    links: [
+      project
+        ? { label: ru ? `Открыть ${project.name}` : `Open ${project.name}`, href: `/projects/${project.id}` }
+        : { label: ru ? "Открыть обзор" : "Open overview", href: "/overview" },
+      { label: ru ? "Открыть проекты" : "Open projects", href: "/projects" },
+    ],
+    confidence: 0.86,
+    source: "fallback",
+  };
+}
+
 const ESTIMATE_HOUR_RANGES: Record<string, { low: number; high: number; label: string }> = {
   framing: { low: 8, high: 28, label: "framing / каркас" },
   drywall: { low: 10, high: 32, label: "drywall / гипсокартон" },
@@ -706,6 +815,69 @@ function buildEstimateFallback(
       { label: ru ? "Открыть команду" : "Open team", href: "/team" },
     ],
     confidence: requestedSkills.length > 0 || project ? 0.66 : 0.44,
+    source: "fallback",
+  };
+}
+
+function buildShiftActivityFallback(
+  question: string,
+  snapshot: AssistantSnapshot,
+  worker: ReturnType<typeof findWorkerInSnapshot>,
+): AssistantResult | null {
+  const normalized = normalizeSearchText(question);
+  const ru = isRussianText(question);
+  const asksShift =
+    normalized.includes("shift") ||
+    normalized.includes("смен") ||
+    normalized.includes("last work") ||
+    normalized.includes("последн") ||
+    normalized.includes("перерыв");
+
+  if (!asksShift) {
+    return null;
+  }
+
+  const shifts = (worker
+    ? snapshot.recentShifts.filter((shift) => shift.workerName === worker.name)
+    : snapshot.recentShifts
+  ).slice(0, 8);
+
+  if (shifts.length === 0) {
+    return {
+      answer: worker
+        ? ru
+          ? `По ${worker.name} смены в текущем снимке не записаны.`
+          : `No recent shifts are recorded for ${worker.name} in the current snapshot.`
+        : ru
+          ? "В текущем снимке нет последних смен."
+          : "No recent shifts are recorded in the current snapshot.",
+      bullets: [],
+      links: [{ label: ru ? "Открыть хронологию" : "Open timeline", href: "/timeline" }],
+      confidence: 0.62,
+      source: "fallback",
+    };
+  }
+
+  const latest = shifts[0];
+  return {
+    answer: worker
+      ? ru
+        ? `Последняя смена ${worker.name}: ${latest.projectName}, ${formatHours(latest.durationMinutes / 60)}.`
+        : `${worker.name}'s latest shift: ${latest.projectName}, ${formatHours(latest.durationMinutes / 60)}.`
+      : ru
+        ? `Последняя смена: ${latest.workerName} на ${latest.projectName}, ${formatHours(latest.durationMinutes / 60)}.`
+        : `Latest shift: ${latest.workerName} on ${latest.projectName}, ${formatHours(latest.durationMinutes / 60)}.`,
+    bullets: shifts.map((shift) =>
+      ru
+        ? `${shift.workerName} • ${shift.projectName} • ${shift.clockInTime} → ${shift.clockOutTime ?? "открыта"} • ${formatHours(shift.durationMinutes / 60)} • ${shift.checkoutStatus}`
+        : `${shift.workerName} • ${shift.projectName} • ${shift.clockInTime} → ${shift.clockOutTime ?? "open"} • ${formatHours(shift.durationMinutes / 60)} • ${shift.checkoutStatus}`,
+    ),
+    links: [
+      worker
+        ? { label: ru ? "Открыть профиль" : "Open profile", href: `/team/${worker.id}` }
+        : { label: ru ? "Открыть хронологию" : "Open timeline", href: "/timeline" },
+    ],
+    confidence: 0.74,
     source: "fallback",
   };
 }
@@ -909,6 +1081,9 @@ function buildAssistantFallback(
   const mediaAnswer = buildMediaSearchFallback(question, snapshot);
   if (mediaAnswer) return mediaAnswer;
 
+  const materialSpendAnswer = buildMaterialSpendFallback(question, snapshot);
+  if (materialSpendAnswer) return materialSpendAnswer;
+
   const estimateAnswer = buildEstimateFallback(question, snapshot);
   if (estimateAnswer) return estimateAnswer;
 
@@ -920,6 +1095,9 @@ function buildAssistantFallback(
 
   const safeActionAnswer = buildSafeActionFallback(question, snapshot);
   if (safeActionAnswer) return safeActionAnswer;
+
+  const shiftActivityAnswer = buildShiftActivityFallback(question, snapshot, worker);
+  if (shiftActivityAnswer) return shiftActivityAnswer;
 
   if (!snapshot.hasFinanceAccess && isFinancialQuestion(normalized)) {
     return {
@@ -1740,55 +1918,177 @@ export function buildAssistantSnapshot(
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
     .slice(0, 20);
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayStartIso = todayStart.toISOString();
+  const receiptTotalsByProject = new Map<
+    string,
+    {
+      total: number;
+      today: number;
+      count: number;
+      recent: Array<{
+        id: string;
+        projectId: string | null;
+        projectName: string;
+        amount: number;
+        storeName: string | null;
+        filename: string;
+        createdAt: string;
+        purchaseDate: string | null;
+      }>;
+    }
+  >();
+  let receiptTotal = 0;
+  let receiptToday = 0;
+  let receiptCount = 0;
+
+  if (includeFinancials) {
+    for (const item of data.media) {
+      if (item.deleted_at) continue;
+      const meta = item.metadata as Record<string, unknown> | null;
+      if (meta?.category !== "receipt" && meta?.kind !== "receipt") continue;
+      const amount = Number(meta.amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const project = item.project_id ? projectById.get(item.project_id) : null;
+      const receipt = {
+        id: item.id,
+        projectId: item.project_id,
+        projectName: project?.name ?? "Unlinked",
+        amount: roundNumber(amount),
+        storeName: typeof meta.store_name === "string" && meta.store_name.trim() ? meta.store_name : null,
+        filename: item.filename ?? item.storage_path.split("/").pop() ?? item.storage_path,
+        createdAt: item.created_at,
+        purchaseDate:
+          typeof meta.purchase_date === "string" && meta.purchase_date.trim()
+            ? meta.purchase_date
+            : null,
+      };
+      receiptTotal += amount;
+      receiptCount += 1;
+      const purchaseTime = receipt.purchaseDate
+        ? new Date(`${receipt.purchaseDate}T12:00:00`).getTime()
+        : Number.NaN;
+      const isTodayReceipt =
+        item.created_at >= todayStartIso ||
+        (Number.isFinite(purchaseTime) && purchaseTime >= todayStart.getTime());
+      if (isTodayReceipt) {
+        receiptToday += amount;
+      }
+      if (item.project_id) {
+        const current = receiptTotalsByProject.get(item.project_id) ?? {
+          total: 0,
+          today: 0,
+          count: 0,
+          recent: [],
+        };
+        current.total += amount;
+        current.count += 1;
+        if (isTodayReceipt) {
+          current.today += amount;
+        }
+        current.recent.push(receipt);
+        current.recent.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+        current.recent = current.recent.slice(0, 8);
+        receiptTotalsByProject.set(item.project_id, current);
+      }
+    }
+  }
+  const recentShifts = sessions
+    .slice(0, 40)
+    .map((session) => ({
+      id: session.id,
+      workerName: session.profileName,
+      workerRole: session.profileRole,
+      projectName: session.projectName,
+      clockInTime: session.clockInTime,
+      clockOutTime: session.clockOutTime,
+      durationMinutes: session.durationMinutes,
+      checkoutStatus: session.checkoutStatus,
+      checkoutNote: session.checkoutNote,
+      isOpen: session.isOpen,
+    }));
+  const recentPayrollRuns = includeFinancials
+    ? data.payrollRuns.slice(0, 12).map((run) => ({
+        id: run.id,
+        periodStart: run.period_start,
+        periodEnd: run.period_end,
+        status: run.status,
+        workerCount:
+          typeof run.metadata.workers_count === "number"
+            ? run.metadata.workers_count
+            : typeof run.metadata.workerCount === "number"
+              ? run.metadata.workerCount
+              : 0,
+        totalAmount: roundNumber(run.total_amount),
+        paidAt: run.confirmed_at,
+      }))
+    : [];
 
   return {
     orgName: getDisplayOrgName(data.org.name),
     onSiteCount: stats.onSiteCount,
     activeProjectCount: stats.activeProjectCount,
     openTaskCount: stats.openTaskCount,
+    crewCount: stats.crewCount,
+    todayHours: stats.todayHours,
     hasFinanceAccess: includeFinancials,
     unpaidHours: stats.unpaidHours,
     unpaidAmount: stats.unpaidAmount,
-    projects: projectSummaries.map((project) => ({
-      id: project.id,
-      name: project.name,
-      status: project.status,
-      address: project.address,
-      notes: project.notes,
-      startDate: project.start_date,
-      endDate: project.end_date,
-      onSiteWorkerCount: project.onSiteWorkerCount,
-      openTaskCount: project.openTaskCount,
-      weekMinutes: project.weekMinutes,
-      skillTags: skillsByProjectId.get(project.id) ?? [],
-      openTaskTitles: openTaskTitlesByProjectId.get(project.id) ?? [],
-      materialSpec: readProjectMaterialSpec(project.settings)
-        .slice(0, 40)
-        .map((item) => ({
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit,
-          supplier: item.supplier,
-          link: item.link,
-          note: item.note,
-        })),
-      estimates: includeFinancials
-        ? readProjectEstimations(project.settings)
-            .slice(0, 20)
-            .map((estimate) => ({
-              title: estimate.title,
-              status: estimate.status,
-              description: estimate.description,
-              clientPrice: roundNumber(estimate.clientPrice),
-              internalCost: roundNumber(estimate.internalCost),
-              materialCost: roundNumber(estimate.materialCost),
-              margin: roundNumber(estimateMargin(estimate)),
-              workItems: estimate.items
-                .slice(0, 12)
-                .map((item) => `${item.title}: ${item.quantity} ${item.unit}, $${item.totalPrice}`),
-            }))
-        : [],
-    })),
+    receiptTotal: includeFinancials ? roundNumber(receiptTotal) : 0,
+    receiptToday: includeFinancials ? roundNumber(receiptToday) : 0,
+    receiptCount: includeFinancials ? receiptCount : 0,
+    projects: projectSummaries.map((project) => {
+      const receiptStats = receiptTotalsByProject.get(project.id);
+      return {
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        address: project.address,
+        notes: project.notes,
+        startDate: project.start_date,
+        endDate: project.end_date,
+        onSiteWorkerCount: project.onSiteWorkerCount,
+        openTaskCount: project.openTaskCount,
+        weekMinutes: project.weekMinutes,
+        skillTags: skillsByProjectId.get(project.id) ?? [],
+        openTaskTitles: openTaskTitlesByProjectId.get(project.id) ?? [],
+        receiptTotal: includeFinancials ? roundNumber(receiptStats?.total ?? 0) : 0,
+        receiptToday: includeFinancials ? roundNumber(receiptStats?.today ?? 0) : 0,
+        receiptCount: includeFinancials ? receiptStats?.count ?? 0 : 0,
+        recentReceipts: includeFinancials ? receiptStats?.recent ?? [] : [],
+        materialSpec: readProjectMaterialSpec(project.settings)
+          .slice(0, 40)
+          .map((item) => ({
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit,
+            supplier: item.supplier,
+            link: item.link,
+            note: item.note,
+          })),
+        estimates: includeFinancials
+          ? readProjectEstimations(project.settings)
+              .slice(0, 20)
+              .map((estimate) => ({
+                title: estimate.title,
+                documentType: estimate.documentType,
+                status: estimate.status,
+                description: estimate.description,
+                clientPrice: roundNumber(estimate.clientPrice),
+                internalCost: roundNumber(estimate.internalCost),
+                materialCost: roundNumber(estimate.materialCost),
+                margin: 0,
+                workItems: estimate.items
+                  .slice(0, 12)
+                  .map((item) => `${item.title}: ${item.quantity} ${item.unit}, $${item.totalPrice}`),
+                attachmentNames: estimate.attachments.slice(0, 10).map((attachment) => attachment.name),
+                attachmentCount: estimate.attachments.length,
+              }))
+          : [],
+      };
+    }),
     liveWorkers: profileSummaries
       .filter((profile) => profile.isOnSite)
       .map((profile) => ({
@@ -1885,6 +2185,8 @@ export function buildAssistantSnapshot(
       reportDate: report.report_date,
       summary: report.summary,
     })),
+    recentShifts,
+    recentPayrollRuns,
   };
 }
 
@@ -2140,6 +2442,9 @@ export async function answerManagerAssistant(
     ? [
         `Unpaid hours: ${snapshot.unpaidHours.toFixed(2)}`,
         `Unpaid amount: ${snapshot.unpaidAmount.toFixed(2)}`,
+        `Material receipts total: ${snapshot.receiptTotal.toFixed(2)}`,
+        `Material receipts today: ${snapshot.receiptToday.toFixed(2)}`,
+        `Receipt count: ${snapshot.receiptCount}`,
       ]
     : [
         "Financial visibility: hidden for this user.",
@@ -2153,7 +2458,7 @@ export async function answerManagerAssistant(
       "links must be an array of objects with label and href.",
       "If asked who should do work, use the worker skills and assignment suggestions below; never invent a skill.",
       "If asked for accounting/payroll analysis, use financial fields only when financial visibility is present.",
-      "If asked for estimates, provide a planning range and clearly say when materials/AHJ/field inspection are missing.",
+      "If asked about current totals, overview, materials, shifts, tasks, project documents, estimates, invoices, or change orders, use the snapshot first and answer with exact app numbers.",
       "If asked about Washington code, use the code reference pack as navigation only and say AHJ/permit set is final.",
       "If attached images are supplied to the model, inspect them directly. If only filenames or metadata are supplied, say that visual content is not available.",
       "Use the recent conversation to resolve follow-up words like 'him', 'that project', 'there', or 'same thing'.",
@@ -2163,14 +2468,18 @@ export async function answerManagerAssistant(
       `On site count: ${snapshot.onSiteCount}`,
       `Active projects: ${snapshot.activeProjectCount}`,
       `Open tasks: ${snapshot.openTaskCount}`,
+      `Crew count: ${snapshot.crewCount}`,
+      `Today hours: ${snapshot.todayHours.toFixed(2)}`,
       ...financialPromptLines,
       `Saved owner rules / Jarvis memory:\n${formatJarvisMemoryForPrompt(snapshot.memoryRules)}`,
       `Attached files:\n${formatJarvisAttachmentsForPrompt(attachments)}`,
-      `Projects: ${snapshot.projects.map((project) => `${project.name} (${project.status}, address: ${project.address ?? "none"}, dates: ${project.startDate ?? "none"} to ${project.endDate ?? "none"}, ${project.onSiteWorkerCount} live, ${project.openTaskCount} open tasks, skills: ${project.skillTags.join(", ") || "none"}, tasks: ${project.openTaskTitles.join("; ") || "none"}, materials: ${project.materialSpec.map((item) => `${item.name} ${item.quantity} ${item.unit}${item.supplier ? ` from ${item.supplier}` : ""}${item.note ? ` note ${item.note}` : ""}`).join("; ") || "none"}, estimates: ${snapshot.hasFinanceAccess ? project.estimates.map((estimate) => `${estimate.title} ${estimate.status} client $${estimate.clientPrice} cost $${estimate.internalCost + estimate.materialCost} margin $${estimate.margin}; works ${estimate.workItems.join(", ") || "none"}`).join("; ") || "none" : "hidden"}, notes: ${project.notes ?? "none"})`).join(" | ")}`,
+      `Projects: ${snapshot.projects.map((project) => `${project.name} (${project.status}, address: ${project.address ?? "none"}, dates: ${project.startDate ?? "none"} to ${project.endDate ?? "none"}, ${project.onSiteWorkerCount} live, ${project.openTaskCount} open tasks, receipts: ${snapshot.hasFinanceAccess ? `total $${project.receiptTotal.toFixed(2)}, today $${project.receiptToday.toFixed(2)}, count ${project.receiptCount}` : "hidden"}, skills: ${project.skillTags.join(", ") || "none"}, tasks: ${project.openTaskTitles.join("; ") || "none"}, materials: ${project.materialSpec.map((item) => `${item.name} ${item.quantity} ${item.unit}${item.supplier ? ` from ${item.supplier}` : ""}${item.note ? ` note ${item.note}` : ""}`).join("; ") || "none"}, documents: ${snapshot.hasFinanceAccess ? project.estimates.map((estimate) => `${estimate.documentType} ${estimate.title} ${estimate.status}; files ${estimate.attachmentNames.join(", ") || "none"}; notes ${estimate.description || "none"}`).join("; ") || "none" : "hidden"}, notes: ${project.notes ?? "none"})`).join(" | ")}`,
       `Live workers: ${snapshot.liveWorkers.map((worker) => `${worker.name} on ${worker.projectName ?? "unknown project"}`).join(" | ") || "None"}`,
       `Current month worker metrics: ${snapshot.workerMetrics.map((worker) => `${worker.name} (${worker.role}): ${worker.monthHours.toFixed(2)}h, ${worker.completedTasksThisMonth} completed tasks, ${worker.openTaskCount} open assigned, skills: ${worker.skills.join(", ") || "none"}, note: ${worker.capabilitiesNote ?? "none"}`).join(" | ") || "None"}`,
       `Open tasks: ${snapshot.openTasks.map((task) => `${task.title} on ${task.projectName}, priority ${task.priority}, assigned ${task.assignedToName ?? "unassigned"}, skills ${task.skillTags.join(", ") || "unknown"}`).join(" | ") || "None"}`,
       `Assignment suggestions: ${snapshot.assignmentSuggestions.map((suggestion) => `${suggestion.taskTitle} on ${suggestion.projectName}, needs ${suggestion.requiredSkills.join(", ")}, candidates ${suggestion.candidates.map((candidate) => `${candidate.name} (${candidate.reason})`).join("; ") || "none"}`).join(" | ") || "None"}`,
+      `Recent shifts: ${snapshot.recentShifts.map((shift) => `${shift.workerName} (${shift.workerRole}) on ${shift.projectName}, ${shift.clockInTime} to ${shift.clockOutTime ?? "open"}, ${formatHours(shift.durationMinutes / 60)}, checkout ${shift.checkoutStatus}${shift.checkoutNote ? `, note ${shift.checkoutNote}` : ""}`).join(" | ") || "None"}`,
+      `Recent payroll runs: ${snapshot.hasFinanceAccess ? snapshot.recentPayrollRuns.map((run) => `${run.periodStart} to ${run.periodEnd}, ${run.status}, workers ${run.workerCount}, total $${run.totalAmount.toFixed(2)}, paid ${run.paidAt ?? "not paid"}`).join(" | ") || "None" : "hidden"}`,
       `Recent media index: ${snapshot.mediaIndex.slice(0, 40).map((item) => `${item.projectName} ${item.mediaType} ${item.filename}, caption ${item.caption ?? "none"}, tags ${item.tags.join(", ") || "none"}, summary ${item.summary ?? "none"}, uploader ${item.uploadedByName ?? "unknown"}`).join(" | ") || "None"}`,
       `Washington code reference pack: ${snapshot.codeReferences.map((reference) => `${reference.topic}: ${reference.summary} (${reference.url})`).join(" | ")}`,
       `Recent reports: ${snapshot.recentReports.map((report) => `${report.projectName} ${report.reportDate}: ${report.summary ?? "No summary"}`).join(" | ") || "None"}`,
