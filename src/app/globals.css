@@ -1088,14 +1088,16 @@ select:focus {
 
 .jarvis-dock-orb-button[data-voice-state="connecting"] .jarvis-orb,
 .jarvis-dock-orb-button[data-voice-state="connected"] .jarvis-orb,
-.jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb {
+.jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb,
+.jarvis-dock-orb-button[data-voice-state="error"] .jarvis-orb {
   --orb-glow: rgba(255, 64, 93, 0.56);
   --orb-color: #ff5f75;
 }
 
 .jarvis-dock-orb-button[data-voice-state="connecting"] .jarvis-orb__core,
 .jarvis-dock-orb-button[data-voice-state="connected"] .jarvis-orb__core,
-.jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb__core {
+.jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb__core,
+.jarvis-dock-orb-button[data-voice-state="error"] .jarvis-orb__core {
   fill: #ff405d;
   filter:
     drop-shadow(0 0 8px rgba(255, 64, 93, 0.95))
@@ -1232,5 +1234,34 @@ select:focus {
   ::view-transition-group(*) {
     animation-duration: 0s !important;
     animation-delay: 0s !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-dock-orb-button[data-voice-state="connecting"],
+  .jarvis-dock-orb-button[data-voice-state="connected"] {
+    animation: jarvis-dock-listening 1.9s ease-in-out infinite !important;
+  }
+
+  .jarvis-dock-orb-button[data-voice-state="speaking"] {
+    animation: jarvis-dock-speaking 1.05s ease-in-out infinite !important;
+  }
+
+  .jarvis-dock-orb-button[data-voice-state="connecting"] .jarvis-orb__outer,
+  .jarvis-dock-orb-button[data-voice-state="connected"] .jarvis-orb__outer,
+  .jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb__outer {
+    animation: jarvis-orb-spin 3.2s linear infinite !important;
+  }
+
+  .jarvis-dock-orb-button[data-voice-state="connecting"] .jarvis-orb__outer--counter,
+  .jarvis-dock-orb-button[data-voice-state="connected"] .jarvis-orb__outer--counter,
+  .jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb__outer--counter {
+    animation: jarvis-orb-spin 4.4s linear infinite reverse !important;
+  }
+
+  .jarvis-dock-orb-button[data-voice-state="connecting"] .jarvis-orb__core,
+  .jarvis-dock-orb-button[data-voice-state="connected"] .jarvis-orb__core,
+  .jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb__core {
+    animation: jarvis-orb-hot-core 0.95s ease-in-out infinite !important;
   }
 }

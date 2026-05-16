@@ -11,6 +11,7 @@ const DOCK_POSITION_KEY = "check-time.jarvisDock.position";
 const DOCK_MARGIN = 10;
 const REALTIME_TOKEN_MIN_TTL_MS = 10_000;
 const REALTIME_TOKEN_FALLBACK_TTL_MS = 45_000;
+const MIN_VISIBLE_CONNECTING_MS = 650;
 
 function isVoiceActive(state: RealtimeState): boolean {
   return state === "connecting" || state === "connected" || state === "speaking";
@@ -93,8 +94,10 @@ export function JarvisDock() {
   const realtimeChannelRef = useRef<RTCDataChannel | null>(null);
   const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
   const realtimeStreamRef = useRef<MediaStream | null>(null);
+  const realtimeStateRef = useRef<RealtimeState>("idle");
   const realtimeTokenRef = useRef<{ secret: string; expiresAtMs: number } | null>(null);
   const realtimeTokenPromiseRef = useRef<Promise<string> | null>(null);
+  const realtimeAttemptRef = useRef(0);
   const dockPositionRef = useRef<DockPosition>({ x: 16, y: 420 });
   const dragStartRef = useRef<{
     pointerId: number;
@@ -105,10 +108,17 @@ export function JarvisDock() {
     moved: boolean;
   } | null>(null);
   const suppressClickRef = useRef(false);
+  const pointerActivatedRef = useRef(false);
   const [realtimeState, setRealtimeState] = useState<RealtimeState>("idle");
   const [realtimeMessage, setRealtimeMessage] = useState("");
   const [dockPosition, setDockPosition] = useState<DockPosition>({ x: 16, y: 420 });
   const [positionReady, setPositionReady] = useState(false);
+
+  const setRealtimeStatus = useCallback((state: RealtimeState, message = "") => {
+    realtimeStateRef.current = state;
+    setRealtimeState(state);
+    setRealtimeMessage(message);
+  }, []);
 
   const getRealtimeClientSecret = useCallback(async () => {
     const cached = realtimeTokenRef.current;
@@ -148,6 +158,7 @@ export function JarvisDock() {
   }, [t]);
 
   const stopRealtime = useCallback((nextState: RealtimeState = "idle", nextMessage = "") => {
+    realtimeAttemptRef.current += 1;
     realtimeChannelRef.current?.close();
     realtimeChannelRef.current = null;
     realtimePeerRef.current?.close();
@@ -159,11 +170,16 @@ export function JarvisDock() {
       realtimeAudioRef.current.remove();
       realtimeAudioRef.current = null;
     }
+    realtimeStateRef.current = nextState;
     setRealtimeState(nextState);
     setRealtimeMessage(nextMessage);
   }, []);
 
   useEffect(() => () => stopRealtime(), [stopRealtime]);
+
+  useEffect(() => {
+    realtimeStateRef.current = realtimeState;
+  }, [realtimeState]);
 
   useEffect(() => {
     if (!positionReady) return;
@@ -258,39 +274,64 @@ export function JarvisDock() {
       window.setTimeout(() => {
         suppressClickRef.current = false;
       }, 0);
+      return;
     }
+    pointerActivatedRef.current = true;
+    window.setTimeout(() => {
+      pointerActivatedRef.current = false;
+    }, 350);
+    activateDockVoice();
   }
 
   function handleDockClick() {
+    if (pointerActivatedRef.current) {
+      pointerActivatedRef.current = false;
+      return;
+    }
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
       return;
     }
-    if (isVoiceActive(realtimeState)) {
+    activateDockVoice();
+  }
+
+  function activateDockVoice() {
+    if (isVoiceActive(realtimeStateRef.current)) {
       stopRealtime();
       return;
     }
-    setRealtimeState("connecting");
-    setRealtimeMessage(t("jarvisDock.voiceConnecting"));
     void startRealtime();
   }
 
   async function startRealtime() {
-    if (isVoiceActive(realtimeState)) {
-      stopRealtime();
+    if (isVoiceActive(realtimeStateRef.current)) {
       return;
     }
     if (typeof window === "undefined") return;
     if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") {
-      setRealtimeState("error");
-      setRealtimeMessage(t("jarvisDock.voiceUnsupported"));
+      setRealtimeStatus("error", t("jarvisDock.voiceUnsupported"));
       return;
     }
 
-    setRealtimeState("connecting");
-    setRealtimeMessage(t("jarvisDock.voiceConnecting"));
+    const attempt = realtimeAttemptRef.current + 1;
+    realtimeAttemptRef.current = attempt;
+    const startedAt = performance.now();
+    setRealtimeStatus("connecting", t("jarvisDock.voiceConnecting"));
     try {
-      const realtimeClientSecret = await getRealtimeClientSecret();
+      const realtimeClientSecretPromise = getRealtimeClientSecret();
+      const streamPromise = navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      const [realtimeClientSecret, stream] = await Promise.all([realtimeClientSecretPromise, streamPromise]);
+      if (realtimeAttemptRef.current !== attempt) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
       const peer = new RTCPeerConnection();
       realtimePeerRef.current = peer;
 
@@ -309,7 +350,6 @@ export function JarvisDock() {
         void audio.play().catch(() => undefined);
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       realtimeStreamRef.current = stream;
       for (const track of stream.getAudioTracks()) {
         peer.addTrack(track, stream);
@@ -318,8 +358,8 @@ export function JarvisDock() {
       const channel = peer.createDataChannel("oai-events");
       realtimeChannelRef.current = channel;
       channel.onopen = () => {
-        setRealtimeState("connected");
-        setRealtimeMessage(t("jarvisDock.voiceConnected"));
+        if (realtimeAttemptRef.current !== attempt) return;
+        setRealtimeStatus("connected", t("jarvisDock.voiceConnected"));
         channel.send(
           JSON.stringify({
             type: "response.create",
@@ -332,49 +372,56 @@ export function JarvisDock() {
         );
       };
       channel.onmessage = (event) => {
+        if (realtimeAttemptRef.current !== attempt) return;
         if (typeof event.data !== "string") return;
         try {
           const payload = JSON.parse(event.data) as { type?: string };
           if (payload.type === "response.audio.delta" || payload.type === "response.output_audio.delta") {
-            setRealtimeState("speaking");
+            setRealtimeStatus("speaking", t("jarvisDock.voiceConnected"));
           }
           if (payload.type === "input_audio_buffer.speech_started") {
-            setRealtimeState("connected");
+            setRealtimeStatus("connected", t("jarvisDock.voiceConnected"));
           }
           if (
             payload.type === "response.done" ||
             payload.type === "response.audio.done" ||
             payload.type === "output_audio_buffer.stopped"
           ) {
-            setRealtimeState("connected");
+            setRealtimeStatus("connected", t("jarvisDock.voiceConnected"));
           }
         } catch {
           // Realtime occasionally emits transport messages we do not need for UI state.
         }
       };
       channel.onclose = () => {
-        if (realtimePeerRef.current) {
+        if (realtimePeerRef.current && realtimeAttemptRef.current === attempt) {
           stopRealtime();
         }
       };
       channel.onerror = () => {
-        stopRealtime("error", t("jarvisDock.voiceFailed"));
+        if (realtimeAttemptRef.current === attempt) {
+          stopRealtime("error", t("jarvisDock.voiceFailed"));
+        }
       };
 
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 20000);
-      const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${realtimeClientSecret}`,
-          "Content-Type": "application/sdp",
-        },
-        body: offer.sdp ?? "",
-        signal: controller.signal,
-      });
-      window.clearTimeout(timeout);
+      let sdpResponse: Response;
+      try {
+        sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${realtimeClientSecret}`,
+            "Content-Type": "application/sdp",
+          },
+          body: offer.sdp ?? "",
+          signal: controller.signal,
+        });
+      } finally {
+        window.clearTimeout(timeout);
+      }
       if (!sdpResponse.ok) {
         const contentType = sdpResponse.headers.get("content-type") ?? "";
         if (contentType.includes("application/json")) {
@@ -384,8 +431,15 @@ export function JarvisDock() {
         throw new Error(await sdpResponse.text());
       }
       const answer = await sdpResponse.text();
+      if (realtimeAttemptRef.current !== attempt) return;
       await peer.setRemoteDescription({ type: "answer", sdp: answer });
     } catch (error) {
+      if (realtimeAttemptRef.current !== attempt) return;
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < MIN_VISIBLE_CONNECTING_MS) {
+        await new Promise((resolve) => window.setTimeout(resolve, MIN_VISIBLE_CONNECTING_MS - elapsed));
+      }
+      if (realtimeAttemptRef.current !== attempt) return;
       const text =
         error instanceof DOMException && error.name === "AbortError"
           ? t("jarvisDock.voiceTimeout")
