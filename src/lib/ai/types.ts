@@ -42,7 +42,7 @@ export interface GeneratedDailyReport {
   laborSignal: string;
   deliverySignal: string;
   confidence: number;
-  source: "anthropic" | "fallback";
+  source: "gemini" | "fallback";
 }
 
 export interface PhotoAnalysisInput {
@@ -64,7 +64,7 @@ export interface PhotoAnalysisResult {
   followUps: string[];
   tags: string[];
   confidence: number;
-  source: "anthropic" | "fallback";
+  source: "gemini" | "fallback";
 }
 
 export interface SnapshotProjectMaterialSpecItem {
@@ -284,7 +284,7 @@ export interface AssistantResult {
   links: AssistantLink[];
   actions?: AssistantAction[];
   confidence: number;
-  source: "anthropic" | "openai" | "fallback";
+  source: "gemini" | "fallback";
   memorySaved?: JarvisMemoryRule | null;
 }
 
@@ -298,7 +298,7 @@ export interface VoiceCommandResult {
   actionLabel: string | null;
   route: string | null;
   confidence: number;
-  source: "anthropic" | "fallback";
+  source: "gemini" | "fallback";
 }
 
 export interface AiReportCard {

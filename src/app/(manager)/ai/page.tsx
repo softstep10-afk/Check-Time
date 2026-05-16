@@ -48,8 +48,9 @@ export default async function AiPage() {
         recentUploadsCount: media.length,
       }}
       hasModelProvider={Boolean(
-        (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_MODEL) ||
-          process.env.OPENAI_API_KEY,
+        process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+          process.env.GEMINI_API_KEY ||
+          process.env.GOOGLE_AI_API_KEY,
       )}
       hasAnalysisPersistence={Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)}
     />

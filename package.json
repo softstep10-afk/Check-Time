@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@google-cloud/text-to-speech": "^6.4.1",
+    "@google/generative-ai": "^0.24.1",
     "@node-rs/argon2": "^2.0.2",
     "@react-google-maps/api": "^2.20.8",
     "@supabase/ssr": "^0.10.2",

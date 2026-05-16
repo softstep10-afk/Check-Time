@@ -17,7 +17,7 @@ set and dark Binance-style UI, rebuilt on a proper architecture.
 | Storage | Supabase Storage (photos, videos, PDFs) |
 | Hosting | Vercel |
 | Styling | Tailwind CSS + CSS custom properties (tokens in `globals.css`, full system in `DESIGN.md`) |
-| AI | OpenAI Responses/Realtime via Next API routes, Anthropic fallback still supported |
+| AI | Google Gemini 1.5 Flash via Next API routes + Google Cloud Text-to-Speech |
 | Tests | Vitest |
 
 `CLAUDE.md` lists the stack choices we deliberately exclude (React Native,
@@ -39,12 +39,12 @@ npm run dev                         # http://localhost:3000
 NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-jwt>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-jwt>     # server-only; bypasses RLS
-OPENAI_API_KEY=<key>                             # Jarvis chat, vision, realtime token minting
-OPENAI_MODEL=gpt-5.4-mini                        # optional override: Jarvis app-data + image answers
-OPENAI_REALTIME_MODEL=gpt-realtime-mini          # optional override: live voice endpoint
-OPENAI_REALTIME_VOICE=marin                      # optional: live voice endpoint
-ANTHROPIC_API_KEY=<key>                          # optional fallback for older AI routes
-ANTHROPIC_MODEL=<model>                          # optional fallback for older AI routes
+GOOGLE_GENERATIVE_AI_API_KEY=<key>               # Gemini brain for Jarvis chat/vision/PDF prompts
+GEMINI_MODEL=gemini-1.5-flash                    # optional override for Jarvis model
+GOOGLE_CLOUD_CREDENTIALS=<service-account-json>  # or base64 JSON for Google Cloud Text-to-Speech
+GOOGLE_TTS_VOICE=en-GB-Neural2-B                 # optional British male voice override
+GOOGLE_TTS_SPEAKING_RATE=0.9                     # optional slower Jarvis cadence
+GOOGLE_TTS_PITCH=-3                              # optional deeper Jarvis tone
 ```
 
 ### Demo / preview mode

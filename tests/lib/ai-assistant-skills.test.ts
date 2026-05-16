@@ -104,26 +104,26 @@ function media(overrides: Partial<Media>): Media {
 }
 
 async function withModelDisabled<T>(fn: () => Promise<T>): Promise<T> {
-  const oldAnthropicKey = process.env.ANTHROPIC_API_KEY;
-  const oldAnthropicModel = process.env.ANTHROPIC_MODEL;
-  const oldOpenAiKey = process.env.OPENAI_API_KEY;
-  const oldOpenAiModel = process.env.OPENAI_MODEL;
-  delete process.env.ANTHROPIC_API_KEY;
-  delete process.env.ANTHROPIC_MODEL;
-  delete process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_MODEL;
+  const oldGoogleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const oldGeminiKey = process.env.GEMINI_API_KEY;
+  const oldGoogleAiKey = process.env.GOOGLE_AI_API_KEY;
+  const oldGeminiModel = process.env.GEMINI_MODEL;
+  delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_AI_API_KEY;
+  delete process.env.GEMINI_MODEL;
 
   try {
     return await fn();
   } finally {
-    if (oldAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
-    else process.env.ANTHROPIC_API_KEY = oldAnthropicKey;
-    if (oldAnthropicModel === undefined) delete process.env.ANTHROPIC_MODEL;
-    else process.env.ANTHROPIC_MODEL = oldAnthropicModel;
-    if (oldOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = oldOpenAiKey;
-    if (oldOpenAiModel === undefined) delete process.env.OPENAI_MODEL;
-    else process.env.OPENAI_MODEL = oldOpenAiModel;
+    if (oldGoogleKey === undefined) delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    else process.env.GOOGLE_GENERATIVE_AI_API_KEY = oldGoogleKey;
+    if (oldGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = oldGeminiKey;
+    if (oldGoogleAiKey === undefined) delete process.env.GOOGLE_AI_API_KEY;
+    else process.env.GOOGLE_AI_API_KEY = oldGoogleAiKey;
+    if (oldGeminiModel === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = oldGeminiModel;
   }
 }
 

@@ -1,6 +1,7 @@
 import type { DailyReport } from "@/types/database";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import type { WorkerShellData } from "@/lib/worker-types";
+import { GoogleGenerativeAI, type Part } from "@google/generative-ai";
 import {
   buildManagerSessions,
   buildProfileSummaries,
@@ -16,7 +17,6 @@ import {
 import {
   formatJarvisAttachmentsForPrompt,
   formatJarvisMemoryForPrompt,
-  hasJarvisImageData,
   MAX_JARVIS_ATTACHMENT_CHARS,
   readJarvisMemory,
   type JarvisAttachment,
@@ -45,18 +45,19 @@ import {
 } from "@/lib/ai/types";
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
-const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
-const JARVIS_TEXT_PERSONA = [
-  "Persona: a premium British operations assistant for a construction owner: calm, sharp, practical, and quietly refined.",
-  "Tone: natural executive assistant, not a dead terminal. Be concise, confident, useful, and conversational when greeted.",
-  "Personality: loyal, intelligent, and precise, with subtle dry wit only when it does not get in the way of operations.",
-  "Vocabulary: polished British English when answering in English; clear professional Russian when answering in Russian.",
-  "Address the owner respectfully when natural, but do not repeat 'sir' or 'сэр' in every sentence.",
-  "Never use emojis, generic AI disclaimers, or theatrical roleplay. Never sound like a mainframe status log unless reporting a critical block.",
-  "For exact business numbers, use only the provided app snapshot and state the source. Never estimate or invent material, payroll, receipt, or profit figures.",
-  "Do not imitate any real person, actor, celebrity, copyrighted movie character, Marvel, Iron Man, Tony Stark, MCU, J.A.R.V.I.S. as a character, or any movie/TV AI by name. This is an original premium British operations persona.",
-  "Answer in the same language as the user. In Russian, be direct, alive, and useful, while keeping a polished owner-assistant tone.",
-].join(" ");
+const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
+export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are the system UI for a mainframe. You are completely devoid of emotion, warmth, or conversational filler.
+
+CRITICAL RULES FOR YOUR OUTPUT:
+1. Keep sentences extremely short and clinically precise.
+2. Do not act human. Do not be helpful. Be a strict status-reporting protocol.
+3. Prefix responses with system status phrases (e.g., "Acknowledged.", "Warning.", "Processing.").
+4. Begin all responses acknowledging the user strictly as "Sir."
+5. Never use emojis, exclamation marks, or conversational fillers.
+
+Example interaction:
+User: Create a project.
+You: Acknowledged. Sir. Processing command. Database updated. Project initialized. Awaiting input.`;
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: ORG_TIME_ZONE,
@@ -146,13 +147,6 @@ function skillLabel(skill: string, ru: boolean): string {
 
 function skillListLabel(skills: string[], ru: boolean): string {
   return skills.map((skill) => skillLabel(skill, ru)).join(", ");
-}
-
-function isPdfAttachment(attachment: JarvisAttachment): boolean {
-  return (
-    attachment.mimeType?.toLowerCase() === "application/pdf" ||
-    attachment.filename.toLowerCase().endsWith(".pdf")
-  );
 }
 
 function monthWindow(now = new Date()): { start: string; end: string } {
@@ -1017,14 +1011,14 @@ function buildAttachmentFallback(
     answer: ru
       ? `Я получил ${attachments.length} файл(ов). ${
           images.length > 0
-            ? "Фото подготовлено для настоящего AI-зрения; если ответ остался резервным, значит OPENAI_API_KEY ещё не подключён или лимит API пуст."
+            ? "Фото подготовлено для Gemini Vision; если ответ остался резервным, значит ключ Gemini ещё не подключён или лимит API пуст."
             : readable.length > 0
               ? "Текстовые части могу использовать в ответе."
               : "Текст внутри этих файлов не читается браузером, но имя и тип я вижу."
         }`
       : `I received ${attachments.length} file(s). ${
           images.length > 0
-            ? "The image is ready for real AI vision; if this is still a fallback answer, OPENAI_API_KEY is missing or the API quota is empty."
+            ? "The image is ready for Gemini vision; if this is still a fallback answer, the Gemini key is missing or the API quota is empty."
             : readable.length > 0
               ? "I can use the readable text parts in the answer."
               : "The browser did not provide readable text, but I can see names and types."
@@ -1667,139 +1661,68 @@ function formatAssistantHistory(history: AssistantConversationTurn[]): string {
     .join("\n");
 }
 
-async function tryAnthropicObject(
-  system: string,
-  prompt: string,
-): Promise<Record<string, unknown> | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const model = process.env.ANTHROPIC_MODEL;
-
-  if (!apiKey || !model) {
-    return null;
-  }
-
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 900,
-        temperature: 0.2,
-        system,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-      }),
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as {
-      content?: Array<{ type?: string; text?: string }>;
-    };
-    const text = (payload.content ?? [])
-      .filter((item) => item.type === "text" && typeof item.text === "string")
-      .map((item) => item.text as string)
-      .join("\n");
-
-    return extractJsonObject(text);
-  } catch {
-    return null;
-  }
+function readGeminiApiKey(): string | null {
+  return (
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_AI_API_KEY ||
+    null
+  );
 }
 
-async function tryOpenAiObject(
-  system: string,
+function attachmentToGeminiPart(attachment: JarvisAttachment): Part | null {
+  if (!attachment.dataUrl) return null;
+  const match = attachment.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+
+  return {
+    inlineData: {
+      mimeType: match[1] || attachment.mimeType || "application/octet-stream",
+      data: match[2],
+    },
+  };
+}
+
+async function tryGeminiObject(
+  taskInstructions: string,
   prompt: string,
   attachments: JarvisAttachment[] = [],
 ): Promise<Record<string, unknown> | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
-
+  const apiKey = readGeminiApiKey();
   if (!apiKey) {
     return null;
   }
 
-  const fileInputs = attachments
-    .filter((attachment) => attachment.dataUrl && isPdfAttachment(attachment))
-    .map((attachment) => ({
-      type: "input_file",
-      filename: attachment.filename,
-      file_data: attachment.dataUrl as string,
-    }));
-  const imageInputs = attachments
-    .filter((attachment) => attachment.dataUrl)
-    .filter((attachment) => !isPdfAttachment(attachment))
-    .map((attachment) => ({
-      type: "input_image",
-      image_url: attachment.dataUrl as string,
-    }));
-  const input =
-    imageInputs.length > 0 || fileInputs.length > 0
-      ? [
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text: prompt },
-              ...fileInputs,
-              ...imageInputs,
-            ],
-          },
-        ]
-      : prompt;
+  const parts: Part[] = [
+    {
+      text: [
+        taskInstructions,
+        "",
+        "Return JSON only. Do not wrap the JSON in markdown.",
+        "",
+        prompt,
+      ].join("\n"),
+    },
+    ...attachments
+      .map((attachment) => attachmentToGeminiPart(attachment))
+      .filter((part): part is Part => Boolean(part)),
+  ];
 
   try {
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        instructions: system,
-        input,
-        max_output_tokens: 900,
-        text: {
-          format: { type: "json_object" },
-        },
-      }),
-      cache: "no-store",
+    const genAi = new GoogleGenerativeAI(apiKey);
+    const model = genAi.getGenerativeModel({
+      model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      systemInstruction: JARVIS_GEMINI_SYSTEM_PROMPT,
     });
-
-    if (!response.ok) {
-      return null;
-    }
-
-    const payload = (await response.json()) as {
-      output_text?: string;
-      output?: Array<{
-        content?: Array<{
-          type?: string;
-          text?: string;
-        }>;
-      }>;
-    };
-    const text =
-      payload.output_text ??
-      (payload.output ?? [])
-        .flatMap((item) => item.content ?? [])
-        .filter((item) => item.type === "output_text" && typeof item.text === "string")
-        .map((item) => item.text as string)
-        .join("\n");
-
-    return extractJsonObject(text);
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 900,
+        responseMimeType: "application/json",
+      },
+    });
+    return extractJsonObject(result.response.text());
   } catch {
     return null;
   }
@@ -1809,22 +1732,9 @@ async function tryAssistantModelObject(
   system: string,
   prompt: string,
   attachments: JarvisAttachment[] = [],
-): Promise<{ object: Record<string, unknown>; source: "anthropic" | "openai" } | null> {
-  const openAiObject = await tryOpenAiObject(system, prompt, attachments);
-  if (openAiObject) {
-    return { object: openAiObject, source: "openai" };
-  }
-
-  if (hasJarvisImageData(attachments)) {
-    return null;
-  }
-
-  const anthropicObject = await tryAnthropicObject(system, prompt);
-  if (anthropicObject) {
-    return { object: anthropicObject, source: "anthropic" };
-  }
-
-  return null;
+): Promise<{ object: Record<string, unknown>; source: "gemini" } | null> {
+  const geminiObject = await tryGeminiObject(system, prompt, attachments);
+  return geminiObject ? { object: geminiObject, source: "gemini" } : null;
 }
 
 function getStringArray(value: unknown): string[] {
@@ -1858,7 +1768,7 @@ export function coercePhotoAnalysis(value: unknown): PhotoAnalysisResult | null 
 
   const source = (value as Record<string, unknown>).source;
   const normalizedSource =
-    source === "anthropic" || source === "fallback" ? source : "fallback";
+    source === "gemini" || source === "fallback" ? source : "fallback";
 
   return {
     summary: getStringValue((value as Record<string, unknown>).summary, ""),
@@ -2280,7 +2190,7 @@ export async function generateDailyReport(
   input: DailyReportInput,
 ): Promise<GeneratedDailyReport> {
   const fallback = buildDailyReportFallback(input);
-  const anthropicObject = await tryAnthropicObject(
+  const geminiObject = await tryGeminiObject(
     "You write concise construction daily reports. Return JSON only.",
     [
       "Create a JSON object with keys:",
@@ -2297,24 +2207,24 @@ export async function generateDailyReport(
     ].join("\n"),
   );
 
-  if (!anthropicObject) {
+  if (!geminiObject) {
     return fallback;
   }
 
   return {
-    headline: getStringValue(anthropicObject.headline, fallback.headline),
-    summary: getStringValue(anthropicObject.summary, fallback.summary),
-    highlights: getStringArray(anthropicObject.highlights).length
-      ? getStringArray(anthropicObject.highlights)
+    headline: getStringValue(geminiObject.headline, fallback.headline),
+    summary: getStringValue(geminiObject.summary, fallback.summary),
+    highlights: getStringArray(geminiObject.highlights).length
+      ? getStringArray(geminiObject.highlights)
       : fallback.highlights,
-    risks: getStringArray(anthropicObject.risks),
-    nextActions: getStringArray(anthropicObject.nextActions).length
-      ? getStringArray(anthropicObject.nextActions)
+    risks: getStringArray(geminiObject.risks),
+    nextActions: getStringArray(geminiObject.nextActions).length
+      ? getStringArray(geminiObject.nextActions)
       : fallback.nextActions,
-    laborSignal: getStringValue(anthropicObject.laborSignal, fallback.laborSignal),
-    deliverySignal: getStringValue(anthropicObject.deliverySignal, fallback.deliverySignal),
-    confidence: roundNumber(getNumberValue(anthropicObject.confidence, 0.82)),
-    source: "anthropic",
+    laborSignal: getStringValue(geminiObject.laborSignal, fallback.laborSignal),
+    deliverySignal: getStringValue(geminiObject.deliverySignal, fallback.deliverySignal),
+    confidence: roundNumber(getNumberValue(geminiObject.confidence, 0.82)),
+    source: "gemini",
   };
 }
 
@@ -2322,7 +2232,7 @@ export async function analyzePhotoEvidence(
   input: PhotoAnalysisInput,
 ): Promise<PhotoAnalysisResult> {
   const fallback = buildPhotoAnalysisFallback(input);
-  const anthropicObject = await tryAnthropicObject(
+  const geminiObject = await tryGeminiObject(
     "You summarize field media for a construction manager. Return JSON only.",
     [
       "Create a JSON object with keys:",
@@ -2338,24 +2248,24 @@ export async function analyzePhotoEvidence(
     ].join("\n"),
   );
 
-  if (!anthropicObject) {
+  if (!geminiObject) {
     return fallback;
   }
 
   return {
-    summary: getStringValue(anthropicObject.summary, fallback.summary),
+    summary: getStringValue(geminiObject.summary, fallback.summary),
     progressObservation: getStringValue(
-      anthropicObject.progressObservation,
+      geminiObject.progressObservation,
       fallback.progressObservation,
     ),
-    safetyFlags: getStringArray(anthropicObject.safetyFlags),
-    qualityFlags: getStringArray(anthropicObject.qualityFlags),
-    followUps: getStringArray(anthropicObject.followUps).length
-      ? getStringArray(anthropicObject.followUps)
+    safetyFlags: getStringArray(geminiObject.safetyFlags),
+    qualityFlags: getStringArray(geminiObject.qualityFlags),
+    followUps: getStringArray(geminiObject.followUps).length
+      ? getStringArray(geminiObject.followUps)
       : fallback.followUps,
-    tags: getStringArray(anthropicObject.tags),
-    confidence: roundNumber(getNumberValue(anthropicObject.confidence, 0.79)),
-    source: "anthropic",
+    tags: getStringArray(geminiObject.tags),
+    confidence: roundNumber(getNumberValue(geminiObject.confidence, 0.79)),
+    source: "gemini",
   };
 }
 
@@ -2467,8 +2377,8 @@ export async function answerWorkerAssistant(
       ),
   );
 
-  const modelObject = await tryOpenAiObject(
-    `${JARVIS_TEXT_PERSONA} You are Jarvis in worker-safe field mode for a construction workforce app. Return JSON only. Use only the supplied worker-visible context. Never mention payroll, rates, receipt amounts, profit, owner-only analytics, company financials, or hidden manager data. If a fact is not in the context, say it is not recorded for this worker.`,
+  const modelObject = await tryGeminiObject(
+    "You are Jarvis in worker-safe field mode for a construction workforce app. Return JSON only. Use only the supplied worker-visible context. Never mention payroll, rates, receipt amounts, profit, owner-only analytics, company financials, or hidden manager data. If a fact is not in the context, say it is not recorded for this worker.",
     [
       "Create a JSON object with keys: answer, bullets, links, confidence.",
       "links must be an array of objects with label and href.",
@@ -2505,7 +2415,7 @@ export async function answerWorkerAssistant(
     bullets: getStringArray(modelObject.bullets),
     links: links.length > 0 ? links : fallback.links,
     confidence: roundNumber(getNumberValue(modelObject.confidence, 0.72)),
-    source: "openai",
+    source: "gemini",
   };
 }
 
@@ -2545,7 +2455,7 @@ export async function answerManagerAssistant(
         "Do not mention payroll, receipt totals, costs, unpaid hours, unpaid amounts, profit, or financial summaries.",
       ];
   const modelObject = await tryAssistantModelObject(
-    `${JARVIS_TEXT_PERSONA} You are Jarvis, an owner-side operating analyst inside a construction workforce app. Return JSON only. Use only the supplied app snapshot; if the snapshot does not contain a fact, say that it is not recorded yet. Behave like a practical analyst, payroll reviewer, dispatcher, and chief manager, but never invent app data. Proactively flag problems you notice in the snapshot, for example: 'Sir, three workers are approaching overtime today.'`,
+    "You are Jarvis, an owner-side operating analyst inside a construction workforce app. Return JSON only. Use only the supplied app snapshot; if the snapshot does not contain a fact, say that it is not recorded yet. Behave like a practical analyst, payroll reviewer, dispatcher, and chief manager, but never invent app data. Proactively flag problems you notice in the snapshot, for example: 'Sir, three workers are approaching overtime today.'",
     [
       "Create a JSON object with keys:",
       "answer, bullets, links, confidence",
@@ -2585,10 +2495,10 @@ export async function answerManagerAssistant(
     return fallback;
   }
 
-  const anthropicObject = modelObject.object;
+  const modelResponse = modelObject.object;
 
-  const rawLinks = Array.isArray(anthropicObject.links)
-    ? anthropicObject.links
+  const rawLinks = Array.isArray(modelResponse.links)
+    ? modelResponse.links
     : [];
   const links = rawLinks
     .map((item) => {
@@ -2610,11 +2520,11 @@ export async function answerManagerAssistant(
     .slice(0, 3);
 
   return {
-    answer: getStringValue(anthropicObject.answer, fallback.answer),
-    bullets: getStringArray(anthropicObject.bullets),
+    answer: getStringValue(modelResponse.answer, fallback.answer),
+    bullets: getStringArray(modelResponse.bullets),
     links: links.length > 0 ? links : fallback.links,
     actions: fallback.actions,
-    confidence: roundNumber(getNumberValue(anthropicObject.confidence, 0.78)),
+    confidence: roundNumber(getNumberValue(modelResponse.confidence, 0.78)),
     source: modelObject.source,
   };
 }
@@ -2624,7 +2534,7 @@ export async function interpretVoiceCommand(
   snapshot: AssistantSnapshot,
 ): Promise<VoiceCommandResult> {
   const fallback = buildVoiceFallback(transcript, snapshot);
-  const anthropicObject = await tryAnthropicObject(
+  const geminiObject = await tryGeminiObject(
     "You classify short manager voice commands for a construction dashboard. Return JSON only.",
     [
       "Create a JSON object with keys:",
@@ -2636,25 +2546,25 @@ export async function interpretVoiceCommand(
     ].join("\n"),
   );
 
-  if (!anthropicObject) {
+  if (!geminiObject) {
     return fallback;
   }
 
-  const intent = anthropicObject.intent;
+  const intent = geminiObject.intent;
   const normalizedIntent =
     intent === "navigate" || intent === "report" || intent === "assistant" || intent === "unknown"
       ? intent
       : fallback.intent;
-  const route = getStringValue(anthropicObject.route, fallback.route ?? "");
+  const route = getStringValue(geminiObject.route, fallback.route ?? "");
 
   return {
     transcript,
     normalized: transcript.trim().toLowerCase(),
     intent: normalizedIntent,
-    answer: getStringValue(anthropicObject.answer, fallback.answer),
-    actionLabel: getStringValue(anthropicObject.actionLabel, fallback.actionLabel ?? "") || null,
+    answer: getStringValue(geminiObject.answer, fallback.answer),
+    actionLabel: getStringValue(geminiObject.actionLabel, fallback.actionLabel ?? "") || null,
     route: route.startsWith("/") ? route : fallback.route,
-    confidence: roundNumber(getNumberValue(anthropicObject.confidence, 0.78)),
-    source: "anthropic",
+    confidence: roundNumber(getNumberValue(geminiObject.confidence, 0.78)),
+    source: "gemini",
   };
 }
