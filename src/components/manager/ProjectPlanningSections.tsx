@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, ExternalLink, FileSpreadsheet, Lock, Plus, Save, Trash2 } from "lucide-react";
+import { Calculator, ExternalLink, FileDown, FileSpreadsheet, Lock, Plus, Save, Trash2 } from "lucide-react";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
-import { useTranslation } from "@/lib/i18n";
+import { type TranslationKey, useTranslation } from "@/lib/i18n";
 import {
   createProjectPlanningId,
   estimateMargin,
   parseMaterialSpecText,
   readProjectEstimations,
   readProjectMaterialSpec,
+  summarizeProjectEstimations,
   type ProjectEstimate,
+  type ProjectEstimateDocumentType,
   type ProjectEstimateWorkItem,
   type ProjectMaterialSpecItem,
 } from "@/lib/project-planning";
@@ -25,6 +27,8 @@ type ProjectPlanningSectionsProps = {
 
 type EstimateDraft = {
   title: string;
+  documentType: ProjectEstimateDocumentType;
+  status: ProjectEstimate["status"];
   description: string;
   workTitle: string;
   quantity: string;
@@ -37,6 +41,8 @@ type EstimateDraft = {
 
 const EMPTY_ESTIMATE_DRAFT: EstimateDraft = {
   title: "",
+  documentType: "estimate",
+  status: "draft",
   description: "",
   workTitle: "",
   quantity: "1",
@@ -46,6 +52,22 @@ const EMPTY_ESTIMATE_DRAFT: EstimateDraft = {
   laborHours: "",
   internalCost: "",
 };
+
+const ESTIMATE_DOCUMENT_TYPES: ProjectEstimateDocumentType[] = [
+  "estimate",
+  "invoice",
+  "change_order",
+  "extra_work",
+];
+
+const ESTIMATE_STATUSES: ProjectEstimate["status"][] = [
+  "draft",
+  "sent",
+  "approved",
+  "rejected",
+  "done",
+  "paid",
+];
 
 function currency(value: number): string {
   return new Intl.NumberFormat("en-US", {
@@ -66,6 +88,107 @@ function materialLinkHref(link: string): string | null {
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
   if (trimmed.startsWith("www.")) return `https://${trimmed}`;
   return null;
+}
+
+function labelFromToken(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function estimateTypeKey(type: ProjectEstimateDocumentType): TranslationKey {
+  return `projectEstimates.type.${type}` as TranslationKey;
+}
+
+function estimateStatusKey(status: ProjectEstimate["status"]): TranslationKey {
+  return `projectEstimates.status.${status}` as TranslationKey;
+}
+
+function sanitizeFileName(value: string): string {
+  const cleaned = value.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+  return cleaned || "project-estimate";
+}
+
+function buildEstimateCsv(estimate: ProjectEstimate): string {
+  const rows = [
+    ["Document", estimate.title],
+    ["Type", labelFromToken(estimate.documentType)],
+    ["Status", labelFromToken(estimate.status)],
+    ["Description", estimate.description],
+    [],
+    ["Work item", "Description", "Qty", "Unit", "Client price", "Material cost", "Internal/labor cost"],
+    ...estimate.items.map((item) => [
+      item.title,
+      item.description,
+      String(item.quantity),
+      item.unit,
+      String(item.totalPrice),
+      String(item.materialCost),
+      String(item.internalCost),
+    ]),
+    [],
+    ["Client total", String(estimate.clientPrice)],
+    ["Material cost", String(estimate.materialCost)],
+    ["Internal/labor cost", String(estimate.internalCost)],
+    ["Margin", String(estimateMargin(estimate))],
+  ];
+
+  return rows
+    .map((row) =>
+      row
+        .map((cell) => {
+          const value = String(cell ?? "");
+          return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+        })
+        .join(","),
+    )
+    .join("\n");
+}
+
+function downloadEstimateCsv(estimate: ProjectEstimate) {
+  const blob = new Blob([buildEstimateCsv(estimate)], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${sanitizeFileName(estimate.title)}.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function downloadEstimatePdf(estimate: ProjectEstimate) {
+  const [{ jsPDF }, autoTableModule] = await Promise.all([
+    import("jspdf"),
+    import("jspdf-autotable"),
+  ]);
+  const autoTable = autoTableModule.default;
+  const doc = new jsPDF();
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text(estimate.title, 14, 18);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`${labelFromToken(estimate.documentType)} · ${labelFromToken(estimate.status)}`, 14, 26);
+  if (estimate.description) {
+    doc.text(doc.splitTextToSize(estimate.description, 180), 14, 34);
+  }
+  autoTable(doc, {
+    startY: estimate.description ? 48 : 34,
+    head: [["Work", "Qty", "Unit", "Client", "Material", "Cost"]],
+    body: estimate.items.map((item) => [
+      item.title,
+      item.quantity,
+      item.unit,
+      currency(item.totalPrice),
+      currency(item.materialCost),
+      currency(item.internalCost),
+    ]),
+    foot: [["Totals", "", "", currency(estimate.clientPrice), currency(estimate.materialCost), currency(estimate.internalCost)]],
+    styles: { font: "helvetica", fontSize: 9 },
+    headStyles: { fillColor: [8, 31, 48], textColor: [230, 250, 255] },
+    footStyles: { fillColor: [230, 240, 245], textColor: [16, 24, 32] },
+  });
+  const finalY = ((doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 70) + 10;
+  doc.setFont("helvetica", "bold");
+  doc.text(`Margin: ${currency(estimateMargin(estimate))}`, 14, finalY);
+  doc.save(`${sanitizeFileName(estimate.title)}.pdf`);
 }
 
 export function ProjectPlanningSections({
@@ -374,6 +497,7 @@ function ProjectEstimatesSection({
   const [draft, setDraft] = useState<EstimateDraft>(EMPTY_ESTIMATE_DRAFT);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const summary = summarizeProjectEstimations(estimations);
 
   useEffect(() => {
     setEstimations(readProjectEstimations(projectSettings));
@@ -429,7 +553,8 @@ function ProjectEstimatesSection({
     const estimate: ProjectEstimate = {
       id: createProjectPlanningId("est"),
       title,
-      status: "draft",
+      documentType: draft.documentType,
+      status: draft.status,
       description: draft.description.trim(),
       clientPrice: totalPrice,
       materialCost,
@@ -442,6 +567,16 @@ function ProjectEstimatesSection({
     setEstimations((current) => [estimate, ...current]);
     setDraft(EMPTY_ESTIMATE_DRAFT);
     setMessage(t("projectEstimates.draftAdded"));
+  }
+
+  function updateEstimate(id: string, patch: Partial<ProjectEstimate>) {
+    setEstimations((current) =>
+      current.map((estimate) =>
+        estimate.id === id
+          ? { ...estimate, ...patch, updatedAt: new Date().toISOString() }
+          : estimate,
+      ),
+    );
   }
 
   if (!hasFinanceAccess) {
@@ -497,6 +632,40 @@ function ProjectEstimatesSection({
           </div>
         ) : null}
         <div className="surface-panel grid gap-3 p-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <select
+              value={draft.documentType}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  documentType: event.target.value as ProjectEstimateDocumentType,
+                }))
+              }
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            >
+              {ESTIMATE_DOCUMENT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {t(estimateTypeKey(type))}
+                </option>
+              ))}
+            </select>
+            <select
+              value={draft.status}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  status: event.target.value as ProjectEstimate["status"],
+                }))
+              }
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            >
+              {ESTIMATE_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {t(estimateStatusKey(status))}
+                </option>
+              ))}
+            </select>
+          </div>
           <TextInputWithVoice
             value={draft.title}
             onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
@@ -564,7 +733,41 @@ function ProjectEstimatesSection({
             {t("projectEstimates.empty")}
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="metric-panel rounded-[var(--radius-md)] p-3">
+                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {t("projectEstimates.summaryClient")}
+                </div>
+                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
+                  {currency(summary.clientPrice)}
+                </div>
+              </div>
+              <div className="metric-panel rounded-[var(--radius-md)] p-3">
+                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {t("projectEstimates.summaryCost")}
+                </div>
+                <div className="mt-1 font-mono text-lg font-bold text-[var(--text-primary)]">
+                  {currency(summary.internalCost + summary.materialCost)}
+                </div>
+              </div>
+              <div className="metric-panel rounded-[var(--radius-md)] p-3">
+                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {t("projectEstimates.summaryExtras")}
+                </div>
+                <div className="mt-1 font-mono text-lg font-bold text-[var(--brand-yellow)]">
+                  {currency(summary.extras)}
+                </div>
+              </div>
+              <div className="metric-panel rounded-[var(--radius-md)] p-3">
+                <div className="text-[9px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {t("projectEstimates.summaryMargin")}
+                </div>
+                <div className="mt-1 font-mono text-lg font-bold text-[var(--ai-cyan)]">
+                  {currency(summary.margin)}
+                </div>
+              </div>
+            </div>
             {estimations.map((estimate) => (
               <div
                 key={estimate.id}
@@ -572,8 +775,13 @@ function ProjectEstimatesSection({
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <div className="text-sm font-bold text-[var(--text-primary)]">
-                      {estimate.title}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-bold text-[var(--text-primary)]">
+                        {estimate.title}
+                      </div>
+                      <span className="rounded-[var(--radius-pill)] border border-[rgba(105,231,255,0.25)] bg-[rgba(105,231,255,0.08)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--ai-cyan-bright)]">
+                        {t(estimateTypeKey(estimate.documentType))}
+                      </span>
                     </div>
                     {estimate.description ? (
                       <p className="mt-1 whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
@@ -581,15 +789,47 @@ function ProjectEstimatesSection({
                       </p>
                     ) : null}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEstimations((current) => current.filter((item) => item.id !== estimate.id))
-                    }
-                    className="button-base button-danger-ghost min-h-0 px-3 py-2 text-xs"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={estimate.status}
+                      onChange={(event) =>
+                        updateEstimate(estimate.id, {
+                          status: event.target.value as ProjectEstimate["status"],
+                        })
+                      }
+                      className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-2 text-xs text-[var(--text-primary)] outline-none"
+                    >
+                      {ESTIMATE_STATUSES.map((status) => (
+                        <option key={status} value={status}>
+                          {t(estimateStatusKey(status))}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void downloadEstimatePdf(estimate)}
+                      className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
+                    >
+                      <FileDown size={13} />
+                      PDF
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadEstimateCsv(estimate)}
+                      className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
+                    >
+                      CSV
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEstimations((current) => current.filter((item) => item.id !== estimate.id))
+                      }
+                      className="button-base button-danger-ghost min-h-0 px-3 py-2 text-xs"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                   <div className="metric-panel rounded-[var(--radius-sm)] p-2">

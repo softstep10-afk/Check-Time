@@ -14,7 +14,8 @@ export type ProjectMaterialSpecItem = {
   updatedAt: string;
 };
 
-export type ProjectEstimateStatus = "draft" | "sent" | "approved" | "rejected" | "done";
+export type ProjectEstimateDocumentType = "estimate" | "invoice" | "change_order" | "extra_work";
+export type ProjectEstimateStatus = "draft" | "sent" | "approved" | "rejected" | "done" | "paid";
 
 export type ProjectEstimateWorkItem = {
   id: string;
@@ -32,6 +33,7 @@ export type ProjectEstimateWorkItem = {
 export type ProjectEstimate = {
   id: string;
   title: string;
+  documentType: ProjectEstimateDocumentType;
   status: ProjectEstimateStatus;
   description: string;
   clientPrice: number;
@@ -63,10 +65,18 @@ function asNumber(value: unknown, fallback = 0): number {
 
 function asStatus(value: unknown): ProjectEstimateStatus {
   const text = asString(value).toLowerCase();
-  if (text === "sent" || text === "approved" || text === "rejected" || text === "done") {
+  if (text === "sent" || text === "approved" || text === "rejected" || text === "done" || text === "paid") {
     return text;
   }
   return "draft";
+}
+
+function asDocumentType(value: unknown): ProjectEstimateDocumentType {
+  const text = asString(value).toLowerCase().replace(/[\s-]+/g, "_");
+  if (text === "invoice" || text === "change_order" || text === "extra_work") {
+    return text;
+  }
+  return "estimate";
 }
 
 function nowIso(): string {
@@ -144,6 +154,7 @@ export function normalizeProjectEstimations(value: unknown): ProjectEstimate[] {
       return {
         id: asString(estimate.id, createProjectPlanningId("est")),
         title,
+        documentType: asDocumentType(estimate.documentType || estimate.document_type || estimate.type),
         status: asStatus(estimate.status),
         description: asString(estimate.description || estimate.note || estimate.scope),
         clientPrice: asNumber(estimate.clientPrice || estimate.client_price, clientPriceFromItems),
@@ -234,4 +245,42 @@ export function parseMaterialSpecText(text: string): ProjectMaterialSpecItem[] {
 
 export function estimateMargin(estimate: ProjectEstimate): number {
   return estimate.clientPrice - estimate.internalCost - estimate.materialCost;
+}
+
+export function summarizeProjectEstimations(estimations: ProjectEstimate[]) {
+  const totals = estimations.reduce(
+    (summary, estimate) => {
+      summary.clientPrice += estimate.clientPrice;
+      summary.materialCost += estimate.materialCost;
+      summary.internalCost += estimate.internalCost;
+      summary.margin += estimateMargin(estimate);
+      summary.laborHours += estimate.laborHours;
+      if (estimate.documentType === "invoice" || estimate.status === "paid") {
+        summary.invoiced += estimate.clientPrice;
+      }
+      if (estimate.documentType === "change_order" || estimate.documentType === "extra_work") {
+        summary.extras += estimate.clientPrice;
+      }
+      return summary;
+    },
+    {
+      clientPrice: 0,
+      materialCost: 0,
+      internalCost: 0,
+      margin: 0,
+      laborHours: 0,
+      invoiced: 0,
+      extras: 0,
+    },
+  );
+
+  return {
+    clientPrice: Math.round(totals.clientPrice * 100) / 100,
+    materialCost: Math.round(totals.materialCost * 100) / 100,
+    internalCost: Math.round(totals.internalCost * 100) / 100,
+    margin: Math.round(totals.margin * 100) / 100,
+    laborHours: Math.round(totals.laborHours * 100) / 100,
+    invoiced: Math.round(totals.invoiced * 100) / 100,
+    extras: Math.round(totals.extras * 100) / 100,
+  };
 }
