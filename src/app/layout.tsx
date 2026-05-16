@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Mono, DM_Sans } from "next/font/google";
+import { DM_Mono, DM_Sans, Orbitron } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -13,6 +13,12 @@ const dmMono = DM_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
   weight: ["400", "500"],
+});
+
+const orbitron = Orbitron({
+  subsets: ["latin"],
+  variable: "--font-jarvis",
+  weight: ["500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -47,7 +53,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${dmSans.variable} ${dmMono.variable}`}>
+    <html lang="en" className={`${dmSans.variable} ${dmMono.variable} ${orbitron.variable}`}>
       <body className="antialiased"><Providers>{children}</Providers></body>
     </html>
   );

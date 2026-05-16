@@ -908,6 +908,12 @@ select:focus {
   filter: drop-shadow(0 0 8px rgba(105, 231, 255, 0.42));
 }
 
+.jarvis-wordmark {
+  font-family: var(--font-jarvis), var(--font-sans), system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .jarvis-orb {
   --orb-speed: 12s;
   --orb-counter-speed: 16s;
@@ -961,11 +967,11 @@ select:focus {
 }
 
 .jarvis-orb__outer {
-  animation: jarvis-orb-spin var(--orb-speed) linear infinite;
+  animation: none;
 }
 
 .jarvis-orb__outer--counter {
-  animation: jarvis-orb-spin var(--orb-counter-speed) linear infinite reverse;
+  animation: none;
 }
 
 .jarvis-orb__plate {
@@ -989,7 +995,7 @@ select:focus {
 }
 
 .jarvis-orb__scan {
-  animation: jarvis-orb-scan 7s ease-in-out infinite;
+  animation: none;
 }
 
 .jarvis-orb__hex {
@@ -1002,7 +1008,7 @@ select:focus {
 
 .jarvis-orb__core {
   transform-origin: 48px 48px;
-  animation: jarvis-orb-breathe var(--orb-core-speed) ease-in-out infinite;
+  animation: none;
 }
 
 .jarvis-orb[data-state="listening"] {
@@ -1033,6 +1039,34 @@ select:focus {
 .jarvis-orb[data-state="error"] {
   --orb-color: var(--red);
   --orb-glow: rgba(239, 102, 116, 0.52);
+}
+
+.jarvis-orb[data-state="listening"] .jarvis-orb__outer,
+.jarvis-orb[data-state="speaking"] .jarvis-orb__outer,
+.jarvis-orb[data-state="thinking"] .jarvis-orb__outer {
+  animation: jarvis-orb-spin var(--orb-speed) linear infinite;
+}
+
+.jarvis-orb[data-state="listening"] .jarvis-orb__outer--counter,
+.jarvis-orb[data-state="speaking"] .jarvis-orb__outer--counter,
+.jarvis-orb[data-state="thinking"] .jarvis-orb__outer--counter {
+  animation: jarvis-orb-spin var(--orb-counter-speed) linear infinite reverse;
+}
+
+.jarvis-orb[data-state="listening"] .jarvis-orb__scan,
+.jarvis-orb[data-state="speaking"] .jarvis-orb__scan,
+.jarvis-orb[data-state="thinking"] .jarvis-orb__scan {
+  animation: jarvis-orb-scan 7s ease-in-out infinite;
+}
+
+.jarvis-orb[data-state="listening"] .jarvis-orb__core,
+.jarvis-orb[data-state="speaking"] .jarvis-orb__core,
+.jarvis-orb[data-state="thinking"] .jarvis-orb__core {
+  animation: jarvis-orb-breathe var(--orb-core-speed) ease-in-out infinite;
+}
+
+.jarvis-orb[data-state="notification"] .jarvis-orb__core {
+  animation: jarvis-orb-breathe 1.8s ease-in-out 2;
 }
 
 .team-member-profile-screen > section:first-child h1 {

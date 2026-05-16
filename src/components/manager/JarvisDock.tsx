@@ -10,6 +10,8 @@ type DockPosition = { x: number; y: number };
 
 const DOCK_POSITION_KEY = "check-time.jarvisDock.position";
 const DOCK_MARGIN = 10;
+const REALTIME_TOKEN_MIN_TTL_MS = 10_000;
+const REALTIME_TOKEN_FALLBACK_TTL_MS = 45_000;
 
 function isVoiceActive(state: RealtimeState): boolean {
   return state === "connecting" || state === "connected" || state === "speaking";
@@ -51,6 +53,40 @@ function readDockPosition(): DockPosition {
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function extractRealtimeClientSecret(payload: unknown): { secret: string; expiresAtMs: number } | null {
+  const candidates: unknown[] = [payload];
+  if (isRecord(payload)) {
+    candidates.push(payload.realtime);
+  }
+
+  for (const candidate of candidates) {
+    if (!isRecord(candidate)) continue;
+    const directValue = candidate.value;
+    if (typeof directValue === "string" && directValue.trim()) {
+      const expiresAt = typeof candidate.expires_at === "number" ? candidate.expires_at * 1000 : 0;
+      return {
+        secret: directValue,
+        expiresAtMs: expiresAt || Date.now() + REALTIME_TOKEN_FALLBACK_TTL_MS,
+      };
+    }
+
+    const nested = candidate.client_secret;
+    if (isRecord(nested) && typeof nested.value === "string" && nested.value.trim()) {
+      const expiresAt = typeof nested.expires_at === "number" ? nested.expires_at * 1000 : 0;
+      return {
+        secret: nested.value,
+        expiresAtMs: expiresAt || Date.now() + REALTIME_TOKEN_FALLBACK_TTL_MS,
+      };
+    }
+  }
+
+  return null;
+}
+
 export function JarvisDock() {
   const { t } = useTranslation();
   const dockRef = useRef<HTMLDivElement | null>(null);
@@ -58,6 +94,8 @@ export function JarvisDock() {
   const realtimeChannelRef = useRef<RTCDataChannel | null>(null);
   const realtimePeerRef = useRef<RTCPeerConnection | null>(null);
   const realtimeStreamRef = useRef<MediaStream | null>(null);
+  const realtimeTokenRef = useRef<{ secret: string; expiresAtMs: number } | null>(null);
+  const realtimeTokenPromiseRef = useRef<Promise<string> | null>(null);
   const dockPositionRef = useRef<DockPosition>({ x: 16, y: 420 });
   const dragStartRef = useRef<{
     pointerId: number;
@@ -72,6 +110,43 @@ export function JarvisDock() {
   const [realtimeMessage, setRealtimeMessage] = useState("");
   const [dockPosition, setDockPosition] = useState<DockPosition>({ x: 16, y: 420 });
   const [positionReady, setPositionReady] = useState(false);
+
+  const getRealtimeClientSecret = useCallback(async () => {
+    const cached = realtimeTokenRef.current;
+    if (cached && cached.expiresAtMs - Date.now() > REALTIME_TOKEN_MIN_TTL_MS) {
+      return cached.secret;
+    }
+    if (realtimeTokenPromiseRef.current) {
+      return realtimeTokenPromiseRef.current;
+    }
+
+    const promise = (async () => {
+      const response = await fetch("/api/ai/realtime/token", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => ({}))) as unknown;
+      if (!response.ok) {
+        const message = isRecord(payload) && typeof payload.error === "string"
+          ? payload.error
+          : t("jarvisDock.voiceTokenFailed");
+        throw new Error(message);
+      }
+      const token = extractRealtimeClientSecret(payload);
+      if (!token) {
+        throw new Error(t("jarvisDock.voiceTokenFailed"));
+      }
+      realtimeTokenRef.current = token;
+      return token.secret;
+    })();
+
+    realtimeTokenPromiseRef.current = promise;
+    try {
+      return await promise;
+    } finally {
+      realtimeTokenPromiseRef.current = null;
+    }
+  }, [t]);
 
   const stopRealtime = useCallback((nextState: RealtimeState = "idle", nextMessage = "") => {
     realtimeChannelRef.current?.close();
@@ -90,6 +165,14 @@ export function JarvisDock() {
   }, []);
 
   useEffect(() => () => stopRealtime(), [stopRealtime]);
+
+  useEffect(() => {
+    if (!positionReady) return;
+    const timer = window.setTimeout(() => {
+      void getRealtimeClientSecret().catch(() => undefined);
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [getRealtimeClientSecret, positionReady]);
 
   useEffect(() => {
     dockPositionRef.current = dockPosition;
@@ -202,6 +285,7 @@ export function JarvisDock() {
     setRealtimeState("connecting");
     setRealtimeMessage(t("jarvisDock.voiceConnecting"));
     try {
+      const realtimeClientSecret = await getRealtimeClientSecret();
       const peer = new RTCPeerConnection();
       realtimePeerRef.current = peer;
 
@@ -249,11 +333,13 @@ export function JarvisDock() {
           if (payload.type === "response.audio.delta" || payload.type === "response.output_audio.delta") {
             setRealtimeState("speaking");
           }
+          if (payload.type === "input_audio_buffer.speech_started") {
+            setRealtimeState("connected");
+          }
           if (
             payload.type === "response.done" ||
             payload.type === "response.audio.done" ||
-            payload.type === "output_audio_buffer.stopped" ||
-            payload.type === "input_audio_buffer.speech_started"
+            payload.type === "output_audio_buffer.stopped"
           ) {
             setRealtimeState("connected");
           }
@@ -274,11 +360,13 @@ export function JarvisDock() {
       await peer.setLocalDescription(offer);
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 20000);
-      const sdpResponse = await fetch("/api/ai/realtime/connect", {
+      const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
         method: "POST",
-        headers: { "Content-Type": "application/sdp" },
+        headers: {
+          Authorization: `Bearer ${realtimeClientSecret}`,
+          "Content-Type": "application/sdp",
+        },
         body: offer.sdp ?? "",
-        cache: "no-store",
         signal: controller.signal,
       });
       window.clearTimeout(timeout);
@@ -318,6 +406,7 @@ export function JarvisDock() {
       onPointerMove={handleDockPointerMove}
       onPointerUp={handleDockPointerUp}
       onPointerCancel={handleDockPointerUp}
+      onPointerEnter={() => void getRealtimeClientSecret().catch(() => undefined)}
     >
       <button
         type="button"
@@ -382,7 +471,7 @@ export function JarvisDock() {
         ) : (
           <Mic size={13} className="text-[var(--ai-cyan-bright)]" />
         )}
-        {active ? t("jarvisDock.voiceStop") : "Jarvis"}
+        <span className="jarvis-wordmark">{active ? t("jarvisDock.voiceStop") : "Jarvis"}</span>
       </button>
       {realtimeState !== "idle" ? (
         <div
