@@ -49,10 +49,11 @@ ANTHROPIC_MODEL=<model>                          # optional fallback for older A
 
 ### Demo / preview mode
 
-`src/lib/auth-bypass.ts` ships `AUTH_BYPASS_ENABLED = true`. With it on,
-the app loads preview data from `src/lib/preview-data.ts` so you can browse
-every page without a real Supabase session. Flip it back to `false` for
-normal auth gating before deploying.
+`src/lib/auth-bypass.ts` reads `NEXT_PUBLIC_AUTH_BYPASS=true` only in local
+development. Production always forces bypass off, even if the env var is
+present. With local preview mode on, the app loads preview data from
+`src/lib/preview-data.ts` so you can browse every page without a real Supabase
+session.
 
 ### Supabase migrations
 
