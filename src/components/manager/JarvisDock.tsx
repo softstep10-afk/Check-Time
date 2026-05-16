@@ -232,7 +232,7 @@ export function JarvisDock() {
     if (!drag || drag.pointerId !== event.pointerId) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
       drag.moved = true;
       suppressClickRef.current = true;
     }
@@ -266,6 +266,12 @@ export function JarvisDock() {
       suppressClickRef.current = false;
       return;
     }
+    if (isVoiceActive(realtimeState)) {
+      stopRealtime();
+      return;
+    }
+    setRealtimeState("connecting");
+    setRealtimeMessage(t("jarvisDock.voiceConnecting"));
     void startRealtime();
   }
 

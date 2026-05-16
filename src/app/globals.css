@@ -1086,6 +1086,23 @@ select:focus {
   animation: jarvis-orb-breathe 1.8s ease-in-out 2;
 }
 
+.jarvis-dock-orb-button[data-voice-state="connecting"] .jarvis-orb,
+.jarvis-dock-orb-button[data-voice-state="connected"] .jarvis-orb,
+.jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb {
+  --orb-glow: rgba(255, 64, 93, 0.56);
+  --orb-color: #ff5f75;
+}
+
+.jarvis-dock-orb-button[data-voice-state="connecting"] .jarvis-orb__core,
+.jarvis-dock-orb-button[data-voice-state="connected"] .jarvis-orb__core,
+.jarvis-dock-orb-button[data-voice-state="speaking"] .jarvis-orb__core {
+  fill: #ff405d;
+  filter:
+    drop-shadow(0 0 8px rgba(255, 64, 93, 0.95))
+    drop-shadow(0 0 18px rgba(255, 64, 93, 0.55));
+  animation: jarvis-orb-hot-core 0.95s ease-in-out infinite;
+}
+
 .team-member-profile-screen > section:first-child h1 {
   text-shadow: 0 0 22px rgba(105, 231, 255, 0.12);
 }
@@ -1123,6 +1140,19 @@ select:focus {
   50% {
     opacity: 0.9;
     transform: rotate(18deg);
+  }
+}
+
+@keyframes jarvis-orb-hot-core {
+  0%,
+  100% {
+    opacity: 0.9;
+    transform: scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
   }
 }
 
