@@ -22,6 +22,7 @@ describe("project planning", () => {
     const rows = parseMaterialSpecText(
       [
         "material\tqty\tunit\tsupplier\tlink\tnote",
+        "[Framing]",
         "Drywall 5/8\t40\tsheets\tHome Depot\thttps://example.com/drywall\tType X",
         "Door trim,12,pcs,Lowe's,www.example.com/trim,paint grade",
       ].join("\n"),
@@ -35,6 +36,7 @@ describe("project planning", () => {
       supplier: "Home Depot",
       link: "https://example.com/drywall",
       note: "Type X",
+      category: "Framing",
     });
     expect(rows[1]?.link).toBe("https://www.example.com/trim");
   });
@@ -44,6 +46,13 @@ describe("project planning", () => {
     const estimates = normalizeProjectEstimations([
       {
         title: "Bathroom change order",
+        attachments: [
+          {
+            name: "Client scope PDF",
+            url: "https://example.com/scope.pdf",
+            kind: "pdf",
+          },
+        ],
         items: [
           {
             title: "Tile install",
@@ -65,6 +74,7 @@ describe("project planning", () => {
     expect(settings.client_priority).toBe("red");
     expect(readProjectMaterialSpec(settings)[0]?.name).toBe("Frame lumber");
     expect(readProjectEstimations(settings)[0]?.clientPrice).toBe(2160);
+    expect(readProjectEstimations(settings)[0]?.attachments[0]?.name).toBe("Client scope PDF");
     expect(settings[PROJECT_MATERIAL_SPEC_KEY]).toHaveLength(1);
     expect(settings[PROJECT_ESTIMATES_KEY]).toHaveLength(1);
     expect(estimateMargin(readProjectEstimations(settings)[0]!)).toBe(810);

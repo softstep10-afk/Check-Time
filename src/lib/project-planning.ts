@@ -14,6 +14,15 @@ export type ProjectMaterialSpecItem = {
   updatedAt: string;
 };
 
+export type ProjectPlanningAttachment = {
+  id: string;
+  name: string;
+  url: string;
+  kind: string;
+  note: string;
+  createdAt: string;
+};
+
 export type ProjectEstimateDocumentType = "estimate" | "invoice" | "change_order" | "extra_work";
 export type ProjectEstimateStatus = "draft" | "sent" | "approved" | "rejected" | "done" | "paid";
 
@@ -42,6 +51,7 @@ export type ProjectEstimate = {
   internalCost: number;
   createdAt: string;
   updatedAt: string;
+  attachments: ProjectPlanningAttachment[];
   items: ProjectEstimateWorkItem[];
 };
 
@@ -85,6 +95,28 @@ function nowIso(): string {
 
 export function createProjectPlanningId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function normalizePlanningAttachments(value: unknown): ProjectPlanningAttachment[] {
+  if (!Array.isArray(value)) return [];
+  const stamp = nowIso();
+  return value
+    .map((attachment) => {
+      if (!isRecord(attachment)) return null;
+      const url = asString(attachment.url || attachment.link || attachment.href);
+      const name = asString(attachment.name || attachment.title || attachment.fileName || attachment.file_name, url);
+      if (!name && !url) return null;
+      return {
+        id: asString(attachment.id, createProjectPlanningId("att")),
+        name,
+        url,
+        kind: asString(attachment.kind || attachment.type || attachment.fileType || attachment.file_type, "link"),
+        note: asString(attachment.note || attachment.notes || attachment.description),
+        createdAt: asString(attachment.createdAt || attachment.created_at, stamp),
+      };
+    })
+    .filter((attachment): attachment is ProjectPlanningAttachment => Boolean(attachment))
+    .slice(0, 40);
 }
 
 export function normalizeMaterialSpecItems(value: unknown): ProjectMaterialSpecItem[] {
@@ -163,6 +195,7 @@ export function normalizeProjectEstimations(value: unknown): ProjectEstimate[] {
         internalCost: asNumber(estimate.internalCost || estimate.internal_cost, internalCostFromItems),
         createdAt: asString(estimate.createdAt || estimate.created_at, stamp),
         updatedAt: asString(estimate.updatedAt || estimate.updated_at, stamp),
+        attachments: normalizePlanningAttachments(estimate.attachments || estimate.files),
         items,
       };
     })
@@ -215,32 +248,44 @@ function extractUrl(text: string): string {
 
 export function parseMaterialSpecText(text: string): ProjectMaterialSpecItem[] {
   const stamp = nowIso();
-  return text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => splitMaterialLine(line).map((part) => part.trim()))
-    .filter((columns) => !looksLikeHeader(columns))
-    .map((columns) => {
-      const rowText = columns.join(" ");
-      const link = columns[4] || extractUrl(rowText);
-      const name = columns[0] ?? "";
-      if (!name) return null;
-      return {
-        id: createProjectPlanningId("mat"),
-        name,
-        quantity: columns[1] ?? "",
-        unit: columns[2] ?? "",
-        supplier: columns[3] ?? "",
-        link: link.startsWith("www.") ? `https://${link}` : link,
-        note: columns.slice(5).join(" "),
-        category: "",
-        createdAt: stamp,
-        updatedAt: stamp,
-      };
-    })
-    .filter((item): item is ProjectMaterialSpecItem => Boolean(item))
-    .slice(0, 250);
+  const items: ProjectMaterialSpecItem[] = [];
+  let activeCategory = "";
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const bracketHeading = line.match(/^\[(.+)]$/);
+    const hashHeading = line.match(/^#+\s+(.+)$/);
+    const heading = bracketHeading?.[1] || hashHeading?.[1];
+    if (heading) {
+      activeCategory = heading.trim();
+      continue;
+    }
+
+    const columns = splitMaterialLine(line).map((part) => part.trim());
+    if (looksLikeHeader(columns)) continue;
+
+    const rowText = columns.join(" ");
+    const link = columns[4] || extractUrl(rowText);
+    const name = columns[0] ?? "";
+    if (!name) continue;
+
+    items.push({
+      id: createProjectPlanningId("mat"),
+      name,
+      quantity: columns[1] ?? "",
+      unit: columns[2] ?? "",
+      supplier: columns[3] ?? "",
+      link: link.startsWith("www.") ? `https://${link}` : link,
+      note: columns[5] ?? "",
+      category: columns[6] || activeCategory,
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+  }
+
+  return items.slice(0, 250);
 }
 
 export function estimateMargin(estimate: ProjectEstimate): number {

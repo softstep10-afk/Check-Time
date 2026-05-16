@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Calculator, ExternalLink, FileDown, FileSpreadsheet, Lock, Plus, Save, Trash2 } from "lucide-react";
+import { Calculator, ExternalLink, FileDown, FileSpreadsheet, Lock, Paperclip, Plus, Save, Trash2 } from "lucide-react";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
@@ -15,6 +15,7 @@ import {
   summarizeProjectEstimations,
   type ProjectEstimate,
   type ProjectEstimateDocumentType,
+  type ProjectPlanningAttachment,
   type ProjectEstimateWorkItem,
   type ProjectMaterialSpecItem,
 } from "@/lib/project-planning";
@@ -37,6 +38,9 @@ type EstimateDraft = {
   materialCost: string;
   laborHours: string;
   internalCost: string;
+  attachmentName: string;
+  attachmentUrl: string;
+  attachmentNote: string;
 };
 
 const EMPTY_ESTIMATE_DRAFT: EstimateDraft = {
@@ -51,6 +55,9 @@ const EMPTY_ESTIMATE_DRAFT: EstimateDraft = {
   materialCost: "",
   laborHours: "",
   internalCost: "",
+  attachmentName: "",
+  attachmentUrl: "",
+  attachmentNote: "",
 };
 
 const ESTIMATE_DOCUMENT_TYPES: ProjectEstimateDocumentType[] = [
@@ -88,6 +95,30 @@ function materialLinkHref(link: string): string | null {
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
   if (trimmed.startsWith("www.")) return `https://${trimmed}`;
   return null;
+}
+
+function normalizeAttachmentUrl(link: string): string {
+  const trimmed = link.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) return trimmed;
+  if (trimmed.startsWith("www.")) return `https://${trimmed}`;
+  return trimmed;
+}
+
+function buildDraftAttachment(draft: EstimateDraft): ProjectPlanningAttachment[] {
+  const url = normalizeAttachmentUrl(draft.attachmentUrl);
+  const name = draft.attachmentName.trim() || url;
+  if (!name && !url) return [];
+  return [
+    {
+      id: createProjectPlanningId("att"),
+      name,
+      url,
+      kind: "link",
+      note: draft.attachmentNote.trim(),
+      createdAt: new Date().toISOString(),
+    },
+  ];
 }
 
 function labelFromToken(value: string): string {
@@ -129,6 +160,14 @@ function buildEstimateCsv(estimate: ProjectEstimate): string {
     ["Material cost", String(estimate.materialCost)],
     ["Internal/labor cost", String(estimate.internalCost)],
     ["Margin", String(estimateMargin(estimate))],
+    [],
+    ["Attachments"],
+    ...estimate.attachments.map((attachment) => [
+      attachment.name,
+      attachment.kind,
+      attachment.url,
+      attachment.note,
+    ]),
   ];
 
   return rows
@@ -188,6 +227,18 @@ async function downloadEstimatePdf(estimate: ProjectEstimate) {
   const finalY = ((doc as unknown as { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 70) + 10;
   doc.setFont("helvetica", "bold");
   doc.text(`Margin: ${currency(estimateMargin(estimate))}`, 14, finalY);
+  if (estimate.attachments.length > 0) {
+    doc.setFontSize(10);
+    doc.text("Attachments:", 14, finalY + 10);
+    doc.setFont("helvetica", "normal");
+    estimate.attachments.slice(0, 8).forEach((attachment, index) => {
+      doc.text(
+        doc.splitTextToSize(`${attachment.name}${attachment.url ? ` - ${attachment.url}` : ""}`, 180),
+        14,
+        finalY + 18 + index * 8,
+      );
+    });
+  }
   doc.save(`${sanitizeFileName(estimate.title)}.pdf`);
 }
 
@@ -398,7 +449,13 @@ function ProjectMaterialSpecSection({
                   key={item.id}
                   className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.36)] p-3"
                 >
-                  <div className="grid gap-2 md:grid-cols-[1.5fr_0.55fr_0.55fr_1fr]">
+                  <div className="grid gap-2 md:grid-cols-[1fr_1.5fr_0.55fr_0.55fr_1fr]">
+                    <input
+                      value={item.category}
+                      onChange={(event) => updateItem(item.id, { category: event.target.value })}
+                      placeholder={t("projectMaterials.category")}
+                      className="rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+                    />
                     <TextInputWithVoice
                       value={item.name}
                       onChange={(event) => updateItem(item.id, { name: event.target.value })}
@@ -563,6 +620,7 @@ function ProjectEstimatesSection({
       createdAt: stamp,
       updatedAt: stamp,
       items: [workItem],
+      attachments: buildDraftAttachment(draft),
     };
     setEstimations((current) => [estimate, ...current]);
     setDraft(EMPTY_ESTIMATE_DRAFT);
@@ -577,6 +635,30 @@ function ProjectEstimatesSection({
           : estimate,
       ),
     );
+  }
+
+  function convertToInvoice(source: ProjectEstimate) {
+    const stamp = new Date().toISOString();
+    const invoice: ProjectEstimate = {
+      ...source,
+      id: createProjectPlanningId("inv"),
+      title: `${t("projectEstimates.invoicePrefix")} ${source.title}`.trim(),
+      documentType: "invoice",
+      status: "draft",
+      createdAt: stamp,
+      updatedAt: stamp,
+      attachments: source.attachments.map((attachment) => ({
+        ...attachment,
+        id: createProjectPlanningId("att"),
+        createdAt: stamp,
+      })),
+      items: source.items.map((item) => ({
+        ...item,
+        id: createProjectPlanningId("work"),
+      })),
+    };
+    setEstimations((current) => [invoice, ...current]);
+    setMessage(t("projectEstimates.invoiceCreated"));
   }
 
   if (!hasFinanceAccess) {
@@ -722,6 +804,32 @@ function ProjectEstimatesSection({
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
           </div>
+          <div className="rounded-[var(--radius-md)] border border-[rgba(105,231,255,0.16)] bg-[rgba(4,10,18,0.5)] p-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              <Paperclip size={14} />
+              {t("projectEstimates.attachments")}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <input
+                value={draft.attachmentName}
+                onChange={(event) => setDraft((current) => ({ ...current, attachmentName: event.target.value }))}
+                placeholder={t("projectEstimates.attachmentName")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <input
+                value={draft.attachmentUrl}
+                onChange={(event) => setDraft((current) => ({ ...current, attachmentUrl: event.target.value }))}
+                placeholder={t("projectEstimates.attachmentUrl")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+            <input
+              value={draft.attachmentNote}
+              onChange={(event) => setDraft((current) => ({ ...current, attachmentNote: event.target.value }))}
+              placeholder={t("projectEstimates.attachmentNote")}
+              className="mt-2 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+          </div>
           <button type="button" onClick={addEstimate} className="button-base button-secondary">
             <Plus size={15} />
             {t("projectEstimates.addDraft")}
@@ -807,6 +915,14 @@ function ProjectEstimatesSection({
                     </select>
                     <button
                       type="button"
+                      onClick={() => convertToInvoice(estimate)}
+                      disabled={estimate.documentType === "invoice"}
+                      className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
+                    >
+                      {t("projectEstimates.convertToInvoice")}
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => void downloadEstimatePdf(estimate)}
                       className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
                     >
@@ -867,6 +983,33 @@ function ProjectEstimatesSection({
                         {item.title} · {item.quantity} {item.unit} · {currency(item.totalPrice)}
                       </div>
                     ))}
+                  </div>
+                ) : null}
+                {estimate.attachments.length > 0 ? (
+                  <div className="mt-3 grid gap-1">
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      <Paperclip size={12} />
+                      {t("projectEstimates.attachments")}
+                    </div>
+                    {estimate.attachments.map((attachment) => {
+                      const href = materialLinkHref(attachment.url);
+                      return (
+                        <div
+                          key={attachment.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] bg-[rgba(0,0,0,0.18)] px-2 py-1.5 text-xs text-[var(--text-secondary)]"
+                        >
+                          <span>
+                            {attachment.name}
+                            {attachment.note ? ` · ${attachment.note}` : ""}
+                          </span>
+                          {href ? (
+                            <a href={href} target="_blank" rel="noreferrer" className="text-[var(--ai-cyan-bright)] hover:underline">
+                              {t("common.open")}
+                            </a>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
