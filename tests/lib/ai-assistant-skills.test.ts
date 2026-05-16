@@ -240,4 +240,77 @@ describe("AI assistant worker skill suggestions", () => {
       expect(answer.links.some((link) => link.href.startsWith("https://"))).toBe(true);
     });
   });
+
+  it("matches overview material totals and ignores legacy receipt-like rows", async () => {
+    await withModelDisabled(async () => {
+      const data = workspace();
+      data.media = [
+        media({
+          id: "receipt-good",
+          filename: "home-depot.jpg",
+          metadata: {
+            category: "receipt",
+            amount: 9976,
+            store_name: "Home Depot",
+            purchase_date: "2026-05-13",
+          },
+        }),
+        media({
+          id: "receipt-legacy-kind-only",
+          filename: "bad-old-row.jpg",
+          metadata: {
+            kind: "receipt",
+            amount: 532544,
+          },
+        }),
+        media({
+          id: "receipt-unlinked",
+          project_id: null,
+          filename: "unlinked.jpg",
+          metadata: {
+            category: "receipt",
+            amount: 1000,
+          },
+        }),
+      ];
+      const snapshot = buildAssistantSnapshot(data, [], {
+        includeFinancials: true,
+      });
+
+      expect(snapshot.receiptTotal).toBe(9976);
+      expect(snapshot.projects[0]?.receiptTotal).toBe(9976);
+
+      const answer = await answerManagerAssistant(
+        "сколько сейчас потрачено денег на материал?",
+        snapshot,
+      );
+
+      expect(answer.answer).toContain("$9,976.00");
+      expect(answer.answer).not.toContain("532");
+      expect(answer.bullets.join(" ")).toContain("карточка");
+    });
+  });
+
+  it("treats a greeting as conversation even when a file is attached", async () => {
+    await withModelDisabled(async () => {
+      const snapshot = buildAssistantSnapshot(workspace(), [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant("привет", snapshot, {
+        attachments: [
+          {
+            filename: "plan.pdf",
+            mimeType: "application/pdf",
+            content: "floor plan notes",
+            dataUrl: null,
+          },
+        ],
+      });
+
+      expect(answer.answer).toContain("На связи");
+      expect(answer.answer).not.toContain("файл");
+      expect(answer.bullets.join(" ")).toContain("Можете спросить");
+    });
+  });
 });

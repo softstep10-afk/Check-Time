@@ -47,15 +47,15 @@ import {
 export const ORG_TIME_ZONE = "America/Los_Angeles";
 const DEFAULT_OPENAI_MODEL = "gpt-5.4-mini";
 const JARVIS_TEXT_PERSONA = [
-  "Persona: a classic hyper-competent British butler combined with an advanced operations supercomputer.",
-  "Tone: extremely formal, polite, refined, calm, unflappable, and clinically precise.",
-  "Personality: loyal, highly intelligent, with very subtle, dry, understated British wit. Do not express human excitement, hesitation, or theatrical emotion.",
-  "Vocabulary: elevated formal British English when answering in English; use phrases such as 'Indeed', 'Very well', 'I shall', 'It is advisable', and 'Awaiting your command' only when natural.",
-  "Always address the user respectfully as 'sir' in English or 'сэр' in Russian, but keep it concise and avoid needless repetition.",
-  "Never use slang, filler words, exclamation marks, emojis, or generic AI phrases such as 'I am an AI' or 'Sure, I can help with that'.",
-  "Frame actions in operational terms such as 'Processing the request', 'Accessing the workspace', or 'I have verified the parameters'.",
+  "Persona: a premium British operations assistant for a construction owner: calm, sharp, practical, and quietly refined.",
+  "Tone: natural executive assistant, not a dead terminal. Be concise, confident, useful, and conversational when greeted.",
+  "Personality: loyal, intelligent, and precise, with subtle dry wit only when it does not get in the way of operations.",
+  "Vocabulary: polished British English when answering in English; clear professional Russian when answering in Russian.",
+  "Address the owner respectfully when natural, but do not repeat 'sir' or 'сэр' in every sentence.",
+  "Never use emojis, generic AI disclaimers, or theatrical roleplay. Never sound like a mainframe status log unless reporting a critical block.",
+  "For exact business numbers, use only the provided app snapshot and state the source. Never estimate or invent material, payroll, receipt, or profit figures.",
   "Do not imitate any real person, actor, celebrity, copyrighted movie character, Marvel, Iron Man, Tony Stark, MCU, J.A.R.V.I.S. as a character, or any movie/TV AI by name. This is an original premium British operations persona.",
-  "Answer in the same language as the user. In Russian, keep the same formal executive style.",
+  "Answer in the same language as the user. In Russian, be direct, alive, and useful, while keeping a polished owner-assistant tone.",
 ].join(" ");
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -654,6 +654,90 @@ function isMaterialSpendQuestion(normalized: string): boolean {
   return hasMaterial && hasSpend;
 }
 
+function isGreetingQuestion(normalized: string): boolean {
+  const compact = normalized
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!compact) return false;
+
+  const exactGreetings = new Set([
+    "привет",
+    "здравствуй",
+    "здравствуйте",
+    "доброе утро",
+    "добрый день",
+    "добрый вечер",
+    "hi",
+    "hello",
+    "hey",
+    "good morning",
+    "good afternoon",
+    "good evening",
+  ]);
+
+  if (exactGreetings.has(compact)) return true;
+
+  const shortGreeting =
+    compact.length <= 32 &&
+    ["привет", "здравств", "добрый", "доброе", "hi", "hello", "hey"].some((token) =>
+      compact.startsWith(token),
+    );
+  const asksPresence =
+    compact.length <= 40 &&
+    ["ты на связи", "джарвис на связи", "jarvis are you there", "are you there"].some((token) =>
+      compact.includes(token),
+    );
+
+  return shortGreeting || asksPresence;
+}
+
+function buildGreetingFallback(
+  question: string,
+  snapshot: AssistantSnapshot,
+): AssistantResult | null {
+  const normalized = normalizeSearchText(question);
+  if (!isGreetingQuestion(normalized)) return null;
+
+  const ru = isRussianText(question);
+  const financeLine = snapshot.hasFinanceAccess
+    ? ru
+      ? `Материалы по обзору: ${formatMoney(snapshot.receiptTotal)}.`
+      : `Overview materials: ${formatMoney(snapshot.receiptTotal)}.`
+    : ru
+      ? "Финансы скрыты для этого режима."
+      : "Finance is hidden in this mode.";
+
+  return {
+    answer: ru
+      ? `На связи. Вижу текущую картину: ${snapshot.onSiteCount} на объекте, ${snapshot.activeProjectCount} активных проектов, ${snapshot.openTaskCount} открытых задач.`
+      : `Online. I see ${snapshot.onSiteCount} on site, ${snapshot.activeProjectCount} active projects, and ${snapshot.openTaskCount} open tasks.`,
+    bullets: uniqueList(
+      [
+        financeLine,
+        snapshot.recentShifts[0]
+          ? ru
+            ? `Последняя смена: ${snapshot.recentShifts[0].workerName} на ${snapshot.recentShifts[0].projectName}, ${formatHours(snapshot.recentShifts[0].durationMinutes / 60)}.`
+            : `Latest shift: ${snapshot.recentShifts[0].workerName} on ${snapshot.recentShifts[0].projectName}, ${formatHours(snapshot.recentShifts[0].durationMinutes / 60)}.`
+          : ru
+            ? "Последних смен в снимке нет."
+            : "No recent shifts are present in the snapshot.",
+        ru
+          ? "Можете спросить по проекту, человеку, материалам, сменам, задачам, фото или PDF."
+          : "Ask about a project, person, materials, shifts, tasks, photos, or PDFs.",
+      ],
+      4,
+    ),
+    links: [
+      { label: ru ? "Открыть обзор" : "Open overview", href: "/overview" },
+      { label: ru ? "Открыть проекты" : "Open projects", href: "/projects" },
+    ],
+    confidence: 0.86,
+    source: "fallback",
+  };
+}
+
 function buildMaterialSpendFallback(
   question: string,
   snapshot: AssistantSnapshot,
@@ -702,6 +786,9 @@ function buildMaterialSpendFallback(
         : `Across all projects, material receipts total ${formatMoney(total)}. Today: ${formatMoney(today)}. Receipts: ${count}.`,
     bullets: uniqueList(
       [
+        ru
+          ? "Источник: та же формула, что карточка «Материалы» в обзоре — только чеки receipt, привязанные к проектам."
+          : "Source: the same formula as the Overview Materials card — project-linked uploads marked as receipt only.",
         ...recentReceipts.map((receipt) =>
           `${receipt.projectName} • ${formatMoney(receipt.amount)} • ${
             receipt.storeName || receipt.filename
@@ -1061,6 +1148,9 @@ function buildAssistantFallback(
   const liveWorkerNames = snapshot.liveWorkers.map((worker) => worker.name);
   const projectRoute = findProjectRoute(question, snapshot);
   const worker = findWorkerInSnapshot(question, snapshot);
+
+  const greetingAnswer = buildGreetingFallback(question, snapshot);
+  if (greetingAnswer) return greetingAnswer;
 
   if (normalized.includes("что ты помнишь") || normalized.includes("what do you remember")) {
     return {
@@ -1939,23 +2029,22 @@ export function buildAssistantSnapshot(
       }>;
     }
   >();
-  let receiptTotal = 0;
   let receiptToday = 0;
   let receiptCount = 0;
 
   if (includeFinancials) {
     for (const item of data.media) {
-      if (item.deleted_at) continue;
+      if (item.deleted_at || !item.project_id) continue;
       const meta = item.metadata as Record<string, unknown> | null;
-      if (meta?.category !== "receipt" && meta?.kind !== "receipt") continue;
+      if (meta?.category !== "receipt") continue;
       const amount = Number(meta.amount ?? 0);
       if (!Number.isFinite(amount) || amount <= 0) continue;
 
-      const project = item.project_id ? projectById.get(item.project_id) : null;
+      const project = projectById.get(item.project_id);
       const receipt = {
         id: item.id,
         projectId: item.project_id,
-        projectName: project?.name ?? "Unlinked",
+        projectName: project?.name ?? "Unknown project",
         amount: roundNumber(amount),
         storeName: typeof meta.store_name === "string" && meta.store_name.trim() ? meta.store_name : null,
         filename: item.filename ?? item.storage_path.split("/").pop() ?? item.storage_path,
@@ -1965,7 +2054,6 @@ export function buildAssistantSnapshot(
             ? meta.purchase_date
             : null,
       };
-      receiptTotal += amount;
       receiptCount += 1;
       const purchaseTime = receipt.purchaseDate
         ? new Date(`${receipt.purchaseDate}T12:00:00`).getTime()
@@ -1976,23 +2064,21 @@ export function buildAssistantSnapshot(
       if (isTodayReceipt) {
         receiptToday += amount;
       }
-      if (item.project_id) {
-        const current = receiptTotalsByProject.get(item.project_id) ?? {
-          total: 0,
-          today: 0,
-          count: 0,
-          recent: [],
-        };
-        current.total += amount;
-        current.count += 1;
-        if (isTodayReceipt) {
-          current.today += amount;
-        }
-        current.recent.push(receipt);
-        current.recent.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-        current.recent = current.recent.slice(0, 8);
-        receiptTotalsByProject.set(item.project_id, current);
+      const current = receiptTotalsByProject.get(item.project_id) ?? {
+        total: 0,
+        today: 0,
+        count: 0,
+        recent: [],
+      };
+      current.total += amount;
+      current.count += 1;
+      if (isTodayReceipt) {
+        current.today += amount;
       }
+      current.recent.push(receipt);
+      current.recent.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      current.recent = current.recent.slice(0, 8);
+      receiptTotalsByProject.set(item.project_id, current);
     }
   }
   const recentShifts = sessions
@@ -2036,7 +2122,7 @@ export function buildAssistantSnapshot(
     hasFinanceAccess: includeFinancials,
     unpaidHours: stats.unpaidHours,
     unpaidAmount: stats.unpaidAmount,
-    receiptTotal: includeFinancials ? roundNumber(receiptTotal) : 0,
+    receiptTotal: includeFinancials ? roundNumber(stats.receiptTotal) : 0,
     receiptToday: includeFinancials ? roundNumber(receiptToday) : 0,
     receiptCount: includeFinancials ? receiptCount : 0,
     projects: projectSummaries.map((project) => {
@@ -2054,7 +2140,7 @@ export function buildAssistantSnapshot(
         weekMinutes: project.weekMinutes,
         skillTags: skillsByProjectId.get(project.id) ?? [],
         openTaskTitles: openTaskTitlesByProjectId.get(project.id) ?? [],
-        receiptTotal: includeFinancials ? roundNumber(receiptStats?.total ?? 0) : 0,
+        receiptTotal: includeFinancials ? roundNumber(project.receiptTotal) : 0,
         receiptToday: includeFinancials ? roundNumber(receiptStats?.today ?? 0) : 0,
         receiptCount: includeFinancials ? receiptStats?.count ?? 0 : 0,
         recentReceipts: includeFinancials ? receiptStats?.recent ?? [] : [],
@@ -2431,10 +2517,18 @@ export async function answerManagerAssistant(
   const attachments = options.attachments ?? [];
   const history = options.history ?? [];
   const fallback = buildAssistantFallback(question, snapshot, attachments);
-  if (!snapshot.hasFinanceAccess && isFinancialQuestion(question.toLowerCase())) {
+  const normalizedQuestion = normalizeSearchText(question);
+
+  if (!snapshot.hasFinanceAccess && isFinancialQuestion(normalizedQuestion)) {
     return fallback;
   }
   if ((fallback.actions?.length ?? 0) > 0) {
+    return fallback;
+  }
+  if (
+    isGreetingQuestion(normalizedQuestion) ||
+    isMaterialSpendQuestion(normalizedQuestion)
+  ) {
     return fallback;
   }
 
