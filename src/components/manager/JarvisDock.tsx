@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
-import { Mic, MicOff } from "lucide-react";
 import { JarvisOrb, type JarvisOrbState } from "@/components/shared/JarvisOrb";
 import { useTranslation } from "@/lib/i18n";
 
@@ -411,7 +410,8 @@ export function JarvisDock() {
       <button
         type="button"
         onClick={handleDockClick}
-        className="group relative flex h-[68px] w-[68px] cursor-grab items-center justify-center rounded-full border transition hover:scale-[1.04] active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ai-cyan-bright)]"
+        className="jarvis-dock-orb-button group relative flex h-[68px] w-[68px] cursor-grab items-center justify-center rounded-full border transition hover:scale-[1.04] active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ai-cyan-bright)]"
+        data-voice-state={realtimeState}
         style={{
           background:
             "radial-gradient(circle at 50% 50%, rgba(214, 252, 255, 0.98) 0 8%, rgba(91, 231, 255, 0.92) 9% 22%, rgba(7, 35, 62, 0.98) 23% 58%, rgba(3, 8, 18, 0.98) 59% 100%)",
@@ -441,37 +441,6 @@ export function JarvisDock() {
           aria-hidden
         />
         <JarvisOrb size="sm" state={mapJarvisState(realtimeState)} />
-      </button>
-      <button
-        type="button"
-        onClick={handleDockClick}
-        className="hidden cursor-grab rounded-[var(--radius-pill)] border px-3 py-2 text-[11px] font-bold uppercase tracking-[0.18em] transition active:cursor-grabbing md:flex md:items-center md:gap-2"
-        style={{
-          background:
-            realtimeState === "error"
-              ? "linear-gradient(135deg, rgba(30, 8, 14, 0.94), rgba(9, 14, 22, 0.92))"
-              : "linear-gradient(135deg, rgba(9, 17, 28, 0.94), rgba(6, 12, 20, 0.9))",
-          borderColor:
-            realtimeState === "error"
-              ? "rgba(229, 72, 77, 0.5)"
-              : active
-                ? "rgba(185, 248, 255, 0.62)"
-                : "rgba(130, 240, 255, 0.38)",
-          boxShadow:
-            realtimeState === "error"
-              ? "0 0 28px rgba(229, 72, 77, 0.16)"
-              : "0 0 0 1px rgba(255,255,255,0.05) inset, 0 0 24px rgba(91, 231, 255, 0.18)",
-          color: active ? "rgba(224, 252, 255, 0.98)" : "rgba(218, 241, 247, 0.94)",
-        }}
-        aria-label={label}
-        title={statusText}
-      >
-        {active ? (
-          <MicOff size={13} className={realtimeState === "error" ? "text-[var(--danger)]" : "text-[var(--ai-cyan-bright)]"} />
-        ) : (
-          <Mic size={13} className="text-[var(--ai-cyan-bright)]" />
-        )}
-        <span className="jarvis-wordmark">{active ? t("jarvisDock.voiceStop") : "Jarvis"}</span>
       </button>
       {realtimeState !== "idle" ? (
         <div

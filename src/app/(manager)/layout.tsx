@@ -30,7 +30,6 @@ const sidebarItems: SidebarItem[] = [
   { href: "/payroll", icon: "payroll", label: "Payroll", labelKey: "manager.navPayroll", financeOnly: true },
   { href: "/admin/audit", icon: "audit", label: "Audit Log", labelKey: "audit.title", ownerOnly: true },
   { href: "/admin/settings", icon: "admin", label: "Admin Settings", labelKey: "admin.settings.title", ownerOnly: true },
-  { href: "/settings", icon: "settings", label: "Settings", labelKey: "manager.navSettings" },
   { href: "/trash", icon: "trash", label: "Trash", labelKey: "nav.trash" },
 ];
 
