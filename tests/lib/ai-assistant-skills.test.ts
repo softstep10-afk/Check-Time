@@ -308,7 +308,7 @@ describe("AI assistant worker skill suggestions", () => {
         ],
       });
 
-      expect(answer.answer).toBe("Всегда к вашим услугам, сэр.");
+      expect(answer.answer).toBe("Сэр?");
       expect(answer.answer).not.toContain("файл");
       expect(answer.bullets).toEqual([]);
     });

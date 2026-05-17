@@ -1,11 +1,12 @@
 export const DEFAULT_GOOGLE_TTS_LANGUAGE = "en-GB";
 export const DEFAULT_GOOGLE_TTS_VOICE = "en-GB-Neural2-B";
-export const DEFAULT_GOOGLE_TTS_SPEAKING_RATE = 0.9;
-export const DEFAULT_GOOGLE_TTS_PITCH = -3;
+export const DEFAULT_GOOGLE_TTS_SPEAKING_RATE = 0.85;
+export const DEFAULT_GOOGLE_TTS_PITCH = -6.0;
 export const DEFAULT_GOOGLE_TTS_RU_LANGUAGE = "ru-RU";
-export const DEFAULT_GOOGLE_TTS_RU_VOICE = "ru-RU-Wavenet-D";
-export const DEFAULT_GOOGLE_TTS_RU_SPEAKING_RATE = 0.9;
-export const DEFAULT_GOOGLE_TTS_RU_PITCH = -2;
+export const DEFAULT_GOOGLE_TTS_RU_VOICE = "ru-RU-Neural2-D";
+export const FALLBACK_GOOGLE_TTS_RU_VOICE = "ru-RU-Wavenet-D";
+export const DEFAULT_GOOGLE_TTS_RU_SPEAKING_RATE = 0.85;
+export const DEFAULT_GOOGLE_TTS_RU_PITCH = -6.0;
 
 export type JarvisSpeechLocale = "en" | "ru";
 
@@ -34,33 +35,27 @@ export function detectJarvisSpeechLocale(text: string, requestedLocale?: string 
   return /[а-яё]/i.test(text) ? "ru" : "en";
 }
 
-function numberFromEnv(value: string | undefined, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
 export function resolveJarvisVoiceSelection(
   text: string,
   options: { locale?: string | null; env?: JarvisVoiceEnv } = {},
 ): JarvisVoiceSelection {
-  const env = options.env ?? process.env;
   const locale = detectJarvisSpeechLocale(text, options.locale);
 
   if (locale === "ru") {
     return {
       locale,
-      languageCode: env.GOOGLE_TTS_RU_LANGUAGE || DEFAULT_GOOGLE_TTS_RU_LANGUAGE,
-      voiceName: env.GOOGLE_TTS_RU_VOICE || DEFAULT_GOOGLE_TTS_RU_VOICE,
-      speakingRate: numberFromEnv(env.GOOGLE_TTS_RU_SPEAKING_RATE, DEFAULT_GOOGLE_TTS_RU_SPEAKING_RATE),
-      pitch: numberFromEnv(env.GOOGLE_TTS_RU_PITCH, DEFAULT_GOOGLE_TTS_RU_PITCH),
+      languageCode: DEFAULT_GOOGLE_TTS_RU_LANGUAGE,
+      voiceName: DEFAULT_GOOGLE_TTS_RU_VOICE,
+      speakingRate: DEFAULT_GOOGLE_TTS_RU_SPEAKING_RATE,
+      pitch: DEFAULT_GOOGLE_TTS_RU_PITCH,
     };
   }
 
   return {
     locale,
-    languageCode: env.GOOGLE_TTS_LANGUAGE || DEFAULT_GOOGLE_TTS_LANGUAGE,
-    voiceName: env.GOOGLE_TTS_VOICE || DEFAULT_GOOGLE_TTS_VOICE,
-    speakingRate: numberFromEnv(env.GOOGLE_TTS_SPEAKING_RATE, DEFAULT_GOOGLE_TTS_SPEAKING_RATE),
-    pitch: numberFromEnv(env.GOOGLE_TTS_PITCH, DEFAULT_GOOGLE_TTS_PITCH),
+    languageCode: DEFAULT_GOOGLE_TTS_LANGUAGE,
+    voiceName: DEFAULT_GOOGLE_TTS_VOICE,
+    speakingRate: DEFAULT_GOOGLE_TTS_SPEAKING_RATE,
+    pitch: DEFAULT_GOOGLE_TTS_PITCH,
   };
 }

@@ -1,5 +1,6 @@
 import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 import {
+  FALLBACK_GOOGLE_TTS_RU_VOICE,
   resolveJarvisVoiceSelection,
 } from "@/lib/ai/jarvis-voice";
 
@@ -100,19 +101,34 @@ export async function synthesizeJarvisSpeech(
   const selection = resolveJarvisVoiceSelection(text, options);
   const client = getTextToSpeechClient();
 
-  const [response] = await client.synthesizeSpeech({
-    input: { text },
-    voice: {
-      languageCode: selection.languageCode,
-      name: selection.voiceName,
-      ssmlGender: "MALE",
-    },
-    audioConfig: {
-      audioEncoding: "MP3",
-      speakingRate: selection.speakingRate,
-      pitch: selection.pitch,
-    },
-  });
+  async function synthesizeWithVoice(voiceName: string) {
+    return client.synthesizeSpeech({
+      input: { text },
+      voice: {
+        languageCode: selection.languageCode,
+        name: voiceName,
+        ssmlGender: "MALE",
+      },
+      audioConfig: {
+        audioEncoding: "MP3",
+        speakingRate: 0.85,
+        pitch: -6.0,
+      },
+    });
+  }
+
+  let response;
+  let voiceName = selection.voiceName;
+  try {
+    [response] = await synthesizeWithVoice(voiceName);
+  } catch (error) {
+    if (selection.locale !== "ru" || voiceName === FALLBACK_GOOGLE_TTS_RU_VOICE) {
+      throw error;
+    }
+
+    voiceName = FALLBACK_GOOGLE_TTS_RU_VOICE;
+    [response] = await synthesizeWithVoice(voiceName);
+  }
 
   if (!response.audioContent) {
     throw new Error("Google TTS returned no audio.");
@@ -125,7 +141,7 @@ export async function synthesizeJarvisSpeech(
   return {
     base64: buffer.toString("base64"),
     mimeType: "audio/mpeg",
-    voiceName: selection.voiceName,
+    voiceName,
     languageCode: selection.languageCode,
   };
 }

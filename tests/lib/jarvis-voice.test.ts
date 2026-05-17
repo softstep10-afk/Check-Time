@@ -15,18 +15,20 @@ describe("Jarvis voice selection", () => {
 
     expect(voice.languageCode).toBe("en-GB");
     expect(voice.voiceName).toBe("en-GB-Neural2-B");
-    expect(voice.speakingRate).toBe(0.9);
-    expect(voice.pitch).toBe(-3);
+    expect(voice.speakingRate).toBe(0.85);
+    expect(voice.pitch).toBe(-6);
   });
 
   it("uses a Russian Google voice for Russian app mode", () => {
     const voice = resolveJarvisVoiceSelection("Hello", { locale: "ru", env: {} });
 
     expect(voice.languageCode).toBe("ru-RU");
-    expect(voice.voiceName).toBe("ru-RU-Wavenet-D");
+    expect(voice.voiceName).toBe("ru-RU-Neural2-D");
+    expect(voice.speakingRate).toBe(0.85);
+    expect(voice.pitch).toBe(-6);
   });
 
-  it("allows Russian voice env overrides without touching English settings", () => {
+  it("ignores voice env overrides for cinematic voice settings", () => {
     const voice = resolveJarvisVoiceSelection("Привет", {
       env: {
         GOOGLE_TTS_LANGUAGE: "en-GB",
@@ -39,8 +41,8 @@ describe("Jarvis voice selection", () => {
     });
 
     expect(voice.languageCode).toBe("ru-RU");
-    expect(voice.voiceName).toBe("ru-RU-Standard-D");
+    expect(voice.voiceName).toBe("ru-RU-Neural2-D");
     expect(voice.speakingRate).toBe(0.85);
-    expect(voice.pitch).toBe(-4);
+    expect(voice.pitch).toBe(-6);
   });
 });
