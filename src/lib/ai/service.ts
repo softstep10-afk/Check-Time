@@ -378,6 +378,16 @@ function isGreetingQuestion(normalized: string): boolean {
   return shortGreeting || asksPresence;
 }
 
+function isSimpleGreetingQuestion(question: string): boolean {
+  const compact = question
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return compact.length > 0 && compact.length < 15 && isGreetingQuestion(compact);
+}
 export function buildJarvisWakeResponse(question: string): AssistantResult | null {
   const normalized = normalizeSearchText(question);
   if (!isGreetingQuestion(normalized)) return null;
@@ -1425,6 +1435,7 @@ export async function answerManagerAssistant(
   }
 
   const unavailable = buildGeminiUnavailableFallback(question);
+  const includeWorkspaceSnapshot = !isSimpleGreetingQuestion(question);
   const financialPromptLines = snapshot.hasFinanceAccess
     ? [
         `Unpaid hours: ${snapshot.unpaidHours.toFixed(2)}`,
@@ -1440,7 +1451,9 @@ export async function answerManagerAssistant(
   const modelObject = await tryAssistantModelObject(
     [
       "Return JSON only.",
-      "Use only the supplied app snapshot. If the snapshot does not contain a fact, say it is not recorded.",
+      includeWorkspaceSnapshot
+        ? "Use only the supplied app snapshot. If the snapshot does not contain a fact, say it is not recorded."
+        : "No workspace snapshot is provided for this greeting. Do not mention app data, workers, hours, projects, payroll, materials, or numbers.",
       "Gemini is the primary assistant. Answer from the supplied snapshot directly; do not defer to hidden persona rules or old router behavior.",
       "Do not proactively summarize data. Do not volunteer numbers, hours, payroll, workers, or project statistics unless the user directly asks.",
       "For greetings or wake words, keep bullets and links empty.",
@@ -1451,6 +1464,12 @@ export async function answerManagerAssistant(
       "Create a JSON object with keys:",
       "answer, bullets, links, confidence",
       "links must be an array of objects with label and href.",
+      `Question: ${question}`,
+      ...(!includeWorkspaceSnapshot
+        ? [
+            "Workspace snapshot: not provided for this turn.",
+          ]
+        : [
       "If asked who should do work, use the worker skills and assignment suggestions below; never invent a skill.",
       "If asked for accounting/payroll analysis, use financial fields only when financial visibility is present.",
       "If asked about current totals, overview, materials, shifts, tasks, project documents, estimates, invoices, or change orders, use the snapshot first and answer with exact app numbers.",
@@ -1458,7 +1477,6 @@ export async function answerManagerAssistant(
       "If attached images are supplied to the model, inspect them directly. If only filenames or metadata are supplied, say that visual content is not available.",
       "Use the recent conversation to resolve follow-up words like 'him', 'that project', 'there', or 'same thing'.",
       `Recent conversation:\n${formatAssistantHistory(history)}`,
-      `Question: ${question}`,
       `Org: ${snapshot.orgName}`,
       `On site count: ${snapshot.onSiteCount}`,
       `Active projects: ${snapshot.activeProjectCount}`,
@@ -1477,6 +1495,7 @@ export async function answerManagerAssistant(
       `Recent media index: ${snapshot.mediaIndex.slice(0, 40).map((item) => `${item.projectName} ${item.mediaType} ${item.filename}, caption ${item.caption ?? "none"}, tags ${item.tags.join(", ") || "none"}, summary ${item.summary ?? "none"}, uploader ${item.uploadedByName ?? "unknown"}`).join(" | ") || "None"}`,
       `Washington code reference pack: ${snapshot.codeReferences.map((reference) => `${reference.topic}: ${reference.summary} (${reference.url})`).join(" | ")}`,
       `Recent reports: ${snapshot.recentReports.map((report) => `${report.projectName} ${report.reportDate}: ${report.summary ?? "No summary"}`).join(" | ") || "None"}`,
+          ]),
     ].join("\n"),
     attachments,
   );
