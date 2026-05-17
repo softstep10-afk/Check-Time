@@ -683,21 +683,6 @@ export default async function OverviewPage() {
         </div>
       </section>
 
-      <section className="surface-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("overview.activeSiteMap")}</h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {t("overview.mapDesc")}
-            </p>
-          </div>
-          <Link href="/projects" className="text-sm font-semibold text-[var(--brand-yellow)]">
-            {t("overview.openProjects")}
-          </Link>
-        </div>
-        <FullscreenMapWrapper projects={projectSummaries} activeWorkers={activeWorkerMarkers} />
-      </section>
-
       {closedShiftAlerts.length > 0 ? (
         <section
           className="rounded-[var(--radius-lg)] border p-4"
@@ -783,6 +768,21 @@ export default async function OverviewPage() {
           </div>
         </section>
       ) : null}
+
+      <section className="surface-card p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("overview.activeSiteMap")}</h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {t("overview.mapDesc")}
+            </p>
+          </div>
+          <Link href="/projects" className="text-sm font-semibold text-[var(--brand-yellow)]">
+            {t("overview.openProjects")}
+          </Link>
+        </div>
+        <FullscreenMapWrapper projects={projectSummaries} activeWorkers={activeWorkerMarkers} />
+      </section>
 
       {/* ── Currently on site table ── */}
       <section className="surface-card p-4">
