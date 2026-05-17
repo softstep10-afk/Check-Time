@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { answerManagerAssistant, buildAssistantSnapshot } from "@/lib/ai/service";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
-import type { Media, Profile, Project, Task } from "@/types/database";
+import type { Media, Profile, Project, Task, TimeEvent } from "@/types/database";
 
 function profile(overrides: Partial<Profile>): Profile {
   return {
@@ -100,6 +100,31 @@ function media(overrides: Partial<Media>): Media {
     deleted_at: null,
     created_at: "2026-05-12T00:00:00.000Z",
     ...overrides,
+  };
+}
+
+function timeEvent(overrides: Partial<TimeEvent> & Pick<TimeEvent, "id" | "profile_id" | "project_id" | "event_type" | "event_time">): TimeEvent {
+  const eventTime = overrides.event_time;
+  return {
+    ...overrides,
+    id: overrides.id,
+    org_id: "org",
+    profile_id: overrides.profile_id,
+    project_id: overrides.project_id,
+    event_type: overrides.event_type,
+    event_time: eventTime,
+    server_time: eventTime,
+    gps_point: null,
+    gps_accuracy_m: null,
+    gps_source: null,
+    adjusts_event_id: null,
+    adjust_reason: null,
+    adjusted_by: null,
+    video_status: "not_required",
+    video_storage_path: null,
+    notes: null,
+    metadata: {},
+    created_at: eventTime,
   };
 }
 
@@ -224,7 +249,39 @@ describe("AI assistant worker skill suggestions", () => {
 
       expect(answer.answer).toContain("человеко-часов");
       expect(answer.bullets.join(" ")).toContain("каркас");
-      expect(answer.bullets.join(" ")).toContain("progress photo");
+      expect(answer.bullets.join(" ")).not.toContain("progress photo");
+    });
+  });
+
+  it("routes worked-hour questions to actual shifts instead of estimates", async () => {
+    await withModelDisabled(async () => {
+      const data = workspace();
+      data.timeEvents = [
+        timeEvent({
+          id: "in",
+          profile_id: "vasia",
+          project_id: "project",
+          event_type: "clock_in",
+          event_time: "2026-05-15T09:00:00.000Z",
+        }),
+        timeEvent({
+          id: "out",
+          profile_id: "vasia",
+          project_id: "project",
+          event_type: "clock_out",
+          event_time: "2026-05-15T17:30:00.000Z",
+        }),
+      ];
+      const snapshot = buildAssistantSnapshot(data, [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant("сколько часов отработал Vasia последняя смена?", snapshot);
+
+      expect(answer.answer).toContain("Vasia");
+      expect(answer.answer).toContain("8.50h");
+      expect(answer.answer.toLowerCase()).not.toContain("эстимейт");
+      expect(answer.answer).not.toContain("человеко-часов");
     });
   });
 
@@ -308,7 +365,7 @@ describe("AI assistant worker skill suggestions", () => {
         ],
       });
 
-      expect(answer.answer).toBe("Сэр?");
+      expect(answer.answer).toBe("Готов.");
       expect(answer.answer).not.toContain("файл");
       expect(answer.bullets).toEqual([]);
     });

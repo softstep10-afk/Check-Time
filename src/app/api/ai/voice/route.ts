@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
       ? {
           answer: /[а-яё]/i.test(question)
             ? "Принял. Правило сохранено."
-            : "Acknowledged. Sir. Rule stored.",
+            : "Rule stored.",
           bullets: [memorySaved.text],
           links: [],
           confidence: 0.94,

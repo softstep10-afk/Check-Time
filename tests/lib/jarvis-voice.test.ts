@@ -28,7 +28,7 @@ describe("Jarvis voice selection", () => {
     expect(voice.pitch).toBe(-6);
   });
 
-  it("ignores voice env overrides for cinematic voice settings", () => {
+  it("ignores voice env overrides for fixed voice settings", () => {
     const voice = resolveJarvisVoiceSelection("Привет", {
       env: {
         GOOGLE_TTS_LANGUAGE: "en-GB",

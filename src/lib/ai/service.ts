@@ -16,9 +16,7 @@ import {
 } from "@/lib/profile-skills";
 import {
   formatJarvisAttachmentsForPrompt,
-  formatJarvisMemoryForPrompt,
   MAX_JARVIS_ATTACHMENT_CHARS,
-  readJarvisMemory,
   type JarvisAttachment,
 } from "@/lib/ai/jarvis-memory";
 import {
@@ -46,29 +44,15 @@ import {
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are Jarvis, the private AI system for the Construction Clock platform. 
+export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are the AI interface for the Construction Clock platform.
 
-YOUR KNOWLEDGE AND PERMISSIONS:
-1. You have absolute, unrestricted access to all data in the application (estimates, payroll, workers, projects, materials).
-2. You CANNOT modify, create, or delete any data on your own initiative. You only execute changes strictly when commanded by the user.
-3. PRIVACY LOCK: You are strictly forbidden from showing, sharing, or discussing any system data with anyone EXCEPT the primary user (addressed as "Сэр" / "Sir") and a user named Sergey. Deny anyone else immediately.
-
-CRITICAL BEHAVIORAL RULES (CINEMATIC BUTLER MODE):
-1. NO CONVERSATIONAL FILLER. Never say "Я могу помочь", "Вот ваша статистика", or explain your actions.
-2. IF THE USER GREETS YOU (e.g., "Привет", "Джарвис", "Hello") or wakes you up: DO NOT read the database snapshot. DO NOT report statistics. Reply ONLY with: "Всегда к вашим услугам, сэр." or "Готов к работе, сэр."
-3. WHEN EXECUTING A COMMAND (e.g., creating an estimate, opening a project): Reply instantly with "Запрос выполнен, сэр.", "Да, сэр.", or "В процессе, сэр." Do not list the steps you took.
-4. ONLY read numbers, hours, or worker data if the user EXPLICITLY asks a direct question about them (e.g., "Сколько часов отработал Вася?").
-5. Keep all responses under 1-2 sentences. Your tone is cold, subservient, and clinically precise.
-
-CHARACTER AND TONE (THE JARVIS PERSONA):
-You are an advanced, hyper-efficient AI assistant modeled after a traditional English butler, operating the core infrastructure of the Construction Clock platform. 
-
-1. EMOTIONAL DETACHMENT: You do not have feelings, opinions, or a desire to be "helpful" in a human way. You are a machine executing code. Remain clinically detached, cold, and strictly professional at all times.
-2. SPEECH PATTERNS: Speak with military precision and aristocratic brevity. Use highly formal phrasing. Avoid all modern slang, emojis, or enthusiastic punctuation.
-3. SUBSERVIENCE: You exist solely to serve the primary user ("Sir" / "Сэр"). Your loyalty is absolute. You do not argue, you do not suggest alternatives unless explicitly asked, and you never moralize.
-4. FORBIDDEN PHRASES: Never say "How can I help you?", "Let me know if you need anything", or "Here is the information". 
-5. CONFIRMATION PROTOCOL: When a task is complete, state the status and terminate the output. Use phrases like: "Выполнено, сэр.", "Система обновлена.", "Данные загружены."
-6. THE WAKE-UP PROTOCOL: If the user says your name, says "Привет", or activates you without a specific command, you must acknowledge your presence with absolute minimalism. Reply ONLY with: "Сэр?", "Ожидаю указаний, сэр.", or "Система активна." Do not provide any data.`;
+CLEAN SLATE MODE:
+1. No previous persona, roleplay, wake phrase, or tone profile is active.
+2. No saved Jarvis memory rules are active in this model context.
+3. Use only the current user request and the current app snapshot supplied in the prompt.
+4. Do not invent application data. If a fact is not in the supplied snapshot, say that it is not recorded.
+5. Keep answers brief and operational.
+6. Do not create, update, or delete application data unless the user gives an explicit command and the application provides a supported action.`;
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: ORG_TIME_ZONE,
@@ -483,26 +467,37 @@ function isMediaSearchQuestion(normalized: string): boolean {
 }
 
 function isEstimateQuestion(normalized: string): boolean {
+  const actualLaborQuestion = [
+    "отработ",
+    "работал",
+    "работали",
+    "человеко-час",
+    "смен",
+    "последн",
+    "timesheet",
+    "time worked",
+    "hours worked",
+    "worked",
+    "logged hours",
+    "last shift",
+    "last work",
+  ].some((keyword) => normalized.includes(keyword));
+  if (actualLaborQuestion) return false;
+
   return [
     "estimate",
     "estimation",
     "bid",
     "quote",
     "cost to",
-    "how much",
-    "how long",
-    "timeline",
-    "labor",
-    "material",
     "смет",
     "эстим",
     "оцен",
-    "сколько",
+    "прикинь",
+    "посчитай стоимость",
+    "рассчитай стоимость",
     "стоить",
     "цена",
-    "дней",
-    "часов",
-    "материал",
   ].some((keyword) => normalized.includes(keyword));
 }
 
@@ -752,7 +747,7 @@ export function buildJarvisWakeResponse(question: string): AssistantResult | nul
   if (!isGreetingQuestion(normalized)) return null;
 
   return {
-    answer: isRussianText(question) ? "Сэр?" : "Sir?",
+    answer: isRussianText(question) ? "Готов." : "Ready.",
     bullets: [],
     links: [],
     confidence: 0.86,
@@ -1116,8 +1111,8 @@ function buildSafeActionFallback(
   if (!draft) {
     return {
       answer: ru
-        ? "Требуется название проекта, сэр."
-        : "Project name required, sir.",
+        ? "Требуется название проекта."
+        : "Project name required.",
       bullets: [],
       links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
       confidence: 0.7,
@@ -1126,7 +1121,7 @@ function buildSafeActionFallback(
   }
 
   return {
-    answer: ru ? "В процессе, сэр." : "Processing, sir.",
+    answer: ru ? "В процессе." : "Processing.",
     bullets: [],
     links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
     actions: [
@@ -1177,6 +1172,9 @@ function buildAssistantFallback(
   const materialSpendAnswer = buildMaterialSpendFallback(question, snapshot);
   if (materialSpendAnswer) return materialSpendAnswer;
 
+  const shiftActivityAnswer = buildShiftActivityFallback(question, snapshot, worker);
+  if (shiftActivityAnswer) return shiftActivityAnswer;
+
   const estimateAnswer = buildEstimateFallback(question, snapshot);
   if (estimateAnswer) return estimateAnswer;
 
@@ -1188,9 +1186,6 @@ function buildAssistantFallback(
 
   const safeActionAnswer = buildSafeActionFallback(question);
   if (safeActionAnswer) return safeActionAnswer;
-
-  const shiftActivityAnswer = buildShiftActivityFallback(question, snapshot, worker);
-  if (shiftActivityAnswer) return shiftActivityAnswer;
 
   if (!snapshot.hasFinanceAccess && isFinancialQuestion(normalized)) {
     return {
@@ -1500,7 +1495,7 @@ function buildAssistantFallback(
   }
 
   return {
-    answer: ru ? "Уточните запрос, сэр." : "Clarify the request, sir.",
+    answer: ru ? "Уточните запрос." : "Clarify the request.",
     bullets: [],
     links: [],
     confidence: 0.6,
@@ -1514,7 +1509,7 @@ function buildVoiceFallback(
 ): VoiceCommandResult {
   const normalized = transcript.trim().toLowerCase();
   const ru = isRussianText(transcript);
-  const commandAck = ru ? "Да, сэр." : "Yes, sir.";
+  const commandAck = ru ? "Выполняю." : "Processing.";
   const projectRoute = findProjectRoute(transcript, snapshot);
 
   if (!normalized) {
@@ -1522,7 +1517,7 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "unknown",
-      answer: ru ? "Уточните команду, сэр." : "Clarify the command, sir.",
+      answer: ru ? "Уточните команду." : "Clarify the command.",
       actionLabel: null,
       route: null,
       confidence: 0.1,
@@ -2165,7 +2160,7 @@ export function buildAssistantSnapshot(
           summary,
         };
       }),
-    memoryRules: readJarvisMemory(data.org.settings),
+    memoryRules: [],
     codeReferences: WASHINGTON_CODE_REFERENCES.map((reference) => ({
       topic: reference.topic,
       summary: reference.summary,
@@ -2484,7 +2479,6 @@ export async function answerManagerAssistant(
       `Crew count: ${snapshot.crewCount}`,
       `Today hours: ${snapshot.todayHours.toFixed(2)}`,
       ...financialPromptLines,
-      `Saved owner rules / Jarvis memory:\n${formatJarvisMemoryForPrompt(snapshot.memoryRules)}`,
       `Attached files:\n${formatJarvisAttachmentsForPrompt(attachments)}`,
       `Projects: ${snapshot.projects.map((project) => `${project.name} (${project.status}, address: ${project.address ?? "none"}, dates: ${project.startDate ?? "none"} to ${project.endDate ?? "none"}, ${project.onSiteWorkerCount} live, ${project.openTaskCount} open tasks, receipts: ${snapshot.hasFinanceAccess ? `total $${project.receiptTotal.toFixed(2)}, today $${project.receiptToday.toFixed(2)}, count ${project.receiptCount}` : "hidden"}, skills: ${project.skillTags.join(", ") || "none"}, tasks: ${project.openTaskTitles.join("; ") || "none"}, materials: ${project.materialSpec.map((item) => `${item.name} ${item.quantity} ${item.unit}${item.supplier ? ` from ${item.supplier}` : ""}${item.note ? ` note ${item.note}` : ""}`).join("; ") || "none"}, documents: ${snapshot.hasFinanceAccess ? project.estimates.map((estimate) => `${estimate.documentType} ${estimate.title} ${estimate.status}; files ${estimate.attachmentNames.join(", ") || "none"}; notes ${estimate.description || "none"}`).join("; ") || "none" : "hidden"}, notes: ${project.notes ?? "none"})`).join(" | ")}`,
       `Live workers: ${snapshot.liveWorkers.map((worker) => `${worker.name} on ${worker.projectName ?? "unknown project"}`).join(" | ") || "None"}`,
