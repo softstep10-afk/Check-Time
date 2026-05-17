@@ -96,7 +96,7 @@ export default function ManagerLayout({
   const pathname = usePathname();
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
 
   // In auth-bypass/preview mode, owner is the default role
   const [userRole, setUserRole] = useState<string>(AUTH_BYPASS_ENABLED ? "owner" : "manager");
@@ -349,17 +349,7 @@ export default function ManagerLayout({
                 </div>
               </div>
             </div>
-            <ManagerNotificationBell
-              profileId={userId}
-              orgId={userOrgId}
-              muted={managerMuted}
-              locale={locale}
-              labels={{
-                notifications: t("messages.notifications"),
-                noNew: t("messages.noNew"),
-                gotIt: t("messages.gotIt"),
-              }}
-            />
+            <ManagerNotificationBell profileId={userId} orgId={userOrgId} muted={managerMuted} />
             <button
               type="button"
               onClick={toggleManagerSound}
@@ -395,17 +385,7 @@ export default function ManagerLayout({
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <ManagerNotificationBell
-              profileId={userId}
-              orgId={userOrgId}
-              muted={managerMuted}
-              locale={locale}
-              labels={{
-                notifications: t("messages.notifications"),
-                noNew: t("messages.noNew"),
-                gotIt: t("messages.gotIt"),
-              }}
-            />
+            <ManagerNotificationBell profileId={userId} orgId={userOrgId} muted={managerMuted} />
             <button
               type="button"
               onClick={toggleManagerSound}

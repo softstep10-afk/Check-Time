@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, CheckSquare, FileText, MessageSquare } from "lucide-react";
+import { Bell, CheckSquare, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useTranslation } from "@/lib/i18n";
+import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
 import {
   PRIORITY_COLOR,
   PRIORITY_ORDER,
@@ -11,7 +13,6 @@ import {
   type MessagePriority,
 } from "@/lib/message-types";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
-import type { Locale } from "@/lib/i18n";
 
 type ManagerTaskNotification = {
   id: string;
@@ -66,19 +67,12 @@ export function ManagerNotificationBell({
   profileId,
   orgId,
   muted,
-  locale,
-  labels,
 }: {
   profileId: string | null;
   orgId: string | null;
   muted: boolean;
-  locale: Locale;
-  labels: {
-    notifications: string;
-    noNew: string;
-    gotIt: string;
-  };
 }) {
+  const { t, locale } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [tasks, setTasks] = useState<ManagerTaskNotification[]>([]);
@@ -262,8 +256,8 @@ export function ManagerNotificationBell({
           background: totalBadge > 0 ? "rgba(212, 81, 94, 0.1)" : "transparent",
           color: totalBadge > 0 ? "var(--red)" : "var(--text-secondary)",
         }}
-        aria-label={labels.notifications}
-        title={labels.notifications}
+        aria-label={t("messages.notifications")}
+        title={t("messages.notifications")}
       >
         <Bell size={16} />
         {totalBadge > 0 ? (
@@ -288,7 +282,7 @@ export function ManagerNotificationBell({
             className="flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-[0.14em]"
             style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border-default)" }}
           >
-            <span>{labels.notifications}</span>
+            <span>{t("messages.notifications")}</span>
             <span className="text-[10px] normal-case tracking-normal">{totalBadge}</span>
           </div>
           {tasks.length > 0 ? (
@@ -309,7 +303,7 @@ export function ManagerNotificationBell({
           <div className="max-h-[430px] overflow-y-auto">
             {totalBadge === 0 ? (
               <div className="p-4 text-center text-sm text-[var(--text-secondary)]">
-                {labels.noNew}
+                {t("messages.noNew")}
               </div>
             ) : null}
             {tasks.map((task) => (
@@ -352,12 +346,7 @@ export function ManagerNotificationBell({
                     <MessageSquare size={14} className="mt-0.5 shrink-0" style={{ color: accent }} />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm text-[var(--text-primary)]">{message.text}</div>
-                      {message.attachment ? (
-                        <div className="mt-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2 text-xs text-[var(--text-secondary)]">
-                          <FileText size={14} className="shrink-0" />
-                          <span className="truncate">{message.attachment.filename}</span>
-                        </div>
-                      ) : null}
+                      {message.attachment ? <MessageAttachmentView attachment={message.attachment} /> : null}
                       <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                         <span className="text-[10px] text-[var(--text-muted)]">
                           {relativeTime(message.created_at, locale === "ru" ? "ru" : "en")}
@@ -369,7 +358,7 @@ export function ManagerNotificationBell({
                             className="rounded-[var(--radius-sm)] px-2 py-0.5 text-[10px] font-semibold"
                             style={{ background: `${accent}1f`, color: accent }}
                           >
-                            {labels.gotIt}
+                            {t("messages.gotIt")}
                           </button>
                         ) : null}
                       </div>
