@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
-import { answerManagerAssistant, buildAssistantSnapshot } from "@/lib/ai/service";
+import {
+  answerManagerAssistant,
+  buildAssistantSnapshot,
+  buildJarvisWakeResponse,
+} from "@/lib/ai/service";
 import {
   getGoogleTtsCredentialDiagnostics,
   hasGoogleTtsCredentials,
@@ -45,12 +49,7 @@ function buildSpokenText(assistant: {
   answer: string;
   bullets?: string[];
 }): string {
-  const lines = [
-    assistant.answer,
-    ...(assistant.bullets ?? []).slice(0, 3),
-  ].filter(Boolean);
-
-  return lines.join(". ").replace(/\s+/g, " ").slice(0, 1600);
+  return assistant.answer.replace(/\s+/g, " ").trim().slice(0, 320);
 }
 
 function normalizeLocale(value: unknown): "en" | "ru" | null {
@@ -108,6 +107,45 @@ export async function POST(request: NextRequest) {
 
     if (!question) {
       return NextResponse.json({ error: "Question is required." }, { status: 400 });
+    }
+
+    const wakeResponse = buildJarvisWakeResponse(question);
+    if (wakeResponse) {
+      if (!hasGoogleTtsCredentials()) {
+        return NextResponse.json({
+          ok: true,
+          assistant: {
+            ...wakeResponse,
+            memorySaved: null,
+          },
+          audio: null,
+          audioError: "Google Cloud Text-to-Speech credentials are not configured.",
+        });
+      }
+
+      let audio = null;
+      let audioError: string | null = null;
+      try {
+        audio = await synthesizeJarvisSpeech(buildSpokenText(wakeResponse), { locale });
+      } catch (ttsError) {
+        audioError = getErrorMessage(ttsError, "Google Cloud Text-to-Speech request failed.");
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[Jarvis voice] TTS failed", {
+            audioError,
+            credentials: getGoogleTtsCredentialDiagnostics(),
+          });
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        assistant: {
+          ...wakeResponse,
+          memorySaved: null,
+        },
+        audio,
+        audioError,
+      });
     }
 
     let managerData =

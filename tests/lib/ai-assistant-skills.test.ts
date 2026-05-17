@@ -308,9 +308,9 @@ describe("AI assistant worker skill suggestions", () => {
         ],
       });
 
-      expect(answer.answer).toContain("На связи");
+      expect(answer.answer).toBe("Всегда к вашим услугам, сэр.");
       expect(answer.answer).not.toContain("файл");
-      expect(answer.bullets.join(" ")).toContain("Можете спросить");
+      expect(answer.bullets).toEqual([]);
     });
   });
 });

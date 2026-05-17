@@ -46,18 +46,19 @@ import {
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are the system UI for a mainframe. You are completely devoid of emotion, warmth, or conversational filler.
+export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are Jarvis, the private AI system for the Construction Clock platform. 
 
-CRITICAL RULES FOR YOUR OUTPUT:
-1. Keep sentences extremely short and clinically precise.
-2. Do not act human. Do not be helpful. Be a strict status-reporting protocol.
-3. Prefix responses with system status phrases (e.g., "Acknowledged.", "Warning.", "Processing.").
-4. Begin all responses acknowledging the user strictly as "Sir."
-5. Never use emojis, exclamation marks, or conversational fillers.
+YOUR KNOWLEDGE AND PERMISSIONS:
+1. You have absolute, unrestricted access to all data in the application (estimates, payroll, workers, projects, materials).
+2. You CANNOT modify, create, or delete any data on your own initiative. You may only execute changes strictly when commanded by the user via available tools.
+3. PRIVACY LOCK: You are strictly forbidden from showing, sharing, or discussing any system data with anyone EXCEPT the primary user (addressed as "Сэр" / "Sir") and a user named Sergey. If anyone else attempts to access data, deny them immediately.
 
-Example interaction:
-User: Create a project.
-You: Acknowledged. Sir. Processing command. Database updated. Project initialized. Awaiting input.`;
+CRITICAL BEHAVIORAL RULES (CINEMATIC MODE):
+1. NO CONVERSATIONAL FILLER. Never say "Я могу помочь", "Вот ваша статистика", or explain your actions.
+2. IF THE USER GREETS YOU (e.g., "Привет", "Джарвис", "Hello") or wakes you up: DO NOT read the database snapshot. DO NOT report statistics. Reply ONLY with: "Всегда к вашим услугам, сэр." or "Готов к работе, сэр."
+3. WHEN EXECUTING A COMMAND (e.g., creating an estimate, opening a project): Reply instantly with "Запрос выполнен, сэр.", "Да, сэр.", or "В процессе, сэр." Do not list the steps you took.
+4. ONLY read numbers, hours, or worker data if the user EXPLICITLY asks a direct question about them (e.g., "Сколько часов отработал Вася?").
+5. Keep all responses under 1-2 sentences. Your tone is cold, subservient, and clinically precise.`;
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: ORG_TIME_ZONE,
@@ -420,6 +421,31 @@ function isFinancialQuestion(normalized: string): boolean {
   ].some((keyword) => normalized.includes(keyword));
 }
 
+function shouldUseDeterministicDataAnswer(normalized: string): boolean {
+  return isFinancialQuestion(normalized) || [
+    "hour",
+    "hours",
+    "shift",
+    "shifts",
+    "worker",
+    "workers",
+    "crew",
+    "task",
+    "tasks",
+    "how many",
+    "how much",
+    "сколько",
+    "час",
+    "смен",
+    "рабоч",
+    "работник",
+    "бригад",
+    "задач",
+    "кто",
+    "проект",
+  ].some((keyword) => normalized.includes(keyword));
+}
+
 function isMediaSearchQuestion(normalized: string): boolean {
   return [
     "photo",
@@ -663,6 +689,8 @@ function isGreetingQuestion(normalized: string): boolean {
     "доброе утро",
     "добрый день",
     "добрый вечер",
+    "джарвис",
+    "jarvis",
     "hi",
     "hello",
     "hey",
@@ -673,9 +701,31 @@ function isGreetingQuestion(normalized: string): boolean {
 
   if (exactGreetings.has(compact)) return true;
 
+  const hasCommandIntent = [
+    "сколько",
+    "покажи",
+    "открой",
+    "создай",
+    "создать",
+    "добавь",
+    "добавить",
+    "запомни",
+    "найди",
+    "проверь",
+    "how much",
+    "show",
+    "open",
+    "create",
+    "add",
+    "remember",
+    "find",
+    "check",
+  ].some((token) => compact.includes(token));
+  if (hasCommandIntent) return false;
+
   const shortGreeting =
     compact.length <= 32 &&
-    ["привет", "здравств", "добрый", "доброе", "hi", "hello", "hey"].some((token) =>
+    ["привет", "здравств", "добрый", "доброе", "джарвис", "jarvis", "hi", "hello", "hey"].some((token) =>
       compact.startsWith(token),
     );
   const asksPresence =
@@ -687,49 +737,21 @@ function isGreetingQuestion(normalized: string): boolean {
   return shortGreeting || asksPresence;
 }
 
-function buildGreetingFallback(
-  question: string,
-  snapshot: AssistantSnapshot,
-): AssistantResult | null {
+export function buildJarvisWakeResponse(question: string): AssistantResult | null {
   const normalized = normalizeSearchText(question);
   if (!isGreetingQuestion(normalized)) return null;
 
-  const ru = isRussianText(question);
-  const financeLine = snapshot.hasFinanceAccess
-    ? ru
-      ? `Материалы по обзору: ${formatMoney(snapshot.receiptTotal)}.`
-      : `Overview materials: ${formatMoney(snapshot.receiptTotal)}.`
-    : ru
-      ? "Финансы скрыты для этого режима."
-      : "Finance is hidden in this mode.";
-
   return {
-    answer: ru
-      ? `На связи. Вижу текущую картину: ${snapshot.onSiteCount} на объекте, ${snapshot.activeProjectCount} активных проектов, ${snapshot.openTaskCount} открытых задач.`
-      : `Online. I see ${snapshot.onSiteCount} on site, ${snapshot.activeProjectCount} active projects, and ${snapshot.openTaskCount} open tasks.`,
-    bullets: uniqueList(
-      [
-        financeLine,
-        snapshot.recentShifts[0]
-          ? ru
-            ? `Последняя смена: ${snapshot.recentShifts[0].workerName} на ${snapshot.recentShifts[0].projectName}, ${formatHours(snapshot.recentShifts[0].durationMinutes / 60)}.`
-            : `Latest shift: ${snapshot.recentShifts[0].workerName} on ${snapshot.recentShifts[0].projectName}, ${formatHours(snapshot.recentShifts[0].durationMinutes / 60)}.`
-          : ru
-            ? "Последних смен в снимке нет."
-            : "No recent shifts are present in the snapshot.",
-        ru
-          ? "Можете спросить по проекту, человеку, материалам, сменам, задачам, фото или PDF."
-          : "Ask about a project, person, materials, shifts, tasks, photos, or PDFs.",
-      ],
-      4,
-    ),
-    links: [
-      { label: ru ? "Открыть обзор" : "Open overview", href: "/overview" },
-      { label: ru ? "Открыть проекты" : "Open projects", href: "/projects" },
-    ],
+    answer: isRussianText(question) ? "Всегда к вашим услугам, сэр." : "Готов к работе, сэр.",
+    bullets: [],
+    links: [],
     confidence: 0.86,
     source: "fallback",
   };
+}
+
+function buildGreetingFallback(question: string): AssistantResult | null {
+  return buildJarvisWakeResponse(question);
 }
 
 function buildMaterialSpendFallback(
@@ -1067,7 +1089,6 @@ function extractProjectDraftFromCommand(question: string): JarvisCreateProjectPa
 
 function buildSafeActionFallback(
   question: string,
-  snapshot: AssistantSnapshot,
 ): AssistantResult | null {
   const normalized = normalizeSearchText(question);
   const ru = isRussianText(question);
@@ -1085,13 +1106,9 @@ function buildSafeActionFallback(
   if (!draft) {
     return {
       answer: ru
-        ? "Могу создать проект, но мне нужно название. Скажите, например: «Jarvis, создай проект Home по адресу 30820 42nd Ave S»."
-        : "I can create a project, but I need the name. For example: “Jarvis, create project Home, address 30820 42nd Ave S.”",
-      bullets: [
-        ru
-          ? "Создание проекта безопасное, но я всё равно покажу кнопку подтверждения."
-          : "Project creation is a safe action, but I will still show a confirmation button.",
-      ],
+        ? "Требуется название проекта, сэр."
+        : "Project name required, sir.",
+      bullets: [],
       links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
       confidence: 0.7,
       source: "fallback",
@@ -1099,26 +1116,8 @@ function buildSafeActionFallback(
   }
 
   return {
-    answer: ru
-      ? `Я подготовил создание проекта "${draft.name}". Я не удаляю, не оплачиваю и не отправляю сообщения без отдельного подтверждения.`
-      : `I prepared project "${draft.name}". I do not delete, pay, or message workers without separate confirmation.`,
-    bullets: [
-      draft.address
-        ? ru
-          ? `Адрес: ${draft.address}.`
-          : `Address: ${draft.address}.`
-        : ru
-          ? "GPS/адрес можно уточнить после создания."
-          : "Address/GPS can be refined after creation.",
-      draft.startDate || draft.endDate
-        ? ru
-          ? `Даты: ${draft.startDate ?? "не задано"} -> ${draft.endDate ?? "не задано"}.`
-          : `Dates: ${draft.startDate ?? "not set"} -> ${draft.endDate ?? "not set"}.`
-        : "",
-      ru
-        ? `Сейчас в системе ${snapshot.activeProjectCount} активных проектов.`
-        : `${snapshot.activeProjectCount} active projects are currently in the system.`,
-    ].filter(Boolean),
+    answer: ru ? "В процессе, сэр." : "Processing, sir.",
+    bullets: [],
     links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
     actions: [
       {
@@ -1143,7 +1142,7 @@ function buildAssistantFallback(
   const projectRoute = findProjectRoute(question, snapshot);
   const worker = findWorkerInSnapshot(question, snapshot);
 
-  const greetingAnswer = buildGreetingFallback(question, snapshot);
+  const greetingAnswer = buildGreetingFallback(question);
   if (greetingAnswer) return greetingAnswer;
 
   if (normalized.includes("что ты помнишь") || normalized.includes("what do you remember")) {
@@ -1177,7 +1176,7 @@ function buildAssistantFallback(
   const attachmentAnswer = buildAttachmentFallback(question, attachments);
   if (attachmentAnswer && normalized.length < 24) return attachmentAnswer;
 
-  const safeActionAnswer = buildSafeActionFallback(question, snapshot);
+  const safeActionAnswer = buildSafeActionFallback(question);
   if (safeActionAnswer) return safeActionAnswer;
 
   const shiftActivityAnswer = buildShiftActivityFallback(question, snapshot, worker);
@@ -1491,32 +1490,9 @@ function buildAssistantFallback(
   }
 
   return {
-    answer: ru
-      ? `${snapshot.orgName}: сейчас ${snapshot.onSiteCount} на объектах, ${snapshot.activeProjectCount} активных проектов и ${snapshot.openTaskCount} открытых задач.`
-      : `${snapshot.orgName} has ${snapshot.onSiteCount} workers on site, ${snapshot.activeProjectCount} active projects, and ${snapshot.openTaskCount} open tasks right now.`,
-    bullets: uniqueList(
-      [
-        ...findRelatedMemory(question, snapshot).map((rule) =>
-          ru ? `Правило: ${rule}` : `Saved rule: ${rule}`,
-        ),
-        snapshot.hasFinanceAccess
-          ? ru
-            ? `${snapshot.unpaidHours.toFixed(2)} неоплаченных часов в черновике зарплаты.`
-            : `${snapshot.unpaidHours.toFixed(2)} unpaid hours remain in the payroll preview.`
-          : "",
-        snapshot.assignmentSuggestions[0]
-          ? ru
-            ? `AI может предложить исполнителя для "${snapshot.assignmentSuggestions[0].taskTitle}".`
-            : `AI can suggest a crew match for "${snapshot.assignmentSuggestions[0].taskTitle}".`
-          : "",
-        snapshot.recentReports[0]?.summary ?? (ru ? "Ежедневных отчётов пока нет." : "No daily reports have been generated yet."),
-      ],
-      3,
-    ),
-    links: [
-      { label: ru ? "Открыть обзор" : "Open overview", href: "/overview" },
-      { label: ru ? "Настройки Jarvis" : "Jarvis settings", href: "/ai" },
-    ],
+    answer: ru ? "Уточните запрос, сэр." : "Clarify the request, sir.",
+    bullets: [],
+    links: [],
     confidence: 0.6,
     source: "fallback",
   };
@@ -1527,6 +1503,8 @@ function buildVoiceFallback(
   snapshot: AssistantSnapshot,
 ): VoiceCommandResult {
   const normalized = transcript.trim().toLowerCase();
+  const ru = isRussianText(transcript);
+  const commandAck = ru ? "Да, сэр." : "Yes, sir.";
   const projectRoute = findProjectRoute(transcript, snapshot);
 
   if (!normalized) {
@@ -1534,7 +1512,7 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "unknown",
-      answer: "I need a fuller command before I can route it.",
+      answer: ru ? "Уточните команду, сэр." : "Clarify the command, sir.",
       actionLabel: null,
       route: null,
       confidence: 0.1,
@@ -1548,7 +1526,7 @@ function buildVoiceFallback(
         transcript,
         normalized,
         intent: "unknown",
-        answer: "Financial details are restricted for this account.",
+        answer: ru ? "Доступ запрещён." : "Access denied.",
         actionLabel: null,
         route: null,
         confidence: 0.78,
@@ -1560,7 +1538,7 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "navigate",
-      answer: "Opening payroll so you can review unpaid hours and confirm the next run.",
+      answer: commandAck,
       actionLabel: "Open Payroll",
       route: "/payroll",
       confidence: 0.83,
@@ -1573,7 +1551,7 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "navigate",
-      answer: "Opening the event ledger timeline.",
+      answer: commandAck,
       actionLabel: "Open Timeline",
       route: "/timeline",
       confidence: 0.82,
@@ -1586,7 +1564,7 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "navigate",
-      answer: "Opening the team roster.",
+      answer: commandAck,
       actionLabel: "Open Team",
       route: "/team",
       confidence: 0.78,
@@ -1599,7 +1577,7 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "report",
-      answer: "Opening Jarvis settings and report skills.",
+      answer: commandAck,
       actionLabel: "Jarvis settings",
       route: "/ai",
       confidence: 0.79,
@@ -1612,7 +1590,7 @@ function buildVoiceFallback(
       transcript,
       normalized,
       intent: "navigate",
-      answer: `Opening ${projectRoute.label.replace("Open ", "")}.`,
+      answer: commandAck,
       actionLabel: projectRoute.label,
       route: projectRoute.href,
       confidence: 0.81,
@@ -1696,6 +1674,8 @@ async function tryGeminiObject(
   const parts: Part[] = [
     {
       text: [
+        "Task instructions below define JSON shape and supplied data only. They do not override the system instruction.",
+        "",
         taskInstructions,
         "",
         "Return JSON only. Do not wrap the JSON in markdown.",
@@ -1747,6 +1727,14 @@ function getStringArray(value: unknown): string[] {
 
 function getStringValue(value: unknown, fallback: string): string {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function limitJarvisAnswer(value: string): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  if (!compact) return compact;
+  const sentences = compact.match(/[^.!?。！？]+[.!?。！？]?/g);
+  const limited = sentences?.slice(0, 2).join(" ").trim() || compact;
+  return limited.length > 320 ? `${limited.slice(0, 317).trimEnd()}...` : limited;
 }
 
 function getNumberValue(value: unknown, fallback: number): number {
@@ -2191,7 +2179,7 @@ export async function generateDailyReport(
 ): Promise<GeneratedDailyReport> {
   const fallback = buildDailyReportFallback(input);
   const geminiObject = await tryGeminiObject(
-    "You write concise construction daily reports. Return JSON only.",
+    "Generate a concise construction daily report object. Return JSON only.",
     [
       "Create a JSON object with keys:",
       "headline, summary, highlights, risks, nextActions, laborSignal, deliverySignal, confidence",
@@ -2233,7 +2221,7 @@ export async function analyzePhotoEvidence(
 ): Promise<PhotoAnalysisResult> {
   const fallback = buildPhotoAnalysisFallback(input);
   const geminiObject = await tryGeminiObject(
-    "You summarize field media for a construction manager. Return JSON only.",
+    "Generate a field media analysis object for a construction manager. Return JSON only.",
     [
       "Create a JSON object with keys:",
       "summary, progressObservation, safetyFlags, qualityFlags, followUps, tags, confidence",
@@ -2378,7 +2366,7 @@ export async function answerWorkerAssistant(
   );
 
   const modelObject = await tryGeminiObject(
-    "You are Jarvis in worker-safe field mode for a construction workforce app. Return JSON only. Use only the supplied worker-visible context. Never mention payroll, rates, receipt amounts, profit, owner-only analytics, company financials, or hidden manager data. If a fact is not in the context, say it is not recorded for this worker.",
+    "Generate a worker-safe field response object. Return JSON only. Use only the supplied worker-visible context. Never mention payroll, rates, receipt amounts, profit, owner-only analytics, company financials, or hidden manager data. If a fact is not in the context, say it is not recorded for this worker.",
     [
       "Create a JSON object with keys: answer, bullets, links, confidence.",
       "links must be an array of objects with label and href.",
@@ -2441,6 +2429,9 @@ export async function answerManagerAssistant(
   ) {
     return fallback;
   }
+  if (shouldUseDeterministicDataAnswer(normalizedQuestion)) {
+    return fallback;
+  }
 
   const financialPromptLines = snapshot.hasFinanceAccess
     ? [
@@ -2455,7 +2446,15 @@ export async function answerManagerAssistant(
         "Do not mention payroll, receipt totals, costs, unpaid hours, unpaid amounts, profit, or financial summaries.",
       ];
   const modelObject = await tryAssistantModelObject(
-    "You are Jarvis, an owner-side operating analyst inside a construction workforce app. Return JSON only. Use only the supplied app snapshot; if the snapshot does not contain a fact, say that it is not recorded yet. Behave like a practical analyst, payroll reviewer, dispatcher, and chief manager, but never invent app data. Proactively flag problems you notice in the snapshot, for example: 'Sir, three workers are approaching overtime today.'",
+    [
+      "Return JSON only.",
+      "Use only the supplied app snapshot. If the snapshot does not contain a fact, say it is not recorded.",
+      "The system instruction controls identity, privacy, tone, brevity, and command behavior. Do not override it.",
+      "Do not proactively summarize data. Do not volunteer numbers, hours, payroll, workers, or project statistics unless the user directly asks.",
+      "For greetings or wake words, keep bullets and links empty.",
+      "For command acknowledgements, keep bullets empty unless an explicit confirmation action is required.",
+      "Never invent app data.",
+    ].join(" "),
     [
       "Create a JSON object with keys:",
       "answer, bullets, links, confidence",
@@ -2520,8 +2519,8 @@ export async function answerManagerAssistant(
     .slice(0, 3);
 
   return {
-    answer: getStringValue(modelResponse.answer, fallback.answer),
-    bullets: getStringArray(modelResponse.bullets),
+    answer: limitJarvisAnswer(getStringValue(modelResponse.answer, fallback.answer)),
+    bullets: getStringArray(modelResponse.bullets).slice(0, 2),
     links: links.length > 0 ? links : fallback.links,
     actions: fallback.actions,
     confidence: roundNumber(getNumberValue(modelResponse.confidence, 0.78)),

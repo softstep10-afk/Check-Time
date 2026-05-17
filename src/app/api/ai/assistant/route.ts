@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
-import { answerManagerAssistant, buildAssistantSnapshot } from "@/lib/ai/service";
+import {
+  answerManagerAssistant,
+  buildAssistantSnapshot,
+  buildJarvisWakeResponse,
+} from "@/lib/ai/service";
 import {
   appendJarvisMemoryRule,
   detectJarvisMemoryInstruction,
@@ -48,6 +52,17 @@ export async function POST(request: NextRequest) {
 
     if (!question) {
       return NextResponse.json({ error: "Question is required." }, { status: 400 });
+    }
+
+    const wakeResponse = buildJarvisWakeResponse(question);
+    if (wakeResponse) {
+      return NextResponse.json({
+        ok: true,
+        assistant: {
+          ...wakeResponse,
+          memorySaved: null,
+        },
+      });
     }
 
     let managerData =

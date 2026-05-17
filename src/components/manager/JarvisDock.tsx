@@ -453,6 +453,11 @@ export function JarvisDock() {
         if (voiceAttemptRef.current === attempt) {
           stopAudio();
           setVoiceStatus("idle");
+          window.setTimeout(() => {
+            if (voiceAttemptRef.current === attempt && voiceStateRef.current === "idle") {
+              startVoice();
+            }
+          }, 180);
         }
       };
       audio.onerror = () => {
