@@ -1,12 +1,12 @@
 export const DEFAULT_GOOGLE_TTS_LANGUAGE = "en-GB";
 export const DEFAULT_GOOGLE_TTS_VOICE = "en-GB-Neural2-B";
-export const DEFAULT_GOOGLE_TTS_SPEAKING_RATE = 0.85;
-export const DEFAULT_GOOGLE_TTS_PITCH = -6.0;
+export const DEFAULT_GOOGLE_TTS_SPEAKING_RATE = 1.0;
+export const DEFAULT_GOOGLE_TTS_PITCH = -1.0;
 export const DEFAULT_GOOGLE_TTS_RU_LANGUAGE = "ru-RU";
-export const DEFAULT_GOOGLE_TTS_RU_VOICE = "ru-RU-Neural2-D";
+export const DEFAULT_GOOGLE_TTS_RU_VOICE = "ru-RU-Wavenet-D";
 export const FALLBACK_GOOGLE_TTS_RU_VOICE = "ru-RU-Wavenet-D";
-export const DEFAULT_GOOGLE_TTS_RU_SPEAKING_RATE = 0.85;
-export const DEFAULT_GOOGLE_TTS_RU_PITCH = -6.0;
+export const DEFAULT_GOOGLE_TTS_RU_SPEAKING_RATE = 1.0;
+export const DEFAULT_GOOGLE_TTS_RU_PITCH = -1.0;
 
 export type JarvisSpeechLocale = "en" | "ru";
 
