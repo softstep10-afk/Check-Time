@@ -77,6 +77,8 @@ export async function requireManagerContext(supabase: ServerSupabase) {
   return { user, profile, org };
 }
 
+type ManagerContext = Awaited<ReturnType<typeof requireManagerContext>>;
+
 export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceData> => {
   const supabase = await createClient();
   const {
@@ -100,7 +102,66 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
     }
   }
 
-  const context = await requireManagerContext(supabase);
+  const getWorkspaceResults = () =>
+    Promise.all([
+      supabase
+        .from("profiles")
+        .select("*")
+        .order("name", { ascending: true })
+        .returns<Profile[]>(),
+      supabase
+        .from("projects")
+        .select("*")
+        .order("name", { ascending: true })
+        .returns<Project[]>(),
+      supabase
+        .from("project_assignments")
+        .select("*")
+        .order("assigned_at", { ascending: false })
+        .returns<ProjectAssignment[]>(),
+      supabase
+        .from("tasks")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(0, 399)
+        .returns<Task[]>(),
+      supabase
+        .from("time_events")
+        .select("*")
+        .order("event_time", { ascending: false })
+        .range(0, 4999)
+        .returns<TimeEvent[]>(),
+      supabase
+        .from("media")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(0, 399)
+        .returns<Media[]>(),
+      supabase
+        .from("payroll_runs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(0, 49)
+        .returns<PayrollRun[]>(),
+      supabase
+        .from("payroll_closures")
+        .select("*")
+        .order("closed_through", { ascending: false })
+        .range(0, 999)
+        .returns<PayrollClosure[]>(),
+      // store_visits is optional — table may not exist yet in older envs.
+      supabase
+        .from("store_visits")
+        .select("*")
+        .order("entered_at", { ascending: false })
+        .range(0, 199)
+        .returns<StoreVisit[]>(),
+    ]);
+
+  const contextPromise = !authError && user ? requireManagerContext(supabase) : null;
+  const [context, workspaceResults] = contextPromise
+    ? await Promise.all([contextPromise, getWorkspaceResults()])
+    : [await requireManagerContext(supabase), await getWorkspaceResults()];
 
   const [
     profilesResult,
@@ -112,60 +173,7 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
     payrollRunsResult,
     closuresResult,
     storeVisitsResult,
-  ] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("*")
-      .order("name", { ascending: true })
-      .returns<Profile[]>(),
-    supabase
-      .from("projects")
-      .select("*")
-      .order("name", { ascending: true })
-      .returns<Project[]>(),
-    supabase
-      .from("project_assignments")
-      .select("*")
-      .order("assigned_at", { ascending: false })
-      .returns<ProjectAssignment[]>(),
-    supabase
-      .from("tasks")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .range(0, 399)
-      .returns<Task[]>(),
-    supabase
-      .from("time_events")
-      .select("*")
-      .order("event_time", { ascending: false })
-      .range(0, 4999)
-      .returns<TimeEvent[]>(),
-    supabase
-      .from("media")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .range(0, 399)
-      .returns<Media[]>(),
-    supabase
-      .from("payroll_runs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .range(0, 49)
-      .returns<PayrollRun[]>(),
-    supabase
-      .from("payroll_closures")
-      .select("*")
-      .order("closed_through", { ascending: false })
-      .range(0, 999)
-      .returns<PayrollClosure[]>(),
-    // store_visits is optional — table may not exist yet in older envs.
-    supabase
-      .from("store_visits")
-      .select("*")
-      .order("entered_at", { ascending: false })
-      .range(0, 199)
-      .returns<StoreVisit[]>(),
-  ]);
+  ] = workspaceResults;
 
   assertNoError(profilesResult.error, "Profiles query failed");
   assertNoError(projectsResult.error, "Projects query failed");
@@ -199,7 +207,7 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
  */
 async function resolveContextOrPreview(): Promise<
   | { preview: ManagerWorkspaceData }
-  | { preview: null; supabase: ServerSupabase; context: Awaited<ReturnType<typeof requireManagerContext>> }
+  | { preview: null; supabase: ServerSupabase; context: ManagerContext }
 > {
   const supabase = await createClient();
   const {
@@ -225,6 +233,38 @@ async function resolveContextOrPreview(): Promise<
   return { preview: null, supabase, context };
 }
 
+async function resolveDeferredContextOrPreview(): Promise<
+  | { preview: ManagerWorkspaceData }
+  | { preview: null; supabase: ServerSupabase; contextPromise: Promise<ManagerContext> }
+> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (AUTH_BYPASS_ENABLED && (authError || !user)) {
+    return { preview: buildPreviewManagerWorkspaceData() };
+  }
+  if (AUTH_BYPASS_ENABLED && user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single<Pick<Profile, "role">>();
+    if (!profile || !isManagerRole(profile.role)) {
+      return { preview: buildPreviewManagerWorkspaceData() };
+    }
+  }
+
+  if (authError || !user) {
+    const context = await requireManagerContext(supabase);
+    return { preview: null, supabase, contextPromise: Promise.resolve(context) };
+  }
+
+  return { preview: null, supabase, contextPromise: requireManagerContext(supabase) };
+}
+
 function isoDaysAgo(days: number): string {
   return new Date(Date.now() - days * 86_400_000).toISOString();
 }
@@ -245,20 +285,13 @@ function isoDaysAgo(days: number): string {
  * skipped — they're not read on these pages.
  */
 export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData> => {
-  const resolved = await resolveContextOrPreview();
+  const resolved = await resolveDeferredContextOrPreview();
   if (resolved.preview) return resolved.preview;
-  const { supabase, context } = resolved;
+  const { supabase, contextPromise } = resolved;
 
   const since14d = isoDaysAgo(14);
 
-  const [
-    profilesResult,
-    projectsResult,
-    assignmentsResult,
-    tasksResult,
-    mediaResult,
-    timeEventsResult,
-  ] = await Promise.all([
+  const dataPromise = Promise.all([
     supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
@@ -286,6 +319,8 @@ export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData>
       .range(0, 499)
       .returns<TimeEvent[]>(),
   ]);
+  const [context, pageResults] = await Promise.all([contextPromise, dataPromise]);
+  const [profilesResult, projectsResult, assignmentsResult, tasksResult, mediaResult, timeEventsResult] = pageResults;
 
   assertNoError(profilesResult.error, "Profiles query failed");
   assertNoError(projectsResult.error, "Projects query failed");
@@ -433,41 +468,43 @@ export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
  * media and payroll.
  */
 export const getTeamPageData = cache(async (): Promise<ManagerWorkspaceData> => {
-  const resolved = await resolveContextOrPreview();
+  const resolved = await resolveDeferredContextOrPreview();
   if (resolved.preview) return resolved.preview;
-  const { supabase, context } = resolved;
+  const { supabase, contextPromise } = resolved;
 
   const since14d = isoDaysAgo(14);
 
+  const dataPromise = Promise.all([
+    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
+    supabase
+      .from("project_assignments")
+      .select("*")
+      .order("assigned_at", { ascending: false })
+      .returns<ProjectAssignment[]>(),
+    supabase
+      .from("tasks")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(0, 99)
+      .returns<Task[]>(),
+    supabase
+      .from("time_events")
+      .select("*")
+      .gte("event_time", since14d)
+      .order("event_time", { ascending: false })
+      .range(0, 299)
+      .returns<TimeEvent[]>(),
+    supabase
+      .from("store_visits")
+      .select("*")
+      .order("entered_at", { ascending: false })
+      .range(0, 49)
+      .returns<StoreVisit[]>(),
+  ]);
+  const [context, pageResults] = await Promise.all([contextPromise, dataPromise]);
   const [profilesResult, projectsResult, assignmentsResult, tasksResult, timeEventsResult, storeVisitsResult] =
-    await Promise.all([
-      supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
-      supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
-      supabase
-        .from("project_assignments")
-        .select("*")
-        .order("assigned_at", { ascending: false })
-        .returns<ProjectAssignment[]>(),
-      supabase
-        .from("tasks")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .range(0, 99)
-        .returns<Task[]>(),
-      supabase
-        .from("time_events")
-        .select("*")
-        .gte("event_time", since14d)
-        .order("event_time", { ascending: false })
-        .range(0, 299)
-        .returns<TimeEvent[]>(),
-      supabase
-        .from("store_visits")
-        .select("*")
-        .order("entered_at", { ascending: false })
-        .range(0, 49)
-        .returns<StoreVisit[]>(),
-    ]);
+    pageResults;
 
   assertNoError(profilesResult.error, "Profiles query failed");
   assertNoError(projectsResult.error, "Projects query failed");
@@ -553,11 +590,11 @@ export const getPayrollPageData = cache(async (): Promise<ManagerWorkspaceData> 
  * time_events slice. Skips everything else.
  */
 export const getTimelinePageData = cache(async (): Promise<ManagerWorkspaceData> => {
-  const resolved = await resolveContextOrPreview();
+  const resolved = await resolveDeferredContextOrPreview();
   if (resolved.preview) return resolved.preview;
-  const { supabase, context } = resolved;
+  const { supabase, contextPromise } = resolved;
 
-  const [profilesResult, projectsResult, timeEventsResult] = await Promise.all([
+  const dataPromise = Promise.all([
     supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
@@ -567,6 +604,8 @@ export const getTimelinePageData = cache(async (): Promise<ManagerWorkspaceData>
       .range(0, 499)
       .returns<TimeEvent[]>(),
   ]);
+  const [context, pageResults] = await Promise.all([contextPromise, dataPromise]);
+  const [profilesResult, projectsResult, timeEventsResult] = pageResults;
 
   assertNoError(profilesResult.error, "Profiles query failed");
   assertNoError(projectsResult.error, "Projects query failed");
