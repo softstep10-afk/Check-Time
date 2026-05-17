@@ -9,7 +9,7 @@ import {
 import { createClient } from "@/lib/supabase/server";
 
 // F5 must reflect newly added/edited workers and live shift state.
-export const revalidate = 0;
+export const revalidate = 15;
 
 export default async function TeamRoutePage() {
   const data = await getTeamPageData();

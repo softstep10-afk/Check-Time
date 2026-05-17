@@ -53,7 +53,7 @@ import { getDisplayOrgName } from "@/lib/brand";
 // 0 = force-dynamic. F5 must always fetch the current state of time_events,
 // projects, tasks, media; OverviewLiveIndicator still pushes router.refresh()
 // for passive updates between manual reloads.
-export const revalidate = 0;
+export const revalidate = 15;
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",

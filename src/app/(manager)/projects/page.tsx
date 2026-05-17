@@ -6,7 +6,7 @@ import { buildManagerSessions, buildProjectSummaries } from "@/lib/manager-utils
 import { createClient } from "@/lib/supabase/server";
 
 // F5 must reflect newly created/edited/deleted projects immediately.
-export const revalidate = 0;
+export const revalidate = 15;
 
 export default async function ProjectsRoutePage() {
   const data = await getProjectsPageData();

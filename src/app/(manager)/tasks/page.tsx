@@ -11,7 +11,7 @@ import { collectTaskReferencedMediaIds } from "@/lib/task-media-hydration";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 
 // F5 must reflect newly assigned/completed tasks immediately.
-export const revalidate = 0;
+export const revalidate = 15;
 
 export default async function ManagerTasksRoutePage() {
   const data = await getProjectsPageData();

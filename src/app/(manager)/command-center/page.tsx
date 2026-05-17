@@ -25,7 +25,7 @@ import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { getServerLocale } from "@/lib/i18n/server";
 import type { TaskPriority } from "@/types/database";
 
-export const revalidate = 0;
+export const revalidate = 15;
 
 const COPY = {
   en: {
