@@ -8,6 +8,7 @@ import {
   buildProjectSummaries,
   getOverviewStats,
 } from "@/lib/manager-utils";
+import { getActiveOperationalProjects } from "@/lib/archive-utils";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import {
   inferSkillTagsFromText,
@@ -795,9 +796,10 @@ export function buildAssistantSnapshot(
 ): AssistantSnapshot {
   const includeFinancials = options.includeFinancials ?? true;
   const sessions = buildManagerSessions(data);
-  const projectSummaries = buildProjectSummaries(data, sessions, {
+  const rawProjectSummaries = buildProjectSummaries(data, sessions, {
     includeFinancials,
   });
+  const projectSummaries = getActiveOperationalProjects(rawProjectSummaries);
   const profileSummaries = buildProfileSummaries(data, sessions);
   const stats = getOverviewStats(data, sessions, projectSummaries, profileSummaries, {
     includeFinancials,

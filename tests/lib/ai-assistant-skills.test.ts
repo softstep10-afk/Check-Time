@@ -4,6 +4,13 @@ import {
   buildAssistantSnapshot,
   buildJarvisWakeResponse,
 } from "@/lib/ai/service";
+import { getActiveOperationalProjects } from "@/lib/archive-utils";
+import {
+  buildManagerSessions,
+  buildProfileSummaries,
+  buildProjectSummaries,
+  getOverviewStats,
+} from "@/lib/manager-utils";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import type { Media, Profile, Project, Task, TimeEvent } from "@/types/database";
 
@@ -329,12 +336,22 @@ describe("AI assistant Gemini routing", () => {
     });
   });
 
-  it("matches overview material totals and ignores legacy receipt-like rows", async () => {
+  it("matches overview material totals and ignores archived project receipts", async () => {
     await withModelDisabled(async () => {
       const data = workspace();
+      data.projects = [
+        project({ id: "project", name: "Home", status: "active" }),
+        project({
+          id: "archived-project",
+          name: "Old Home",
+          status: "archived",
+          archived_at: "2026-05-14T00:00:00.000Z",
+        }),
+      ];
       data.media = [
         media({
           id: "receipt-good",
+          project_id: "project",
           filename: "home-depot.jpg",
           metadata: {
             category: "receipt",
@@ -344,10 +361,11 @@ describe("AI assistant Gemini routing", () => {
           },
         }),
         media({
-          id: "receipt-legacy-kind-only",
-          filename: "bad-old-row.jpg",
+          id: "receipt-archived",
+          project_id: "archived-project",
+          filename: "archived-large-row.jpg",
           metadata: {
-            kind: "receipt",
+            category: "receipt",
             amount: 532544,
           },
         }),
@@ -361,12 +379,28 @@ describe("AI assistant Gemini routing", () => {
           },
         }),
       ];
+      const sessions = buildManagerSessions(data);
+      const overviewProjectSummaries = getActiveOperationalProjects(
+        buildProjectSummaries(data, sessions, {
+          includeFinancials: true,
+        }),
+      );
+      const overviewStats = getOverviewStats(
+        data,
+        sessions,
+        overviewProjectSummaries,
+        buildProfileSummaries(data, sessions),
+        { includeFinancials: true },
+      );
       const snapshot = buildAssistantSnapshot(data, [], {
         includeFinancials: true,
       });
 
-      expect(snapshot.receiptTotal).toBe(9976);
+      expect(overviewStats.receiptTotal).toBe(9976);
+      expect(snapshot.receiptTotal).toBe(overviewStats.receiptTotal);
+      expect(snapshot.receiptTotal).not.toBe(542520);
       expect(snapshot.projects[0]?.receiptTotal).toBe(9976);
+      expect(snapshot.projects.map((item) => item.name)).toEqual(["Home"]);
 
       const answer = await answerManagerAssistant(
         "сколько сейчас потрачено денег на материал?",
