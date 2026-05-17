@@ -144,6 +144,28 @@ describe("deriveWorkerHourBuckets", () => {
     expect(result.unpaidMinutes).toBe(480);
   });
 
+  it("keeps review-required sessions unpaid even inside a payroll closure", () => {
+    const result = deriveWorkerHourBuckets({
+      sessions: [
+        session("2026-04-01T08:00:00.000Z", 480, "2026-04-01T16:00:00.000Z"),
+        {
+          ...session("2026-04-02T08:00:00.000Z", 2321, "2026-04-03T22:41:00.000Z"),
+          reviewRequired: true,
+        },
+        {
+          ...session("2026-04-04T08:00:00.000Z", 112, "2026-04-04T09:52:00.000Z"),
+          reviewRequired: true,
+        },
+      ],
+      adjustments: [],
+      closures: [{ closedThrough: "2026-04-30T23:59:59.000Z" }],
+      now: NOW,
+    });
+    expect(result.totalWorkedMinutes).toBe(480 + 2321 + 112);
+    expect(result.paidOrClosedMinutes).toBe(480);
+    expect(result.unpaidMinutes).toBe(2321 + 112);
+  });
+
   it("does not double-count reset adjustments already covered by a later payroll closure", () => {
     const result = deriveWorkerHourBuckets({
       sessions: [

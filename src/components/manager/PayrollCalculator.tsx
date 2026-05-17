@@ -1741,6 +1741,7 @@ export function PayrollCalculator({
       const needsReview =
         row.missingCheckout ||
         row.missingVideo ||
+        !row.hasGps ||
         row.shiftSeverity === "warning" ||
         row.shiftSeverity === "critical";
       if (!needsReview) continue;

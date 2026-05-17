@@ -34,6 +34,7 @@ import {
   EXTREME_SHIFT_MINUTES,
   LONG_SHIFT_MINUTES,
   SHIFT_REVIEW_COLOR,
+  WARN_SHIFT_MINUTES,
   type ShiftReview,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
@@ -291,25 +292,6 @@ export function TeamMemberPage({
     ].filter((section) => section.items.length > 0);
   }, [media, t]);
 
-  // Hour buckets for the "Hour summary" panel below profile
-  // settings. Pulls from this worker's sessions + adjustments — the
-  // helper keeps the today / yesterday / week / month math in
-  // one tested place. We deliberately recompute on every render
-  // because the boundaries shift across midnight; the worker
-  // detail route feeds this component the full history for this worker.
-  const hourBuckets = useMemo(
-    () =>
-      deriveWorkerHourBuckets({
-        sessions: sessions.map((session) => ({
-          clockInTime: session.clockInTime,
-          clockOutTime: session.clockOutTime,
-          durationMinutes: session.durationMinutes,
-        })),
-        adjustments: workerAdjustments,
-        closures: workerClosures,
-      }),
-    [sessions, workerAdjustments, workerClosures],
-  );
   const latestClosure = useMemo(
     () =>
       workerClosures.reduce<WorkerClosureView | null>((latest, closure) => {
@@ -332,18 +314,60 @@ export function TeamMemberPage({
     () => new Set(acknowledgedShiftEventIds),
     [acknowledgedShiftEventIds],
   );
+  const sessionNeedsPayrollReview = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const session of sessions) {
+      if (session.isOpen) {
+        map.set(session.id, false);
+        continue;
+      }
+      const acknowledged = Boolean(
+        session.clockOutEventId &&
+          acknowledgedShiftIdSet.has(session.clockOutEventId),
+      );
+      const hasGps = hasGpsBySessionId[session.id] ?? false;
+      map.set(
+        session.id,
+        !acknowledged &&
+          (
+            !hasGps ||
+            session.checkoutStatus === "pending" ||
+            session.durationMinutes >= WARN_SHIFT_MINUTES
+          ),
+      );
+    }
+    return map;
+  }, [sessions, acknowledgedShiftIdSet, hasGpsBySessionId]);
+  // Hour buckets for the "Hour summary" panel below profile settings.
+  // Suspicious closed shifts stay outside the paid/closed bucket until a
+  // manager acknowledges them, even when a payroll closure cutoff exists.
+  const hourBuckets = useMemo(
+    () =>
+      deriveWorkerHourBuckets({
+        sessions: sessions.map((session) => ({
+          clockInTime: session.clockInTime,
+          clockOutTime: session.clockOutTime,
+          durationMinutes: session.durationMinutes,
+          reviewRequired: sessionNeedsPayrollReview.get(session.id) ?? false,
+        })),
+        adjustments: workerAdjustments,
+        closures: workerClosures,
+      }),
+    [sessions, workerAdjustments, workerClosures, sessionNeedsPayrollReview],
+  );
   const paidClosedSessionIds = useMemo(() => {
     const ids = new Set<string>();
     if (latestClosureMs === null) return ids;
     for (const session of sessions) {
       if (!session.clockOutTime) continue;
+      if (sessionNeedsPayrollReview.get(session.id)) continue;
       const outMs = new Date(session.clockOutTime).getTime();
       if (Number.isFinite(outMs) && outMs <= latestClosureMs) {
         ids.add(session.id);
       }
     }
     return ids;
-  }, [sessions, latestClosureMs]);
+  }, [sessions, latestClosureMs, sessionNeedsPayrollReview]);
   const sessionRows = useMemo(
     () => sessions.filter((session) => !paidClosedSessionIds.has(session.id)),
     [sessions, paidClosedSessionIds],
@@ -360,11 +384,12 @@ export function TeamMemberPage({
           return false;
         }
         return (
+          sessionNeedsPayrollReview.get(session.id) ||
           session.durationMinutes >= LONG_SHIFT_MINUTES ||
           session.checkoutStatus === "pending"
         );
       }),
-    [sessions, paidClosedSessionIds, acknowledgedShiftIdSet],
+    [sessions, paidClosedSessionIds, acknowledgedShiftIdSet, sessionNeedsPayrollReview],
   );
   const latestPaidPeriodLabel = latestClosure
     ? latestClosure.periodStart && latestClosure.periodEnd

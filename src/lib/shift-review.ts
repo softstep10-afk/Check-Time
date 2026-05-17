@@ -158,13 +158,16 @@ export function deriveShiftReview(args: {
     }
   } else {
     // Closed sessions still feed payroll. Surface the facts that require
-    // manager review before pay: missing checkout proof and unusually long
-    // duration. GPS freshness is intentionally active-only because live GPS
-    // pings stop after checkout.
+    // manager review before pay: missing GPS at clock-in, missing checkout
+    // proof, and unusually long duration. GPS freshness is intentionally
+    // active-only because live GPS pings stop after checkout.
+    if (!args.hadGpsAtClockIn) {
+      reasons.push("no_gps");
+    }
     if (args.requireVideo && args.videoStatus === "pending") {
       reasons.push("video_missing");
     }
-    if (args.durationMinutes >= LONG_SHIFT_MINUTES) {
+    if (args.durationMinutes >= WARN_SHIFT_MINUTES) {
       reasons.push("long_shift");
     }
   }

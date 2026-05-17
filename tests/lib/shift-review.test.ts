@@ -188,7 +188,7 @@ describe("deriveShiftReview — closed shifts", () => {
     const r = deriveShiftReview({
       isOpen: false,
       durationMinutes: 18 * 60,
-      hadGpsAtClockIn: false,
+      hadGpsAtClockIn: true,
       gpsFreshness: null,
       requireVideo: false,
       videoStatus: "not_required",
@@ -197,11 +197,38 @@ describe("deriveShiftReview — closed shifts", () => {
     expect(r.reasons).toContain("long_shift");
   });
 
-  it("keeps video_missing as the top closed-shift status while preserving long_shift as a reason", () => {
+  it("flags closed no-GPS shifts because payroll needs review before pay", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 4 * 60,
+      hadGpsAtClockIn: false,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("no_gps");
+    expect(r.reasons).toContain("no_gps");
+  });
+
+  it("promotes closed no-GPS long shifts to needs_review", () => {
     const r = deriveShiftReview({
       isOpen: false,
       durationMinutes: 18 * 60,
       hadGpsAtClockIn: false,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("needs_review");
+    expect(r.reasons).toContain("no_gps");
+    expect(r.reasons).toContain("long_shift");
+  });
+
+  it("keeps video_missing as the top closed-shift status while preserving long_shift as a reason", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 18 * 60,
+      hadGpsAtClockIn: true,
       gpsFreshness: null,
       requireVideo: true,
       videoStatus: "pending",
@@ -245,7 +272,7 @@ describe("deriveShiftReview — closed shifts", () => {
     expect(r.reasons).toContain("long_shift");
   });
 
-  it("keeps amber long_shift between 12h and the extreme threshold", () => {
+  it("keeps amber long_shift between 16h and the extreme threshold", () => {
     // Just below the extreme cutoff: still long_shift, NOT needs_review.
     const r = deriveShiftReview({
       isOpen: false,

@@ -37,6 +37,11 @@ export interface SessionLike {
   clockOutTime: string | null;
   /** Pre-computed minutes for the closed window OR up-to-now for open. */
   durationMinutes: number;
+  /**
+   * True when this session must remain outside paid/closed buckets until a
+   * manager reviews it, even if a payroll closure cutoff already exists.
+   */
+  reviewRequired?: boolean;
 }
 
 export interface AdjustmentLike {
@@ -236,6 +241,7 @@ export function deriveWorkerHourBuckets(args: {
       const sessionStartMs = new Date(session.clockInTime).getTime();
       const sessionEndMs = new Date(session.clockOutTime).getTime();
       if (!Number.isFinite(sessionStartMs) || !Number.isFinite(sessionEndMs)) continue;
+      if (session.reviewRequired) continue;
       if (sessionStartMs >= latestClosureMs) continue;
 
       if (sessionEndMs <= latestClosureMs) {
