@@ -135,8 +135,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Title and start time are required." }, { status: 400 });
     }
 
-    if (DELIVERY_ONLY_ROLES.has(actor.profile.role) && kind !== "delivery") {
-      return NextResponse.json({ error: "Workers can create delivery calendar items only." }, { status: 403 });
+    if (DELIVERY_ONLY_ROLES.has(actor.profile.role) && kind !== "delivery" && kind !== "task") {
+      return NextResponse.json({ error: "Workers can create delivery or task calendar items only." }, { status: 403 });
     }
 
     if (endsAt && endsAt.getTime() < startsAt.getTime()) {
@@ -184,8 +184,8 @@ export async function POST(request: Request) {
         metadata: {
           schedule_entry: true,
           schedule_kind: kind,
-          schedule_scope: kind === "delivery" ? "delivery" : "general",
-          schedule_visible_to_workers: kind === "delivery",
+          schedule_scope: kind === "delivery" ? "delivery" : kind === "task" ? "task" : "general",
+          schedule_visible_to_workers: kind === "delivery" || kind === "task",
           schedule_delivery_status:
             kind === "delivery"
               ? assignedTo

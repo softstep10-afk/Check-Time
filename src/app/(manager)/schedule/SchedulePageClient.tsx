@@ -35,7 +35,7 @@ type ScheduleKind =
   | "task"
   | "note"
   | "delivery";
-type CalendarMode = "general" | "deliveries";
+type CalendarMode = "general" | "deliveries" | "tasks";
 type EntrySource = "task" | "project";
 type EntryType = ScheduleKind | "project_start" | "project_deadline";
 type DeliveryStatus = "open" | "assigned" | "claimed" | "in_progress" | "delivered";
@@ -127,6 +127,7 @@ const TEXT = {
     resetRange: "Reset dates",
     generalCalendar: "Team calendar",
     deliveryCalendar: "Delivery calendar",
+    taskCalendar: "Task calendar",
     newItem: "New calendar item",
     addToDay: "Add to this day",
     titleLabel: "Title",
@@ -193,7 +194,7 @@ const TEXT = {
     useAsStart: "Set as project start",
     useAsDeadline: "Set as deadline",
     more: "more",
-    deliveryOnlyHint: "Workers see only deliveries here. Meetings, project dates, and internal planning stay hidden.",
+    deliveryOnlyHint: "Workers see deliveries and project tasks here. Meetings, project dates, and internal planning stay hidden.",
   },
   ru: {
     eyebrow: "Расписание",
@@ -207,6 +208,7 @@ const TEXT = {
     resetRange: "Сбросить даты",
     generalCalendar: "Календарь команды",
     deliveryCalendar: "Календарь доставок",
+    taskCalendar: "Календарь задач",
     newItem: "Новая запись",
     addToDay: "Добавить в этот день",
     titleLabel: "Название",
@@ -273,7 +275,7 @@ const TEXT = {
     useAsStart: "Этот день = старт",
     useAsDeadline: "Этот день = дедлайн",
     more: "ещё",
-    deliveryOnlyHint: "Рабочие видят здесь только доставки. Встречи, даты проектов и внутренние планы скрыты.",
+    deliveryOnlyHint: "Рабочие видят здесь доставки и задачи по проектам. Встречи, даты проектов и внутренние планы скрыты.",
   },
 } as const;
 
@@ -698,7 +700,9 @@ export default function SchedulePageClient() {
   useEffect(() => {
     if (!deliveryOnlyCalendar) return;
     setCalendarMode("deliveries");
-    setItemForm((prev) => (prev.kind === "delivery" ? prev : { ...prev, kind: "delivery" }));
+    setItemForm((prev) =>
+      prev.kind === "delivery" || prev.kind === "task" ? prev : { ...prev, kind: "delivery" },
+    );
   }, [deliveryOnlyCalendar]);
 
   const profilesById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles]);
@@ -816,8 +820,9 @@ export default function SchedulePageClient() {
     return entries.filter((entry) => {
       if (rangeStart && entry.dayIso < rangeStart) return false;
       if (rangeEnd && entry.dayIso > rangeEnd) return false;
-      if (deliveryOnlyCalendar) return entry.type === "delivery";
       if (calendarMode === "deliveries") return entry.type === "delivery";
+      if (calendarMode === "tasks") return entry.type === "task";
+      if (deliveryOnlyCalendar) return entry.type === "delivery" || entry.type === "task";
       if (entry.type === "delivery") return false;
       return true;
     });
@@ -854,8 +859,10 @@ export default function SchedulePageClient() {
     setItemForm((prev) => ({
       ...defaultItemForm(
         day.iso,
-        calendarMode === "deliveries" || deliveryOnlyCalendar
+        calendarMode === "deliveries"
           ? "delivery"
+          : calendarMode === "tasks"
+            ? "task"
           : prev.kind === "delivery" || prev.kind === "meeting"
             ? "client_meeting"
             : prev.kind,
@@ -876,7 +883,12 @@ export default function SchedulePageClient() {
       body: JSON.stringify({
         action: "create_item",
         title: itemForm.title,
-        kind: calendarMode === "deliveries" || deliveryOnlyCalendar ? "delivery" : itemForm.kind,
+        kind:
+          calendarMode === "deliveries"
+            ? "delivery"
+            : calendarMode === "tasks"
+              ? "task"
+              : itemForm.kind,
         projectId: itemForm.projectId || null,
         assignedTo: itemForm.assignedTo || null,
         startsAt: itemForm.startsAt,
@@ -894,8 +906,10 @@ export default function SchedulePageClient() {
     setItemForm((prev) => ({
       ...defaultItemForm(
         selectedDay?.iso,
-        calendarMode === "deliveries" || deliveryOnlyCalendar
+        calendarMode === "deliveries"
           ? "delivery"
+          : calendarMode === "tasks"
+            ? "task"
           : prev.kind === "meeting"
             ? "client_meeting"
             : prev.kind,
@@ -968,8 +982,9 @@ export default function SchedulePageClient() {
   }
 
   function renderCalendarItemForm(title: string, buttonText: string) {
-    const isDeliveryForm = calendarMode === "deliveries" || deliveryOnlyCalendar;
-    const effectiveKind = isDeliveryForm ? "delivery" : itemForm.kind;
+    const isDeliveryForm = calendarMode === "deliveries";
+    const isTaskForm = calendarMode === "tasks";
+    const effectiveKind = isDeliveryForm ? "delivery" : isTaskForm ? "task" : itemForm.kind;
     const fallbackDate = selectedDay?.iso ?? isoDay(new Date());
 
     return (
@@ -996,6 +1011,13 @@ export default function SchedulePageClient() {
               <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
               <div className="rounded-[var(--radius-md)] border border-[rgba(59,130,246,0.35)] bg-[rgba(59,130,246,0.12)] px-3 py-3 text-sm font-semibold text-[#60a5fa]">
                 {text.delivery}
+              </div>
+            </div>
+          ) : isTaskForm ? (
+            <div className="grid gap-1 text-xs text-[var(--text-muted)]">
+              <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
+              <div className="rounded-[var(--radius-md)] border border-[rgba(191,162,52,0.35)] bg-[rgba(191,162,52,0.12)] px-3 py-3 text-sm font-semibold text-[var(--brand-yellow)]">
+                {text.task}
               </div>
             </div>
           ) : (
@@ -1190,9 +1212,10 @@ export default function SchedulePageClient() {
             [
               { key: "general", label: text.generalCalendar, icon: CalendarDays },
               { key: "deliveries", label: text.deliveryCalendar, icon: Truck },
+              { key: "tasks", label: text.taskCalendar, icon: CheckCircle2 },
             ] as const
           )
-            .filter(({ key }) => canUseGeneralCalendar || key === "deliveries")
+            .filter(({ key }) => canUseGeneralCalendar || key === "deliveries" || key === "tasks")
             .map(({ key, label, icon: Icon }) => {
             const active = calendarMode === key;
             return (
@@ -1493,7 +1516,11 @@ export default function SchedulePageClient() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {calendarMode === "deliveries" ? text.deliveryCalendar : text.dayPlanner}
+                  {calendarMode === "deliveries"
+                    ? text.deliveryCalendar
+                    : calendarMode === "tasks"
+                      ? text.taskCalendar
+                      : text.dayPlanner}
                 </div>
                 <h2 className="mt-1 text-xl font-bold capitalize text-[var(--text-primary)]">
                   {dayLongLabel(selectedDay.iso, locale)}
