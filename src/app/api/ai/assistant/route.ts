@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
     if (memoryInstruction) {
       if (auth.kind !== "authenticated" || !isJarvisMemoryWriter(auth.context.profile)) {
         return NextResponse.json(
-          { error: "Only owner/admin can teach Jarvis persistent rules." },
+          { error: "Only owner/admin can teach Gemini persistent rules." },
           { status: 403 },
         );
       }
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
         .from("organizations")
         .update({ settings: updated.settings })
         .eq("id", managerData.org.id);
-      assertNoError(settingsError, "Jarvis memory update failed");
+      assertNoError(settingsError, "Gemini memory update failed");
 
       memorySaved = updated.rule;
       managerData = {
@@ -125,8 +125,8 @@ export async function POST(request: NextRequest) {
         ok: true,
         assistant: {
           answer: ru
-            ? "Запомнил. Буду учитывать это правило в следующих ответах Jarvis."
-            : "Remembered. Jarvis will apply this rule in future answers.",
+            ? "Запомнил. Буду учитывать это правило в следующих ответах Gemini."
+            : "Remembered. Gemini will apply this rule in future answers.",
           bullets: [memorySaved.text],
           links: [],
           confidence: 0.94,

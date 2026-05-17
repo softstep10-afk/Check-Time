@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { answerManagerAssistant, buildAssistantSnapshot } from "@/lib/ai/service";
+import {
+  answerManagerAssistant,
+  buildAssistantSnapshot,
+  buildJarvisWakeResponse,
+} from "@/lib/ai/service";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import type { Media, Profile, Project, Task, TimeEvent } from "@/types/database";
 
@@ -192,8 +196,8 @@ function workspace(): ManagerWorkspaceData {
   };
 }
 
-describe("AI assistant worker skill suggestions", () => {
-  it("includes worker skills in the snapshot and recommends a matching worker", async () => {
+describe("AI assistant Gemini routing", () => {
+  it("keeps worker skills in the snapshot without local recommendation fallback", async () => {
     await withModelDisabled(async () => {
       const snapshot = buildAssistantSnapshot(workspace(), [], {
         includeFinancials: true,
@@ -207,12 +211,12 @@ describe("AI assistant worker skill suggestions", () => {
         snapshot,
       );
 
-      expect(answer.answer).toContain("Vasia");
-      expect(answer.bullets.join(" ")).toContain("фрейм");
+      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.bullets).toEqual([]);
     });
   });
 
-  it("searches recent media by description", async () => {
+  it("keeps recent media in the snapshot without local media-search fallback", async () => {
     await withModelDisabled(async () => {
       const data = workspace();
       data.media = [media({ id: "media-glass" })];
@@ -222,12 +226,12 @@ describe("AI assistant worker skill suggestions", () => {
 
       const answer = await answerManagerAssistant("найди фото glass delivery", snapshot);
 
-      expect(answer.answer).toContain("нашёл");
-      expect(answer.bullets.join(" ")).toContain("glass-delivery.jpg");
+      expect(snapshot.mediaIndex[0]?.filename).toBe("glass-delivery.jpg");
+      expect(answer.answer).toContain("Gemini недоступен");
     });
   });
 
-  it("gives rough estimates from task skills", async () => {
+  it("does not generate local rough estimates when Gemini is unavailable", async () => {
     await withModelDisabled(async () => {
       const data = workspace();
       data.org.settings = {
@@ -247,13 +251,13 @@ describe("AI assistant worker skill suggestions", () => {
 
       const answer = await answerManagerAssistant("Сделай эстимейт на фрейм Home", snapshot);
 
-      expect(answer.answer).toContain("человеко-часов");
-      expect(answer.bullets.join(" ")).toContain("каркас");
-      expect(answer.bullets.join(" ")).not.toContain("progress photo");
+      expect(snapshot.memoryRules).toEqual([]);
+      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).not.toContain("человеко-часов");
     });
   });
 
-  it("routes worked-hour questions to actual shifts instead of estimates", async () => {
+  it("keeps worked-hour shift data in the snapshot without local estimate fallback", async () => {
     await withModelDisabled(async () => {
       const data = workspace();
       data.timeEvents = [
@@ -278,14 +282,40 @@ describe("AI assistant worker skill suggestions", () => {
 
       const answer = await answerManagerAssistant("сколько часов отработал Vasia последняя смена?", snapshot);
 
-      expect(answer.answer).toContain("Vasia");
-      expect(answer.answer).toContain("8.50h");
+      expect(snapshot.recentShifts[0]?.workerName).toBe("Vasia");
+      expect(snapshot.recentShifts[0]?.durationMinutes).toBe(510);
+      expect(answer.answer).toContain("Gemini недоступен");
       expect(answer.answer.toLowerCase()).not.toContain("эстимейт");
       expect(answer.answer).not.toContain("человеко-часов");
     });
   });
 
-  it("answers Washington code questions with official reference links", async () => {
+  it("does not answer current-worker questions with monthly rankings", async () => {
+    await withModelDisabled(async () => {
+      const data = workspace();
+      data.timeEvents = [
+        timeEvent({
+          id: "in",
+          profile_id: "vasia",
+          project_id: "project",
+          event_type: "clock_in",
+          event_time: "2026-05-15T09:00:00.000Z",
+        }),
+      ];
+      const snapshot = buildAssistantSnapshot(data, [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant("кто сейчас на работе?", snapshot);
+
+      expect(snapshot.liveWorkers[0]?.name).toBe("Vasia");
+      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer.toLowerCase()).not.toContain("рейтинг");
+      expect(answer.answer.toLowerCase()).not.toContain("месяц");
+    });
+  });
+
+  it("keeps Washington code references in the snapshot without local code fallback", async () => {
     await withModelDisabled(async () => {
       const snapshot = buildAssistantSnapshot(workspace(), [], {
         includeFinancials: true,
@@ -293,8 +323,9 @@ describe("AI assistant worker skill suggestions", () => {
 
       const answer = await answerManagerAssistant("Что по коду Вашингтона для safety inspection?", snapshot);
 
-      expect(answer.answer).toContain("AHJ");
-      expect(answer.links.some((link) => link.href.startsWith("https://"))).toBe(true);
+      expect(snapshot.codeReferences.some((reference) => reference.url.startsWith("https://"))).toBe(true);
+      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.links).toEqual([]);
     });
   });
 
@@ -342,9 +373,9 @@ describe("AI assistant worker skill suggestions", () => {
         snapshot,
       );
 
-      expect(answer.answer).toContain("$9,976.00");
+      expect(answer.answer).toContain("Gemini недоступен");
       expect(answer.answer).not.toContain("532");
-      expect(answer.bullets.join(" ")).toContain("карточка");
+      expect(answer.bullets).toEqual([]);
     });
   });
 
@@ -354,6 +385,7 @@ describe("AI assistant worker skill suggestions", () => {
         includeFinancials: true,
       });
 
+      const wakeAnswer = buildJarvisWakeResponse("привет");
       const answer = await answerManagerAssistant("привет", snapshot, {
         attachments: [
           {
@@ -365,7 +397,8 @@ describe("AI assistant worker skill suggestions", () => {
         ],
       });
 
-      expect(answer.answer).toBe("Готов.");
+      expect(wakeAnswer?.answer).toBe("Готов.");
+      expect(answer.answer).toContain("Gemini недоступен");
       expect(answer.answer).not.toContain("файл");
       expect(answer.bullets).toEqual([]);
     });
