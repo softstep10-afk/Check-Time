@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskStatus, TimeEvent } from "@/types/database";
@@ -569,6 +570,8 @@ export function WorkerShell({
 
   // ── Message overlay for latest unread ──
   const [overlayMessage, setOverlayMessage] = useState<AppMessage | null>(null);
+  const lastUnreadSignalAtRef = useRef(0);
+  const lastOverlayReminderIdRef = useRef<string | null>(null);
 
   const playSound = useCallback(
     (kind: "clock-in" | "clock-out" | "error") => {
@@ -578,6 +581,40 @@ export function WorkerShell({
       else playErrorSound();
     },
     [muted],
+  );
+
+  const handleUnreadReminder = useCallback(
+    (summary: {
+      unreadMessageCount: number;
+      unseenTaskCount: number;
+      latestUnreadMessage: AppMessage | null;
+    }) => {
+      const total = summary.unreadMessageCount + summary.unseenTaskCount;
+      if (total <= 0) return;
+      if (document.visibilityState !== "visible") return;
+
+      if (
+        summary.latestUnreadMessage &&
+        lastOverlayReminderIdRef.current !== summary.latestUnreadMessage.id
+      ) {
+        lastOverlayReminderIdRef.current = summary.latestUnreadMessage.id;
+        setOverlayMessage(summary.latestUnreadMessage);
+      } else if (!summary.latestUnreadMessage && summary.unseenTaskCount > 0) {
+        setBanner({
+          tone: "info",
+          text: t("tasks.newTasksBellLink").replace("{count}", String(summary.unseenTaskCount)),
+        });
+      }
+
+      const nowMs = Date.now();
+      if (nowMs - lastUnreadSignalAtRef.current < 45_000) return;
+      lastUnreadSignalAtRef.current = nowMs;
+      playSound("clock-in");
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([120, 60, 120]);
+      }
+    },
+    [playSound, t],
   );
 
   // ── GPS live tracking ──
@@ -2254,6 +2291,7 @@ export function WorkerShell({
                 <NotificationBell
                   profileId={shell.profile.id}
                   onUrgentArrival={setOverlayMessage}
+                  onUnreadReminder={handleUnreadReminder}
                   unseenTaskCount={unseenTaskCount}
                 />
                 <LanguageSwitcher />
@@ -2413,10 +2451,9 @@ export function WorkerShell({
               {navItems.map((item) => {
                 const active = pathname === item.href;
                 return (
-                  <button
+                  <Link
                     key={item.href}
-                    type="button"
-                    onClick={() => router.push(item.href)}
+                    href={item.href}
                     data-active={active}
                     className="worker-nav-item flex min-w-[58px] flex-col items-center gap-1 rounded-[var(--radius-md)] px-2 py-2"
                     style={{
@@ -2428,7 +2465,7 @@ export function WorkerShell({
                     <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">
                       {t(item.labelKey)}
                     </span>
-                  </button>
+                  </Link>
                 );
               })}
             </div>

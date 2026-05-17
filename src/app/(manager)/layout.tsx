@@ -10,6 +10,7 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { TopProgressBar } from "@/components/shared/TopProgressBar";
 import { JarvisDock } from "@/components/manager/JarvisDock";
+import { ManagerWorkAlertBell } from "@/components/manager/ManagerWorkAlertBell";
 import { JarvisIcon, type JarvisIconName } from "@/components/shared/JarvisIcons";
 import { JarvisOrb } from "@/components/shared/JarvisOrb";
 
@@ -366,6 +367,7 @@ export default function ManagerLayout({
       </div>
 
       {isManagerUser ? <JarvisDock /> : null}
+      {isManagerUser ? <ManagerWorkAlertBell /> : null}
 
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50"

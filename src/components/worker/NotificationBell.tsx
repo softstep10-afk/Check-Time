@@ -42,10 +42,16 @@ function inferPriority(row: { priority?: string | null; color?: string | null; m
 export function NotificationBell({
   profileId,
   onUrgentArrival,
+  onUnreadReminder,
   unseenTaskCount = 0,
 }: {
   profileId?: string;
   onUrgentArrival?: (msg: AppMessage) => void;
+  onUnreadReminder?: (summary: {
+    unreadMessageCount: number;
+    unseenTaskCount: number;
+    latestUnreadMessage: AppMessage | null;
+  }) => void;
   /**
    * Number of tasks the worker hasn't yet seen. Sourced from the
    * worker shell's localStorage-backed lastSeenAt marker. Folded into
@@ -174,9 +180,17 @@ export function NotificationBell({
       )
       .subscribe();
 
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     const interval = setInterval(() => void load(), 30_000);
     return () => {
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
     };
   }, [supabase, profileId, onUrgentArrival]);
@@ -196,6 +210,17 @@ export function NotificationBell({
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [messages]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    const unreadMessages = messages.filter((message) => !message.read);
+    if (unreadMessages.length === 0 && unseenTaskCount === 0) return;
+    onUnreadReminder?.({
+      unreadMessageCount: unreadMessages.length,
+      unseenTaskCount,
+      latestUnreadMessage: unreadMessages[0] ?? null,
+    });
+  }, [loaded, messages, onUnreadReminder, unseenTaskCount]);
 
   const markRead = useCallback(
     async (id: string) => {
