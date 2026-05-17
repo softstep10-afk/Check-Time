@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Volume2, VolumeX } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
@@ -11,7 +10,6 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { TopProgressBar } from "@/components/shared/TopProgressBar";
 import { JarvisDock } from "@/components/manager/JarvisDock";
-import { ManagerNotificationBell } from "@/components/manager/ManagerNotificationBell";
 import { JarvisIcon, type JarvisIconName } from "@/components/shared/JarvisIcons";
 import { JarvisOrb } from "@/components/shared/JarvisOrb";
 
@@ -101,9 +99,6 @@ export default function ManagerLayout({
   // In auth-bypass/preview mode, owner is the default role
   const [userRole, setUserRole] = useState<string>(AUTH_BYPASS_ENABLED ? "owner" : "manager");
   const [userName, setUserName] = useState<string>(AUTH_BYPASS_ENABLED ? "Preview Owner" : "");
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userOrgId, setUserOrgId] = useState<string | null>(null);
-  const [managerMuted, setManagerMuted] = useState(false);
   const [hasFinanceMenu, setHasFinanceMenu] = useState(AUTH_BYPASS_ENABLED);
   const liveRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const liveRefreshPendingWhileHiddenRef = useRef(false);
@@ -117,22 +112,13 @@ export default function ManagerLayout({
       if (!user) return;
       const { data } = await supabase
         .from("profiles")
-        .select("id, org_id, role, name, notif_mode")
+        .select("role, name")
         .eq("id", user.id)
         .single();
       if (data) {
-        const profile = data as {
-          id: string;
-          org_id: string;
-          role: string;
-          name: string | null;
-          notif_mode?: "sound" | "silent" | null;
-        };
-        setUserId(profile.id);
-        setUserOrgId(profile.org_id);
+        const profile = data as { role: string; name: string | null };
         setUserRole(profile.role);
         setUserName(profile.name ?? "");
-        setManagerMuted(profile.notif_mode === "silent");
         let canSeeFinance = profile.role === "owner" || profile.role === "admin";
         if (!canSeeFinance) {
           const { data: capability } = await supabase
@@ -224,19 +210,6 @@ export default function ManagerLayout({
     router.refresh();
   }
 
-  const toggleManagerSound = useCallback(() => {
-    setManagerMuted((prev) => {
-      const next = !prev;
-      if (userId) {
-        void supabase
-          .from("profiles")
-          .update({ notif_mode: next ? "silent" : "sound" })
-          .eq("id", userId);
-      }
-      return next;
-    });
-  }, [supabase, userId]);
-
   return (
     <div className="app-shell h-screen flex overflow-hidden">
       <TopProgressBar />
@@ -317,53 +290,36 @@ export default function ManagerLayout({
           className="px-3 py-3"
           style={{ borderTop: "1px solid var(--border-default)" }}
         >
-          <div className="mb-2 flex items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-md)] border border-[rgba(105,231,255,0.12)] bg-[rgba(7,11,18,0.72)] px-2.5 py-2">
-              <div
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-[var(--text-inverse)]"
-                style={{
-                  background: "linear-gradient(135deg, var(--ai-cyan-bright), var(--ai-cyan))",
-                  boxShadow: "0 0 18px rgba(105, 231, 255, 0.28)",
-                }}
-                aria-hidden
-              >
-                {(userName || "?").charAt(0).toUpperCase()}
+          <div className="mb-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[rgba(105,231,255,0.12)] bg-[rgba(7,11,18,0.72)] px-2.5 py-2">
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[12px] font-bold text-[var(--text-inverse)]"
+              style={{
+                background: "linear-gradient(135deg, var(--ai-cyan-bright), var(--ai-cyan))",
+                boxShadow: "0 0 18px rgba(105, 231, 255, 0.28)",
+              }}
+              aria-hidden
+            >
+              {(userName || "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">
+                {userName || t("sidebar.signedInAs")}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12px] font-semibold text-[var(--text-primary)]">
-                  {userName || t("sidebar.signedInAs")}
-                </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
-                  <span className="uppercase tracking-[0.12em]">{userRole}</span>
-                  <span
-                    className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em]"
-                    style={{
-                      background: isOwnerUser
-                        ? "rgba(15, 168, 120, 0.16)"
-                        : "rgba(107, 114, 128, 0.18)",
-                      color: isOwnerUser ? "var(--green)" : "var(--text-muted)",
-                    }}
-                  >
-                    {isOwnerUser ? t("sidebar.fullAccess") : t("sidebar.limitedAccess")}
-                  </span>
-                </div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-[var(--text-muted)]">
+                <span className="uppercase tracking-[0.12em]">{userRole}</span>
+                <span
+                  className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.1em]"
+                  style={{
+                    background: isOwnerUser
+                      ? "rgba(15, 168, 120, 0.16)"
+                      : "rgba(107, 114, 128, 0.18)",
+                    color: isOwnerUser ? "var(--green)" : "var(--text-muted)",
+                  }}
+                >
+                  {isOwnerUser ? t("sidebar.fullAccess") : t("sidebar.limitedAccess")}
+                </span>
               </div>
             </div>
-            <ManagerNotificationBell profileId={userId} orgId={userOrgId} muted={managerMuted} />
-            <button
-              type="button"
-              onClick={toggleManagerSound}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-sm)] border"
-              style={{
-                borderColor: "var(--border-default)",
-                background: "transparent",
-                color: managerMuted ? "var(--text-muted)" : "var(--brand-yellow)",
-              }}
-              aria-label={managerMuted ? t("sound.unmute") : t("sound.mute")}
-              title={managerMuted ? t("sound.unmute") : t("sound.mute")}
-            >
-              {managerMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            </button>
           </div>
           <button
             onClick={handleLogout}
@@ -385,21 +341,6 @@ export default function ManagerLayout({
             </h2>
           </div>
           <div className="flex items-center gap-2">
-            <ManagerNotificationBell profileId={userId} orgId={userOrgId} muted={managerMuted} />
-            <button
-              type="button"
-              onClick={toggleManagerSound}
-              className="flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border"
-              style={{
-                borderColor: "var(--border-default)",
-                background: "transparent",
-                color: managerMuted ? "var(--text-muted)" : "var(--brand-yellow)",
-              }}
-              aria-label={managerMuted ? t("sound.unmute") : t("sound.mute")}
-              title={managerMuted ? t("sound.unmute") : t("sound.mute")}
-            >
-              {managerMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-            </button>
             <LanguageSwitcher />
             <button
               onClick={handleLogout}
