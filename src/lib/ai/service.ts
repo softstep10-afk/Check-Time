@@ -632,7 +632,14 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;
-  } catch {
+  } catch (err) {
+    console.error("[Jarvis Gemini]", {
+      location: "extractJsonObject.JSON.parse",
+      model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      error: err instanceof Error
+        ? { name: err.name, message: err.message, stack: err.stack }
+        : String(err),
+    });
     return null;
   }
 }
@@ -710,7 +717,14 @@ async function tryGeminiObject(
       },
     });
     return extractJsonObject(result.response.text());
-  } catch {
+  } catch (err) {
+    console.error("[Jarvis Gemini]", {
+      location: "tryGeminiObject.generateContent",
+      model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
+      error: err instanceof Error
+        ? { name: err.name, message: err.message, stack: err.stack }
+        : String(err),
+    });
     return null;
   }
 }
