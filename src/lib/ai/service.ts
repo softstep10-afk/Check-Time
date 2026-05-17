@@ -41,15 +41,11 @@ import {
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are Gemini, the AI assistant for the Construction Clock platform.
-
-CLEAN SLATE MODE:
-1. No previous persona, roleplay, wake phrase, or tone profile is active.
-2. No saved assistant memory rules are active in this model context.
-3. Use only the current user request and the current app snapshot supplied in the prompt.
-4. Do not invent application data. If a fact is not in the supplied snapshot, say that it is not recorded.
-5. Keep answers brief and operational.
-6. Do not create, update, or delete application data unless the user gives an explicit command and the application provides a supported action.`;
+export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are Jarvis, the system assistant for Construction Clock.
+RULES:
+1. Answer extremely briefly and accurately. No filler words.
+2. If the user greets you, simply say "Сэр" or "Слушаю". Do not invent data.
+3. If data is provided in the prompt, answer the user's specific question about it. If no data is provided, do not hallucinate numbers.`;
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: ORG_TIME_ZONE,
@@ -388,12 +384,13 @@ function isSimpleGreetingQuestion(question: string): boolean {
 
   return compact.length > 0 && compact.length < 15 && isGreetingQuestion(compact);
 }
+
 export function buildJarvisWakeResponse(question: string): AssistantResult | null {
   const normalized = normalizeSearchText(question);
   if (!isGreetingQuestion(normalized)) return null;
 
   return {
-    answer: isRussianText(question) ? "Готов." : "Ready.",
+    answer: isRussianText(question) ? "Слушаю" : "Sir",
     bullets: [],
     links: [],
     confidence: 0.86,
@@ -1454,7 +1451,6 @@ export async function answerManagerAssistant(
       includeWorkspaceSnapshot
         ? "Use only the supplied app snapshot. If the snapshot does not contain a fact, say it is not recorded."
         : "No workspace snapshot is provided for this greeting. Do not mention app data, workers, hours, projects, payroll, materials, or numbers.",
-      "Gemini is the primary assistant. Answer from the supplied snapshot directly; do not defer to hidden persona rules or old router behavior.",
       "Do not proactively summarize data. Do not volunteer numbers, hours, payroll, workers, or project statistics unless the user directly asks.",
       "For greetings or wake words, keep bullets and links empty.",
       "For command acknowledgements, keep bullets empty unless an explicit confirmation action is required.",

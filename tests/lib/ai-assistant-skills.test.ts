@@ -397,7 +397,7 @@ describe("AI assistant Gemini routing", () => {
         ],
       });
 
-      expect(wakeAnswer?.answer).toBe("Готов.");
+      expect(wakeAnswer?.answer).toBe("Слушаю");
       expect(answer.answer).toContain("Gemini недоступен");
       expect(answer.answer).not.toContain("файл");
       expect(answer.bullets).toEqual([]);
