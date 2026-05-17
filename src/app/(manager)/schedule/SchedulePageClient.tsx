@@ -35,7 +35,7 @@ type ScheduleKind =
   | "task"
   | "note"
   | "delivery";
-type CalendarMode = "general" | "deliveries" | "tasks";
+type CalendarMode = "general" | "deliveries";
 type EntrySource = "task" | "project";
 type EntryType = ScheduleKind | "project_start" | "project_deadline";
 type DeliveryStatus = "open" | "assigned" | "claimed" | "in_progress" | "delivered";
@@ -103,6 +103,8 @@ const GENERAL_EVENT_KINDS: ScheduleKind[] = [
   "note",
 ];
 
+const FIELD_EVENT_KINDS: ScheduleKind[] = ["delivery", "task"];
+
 const DELIVERY_ASSIGNEE_ROLES = new Set<UserRole>([
   "worker",
   "driver",
@@ -126,7 +128,7 @@ const TEXT = {
     dateTo: "To",
     resetRange: "Reset dates",
     generalCalendar: "Team calendar",
-    deliveryCalendar: "Delivery calendar",
+    deliveryCalendar: "Deliveries and tasks",
     taskCalendar: "Task calendar",
     newItem: "New calendar item",
     addToDay: "Add to this day",
@@ -207,7 +209,7 @@ const TEXT = {
     dateTo: "До",
     resetRange: "Сбросить даты",
     generalCalendar: "Календарь команды",
-    deliveryCalendar: "Календарь доставок",
+    deliveryCalendar: "Доставки и задачи",
     taskCalendar: "Календарь задач",
     newItem: "Новая запись",
     addToDay: "Добавить в этот день",
@@ -716,10 +718,9 @@ export default function SchedulePageClient() {
     return activeProfiles.filter((profile) => DELIVERY_ASSIGNEE_ROLES.has(profile.role));
   }, [activeProfiles]);
 
-  const assignmentOptions =
-    calendarMode === "deliveries" || deliveryOnlyCalendar || itemForm.kind === "delivery"
-      ? deliveryProfiles
-      : activeProfiles;
+  const assignmentKind =
+    calendarMode === "deliveries" && itemForm.kind !== "task" ? "delivery" : itemForm.kind;
+  const assignmentOptions = assignmentKind === "delivery" ? deliveryProfiles : activeProfiles;
 
   const entries = useMemo<CalendarEntry[]>(() => {
     const taskEntries = tasks
@@ -820,9 +821,8 @@ export default function SchedulePageClient() {
     return entries.filter((entry) => {
       if (rangeStart && entry.dayIso < rangeStart) return false;
       if (rangeEnd && entry.dayIso > rangeEnd) return false;
-      if (calendarMode === "deliveries") return entry.type === "delivery";
-      if (calendarMode === "tasks") return entry.type === "task";
       if (deliveryOnlyCalendar) return entry.type === "delivery" || entry.type === "task";
+      if (calendarMode === "deliveries") return entry.type === "delivery" || entry.type === "task";
       if (entry.type === "delivery") return false;
       return true;
     });
@@ -860,9 +860,9 @@ export default function SchedulePageClient() {
       ...defaultItemForm(
         day.iso,
         calendarMode === "deliveries"
-          ? "delivery"
-          : calendarMode === "tasks"
-            ? "task"
+          ? prev.kind === "delivery" || prev.kind === "task"
+            ? prev.kind
+            : "delivery"
           : prev.kind === "delivery" || prev.kind === "meeting"
             ? "client_meeting"
             : prev.kind,
@@ -885,10 +885,10 @@ export default function SchedulePageClient() {
         title: itemForm.title,
         kind:
           calendarMode === "deliveries"
-            ? "delivery"
-            : calendarMode === "tasks"
-              ? "task"
-              : itemForm.kind,
+            ? itemForm.kind === "delivery" || itemForm.kind === "task"
+              ? itemForm.kind
+              : "delivery"
+            : itemForm.kind,
         projectId: itemForm.projectId || null,
         assignedTo: itemForm.assignedTo || null,
         startsAt: itemForm.startsAt,
@@ -907,9 +907,9 @@ export default function SchedulePageClient() {
       ...defaultItemForm(
         selectedDay?.iso,
         calendarMode === "deliveries"
-          ? "delivery"
-          : calendarMode === "tasks"
-            ? "task"
+          ? prev.kind === "delivery" || prev.kind === "task"
+            ? prev.kind
+            : "delivery"
           : prev.kind === "meeting"
             ? "client_meeting"
             : prev.kind,
@@ -982,9 +982,11 @@ export default function SchedulePageClient() {
   }
 
   function renderCalendarItemForm(title: string, buttonText: string) {
-    const isDeliveryForm = calendarMode === "deliveries";
-    const isTaskForm = calendarMode === "tasks";
-    const effectiveKind = isDeliveryForm ? "delivery" : isTaskForm ? "task" : itemForm.kind;
+    const isFieldCalendar = calendarMode === "deliveries" || deliveryOnlyCalendar;
+    const effectiveKind =
+      isFieldCalendar && itemForm.kind !== "delivery" && itemForm.kind !== "task"
+        ? "delivery"
+        : itemForm.kind;
     const fallbackDate = selectedDay?.iso ?? isoDay(new Date());
 
     return (
@@ -1000,26 +1002,29 @@ export default function SchedulePageClient() {
             value={itemForm.title}
             onChange={(event) => setItemForm((prev) => ({ ...prev, title: event.target.value }))}
             required
-            placeholder={isDeliveryForm ? text.deliveryTitlePlaceholder : text.eventTitlePlaceholder}
+            placeholder={effectiveKind === "delivery" ? text.deliveryTitlePlaceholder : text.eventTitlePlaceholder}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-          {isDeliveryForm ? (
-            <div className="grid gap-1 text-xs text-[var(--text-muted)]">
+          {isFieldCalendar ? (
+            <label className="grid gap-1 text-xs text-[var(--text-muted)]">
               <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
-              <div className="rounded-[var(--radius-md)] border border-[rgba(59,130,246,0.35)] bg-[rgba(59,130,246,0.12)] px-3 py-3 text-sm font-semibold text-[#60a5fa]">
-                {text.delivery}
-              </div>
-            </div>
-          ) : isTaskForm ? (
-            <div className="grid gap-1 text-xs text-[var(--text-muted)]">
-              <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
-              <div className="rounded-[var(--radius-md)] border border-[rgba(191,162,52,0.35)] bg-[rgba(191,162,52,0.12)] px-3 py-3 text-sm font-semibold text-[var(--brand-yellow)]">
-                {text.task}
-              </div>
-            </div>
+              <select
+                value={effectiveKind}
+                onChange={(event) =>
+                  setItemForm((prev) => ({ ...prev, kind: event.target.value as ScheduleKind }))
+                }
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              >
+                {FIELD_EVENT_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {entryTypeLabel(kind, text)}
+                  </option>
+                ))}
+              </select>
+            </label>
           ) : (
             <label className="grid gap-1 text-xs text-[var(--text-muted)]">
               <span className="uppercase tracking-[0.14em]">{text.typeLabel}</span>
@@ -1212,10 +1217,9 @@ export default function SchedulePageClient() {
             [
               { key: "general", label: text.generalCalendar, icon: CalendarDays },
               { key: "deliveries", label: text.deliveryCalendar, icon: Truck },
-              { key: "tasks", label: text.taskCalendar, icon: CheckCircle2 },
             ] as const
           )
-            .filter(({ key }) => canUseGeneralCalendar || key === "deliveries" || key === "tasks")
+            .filter(({ key }) => canUseGeneralCalendar || key === "deliveries")
             .map(({ key, label, icon: Icon }) => {
             const active = calendarMode === key;
             return (
@@ -1516,11 +1520,7 @@ export default function SchedulePageClient() {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                  {calendarMode === "deliveries"
-                    ? text.deliveryCalendar
-                    : calendarMode === "tasks"
-                      ? text.taskCalendar
-                      : text.dayPlanner}
+                  {calendarMode === "deliveries" ? text.deliveryCalendar : text.dayPlanner}
                 </div>
                 <h2 className="mt-1 text-xl font-bold capitalize text-[var(--text-primary)]">
                   {dayLongLabel(selectedDay.iso, locale)}

@@ -142,15 +142,6 @@ export default async function OverviewPage() {
       .map((e) => [e.id, e]),
   );
   const acknowledgedShiftEventIds = buildShiftReviewAckEventIds(data.timeEvents);
-  const latestClosedThroughByProfileId = new Map<string, number>();
-  for (const closure of data.payrollClosures) {
-    const closedThroughMs = new Date(closure.closed_through).getTime();
-    if (!Number.isFinite(closedThroughMs)) continue;
-    const current = latestClosedThroughByProfileId.get(closure.profile_id);
-    if (current === undefined || closedThroughMs > current) {
-      latestClosedThroughByProfileId.set(closure.profile_id, closedThroughMs);
-    }
-  }
   const onSiteSessions = activeSessions
     .filter((s) => s.isOpen)
     .map((session) => {
@@ -262,13 +253,6 @@ export default async function OverviewPage() {
 
   const closedShiftAlerts = activeSessions
     .filter((session) => !session.isOpen)
-    .filter((session) => {
-      if (!session.clockOutTime) return true;
-      const closedThroughMs = latestClosedThroughByProfileId.get(session.profileId);
-      if (closedThroughMs === undefined) return true;
-      const outMs = new Date(session.clockOutTime).getTime();
-      return !Number.isFinite(outMs) || outMs > closedThroughMs;
-    })
     .map((session) => {
       const profile = profilesByIdForReview.get(session.profileId);
       const clockInEvent = clockInEventsById.get(session.clockInEventId);
