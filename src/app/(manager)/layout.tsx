@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
@@ -263,9 +264,9 @@ export default function ManagerLayout({
 
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
             return (
-              <button
+              <Link
                 key={item.href}
-                onClick={() => router.push(item.href)}
+                href={item.href}
                 data-active={active}
                 className="sidebar-nav-item mt-1 flex w-full items-center gap-2.5 rounded-[var(--radius-md)] px-3 py-2.5 text-left text-xs font-medium"
                 style={{
@@ -280,7 +281,7 @@ export default function ManagerLayout({
                   <JarvisIcon name={item.icon} size={17} active={active} className="shrink-0" />
                 )}
                 <span className="relative z-[1]">{t(item.labelKey)}</span>
-              </button>
+              </Link>
             );
           })}
         </div>
@@ -377,9 +378,9 @@ export default function ManagerLayout({
           {visibleMobileNav.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
             return (
-              <button
+              <Link
                 key={item.href}
-                onClick={() => router.push(item.href)}
+                href={item.href}
                 className="flex min-w-[48px] flex-col items-center gap-0.5 rounded-[var(--radius-md)] px-2 py-1.5"
                 style={{
                   color: active ? "var(--ai-cyan-bright)" : "var(--text-muted)",
@@ -395,7 +396,7 @@ export default function ManagerLayout({
                 <span className="text-[9px] font-semibold uppercase tracking-wide">
                   {t(item.labelKey)}
                 </span>
-              </button>
+              </Link>
             );
           })}
         </div>
