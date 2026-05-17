@@ -305,6 +305,25 @@ function toDatetimeLocalValue(date: Date): string {
   return local.toISOString().slice(0, 16);
 }
 
+function dateInputValue(value: string | null): string {
+  return value ? value.slice(0, 10) : "";
+}
+
+function timeInputValue(value: string | null): string {
+  return value && value.length >= 16 ? value.slice(11, 16) : "";
+}
+
+function withDateInputValue(value: string, date: string, fallbackTime: string): string {
+  if (!date) return "";
+  return `${date}T${timeInputValue(value) || fallbackTime}`;
+}
+
+function withTimeInputValue(value: string, time: string, fallbackDate: string, fallbackTime: string): string {
+  const date = dateInputValue(value) || fallbackDate;
+  if (!date) return "";
+  return `${date}T${time || fallbackTime}`;
+}
+
 function dateFromIsoDay(dayIso: string, hour = 9): Date {
   const date = new Date(`${dayIso}T00:00:00`);
   if (Number.isNaN(date.getTime())) return new Date();
@@ -339,20 +358,37 @@ function monthEndIso(month: Date): string {
   return isoDay(new Date(month.getFullYear(), month.getMonth() + 1, 0));
 }
 
+function usScheduleDateLocale(locale: "en" | "ru"): "en-US" {
+  switch (locale) {
+    case "en":
+    case "ru":
+      return "en-US";
+  }
+}
+
 function monthLabel(date: Date, locale: "en" | "ru"): string {
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+  return new Intl.DateTimeFormat(usScheduleDateLocale(locale), {
     month: "long",
     year: "numeric",
   }).format(date);
 }
 
 function dayLongLabel(value: string, locale: "en" | "ru"): string {
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+  return new Intl.DateTimeFormat(usScheduleDateLocale(locale), {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
   }).format(dateFromIsoDay(value, 12));
+}
+
+function dateOnlyLabel(value: string | null): string {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+  }).format(dateFromIsoDay(value.slice(0, 10), 12));
 }
 
 function timeLabel(value: string | null, locale: "en" | "ru"): string | null {
@@ -369,9 +405,10 @@ function dateTimeLabel(value: string | null, locale: "en" | "ru"): string | null
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+  return new Intl.DateTimeFormat(usScheduleDateLocale(locale), {
     month: "short",
     day: "numeric",
+    year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
@@ -933,6 +970,7 @@ export default function SchedulePageClient() {
   function renderCalendarItemForm(title: string, buttonText: string) {
     const isDeliveryForm = calendarMode === "deliveries" || deliveryOnlyCalendar;
     const effectiveKind = isDeliveryForm ? "delivery" : itemForm.kind;
+    const fallbackDate = selectedDay?.iso ?? isoDay(new Date());
 
     return (
       <form className="space-y-3" onSubmit={(event) => void createCalendarItem(event)}>
@@ -1018,24 +1056,68 @@ export default function SchedulePageClient() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
           <label className="grid gap-1 text-xs text-[var(--text-muted)]">
             <span className="uppercase tracking-[0.14em]">{text.startLabel}</span>
-            <input
-              type="text"
-              placeholder="YYYY-MM-DD HH:MM"
-              value={itemForm.startsAt}
-              onChange={(event) => setItemForm((prev) => ({ ...prev, startsAt: event.target.value }))}
-              required
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px] xl:grid-cols-2">
+              <input
+                type="date"
+                value={dateInputValue(itemForm.startsAt)}
+                onChange={(event) =>
+                  setItemForm((prev) => ({
+                    ...prev,
+                    startsAt: withDateInputValue(prev.startsAt, event.target.value, "09:00"),
+                  }))
+                }
+                required
+                aria-label={text.startLabel}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <input
+                type="time"
+                value={timeInputValue(itemForm.startsAt)}
+                onChange={(event) =>
+                  setItemForm((prev) => ({
+                    ...prev,
+                    startsAt: withTimeInputValue(prev.startsAt, event.target.value, fallbackDate, "09:00"),
+                  }))
+                }
+                required
+                aria-label={`${text.startLabel} time`}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
           </label>
           <label className="grid gap-1 text-xs text-[var(--text-muted)]">
             <span className="uppercase tracking-[0.14em]">{text.endLabel}</span>
-            <input
-              type="text"
-              placeholder="YYYY-MM-DD HH:MM"
-              value={itemForm.endsAt}
-              onChange={(event) => setItemForm((prev) => ({ ...prev, endsAt: event.target.value }))}
-              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-            />
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px] xl:grid-cols-2">
+              <input
+                type="date"
+                value={dateInputValue(itemForm.endsAt)}
+                onChange={(event) =>
+                  setItemForm((prev) => ({
+                    ...prev,
+                    endsAt: withDateInputValue(prev.endsAt, event.target.value, "10:00"),
+                  }))
+                }
+                aria-label={text.endLabel}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+              <input
+                type="time"
+                value={timeInputValue(itemForm.endsAt)}
+                onChange={(event) =>
+                  setItemForm((prev) => ({
+                    ...prev,
+                    endsAt: withTimeInputValue(
+                      prev.endsAt,
+                      event.target.value,
+                      dateInputValue(prev.startsAt) || fallbackDate,
+                      "10:00",
+                    ),
+                  }))
+                }
+                aria-label={`${text.endLabel} time`}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
           </label>
         </div>
 
@@ -1135,8 +1217,7 @@ export default function SchedulePageClient() {
           <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
             {text.dateFrom}
             <input
-              type="text"
-              placeholder="YYYY-MM-DD"
+              type="date"
               value={rangeStart}
               onChange={(event) => setRangeStart(event.target.value)}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 text-xs normal-case tracking-normal text-[var(--text-primary)] outline-none"
@@ -1145,8 +1226,7 @@ export default function SchedulePageClient() {
           <label className="grid gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
             {text.dateTo}
             <input
-              type="text"
-              placeholder="YYYY-MM-DD"
+              type="date"
               value={rangeEnd}
               onChange={(event) => setRangeEnd(event.target.value)}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 text-xs normal-case tracking-normal text-[var(--text-primary)] outline-none"
@@ -1189,7 +1269,7 @@ export default function SchedulePageClient() {
               </h2>
             </div>
             <div className="text-xs text-[var(--text-muted)]">
-              {monthStartIso(anchorMonth)} → {monthEndIso(anchorMonth)}
+              {dateOnlyLabel(monthStartIso(anchorMonth))} → {dateOnlyLabel(monthEndIso(anchorMonth))}
             </div>
           </div>
           <div className="grid grid-cols-7 border-b border-[var(--border-default)]">
@@ -1327,8 +1407,7 @@ export default function SchedulePageClient() {
               <label className="grid gap-1 text-xs text-[var(--text-muted)]">
                 <span className="uppercase tracking-[0.14em]">{text.starts}</span>
                   <input
-                    type="text"
-                    placeholder="YYYY-MM-DD"
+                    type="date"
                     value={projectForm.startDate}
                     onChange={(event) => setProjectForm((prev) => ({ ...prev, startDate: event.target.value }))}
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
@@ -1337,8 +1416,7 @@ export default function SchedulePageClient() {
               <label className="grid gap-1 text-xs text-[var(--text-muted)]">
                 <span className="uppercase tracking-[0.14em]">{text.deadline}</span>
                   <input
-                    type="text"
-                    placeholder="YYYY-MM-DD"
+                    type="date"
                     value={projectForm.endDate}
                     onChange={(event) => setProjectForm((prev) => ({ ...prev, endDate: event.target.value }))}
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
@@ -1377,7 +1455,7 @@ export default function SchedulePageClient() {
                         <div className="min-w-0">
                           <div className="truncate text-sm font-bold text-[var(--text-primary)]">{project.name}</div>
                           <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                            {project.start_date ?? "—"} → {project.end_date}
+                            {dateOnlyLabel(project.start_date)} → {dateOnlyLabel(project.end_date)}
                           </div>
                         </div>
                         <div className="shrink-0 text-right text-xs font-semibold" style={{ color: style.color }}>
@@ -1515,15 +1593,13 @@ export default function SchedulePageClient() {
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <input
-                      type="text"
-                      placeholder="YYYY-MM-DD"
+                      type="date"
                       value={projectForm.startDate}
                       onChange={(event) => setProjectForm((prev) => ({ ...prev, startDate: event.target.value }))}
                       className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
                     />
                     <input
-                      type="text"
-                      placeholder="YYYY-MM-DD"
+                      type="date"
                       value={projectForm.endDate}
                       onChange={(event) => setProjectForm((prev) => ({ ...prev, endDate: event.target.value }))}
                       className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, MessageSquare, Trash2, UserPlus } from "lucide-react";
+import { Pencil, MessageSquare, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { formatDurationCompact } from "@/lib/worker-utils";
 import type { ManagerProfileSummary } from "@/lib/manager-types";
@@ -185,15 +185,6 @@ export function TeamPage({
     [initialProfiles],
   );
 
-  function scrollToCreateForm() {
-    const el = document.querySelector<HTMLInputElement>('form input[name="name"]');
-    if (el) {
-      el.focus();
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }
-
-
   function validateName(value: string) {
     setNameError(value.trim() ? "" : t("team.nameRequired"));
   }
@@ -312,17 +303,6 @@ export function TeamPage({
             {t("team.description")}
           </p>
         </div>
-        {hasAdminProvisioning ? (
-          <button
-            type="button"
-            onClick={scrollToCreateForm}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] px-4 py-2.5 text-sm font-semibold"
-            style={{ background: "#f59e0b", color: "#0a0c14" }}
-          >
-            <UserPlus size={14} />
-            {t("team.addWorkerCta")}
-          </button>
-        ) : null}
       </section>
 
       {message ? (
