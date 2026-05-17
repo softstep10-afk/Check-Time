@@ -3,7 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { answerManagerAssistant, buildAssistantSnapshot } from "@/lib/ai/service";
-import { hasGoogleTtsCredentials, synthesizeJarvisSpeech } from "@/lib/ai/google-tts";
+import {
+  getGoogleTtsCredentialDiagnostics,
+  hasGoogleTtsCredentials,
+  synthesizeJarvisSpeech,
+} from "@/lib/ai/google-tts";
 import {
   appendJarvisMemoryRule,
   detectJarvisMemoryInstruction,
@@ -49,6 +53,40 @@ function buildSpokenText(assistant: {
   return lines.join(". ").replace(/\s+/g, " ").slice(0, 1600);
 }
 
+function normalizeLocale(value: unknown): "en" | "ru" | null {
+  return value === "en" || value === "ru" ? value : null;
+}
+
+function cleanErrorMessage(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.replace(/\bundefined\b/gi, "").replace(/\s+/g, " ").replace(/^[\s:.-]+|[\s:.-]+$/g, "").trim();
+}
+
+function describeErrorRecord(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const record = value as Record<string, unknown>;
+  return [
+    typeof record.code === "string" || typeof record.code === "number" ? `code ${record.code}` : "",
+    typeof record.status === "string" || typeof record.status === "number" ? `status ${record.status}` : "",
+    cleanErrorMessage(record.details),
+  ].filter(Boolean).join(", ");
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    const message = cleanErrorMessage(error.message);
+    if (message) return message;
+
+    const details = describeErrorRecord(error);
+    return details ? `${fallback} (${details})` : fallback;
+  }
+
+  const message = cleanErrorMessage(error);
+  if (message) return message;
+  const details = describeErrorRecord(error);
+  return details ? `${fallback} (${details})` : fallback;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -66,6 +104,7 @@ export async function POST(request: NextRequest) {
           : "";
     const attachments = normalizeJarvisAttachments(body.attachments);
     const history = normalizeConversationHistory(body.history);
+    const locale = normalizeLocale(body.locale);
 
     if (!question) {
       return NextResponse.json({ error: "Question is required." }, { status: 400 });
@@ -151,16 +190,28 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const audio = await synthesizeJarvisSpeech(buildSpokenText(assistant));
+    let audio = null;
+    let audioError: string | null = null;
+    try {
+      audio = await synthesizeJarvisSpeech(buildSpokenText(assistant), { locale });
+    } catch (ttsError) {
+      audioError = getErrorMessage(ttsError, "Google Cloud Text-to-Speech request failed.");
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[Jarvis voice] TTS failed", {
+          audioError,
+          credentials: getGoogleTtsCredentialDiagnostics(),
+        });
+      }
+    }
 
     return NextResponse.json({
       ok: true,
       assistant,
       audio,
-      audioError: null,
+      audioError,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
+    const message = getErrorMessage(error, "Internal server error");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -45,7 +45,7 @@ import {
 } from "@/lib/ai/types";
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
-const DEFAULT_GEMINI_MODEL = "gemini-1.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are the system UI for a mainframe. You are completely devoid of emotion, warmth, or conversational filler.
 
 CRITICAL RULES FOR YOUR OUTPUT:

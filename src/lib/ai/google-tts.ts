@@ -1,9 +1,6 @@
 import { TextToSpeechClient } from "@google-cloud/text-to-speech";
 import {
-  DEFAULT_GOOGLE_TTS_LANGUAGE,
-  DEFAULT_GOOGLE_TTS_PITCH,
-  DEFAULT_GOOGLE_TTS_SPEAKING_RATE,
-  DEFAULT_GOOGLE_TTS_VOICE,
+  resolveJarvisVoiceSelection,
 } from "@/lib/ai/jarvis-voice";
 
 type GoogleCredentials = {
@@ -47,13 +44,14 @@ function getTextToSpeechClient(): TextToSpeechClient {
   const credentials = readInlineCredentials();
   cachedClient = credentials
     ? new TextToSpeechClient({
+        fallback: true,
         projectId: credentials.project_id,
         credentials: {
           client_email: credentials.client_email,
           private_key: credentials.private_key,
         },
       })
-    : new TextToSpeechClient();
+    : new TextToSpeechClient({ fallback: true });
 
   return cachedClient;
 }
@@ -67,28 +65,52 @@ export function hasGoogleTtsCredentials(): boolean {
   );
 }
 
-export async function synthesizeJarvisSpeech(text: string): Promise<{
+export function getGoogleTtsCredentialDiagnostics(): {
+  hasAnyCredentialEnv: boolean;
+  hasFileCredentialEnv: boolean;
+  hasInlineCredentialEnv: boolean;
+  inlineCredentialsValid: boolean;
+  projectIdPresent: boolean;
+  clientEmailPresent: boolean;
+} {
+  const inlineCredentials = readInlineCredentials();
+  return {
+    hasAnyCredentialEnv: hasGoogleTtsCredentials(),
+    hasFileCredentialEnv: Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS),
+    hasInlineCredentialEnv: Boolean(
+      process.env.GOOGLE_CLOUD_CREDENTIALS ||
+        process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+        process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON,
+    ),
+    inlineCredentialsValid: Boolean(inlineCredentials),
+    projectIdPresent: Boolean(inlineCredentials?.project_id),
+    clientEmailPresent: Boolean(inlineCredentials?.client_email),
+  };
+}
+
+export async function synthesizeJarvisSpeech(
+  text: string,
+  options: { locale?: string | null } = {},
+): Promise<{
   base64: string;
   mimeType: "audio/mpeg";
   voiceName: string;
+  languageCode: string;
 }> {
-  const voiceName = process.env.GOOGLE_TTS_VOICE || DEFAULT_GOOGLE_TTS_VOICE;
-  const languageCode = process.env.GOOGLE_TTS_LANGUAGE || DEFAULT_GOOGLE_TTS_LANGUAGE;
-  const speakingRate = Number(process.env.GOOGLE_TTS_SPEAKING_RATE || DEFAULT_GOOGLE_TTS_SPEAKING_RATE);
-  const pitch = Number(process.env.GOOGLE_TTS_PITCH || DEFAULT_GOOGLE_TTS_PITCH);
+  const selection = resolveJarvisVoiceSelection(text, options);
   const client = getTextToSpeechClient();
 
   const [response] = await client.synthesizeSpeech({
     input: { text },
     voice: {
-      languageCode,
-      name: voiceName,
+      languageCode: selection.languageCode,
+      name: selection.voiceName,
       ssmlGender: "MALE",
     },
     audioConfig: {
       audioEncoding: "MP3",
-      speakingRate: Number.isFinite(speakingRate) ? speakingRate : DEFAULT_GOOGLE_TTS_SPEAKING_RATE,
-      pitch: Number.isFinite(pitch) ? pitch : DEFAULT_GOOGLE_TTS_PITCH,
+      speakingRate: selection.speakingRate,
+      pitch: selection.pitch,
     },
   });
 
@@ -103,6 +125,7 @@ export async function synthesizeJarvisSpeech(text: string): Promise<{
   return {
     base64: buffer.toString("base64"),
     mimeType: "audio/mpeg",
-    voiceName,
+    voiceName: selection.voiceName,
+    languageCode: selection.languageCode,
   };
 }

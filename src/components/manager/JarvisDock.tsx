@@ -18,7 +18,7 @@ type SpeechResultsLike = {
   [index: number]: SpeechResultLike;
 };
 type BrowserSpeechRecognitionEvent = Event & { results: SpeechResultsLike };
-type BrowserSpeechRecognitionErrorEvent = Event & { error?: string };
+type BrowserSpeechRecognitionErrorEvent = Event & { error?: string; message?: string };
 type BrowserSpeechRecognition = EventTarget & {
   lang: string;
   continuous: boolean;
@@ -49,6 +49,32 @@ type VoiceApiResponse = {
 const DOCK_POSITION_KEY = "check-time.jarvisDock.position";
 const DOCK_MARGIN = 10;
 const MIN_LISTENING_VISIBLE_MS = 450;
+const VOICE_TEXT = {
+  en: {
+    start: "Talk live",
+    stop: "Stop voice",
+    connecting: "Listening through this browser...",
+    connected: "Processing through Gemini and Google voice...",
+    speaking: "Jarvis is speaking.",
+    failed: "Google voice request failed.",
+    needsKey: "Live voice needs Gemini and Google Cloud Text-to-Speech credentials in Vercel.",
+    unsupported: "Voice input is not supported in this browser.",
+    microphoneBlocked: "Microphone access is blocked. Allow microphone access in the browser and try again.",
+    noSpeech: "I did not catch anything. Tap Jarvis and speak again.",
+  },
+  ru: {
+    start: "Говорить",
+    stop: "Остановить",
+    connecting: "Слушаю через этот браузер...",
+    connected: "Обрабатываю через Gemini и голос Google...",
+    speaking: "Jarvis отвечает голосом.",
+    failed: "Голосовой запрос Google не сработал.",
+    needsKey: "Для живого голоса нужны Gemini и Google Cloud Text-to-Speech credentials в Vercel.",
+    unsupported: "Голосовой ввод не поддерживается в этом браузере.",
+    microphoneBlocked: "Доступ к микрофону заблокирован. Разрешите микрофон в браузере и попробуйте снова.",
+    noSpeech: "Я ничего не услышал. Нажмите Jarvis и скажите ещё раз.",
+  },
+} as const;
 
 function isVoiceActive(state: VoiceState): boolean {
   return state === "listening" || state === "thinking" || state === "speaking";
@@ -111,14 +137,16 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
   return new Blob([bytes], { type: mimeType });
 }
 
-function getSpeechLanguage(): string {
-  const browserLanguage = navigator.language || "";
-  if (browserLanguage.toLowerCase().startsWith("en")) return "en-US";
-  return "ru-RU";
+function getSpeechLanguage(locale: "en" | "ru"): string {
+  return locale === "ru" ? "ru-RU" : "en-US";
+}
+
+function cleanStatusText(value: unknown): string {
+  return typeof value === "string" ? value.replace(/\bundefined\b/gi, "").replace(/\s+/g, " ").trim() : "";
 }
 
 export function JarvisDock() {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const dockRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
@@ -141,11 +169,35 @@ export function JarvisDock() {
   const [voiceMessage, setVoiceMessage] = useState("");
   const [dockPosition, setDockPosition] = useState<DockPosition>({ x: 16, y: 420 });
   const [positionReady, setPositionReady] = useState(false);
+  const text = VOICE_TEXT[locale];
+
+  const voiceText = useCallback(
+    (key: Parameters<typeof t>[0], fallback: string): string => cleanStatusText(t(key)) || fallback,
+    [t],
+  );
+
+  const speechErrorText = useCallback(
+    (event: BrowserSpeechRecognitionErrorEvent): string => {
+      const errorType = cleanStatusText(event.error);
+      const message = cleanStatusText(event.message);
+
+      if (errorType === "not-allowed" || errorType === "service-not-allowed") {
+        return text.microphoneBlocked;
+      }
+      if (errorType === "no-speech") {
+        return text.noSpeech;
+      }
+
+      const base = voiceText("jarvisDock.voiceFailed", text.failed);
+      return cleanStatusText([base, message || errorType].filter(Boolean).join(" ")) || text.failed;
+    },
+    [text.failed, text.microphoneBlocked, text.noSpeech, voiceText],
+  );
 
   const setVoiceStatus = useCallback((state: VoiceState, message = "") => {
     voiceStateRef.current = state;
     setVoiceState(state);
-    setVoiceMessage(message);
+    setVoiceMessage(cleanStatusText(message));
   }, []);
 
   const stopAudio = useCallback(() => {
@@ -306,7 +358,7 @@ export function JarvisDock() {
     };
     const SpeechRecognitionConstructor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
     if (!SpeechRecognitionConstructor) {
-      setVoiceStatus("error", t("jarvisDock.voiceUnsupported"));
+      setVoiceStatus("error", voiceText("jarvisDock.voiceUnsupported", text.unsupported));
       return;
     }
 
@@ -316,25 +368,24 @@ export function JarvisDock() {
     const startedAt = performance.now();
     const recognition = new SpeechRecognitionConstructor();
     recognitionRef.current = recognition;
-    recognition.lang = getSpeechLanguage();
+    recognition.lang = getSpeechLanguage(locale);
     recognition.continuous = false;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    setVoiceStatus("listening", t("jarvisDock.voiceConnecting"));
+    setVoiceStatus("listening", voiceText("jarvisDock.voiceConnecting", text.connecting));
 
     recognition.onresult = (event) => {
       const transcript = extractTranscript(event.results);
       if (!transcript || voiceAttemptRef.current !== attempt) return;
       recognitionRef.current = null;
-      setVoiceStatus("thinking", t("jarvisDock.voiceConnected"));
+      setVoiceStatus("thinking", voiceText("jarvisDock.voiceConnected", text.connected));
       void completeVoiceRequest(transcript, attempt, startedAt);
     };
 
     recognition.onerror = (event) => {
       if (voiceAttemptRef.current !== attempt) return;
       recognitionRef.current = null;
-      const error = event.error ? `${t("jarvisDock.voiceFailed")} ${event.error}` : t("jarvisDock.voiceFailed");
-      stopVoice("error", error);
+      stopVoice("error", speechErrorText(event));
     };
 
     recognition.onend = () => {
@@ -348,7 +399,7 @@ export function JarvisDock() {
     try {
       recognition.start();
     } catch (error) {
-      const message = error instanceof Error && error.message ? error.message : t("jarvisDock.voiceFailed");
+      const message = error instanceof Error && error.message ? error.message : voiceText("jarvisDock.voiceFailed", text.failed);
       stopVoice("error", message);
     }
   }
@@ -368,11 +419,12 @@ export function JarvisDock() {
         body: JSON.stringify({
           question: transcript,
           history: voiceHistoryRef.current.slice(-8),
+          locale,
         }),
       });
       const payload = (await response.json().catch(() => ({}))) as VoiceApiResponse;
       if (!response.ok) {
-        throw new Error(payload.error || t("jarvisDock.voiceFailed"));
+        throw new Error(payload.error || voiceText("jarvisDock.voiceFailed", text.failed));
       }
 
       const assistantAnswer = payload.assistant?.answer?.trim() || "";
@@ -387,7 +439,7 @@ export function JarvisDock() {
 
       const audioBase64 = payload.audio?.base64;
       if (!audioBase64) {
-        throw new Error(payload.audioError || t("jarvisDock.voiceNeedsKey"));
+        throw new Error(payload.audioError || voiceText("jarvisDock.voiceNeedsKey", text.needsKey));
       }
 
       const audio = audioRef.current ?? new Audio();
@@ -405,21 +457,23 @@ export function JarvisDock() {
       };
       audio.onerror = () => {
         if (voiceAttemptRef.current === attempt) {
-          stopVoice("error", t("jarvisDock.voiceFailed"));
+          stopVoice("error", voiceText("jarvisDock.voiceFailed", text.failed));
         }
       };
-      setVoiceStatus("speaking", t("jarvisDock.voiceSpeaking"));
+      setVoiceStatus("speaking", voiceText("jarvisDock.voiceSpeaking", text.speaking));
       await audio.play();
     } catch (error) {
       if (voiceAttemptRef.current !== attempt) return;
-      const text = error instanceof Error && error.message ? error.message : t("jarvisDock.voiceFailed");
-      stopVoice("error", text);
+      const message = error instanceof Error && error.message ? error.message : voiceText("jarvisDock.voiceFailed", text.failed);
+      stopVoice("error", message);
     }
   }
 
   const active = isVoiceActive(voiceState);
-  const label = active ? t("jarvisDock.voiceStop") : t("jarvisDock.voiceStart");
-  const statusText = voiceMessage || (active ? t("jarvisDock.voiceConnected") : "Jarvis");
+  const label = active
+    ? voiceText("jarvisDock.voiceStop", text.stop)
+    : voiceText("jarvisDock.voiceStart", text.start);
+  const statusText = cleanStatusText(voiceMessage) || (active ? voiceText("jarvisDock.voiceConnected", text.connected) : "Jarvis");
 
   return (
     <div
