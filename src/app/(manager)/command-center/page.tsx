@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { BulkMessageComposer } from "@/components/manager/BulkMessageComposer";
 import { ManagerTasksPage } from "@/components/manager/ManagerTasksPage";
+import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
 import {
   buildActiveProjectIdSet,
   getActiveOperationalProjects,
@@ -581,6 +582,7 @@ export default async function CommandCenterPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <OverviewLiveIndicator />
           <Link href="/overview" className="button-base button-secondary px-3 py-2 text-xs">
             {text.openOverview}
           </Link>
