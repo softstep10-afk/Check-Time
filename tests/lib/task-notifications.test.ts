@@ -203,6 +203,26 @@ describe("countUnseenTasks", () => {
     expect(result.latestCreatedAt).toBe("2026-04-02T10:00:00Z");
   });
 
+  it("keeps seen tasks visible in the worker task lists", () => {
+    const tasks = [
+      makeTask({
+        id: "seen-open",
+        assigned_to: "w1",
+        project_id: "p1",
+        metadata: {
+          seen_by: {
+            w1: "2026-04-02T10:05:00Z",
+          },
+        },
+      }),
+    ];
+
+    expect(isTaskVisibleToWorker(tasks[0], args)).toBe(true);
+    const split = splitWorkerProjectTasks(tasks, "w1");
+    expect(split.mineTasks.map((task) => task.id)).toEqual(["seen-open"]);
+    expect(split.completedTasks).toHaveLength(0);
+  });
+
   it("still counts tasks only seen by another worker", () => {
     const tasks = [
       makeTask({

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { logAuditServer } from "@/lib/audit-server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -35,9 +36,9 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, org_id")
+      .select("id, org_id, name, role")
       .eq("id", user.id)
-      .maybeSingle<{ id: string; org_id: string }>();
+      .maybeSingle<{ id: string; org_id: string; name: string; role: string }>();
 
     if (profileError || !profile) {
       return NextResponse.json(
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     const { data: visibleTasks, error: visibleError } = await supabase
       .from("tasks")
-      .select("id, org_id, metadata")
+      .select("id, org_id, project_id, assigned_to, metadata")
       .eq("org_id", profile.org_id)
       .in("id", taskIds)
       .is("deleted_at", null);
@@ -74,12 +75,18 @@ export async function POST(request: NextRequest) {
     const seenAt = new Date().toISOString();
     let updated = 0;
     const linkedMessageIds = new Set<string>();
+    const affectedProjectIds = new Set<string>();
+    const affectedAssigneeIds = new Set<string>();
 
     for (const task of (visibleTasks ?? []) as Array<{
       id: string;
       org_id: string;
+      project_id: string | null;
+      assigned_to: string | null;
       metadata: Record<string, unknown> | null;
     }>) {
+      if (task.project_id) affectedProjectIds.add(task.project_id);
+      if (task.assigned_to) affectedAssigneeIds.add(task.assigned_to);
       const metadata = asRecord(task.metadata);
       if (typeof metadata.message_id === "string" && metadata.message_id.trim()) {
         linkedMessageIds.add(metadata.message_id.trim());
@@ -103,6 +110,26 @@ export async function POST(request: NextRequest) {
 
       if (!updateError) {
         updated += 1;
+        await logAuditServer(admin, {
+          orgId: profile.org_id,
+          actorId: profile.id,
+          actorName: profile.name,
+          actorRole: profile.role,
+          action: "task_seen",
+          targetType: "task",
+          targetId: task.id,
+          beforeData: {
+            seen_by: metadata.seen_by ?? null,
+            last_seen_by: metadata.last_seen_by ?? null,
+            last_seen_at: metadata.last_seen_at ?? null,
+          },
+          afterData: {
+            seen_by: nextMetadata.seen_by,
+            last_seen_by: profile.id,
+            last_seen_at: seenAt,
+            message_id: metadata.message_id ?? null,
+          },
+        });
       }
     }
 
@@ -127,6 +154,13 @@ export async function POST(request: NextRequest) {
       revalidatePath("/tasks");
       revalidatePath("/my-tasks");
       revalidatePath("/projects");
+      for (const projectId of affectedProjectIds) {
+        revalidatePath(`/projects/${projectId}`);
+        revalidatePath(`/project/${projectId}`);
+      }
+      for (const assigneeId of affectedAssigneeIds) {
+        revalidatePath(`/team/${assigneeId}`);
+      }
     }
 
     return NextResponse.json({ ok: true, updated, messagesMarkedRead, seenAt });

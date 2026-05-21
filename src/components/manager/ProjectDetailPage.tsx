@@ -1820,7 +1820,7 @@ export function ProjectDetailPage({
               placeholder={t("projectDetail.taskDescription")}
               className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
-            <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_minmax(140px,0.8fr)_minmax(150px,0.8fr)]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(280px,1.5fr)_minmax(140px,0.7fr)_minmax(150px,0.8fr)]">
               <label className="grid min-w-0 gap-1">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                   {t("tasks.assignedToLabel")}
@@ -1830,7 +1830,7 @@ export function ProjectDetailPage({
                   defaultValue=""
                   aria-label={t("projectDetail.assignToWorkerOptional")}
                   title={t("projectDetail.assignToWorkerOptional")}
-                  className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  className="min-h-12 w-full min-w-0 overflow-hidden text-ellipsis rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 >
                   <option value="">{t("common.unassigned")}</option>
                   {taskAssigneeProjectProfiles.length > 0 ? (
@@ -1861,7 +1861,7 @@ export function ProjectDetailPage({
               <select
                 name="priority"
                 defaultValue="medium"
-                className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                className="min-h-12 w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               >
                 <option value="low">{t("projectDetail.low")}</option>
                 <option value="medium">{t("projectDetail.medium")}</option>
@@ -2686,7 +2686,7 @@ export function ProjectDetailPage({
                 placeholder={t("projectDetail.taskDescription")}
                 className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
-              <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_minmax(140px,0.8fr)_minmax(150px,0.8fr)]">
+              <div className="grid gap-3 lg:grid-cols-[minmax(280px,1.5fr)_minmax(140px,0.7fr)_minmax(150px,0.8fr)]">
                 <label className="grid min-w-0 gap-1">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
                     {t("tasks.assignedToLabel")}
@@ -2696,7 +2696,7 @@ export function ProjectDetailPage({
                     defaultValue=""
                     aria-label={t("projectDetail.assignToWorkerOptional")}
                     title={t("projectDetail.assignToWorkerOptional")}
-                    className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                    className="min-h-12 w-full min-w-0 overflow-hidden text-ellipsis rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                   >
                     <option value="">{t("common.unassigned")}</option>
                     {taskAssigneeProjectProfiles.length > 0 ? (
@@ -2727,7 +2727,7 @@ export function ProjectDetailPage({
                 <select
                   name="priority"
                   defaultValue="medium"
-                  className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  className="min-h-12 w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 >
                   <option value="low">{t("projectDetail.low")}</option>
                   <option value="medium">{t("projectDetail.medium")}</option>

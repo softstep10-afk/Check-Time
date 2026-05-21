@@ -377,6 +377,14 @@ export function NotificationBell({
               </button>
             ) : null}
           </div>
+          <Link
+            href="/my-messages"
+            onClick={() => setOpen(false)}
+            className="block border-b px-3 py-2 text-xs font-semibold"
+            style={{ borderColor: "var(--border-subtle)", color: "var(--text-secondary)" }}
+          >
+            {t("messages.openHistory")}
+          </Link>
           {unseenTaskCount > 0 ? (
             <Link
               href="/my-tasks"

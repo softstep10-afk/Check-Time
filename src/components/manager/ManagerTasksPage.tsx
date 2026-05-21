@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { logAudit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
+import { DateField } from "@/components/shared/DateField";
+import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import {
   buildProfileNameMap,
   getCompletionMediaIds,
@@ -78,6 +81,7 @@ export function ManagerTasksPage({
   embedded?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const { t } = useTranslation();
 
   const [tasks, setTasks] = useState<TaskRow[]>(initialTasks);
@@ -124,6 +128,77 @@ export function ManagerTasksPage({
     if (status === "done") return t("tasks.statusDone");
     if (status === "cancelled") return t("tasks.statusCancelled");
     return t("tasks.statusPending");
+  }
+
+  async function handleCreateTask(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const title = formData.get("title")?.toString().trim() ?? "";
+    const description = formData.get("description")?.toString().trim() ?? "";
+    const projectId = formData.get("project_id")?.toString() ?? "";
+    const assignedTo = formData.get("assigned_to")?.toString() ?? "";
+    const priorityValue = formData.get("priority")?.toString() ?? "medium";
+    const priority: TaskPriority =
+      priorityValue === "low" ||
+      priorityValue === "medium" ||
+      priorityValue === "high" ||
+      priorityValue === "urgent"
+        ? priorityValue
+        : "medium";
+    const dueDate = formData.get("due_date")?.toString() ?? "";
+
+    if (title.length < 2) {
+      setMessage(t("projectDetail.taskTitleRequired"));
+      setMessageTone("error");
+      return;
+    }
+
+    setBusyKey("create-task");
+    setMessage("");
+    const response = await fetch("/api/manager/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        description: description || null,
+        projectId: projectId || null,
+        assignedTo: assignedTo || null,
+        priority,
+        dueDate: dueDate || null,
+        source: "manager_tasks_page",
+      }),
+    });
+    const result = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      task?: Task;
+    };
+    setBusyKey(null);
+
+    if (!response.ok || !result.task?.id) {
+      setMessage(result.error ?? t("tasks.createTaskFailed"));
+      setMessageTone("error");
+      return;
+    }
+
+    const task = result.task;
+    const nextRow: TaskRow = {
+      ...task,
+      projectName: task.project_id
+        ? projects.find((project) => project.id === task.project_id)?.name ?? null
+        : null,
+      assigneeName: task.assigned_to
+        ? workers.find((worker) => worker.id === task.assigned_to)?.name ?? null
+        : null,
+      completedByName: task.completed_by
+        ? workers.find((worker) => worker.id === task.completed_by)?.name ?? null
+        : null,
+    };
+    setTasks((prev) => [nextRow, ...prev.filter((existing) => existing.id !== task.id)]);
+    form.reset();
+    setMessage(t("tasks.created"));
+    setMessageTone("success");
+    router.refresh();
   }
 
   async function handleStatusChange(taskId: string, status: TaskStatus) {
@@ -317,13 +392,6 @@ export function ManagerTasksPage({
         </div>
       ) : null}
 
-      <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 text-xs text-[var(--text-secondary)]">
-        {t("tasks.preferProjectPage")}
-        <Link href="/projects" className="ml-2 font-semibold text-[var(--brand-yellow)]">
-          {t("tasks.openProjects")}
-        </Link>
-      </div>
-
       <section className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         {/* ── Assign Task ── */}
         <div className="surface-card p-4">
@@ -340,14 +408,90 @@ export function ManagerTasksPage({
           </div>
 
           <p className="mt-4 text-sm text-[var(--text-secondary)]">
-            {t("tasks.createInsideProject")}
+            {t("tasks.createTaskHelp")}
           </p>
-          <Link
-            href="/projects"
-            className="button-base button-primary mt-4 inline-flex"
-          >
-            {t("tasks.openProjects")}
-          </Link>
+          <form className="mt-4 grid gap-3" onSubmit={handleCreateTask}>
+            <TextInputWithVoice
+              name="title"
+              placeholder={t("projectDetail.taskTitle")}
+              required
+              maxLength={180}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+            <TextInputWithVoice
+              multiline
+              name="description"
+              rows={4}
+              placeholder={t("tasks.descriptionPlaceholder")}
+              className="min-h-[96px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+            <label className="grid gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t("tasks.projectLabel")}
+              </span>
+              <select
+                name="project_id"
+                className="min-h-12 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="">{t("common.generalTask")}</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                {t("tasks.assignedToLabel")}
+              </span>
+              <select
+                name="assigned_to"
+                className="min-h-12 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="">{t("common.unassigned")}</option>
+                {workers.map((worker) => (
+                  <option key={worker.id} value={worker.id}>
+                    {worker.name}
+                  </option>
+                ))}
+              </select>
+              {workers.length === 0 ? (
+                <span className="text-[10px] text-[var(--text-muted)]">
+                  {t("tasks.noWorkersAvailable")}
+                </span>
+              ) : null}
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {t("messages.priority")}
+                </span>
+                <select
+                  name="priority"
+                  defaultValue="medium"
+                  className="min-h-12 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="low">{t("tasks.priorityLow")}</option>
+                  <option value="medium">{t("tasks.priorityMedium")}</option>
+                  <option value="high">{t("tasks.priorityHigh")}</option>
+                  <option value="urgent">{t("tasks.priorityUrgent")}</option>
+                </select>
+              </label>
+              <DateField
+                name="due_date"
+                label={t("tasks.dueDateLabel")}
+                className="min-h-12 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={busyKey === "create-task"}
+              className="button-base button-primary"
+            >
+              {busyKey === "create-task" ? t("common.creating") : t("projectDetail.createTask")}
+            </button>
+          </form>
         </div>
 
         {/* ── All Tasks ── */}

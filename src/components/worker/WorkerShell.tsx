@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { logAudit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/client";
 import type { TaskStatus, TimeEvent } from "@/types/database";
 import type {
@@ -1990,7 +1991,8 @@ export function WorkerShell({
         throw new Error(t("tasks.completionModalRequired"));
       }
 
-      const completedAt = nextStatus === "done" ? new Date().toISOString() : null;
+      const statusChangedAt = new Date().toISOString();
+      const completedAt = nextStatus === "done" ? statusChangedAt : null;
       // Compose the completion-evidence payload before the metadata
       // merge: files upload through the existing
       // /lib/task-attachments.uploadTaskAttachment path, which already
@@ -2059,12 +2061,24 @@ export function WorkerShell({
           delivery_completed_by: shell.profile.id,
           delivery_completed_at: completedAt,
         };
-      } else if (nextStatus === "in_progress" && isDeliveryTask) {
+      } else if (nextStatus === "in_progress") {
         nextMetadata = {
           ...existingMetadataRecord,
-          schedule_delivery_status: "in_progress",
-          delivery_started_by: shell.profile.id,
-          delivery_started_at: new Date().toISOString(),
+          started_by:
+            typeof existingMetadataRecord.started_by === "string"
+              ? existingMetadataRecord.started_by
+              : shell.profile.id,
+          started_at:
+            typeof existingMetadataRecord.started_at === "string"
+              ? existingMetadataRecord.started_at
+              : statusChangedAt,
+          ...(isDeliveryTask
+            ? {
+                schedule_delivery_status: "in_progress",
+                delivery_started_by: shell.profile.id,
+                delivery_started_at: statusChangedAt,
+              }
+            : {}),
         };
       }
       const updatePayload: Record<string, unknown> = {
@@ -2110,6 +2124,35 @@ export function WorkerShell({
               : t("tasks.completedSimple")
           : t("tasks.taskUpdated");
       setBanner({ tone: "success", text: successMessage });
+      void logAudit({
+        orgId: shell.profile.org_id,
+        actorId: shell.profile.id,
+        actorName: shell.profile.name,
+        actorRole: shell.profile.role,
+        action: nextStatus === "done" ? "task_completed" : "task_started",
+        targetType: "task",
+        targetId: taskId,
+        beforeData: existing
+          ? {
+              status: existing.status,
+              assigned_to: existing.assigned_to,
+              project_id: existing.project_id,
+              completed_at: existing.completed_at,
+              completed_by: existing.completed_by,
+            }
+          : null,
+        afterData: {
+          status: nextStatus,
+          assigned_to: existing?.assigned_to ?? null,
+          project_id: taskProjectId,
+          completed_at: completedAt,
+          completed_by: nextStatus === "done" ? shell.profile.id : null,
+          started_at:
+            nextMetadata && typeof nextMetadata.started_at === "string"
+              ? nextMetadata.started_at
+              : null,
+        },
+      });
       router.refresh();
       return true;
     } catch (error) {

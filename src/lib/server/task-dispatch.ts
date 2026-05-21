@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAuditServer } from "@/lib/audit-server";
-import type { Profile, Project, TaskPriority } from "@/types/database";
+import type { Profile, Project, Task, TaskPriority } from "@/types/database";
 
 export type ServerTaskDispatchInput = {
   orgId: string;
@@ -19,12 +19,7 @@ export type ServerTaskDispatchInput = {
   auditAction?: string;
 };
 
-export type ServerTaskDispatchResult = {
-  id: string;
-  title: string;
-  project_id: string | null;
-  assigned_to: string | null;
-};
+export type ServerTaskDispatchResult = Task;
 
 export class TaskDispatchError extends Error {
   status: number;
@@ -129,7 +124,7 @@ export async function createManagerTask(
       due_date: dueDate,
       metadata,
     })
-    .select("id, title, project_id, assigned_to")
+    .select("*")
     .single<ServerTaskDispatchResult>();
 
   if (error || !data) {

@@ -74,6 +74,10 @@ export async function POST(request: NextRequest) {
     revalidatePath("/my-tasks");
     if (task.project_id) {
       revalidatePath(`/projects/${task.project_id}`);
+      revalidatePath(`/project/${task.project_id}`);
+    }
+    if (task.assigned_to) {
+      revalidatePath(`/team/${task.assigned_to}`);
     }
 
     return NextResponse.json({ ok: true, task });
