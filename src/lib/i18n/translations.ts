@@ -819,6 +819,22 @@ export const translations = {
     en: "This worker has no open balance.",
     ru: "У этого работника нет открытого баланса.",
   },
+  "teamMember.payrollHistoryShortcut": {
+    en: "Payroll history",
+    ru: "История зарплаты",
+  },
+  "teamMember.payrollHistoryShortcutHint": {
+    en: "Shortcut to closed and paid payroll periods in the archive/history flow.",
+    ru: "Быстрый переход к закрытым и оплаченным периодам в архиве/истории.",
+  },
+  "teamMember.currentPayPeriod": {
+    en: "Current pay period",
+    ru: "Текущий период оплаты",
+  },
+  "teamMember.currentPayPeriodHint": {
+    en: "Open balance for this worker using the existing payroll rules and close/pay action.",
+    ru: "Открытый баланс этого работника по существующим правилам расчёта и действию закрытия/оплаты.",
+  },
   "teamMember.unpaidAmount": { en: "Amount", ru: "Сумма" },
   "teamMember.payrollClosed": { en: "Payment closed", ru: "Оплата закрыта" },
   "teamMember.openPayrollHistory": { en: "Open payroll history", ru: "Открыть историю зарплаты" },

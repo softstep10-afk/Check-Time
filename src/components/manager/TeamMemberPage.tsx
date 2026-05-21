@@ -1837,7 +1837,54 @@ export function TeamMemberPage({
             </div>
             {hasFinanceAccess ? (
               <>
-                <div className="mt-3 grid gap-2 sm:grid-cols-4">
+                <Link
+                  href="/payroll/history"
+                  className="mt-3 flex items-start justify-between gap-3 rounded-[var(--radius-md)] border p-3 transition-colors hover:border-[var(--green)]"
+                  style={{
+                    background: "rgba(15, 168, 120, 0.10)",
+                    borderColor: "rgba(15, 168, 120, 0.28)",
+                    color: "var(--green)",
+                  }}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.16em]">
+                      {t("teamMember.payrollHistoryShortcut")}
+                    </span>
+                    <span className="mt-1 block text-sm font-bold text-[var(--text-primary)]">
+                      {t("teamMember.openPayrollHistory")}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-[var(--text-secondary)]">
+                      {t("teamMember.payrollHistoryShortcutHint")}
+                    </span>
+                    <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
+                      {latestPaidPeriodLabel ?? t("teamMember.noOpenBalance")}
+                      {latestPaidAmountLabel ? ` · ${latestPaidAmountLabel}` : ""}
+                    </span>
+                  </span>
+                  <ArrowRight size={16} className="mt-1 shrink-0" />
+                </Link>
+
+                <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-[var(--text-primary)]">
+                        {t("teamMember.currentPayPeriod")}
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                        {t("teamMember.currentPayPeriodHint")}
+                      </p>
+                    </div>
+                    <div className="rounded-[var(--radius-sm)] border px-3 py-2 text-right" style={{ borderColor: "rgba(191, 162, 52, 0.24)" }}>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: "var(--brand-yellow)" }}>
+                        {t("teamMember.bucketUnpaid")}
+                      </div>
+                      <div className="mt-1 font-mono text-sm font-bold text-[var(--text-primary)]">
+                        {currencyFormatter.format(unpaidAmount)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-4">
                   <div
                     className="rounded-[var(--radius-md)] p-3"
                     style={{ background: "rgba(15, 168, 120, 0.10)" }}
@@ -1939,9 +1986,8 @@ export function TeamMemberPage({
                       </span>
                     </button>
                   ) : (
-                    <Link
-                      href="/payroll/history"
-                      className="flex rounded-[var(--radius-md)] p-3 transition-colors hover:border-[var(--green)]"
+                    <div
+                      className="flex rounded-[var(--radius-md)] p-3"
                       style={{
                         background: "rgba(15, 168, 120, 0.10)",
                         border: "1px solid rgba(15, 168, 120, 0.28)",
@@ -1953,15 +1999,14 @@ export function TeamMemberPage({
                           {t("teamMember.payrollClosed")}
                         </span>
                         <span className="mt-1 text-sm font-bold text-[var(--text-primary)]">
-                          {t("teamMember.openPayrollHistory")}
+                          {t("teamMember.noOpenBalance")}
                         </span>
                         <span className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold">
                           {latestPaidPeriodLabel ?? t("teamMember.noOpenBalance")}
                           {latestPaidAmountLabel ? ` · ${latestPaidAmountLabel}` : ""}
-                          <ArrowRight size={12} />
                         </span>
                       </span>
-                    </Link>
+                    </div>
                   )}
                 </div>
 
@@ -2152,6 +2197,7 @@ export function TeamMemberPage({
                     </div>
                   </div>
                 ) : null}
+                </div>
               </>
             ) : null}
           </div>
