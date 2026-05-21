@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Plus, Trash2 } from "lucide-react";
 import { logAudit } from "@/lib/audit";
@@ -89,6 +89,10 @@ export function ManagerTasksPage({
 
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+
+  useEffect(() => {
+    setTasks(initialTasks);
+  }, [initialTasks]);
 
   const workerNameById = useMemo(() => buildProfileNameMap(workers), [workers]);
   const attachmentById = useMemo(

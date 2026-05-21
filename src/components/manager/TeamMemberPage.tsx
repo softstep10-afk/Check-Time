@@ -1411,8 +1411,16 @@ export function TeamMemberPage({
           <SendMessageForm
             orgId={orgId}
             senderId={managerId}
+            senderName={managerName}
+            senderRole={managerRole}
             recipientId={profile.id}
             recipientName={profile.name}
+            projects={activeProjects.map((project) => ({
+              id: project.id,
+              name: project.name,
+              status: project.status,
+            }))}
+            onSent={() => router.refresh()}
           />
         </section>
 

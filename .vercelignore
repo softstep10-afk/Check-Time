@@ -1,4 +1,5 @@
 .claude/
+.codex-local/
 .next-dev.err.log
 .next-dev.out.log
 .vercel.zip

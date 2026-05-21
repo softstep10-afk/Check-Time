@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import { FileText, Paperclip, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import {
@@ -15,6 +16,7 @@ import {
 import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
 
 const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
+type ProjectOption = { id: string; name: string; status?: string | null };
 
 function classifyFile(file: File): "image" | "video" | "pdf" {
   if (file.type.startsWith("image/")) return "image";
@@ -25,14 +27,20 @@ function classifyFile(file: File): "image" | "video" | "pdf" {
 export function SendMessageForm({
   orgId,
   senderId,
+  senderName = "Manager",
+  senderRole = "manager",
   recipientId,
   recipientName,
+  projects = [],
   onSent,
 }: {
   orgId?: string;
   senderId?: string;
+  senderName?: string;
+  senderRole?: string;
   recipientId: string;
   recipientName: string;
+  projects?: ProjectOption[];
   onSent?: () => void;
 }) {
   const { t } = useTranslation();
@@ -43,6 +51,7 @@ export function SendMessageForm({
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const [taskProjectId, setTaskProjectId] = useState("");
 
   // Attachment state
   const fileRef = useRef<HTMLInputElement>(null);
@@ -111,6 +120,11 @@ export function SendMessageForm({
     };
   }
 
+  function buildTaskTitle(body: string, attachmentName?: string): string {
+    const source = body || attachmentName || t("messages.priorityTask");
+    return source.length > 140 ? `${source.slice(0, 137)}...` : source;
+  }
+
   async function handleSend(event: React.FormEvent) {
     event.preventDefault();
     if (!text.trim() && !pendingFile) return;
@@ -148,9 +162,23 @@ export function SendMessageForm({
     };
     // priority column was added in migration 00014. Retry without it on the
     // off chance an older DB hasn't run the migration yet — cheap insurance.
-    let insertErr = (await supabase.from("messages").insert({ ...basePayload, priority })).error;
+    let messageId: string | null = null;
+    let insertResult = await supabase
+      .from("messages")
+      .insert({ ...basePayload, priority })
+      .select("id")
+      .single<{ id: string }>();
+    let insertErr = insertResult.error;
     if (insertErr && /column .* priority/i.test(insertErr.message)) {
-      insertErr = (await supabase.from("messages").insert(basePayload)).error;
+      insertResult = await supabase
+        .from("messages")
+        .insert(basePayload)
+        .select("id")
+        .single<{ id: string }>();
+      insertErr = insertResult.error;
+    }
+    if (!insertErr && insertResult.data?.id) {
+      messageId = insertResult.data.id;
     }
     if (insertErr) {
       setError(insertErr.message);
@@ -158,9 +186,64 @@ export function SendMessageForm({
       return;
     }
 
+    if (priority === "task") {
+      const body = text.trim();
+      const taskTitle = buildTaskTitle(body, attachment?.filename);
+      const { data: insertedTask, error: taskErr } = await supabase
+        .from("tasks")
+        .insert({
+          org_id: orgId,
+          project_id: taskProjectId || null,
+          assigned_to: recipientId,
+          assigned_by: senderId,
+          title: taskTitle,
+          description: body || null,
+          priority: "medium",
+          status: "pending",
+          due_date: null,
+          metadata: {
+            source: "message_task",
+            message_id: messageId,
+            recipient_id: recipientId,
+            attachment_filename: attachment?.filename ?? null,
+          },
+        })
+        .select("id")
+        .single<{ id: string }>();
+
+      if (taskErr || !insertedTask) {
+        setError(
+          t("messages.taskCreateFailed").replace(
+            "{error}",
+            taskErr?.message ?? t("common.errorTryAgain"),
+          ),
+        );
+        setSending(false);
+        return;
+      }
+
+      void logAudit({
+        orgId,
+        actorId: senderId,
+        actorName: senderName,
+        actorRole: senderRole,
+        action: "task_created_from_message",
+        targetType: "task",
+        targetId: insertedTask.id,
+        beforeData: null,
+        afterData: {
+          title: taskTitle,
+          project_id: taskProjectId || null,
+          assigned_to: recipientId,
+          message_id: messageId,
+        },
+      });
+    }
+
     setSending(false);
     setSent(true);
     setText("");
+    setTaskProjectId("");
     clearAttachment();
     onSent?.();
     setTimeout(() => setSent(false), 2000);
@@ -216,6 +299,26 @@ export function SendMessageForm({
           })}
         </div>
       </fieldset>
+
+      {priority === "task" && projects.length > 0 ? (
+        <label className="block space-y-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+            {t("messages.taskProject")}
+          </span>
+          <select
+            value={taskProjectId}
+            onChange={(event) => setTaskProjectId(event.target.value)}
+            className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+          >
+            <option value="">{t("messages.taskProjectNone")}</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
       {/* Attachment preview */}
       {pendingFile ? (

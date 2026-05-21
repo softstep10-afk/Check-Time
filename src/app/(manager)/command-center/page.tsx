@@ -957,7 +957,9 @@ export default async function CommandCenterPage() {
             orgId={data.manager.org_id}
             senderId={data.manager.id}
             senderName={data.manager.name}
+            senderRole={data.manager.role}
             crew={crew}
+            projects={projects}
             embedded
           />
         </div>

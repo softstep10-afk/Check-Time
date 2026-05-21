@@ -32,6 +32,7 @@ import { normalizeStoragePath } from "@/lib/task-attachments";
 export interface ViewerMediaItem {
   id: string;
   storage_path: string;
+  directUrl?: string | null;
   filename: string | null;
   mime_type: string | null;
   media_type: string;
@@ -151,11 +152,16 @@ function MediaViewerModalBody({
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
-  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [signedUrl, setSignedUrl] = useState<string | null>(() => item.directUrl ?? null);
   const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    if (item.directUrl) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const playback = selectMediaPlayback({
       storage_path: item.storage_path,
       mime_type: item.mime_type,
@@ -176,7 +182,7 @@ function MediaViewerModalBody({
     return () => {
       cancelled = true;
     };
-  }, [supabase, item.storage_path, item.mime_type, item.metadata]);
+  }, [supabase, item.storage_path, item.mime_type, item.metadata, item.directUrl]);
 
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
@@ -189,6 +195,16 @@ function MediaViewerModalBody({
 
   async function handleDownload() {
     if (typeof window === "undefined") return;
+    if (item.directUrl) {
+      const anchor = document.createElement("a");
+      anchor.href = item.directUrl;
+      anchor.download = item.filename?.trim() || "download";
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      return;
+    }
     const path = normalizeStoragePath(item.storage_path);
     const fallbackName = path.split("/").pop() ?? "download";
     const downloadAs = (item.filename && item.filename.trim()) || fallbackName;

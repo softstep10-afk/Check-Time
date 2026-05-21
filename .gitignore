@@ -47,6 +47,7 @@ certificates
 
 # local workspace noise
 .claude/
+.codex-local/
 desktop.ini
 CODEX.bat
 scripts/*.png

@@ -25,6 +25,7 @@ const sidebarItems: SidebarItem[] = [
   { href: "/projects", icon: "projects", label: "Projects", labelKey: "manager.navProjects" },
   { href: "/team", icon: "team", label: "Team", labelKey: "manager.navTeam" },
   { section: "Work", sectionKey: "manager.sectionWork" },
+  { href: "/tasks", icon: "tasks", label: "Tasks", labelKey: "common.tasks" },
   { href: "/schedule", icon: "schedule", label: "Schedule", labelKey: "nav.schedule" },
   { href: "/ai", icon: "jarvis", label: "Jarvis", labelKey: "manager.navAi" },
   { section: "Admin", sectionKey: "manager.sectionAdmin" },
@@ -40,13 +41,24 @@ const mobileNav: Array<{ href: string; icon: JarvisIconName; labelKey: Translati
   { href: "/command-center", icon: "command", labelKey: "manager.navCommandCenter" },
   { href: "/projects", icon: "projects", labelKey: "manager.navProjects" },
   { href: "/team", icon: "team", labelKey: "manager.navTeam" },
+  { href: "/tasks", icon: "tasks", labelKey: "common.tasks" },
   { href: "/schedule", icon: "schedule", labelKey: "nav.schedule" },
   { href: "/ai", icon: "jarvis", labelKey: "manager.navAi" },
   { href: "/payroll", icon: "payroll", labelKey: "manager.navPayroll", financeOnly: true },
 ];
 
 const managerRefreshTables = {
-  command: ["tasks", "projects", "time_events", "media", "messages", "project_assignments"],
+  command: [
+    "tasks",
+    "projects",
+    "profiles",
+    "time_events",
+    "worker_live_locations",
+    "media",
+    "messages",
+    "audit_log",
+    "project_assignments",
+  ],
   projects: ["projects", "tasks", "time_events", "media", "project_assignments", "project_exclusions"],
   team: [
     "profiles",
@@ -141,6 +153,10 @@ export default function ManagerLayout({
     if (AUTH_BYPASS_ENABLED) return;
     const tables = getManagerRealtimeTables(pathname);
     if (tables.length === 0) return;
+    const isCommandCenter = pathname?.startsWith("/command-center") ?? false;
+    const blockedRetryMs = isCommandCenter ? 1200 : 2500;
+    const minDelayMs = isCommandCenter ? 800 : 1800;
+    const maxIntervalMs = isCommandCenter ? 1800 : 4500;
 
     function scheduleRefresh() {
       if (document.visibilityState !== "visible") {
@@ -152,11 +168,11 @@ export default function ManagerLayout({
         liveRefreshTimerRef.current = setTimeout(() => {
           liveRefreshTimerRef.current = null;
           scheduleRefresh();
-        }, 2500);
+        }, blockedRetryMs);
         return;
       }
       const elapsed = Date.now() - liveRefreshLastRunRef.current;
-      const delay = Math.max(1800, 4500 - elapsed);
+      const delay = Math.max(minDelayMs, maxIntervalMs - elapsed);
       liveRefreshTimerRef.current = setTimeout(() => {
         liveRefreshTimerRef.current = null;
         liveRefreshLastRunRef.current = Date.now();

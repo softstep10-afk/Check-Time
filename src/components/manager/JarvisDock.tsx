@@ -49,6 +49,7 @@ type VoiceApiResponse = {
 const DOCK_POSITION_KEY = "check-time.jarvisDock.position";
 const DOCK_MARGIN = 10;
 const MIN_LISTENING_VISIBLE_MS = 450;
+const MAX_SILENCE_RETRIES = 2;
 const VOICE_TEXT = {
   en: {
     start: "Talk live",
@@ -154,6 +155,9 @@ export function JarvisDock() {
   const voiceStateRef = useRef<VoiceState>("idle");
   const voiceAttemptRef = useRef(0);
   const voiceHistoryRef = useRef<AssistantConversationTurn[]>([]);
+  const silenceRetryRef = useRef(0);
+  const voiceRestartTimerRef = useRef<number | null>(null);
+  const startVoiceRef = useRef<() => void>(() => {});
   const dockPositionRef = useRef<DockPosition>({ x: 16, y: 420 });
   const dragStartRef = useRef<{
     pointerId: number;
@@ -200,6 +204,23 @@ export function JarvisDock() {
     setVoiceMessage(cleanStatusText(message));
   }, []);
 
+  const clearVoiceRestart = useCallback(() => {
+    if (voiceRestartTimerRef.current) {
+      window.clearTimeout(voiceRestartTimerRef.current);
+      voiceRestartTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleVoiceRestart = useCallback((attempt: number, delayMs: number) => {
+    clearVoiceRestart();
+    voiceRestartTimerRef.current = window.setTimeout(() => {
+      voiceRestartTimerRef.current = null;
+      if (voiceAttemptRef.current === attempt && voiceStateRef.current === "idle") {
+        startVoiceRef.current();
+      }
+    }, delayMs);
+  }, [clearVoiceRestart]);
+
   const stopAudio = useCallback(() => {
     const audio = audioRef.current;
     if (audio) {
@@ -214,12 +235,14 @@ export function JarvisDock() {
   }, []);
 
   const stopVoice = useCallback((nextState: VoiceState = "idle", nextMessage = "") => {
+    clearVoiceRestart();
+    silenceRetryRef.current = 0;
     voiceAttemptRef.current += 1;
     recognitionRef.current?.abort();
     recognitionRef.current = null;
     stopAudio();
     setVoiceStatus(nextState, nextMessage);
-  }, [setVoiceStatus, stopAudio]);
+  }, [clearVoiceRestart, setVoiceStatus, stopAudio]);
 
   useEffect(() => () => stopVoice(), [stopVoice]);
 
@@ -378,6 +401,7 @@ export function JarvisDock() {
       const transcript = extractTranscript(event.results);
       if (!transcript || voiceAttemptRef.current !== attempt) return;
       recognitionRef.current = null;
+      silenceRetryRef.current = 0;
       setVoiceStatus("thinking", voiceText("jarvisDock.voiceConnected", text.connected));
       void completeVoiceRequest(transcript, attempt, startedAt);
     };
@@ -385,6 +409,16 @@ export function JarvisDock() {
     recognition.onerror = (event) => {
       if (voiceAttemptRef.current !== attempt) return;
       recognitionRef.current = null;
+      if (event.error === "no-speech") {
+        if (silenceRetryRef.current < MAX_SILENCE_RETRIES) {
+          silenceRetryRef.current += 1;
+          setVoiceStatus("idle", text.noSpeech);
+          scheduleVoiceRestart(attempt, 650);
+          return;
+        }
+        stopVoice("idle", text.noSpeech);
+        return;
+      }
       stopVoice("error", speechErrorText(event));
     };
 
@@ -403,6 +437,8 @@ export function JarvisDock() {
       stopVoice("error", message);
     }
   }
+
+  startVoiceRef.current = startVoice;
 
   async function completeVoiceRequest(transcript: string, attempt: number, startedAt: number) {
     try {
@@ -453,11 +489,7 @@ export function JarvisDock() {
         if (voiceAttemptRef.current === attempt) {
           stopAudio();
           setVoiceStatus("idle");
-          window.setTimeout(() => {
-            if (voiceAttemptRef.current === attempt && voiceStateRef.current === "idle") {
-              startVoice();
-            }
-          }, 180);
+          scheduleVoiceRestart(attempt, 180);
         }
       };
       audio.onerror = () => {

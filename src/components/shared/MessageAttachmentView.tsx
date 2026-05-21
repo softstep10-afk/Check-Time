@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { FileText, X } from "lucide-react";
+import { FileText } from "lucide-react";
+import { MediaViewerModal, type ViewerMediaItem } from "@/components/shared/MediaViewerModal";
 import { useTranslation } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/client";
 import { normalizeStoragePath } from "@/lib/task-attachments";
@@ -21,7 +22,7 @@ export function MessageAttachmentView({
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
-  const [lightbox, setLightbox] = useState(false);
+  const [viewerItem, setViewerItem] = useState<ViewerMediaItem | null>(null);
   const [resolvedUrl, setResolvedUrl] = useState(attachment.url);
 
   useEffect(() => {
@@ -45,6 +46,37 @@ export function MessageAttachmentView({
     };
   }, [attachment.storagePath, attachment.url, supabase]);
 
+  function attachmentToViewerItem(): ViewerMediaItem {
+    const fallbackPath = attachment.storagePath || attachment.url || attachment.filename;
+    const mediaType = attachment.type === "image" ? "photo" : attachment.type === "pdf" ? "pdf" : "video";
+    return {
+      id: `message-attachment-${attachment.storagePath || attachment.url || attachment.filename}`,
+      storage_path: fallbackPath,
+      directUrl: attachment.storagePath ? null : resolvedUrl || attachment.url || null,
+      filename: attachment.filename,
+      mime_type:
+        attachment.type === "image"
+          ? "image/*"
+          : attachment.type === "video"
+            ? "video/*"
+            : "application/pdf",
+      media_type: mediaType,
+      metadata: resolvedUrl && !attachment.storagePath ? { direct_url: resolvedUrl } : null,
+    };
+  }
+
+  function openViewer() {
+    if (!resolvedUrl && !attachment.storagePath) return;
+    setViewerItem(attachmentToViewerItem());
+  }
+
+  const viewer = (
+    <MediaViewerModal
+      item={viewerItem}
+      onClose={() => setViewerItem(null)}
+    />
+  );
+
   if (attachment.type === "image") {
     if (!resolvedUrl) {
       return (
@@ -57,7 +89,7 @@ export function MessageAttachmentView({
       <>
         <button
           type="button"
-          onClick={() => setLightbox(true)}
+          onClick={openViewer}
           className="mt-2 block overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-default)]"
         >
           <Image
@@ -69,28 +101,7 @@ export function MessageAttachmentView({
             className="h-auto max-h-[160px] w-full object-cover"
           />
         </button>
-        {lightbox ? (
-          <div
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 p-4"
-            onClick={() => setLightbox(false)}
-          >
-            <button
-              type="button"
-              onClick={() => setLightbox(false)}
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white"
-            >
-              <X size={18} />
-            </button>
-            <Image
-              src={resolvedUrl}
-              alt={attachment.filename}
-              width={1200}
-              height={800}
-              unoptimized
-              className="max-h-[85vh] max-w-[90vw] rounded-[var(--radius-lg)] object-contain"
-            />
-          </div>
-        ) : null}
+        {viewer}
       </>
     );
   }
@@ -104,37 +115,55 @@ export function MessageAttachmentView({
       );
     }
     return (
-      <video
-        src={resolvedUrl}
-        controls
-        playsInline
-        preload="metadata"
-        className="mt-2 max-h-[200px] w-full rounded-[var(--radius-md)] border border-[var(--border-default)]"
-      />
+      <>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={openViewer}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openViewer();
+            }
+          }}
+          className="mt-2 block w-full overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-default)] text-left"
+        >
+          <video
+            src={resolvedUrl}
+            controls
+            playsInline
+            preload="metadata"
+            className="max-h-[200px] w-full"
+          />
+        </div>
+        {viewer}
+      </>
     );
   }
 
   // PDF
   return (
-    <a
-      href={resolvedUrl || "#"}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="mt-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2.5"
-      style={{ background: "var(--bg-primary)" }}
-    >
-      <FileText size={18} className="shrink-0 text-[var(--red)]" />
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
-          {attachment.filename}
+    <>
+      <button
+        type="button"
+        onClick={openViewer}
+        className="mt-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2.5"
+        style={{ background: "var(--bg-primary)" }}
+      >
+        <FileText size={18} className="shrink-0 text-[var(--red)]" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
+            {attachment.filename}
+          </div>
+          <div className="text-[10px] text-[var(--text-muted)]">
+            PDF • {formatFileSize(attachment.size)}
+          </div>
         </div>
-        <div className="text-[10px] text-[var(--text-muted)]">
-          PDF • {formatFileSize(attachment.size)}
-        </div>
-      </div>
-      <span className="shrink-0 text-[10px] font-semibold text-[var(--brand-yellow)]">
-        {t("messages.openFile")}
-      </span>
-    </a>
+        <span className="shrink-0 text-[10px] font-semibold text-[var(--brand-yellow)]">
+          {t("messages.openFile")}
+        </span>
+      </button>
+      {viewer}
+    </>
   );
 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
 import { useTranslation } from "@/lib/i18n";
 function relativeTime(iso: string, lang: "en" | "ru"): string {
   const diff = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -80,6 +81,18 @@ export function NotificationBell({
     }
   });
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const lastSignalAtRef = useRef(0);
+
+  const signal = useCallback((force = false) => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    const now = Date.now();
+    if (!force && now - lastSignalAtRef.current < 45_000) return;
+    lastSignalAtRef.current = now;
+    playNotificationChime();
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate([120, 60, 120]);
+    }
+  }, []);
 
   function deferMessage(id: string) {
     setDeferredIds((prev) => {
@@ -153,6 +166,7 @@ export function NotificationBell({
             !msg.read &&
             !seenIdsRef.current.has(msg.id)
           ) {
+            signal(true);
             onUrgentArrival?.(msg);
           }
           seenIdsRef.current.add(msg.id);
@@ -161,6 +175,12 @@ export function NotificationBell({
       setLoaded(true);
     }
     void load();
+
+    function unlock() {
+      unlockNotificationAudio();
+    }
+    document.addEventListener("pointerdown", unlock, { once: true });
+    document.addEventListener("touchstart", unlock, { once: true });
 
     // Realtime: every new message INSERT for this recipient triggers an
     // immediate refetch so the bell badge + urgent overlay react within
@@ -172,6 +192,16 @@ export function NotificationBell({
         "postgres_changes",
         {
           event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `recipient_id=eq.${profileId}`,
+        },
+        () => { void load(); },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
           schema: "public",
           table: "messages",
           filter: `recipient_id=eq.${profileId}`,
@@ -190,12 +220,18 @@ export function NotificationBell({
     const interval = setInterval(() => void load(), 30_000);
     return () => {
       clearInterval(interval);
+      document.removeEventListener("pointerdown", unlock);
+      document.removeEventListener("touchstart", unlock);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
     };
-  }, [supabase, profileId, onUrgentArrival]);
+  }, [supabase, profileId, onUrgentArrival, signal]);
 
-  const unreadCount = messages.filter((m) => !m.read).length;
+  const unreadMessages = useMemo(
+    () => messages.filter((message) => !message.read),
+    [messages],
+  );
+  const unreadCount = unreadMessages.length;
   // Bell badge folds messages + unseen tasks into a single number so the
   // worker can read "you have N things to look at" at a glance. The
   // dropdown still discriminates the two — there's a "Tasks" link at the
@@ -204,44 +240,78 @@ export function NotificationBell({
 
   // Urgent first, then info/good/task; within each band newest first.
   const sortedMessages = useMemo(() => {
-    return [...messages].sort((a, b) => {
+    return [...unreadMessages].sort((a, b) => {
       const orderDelta = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
       if (orderDelta !== 0) return orderDelta;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [messages]);
+  }, [unreadMessages]);
 
   useEffect(() => {
     if (!loaded) return;
     const unreadMessages = messages.filter((message) => !message.read);
     if (unreadMessages.length === 0 && unseenTaskCount === 0) return;
+    if (unseenTaskCount > 0) {
+      signal();
+    }
     onUnreadReminder?.({
       unreadMessageCount: unreadMessages.length,
       unseenTaskCount,
       latestUnreadMessage: unreadMessages[0] ?? null,
     });
-  }, [loaded, messages, onUnreadReminder, unseenTaskCount]);
+  }, [loaded, messages, onUnreadReminder, signal, unseenTaskCount]);
 
   const markRead = useCallback(
     async (id: string) => {
       setMessages((prev) =>
         prev.map((m) => (m.id === id ? { ...m, read: true } : m)),
       );
+      setDeferredIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        if (typeof window !== "undefined" && profileId) {
+          try {
+            window.localStorage.setItem(
+              `check-time-defer-${profileId}`,
+              JSON.stringify([...next]),
+            );
+          } catch {
+            // Ignore quota errors.
+          }
+        }
+        return next;
+      });
       await supabase.from("messages").update({ read: true }).eq("id", id);
     },
-    [supabase],
+    [profileId, supabase],
   );
 
   const markAllRead = useCallback(async () => {
     const unreadIds = messages.filter((m) => !m.read).map((m) => m.id);
     if (unreadIds.length === 0) return;
     setMessages((prev) => prev.map((m) => ({ ...m, read: true })));
+    setDeferredIds((prev) => {
+      const next = new Set(prev);
+      for (const id of unreadIds) next.delete(id);
+      if (typeof window !== "undefined" && profileId) {
+        try {
+          window.localStorage.setItem(
+            `check-time-defer-${profileId}`,
+            JSON.stringify([...next]),
+          );
+        } catch {
+          // Ignore quota errors.
+        }
+      }
+      return next;
+    });
     const { error } = await supabase
       .from("messages")
       .update({ read: true })
       .in("id", unreadIds);
     if (error) console.warn("markAllRead failed:", error.message);
-  }, [messages, supabase]);
+  }, [messages, profileId, supabase]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

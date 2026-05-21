@@ -1253,6 +1253,26 @@ export function ProjectsPage({
                   ? t("projects.findingLocationAsAddress")
                   : t("projects.useLocationAsAddress")}
               </button>
+              <button
+                type="button"
+                onClick={() =>
+                  fillCoordinatesFromAddress(
+                    "create",
+                    createFormRef,
+                    createLatRef,
+                    createLngRef,
+                    setCreateDeviceLocation,
+                    () => setCreateCoordinatesConfirmed(false),
+                    setCreateAddressLookup,
+                    setCreateAddressLookupError,
+                  )
+                }
+                disabled={geocodingTarget === "create"}
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+              >
+                {geocodingTarget === "create" ? t("common.loading") : t("projects.findGpsByAddress")}
+              </button>
             </div>
             {createAddressLookupError ? (
               <div
@@ -1796,6 +1816,26 @@ export function ProjectsPage({
                     {reverseLookupTarget === "edit"
                       ? t("projects.findingLocationAsAddress")
                       : t("projects.useLocationAsAddress")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      fillCoordinatesFromAddress(
+                        "edit",
+                        editFormRef,
+                        editLatRef,
+                        editLngRef,
+                        setEditDeviceLocation,
+                        () => setEditCoordinatesConfirmed(false),
+                        setEditAddressLookup,
+                        setEditAddressLookupError,
+                      )
+                    }
+                    disabled={geocodingTarget === "edit"}
+                    className="inline-flex items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                    style={{ borderColor: "var(--border-default)", color: "var(--brand-yellow)" }}
+                  >
+                    {geocodingTarget === "edit" ? t("common.loading") : t("projects.findGpsByAddress")}
                   </button>
                 </div>
                 {editAddressLookupError ? (

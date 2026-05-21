@@ -182,6 +182,47 @@ describe("countUnseenTasks", () => {
     expect(result.count).toBe(0);
   });
 
+  it("does not count tasks already seen by this worker in task metadata", () => {
+    const tasks = [
+      makeTask({
+        id: "seen",
+        assigned_to: "w1",
+        project_id: "p1",
+        created_at: "2026-04-02T10:00:00Z",
+        metadata: {
+          seen_by: {
+            w1: "2026-04-02T10:05:00Z",
+          },
+        },
+      }),
+    ];
+
+    const result = countUnseenTasks(tasks, "2026-04-01T00:00:00Z", args);
+
+    expect(result.count).toBe(0);
+    expect(result.latestCreatedAt).toBe("2026-04-02T10:00:00Z");
+  });
+
+  it("still counts tasks only seen by another worker", () => {
+    const tasks = [
+      makeTask({
+        id: "seen-by-other",
+        assigned_to: "w1",
+        project_id: "p1",
+        created_at: "2026-04-02T10:00:00Z",
+        metadata: {
+          seen_by: {
+            w2: "2026-04-02T10:05:00Z",
+          },
+        },
+      }),
+    ];
+
+    const result = countUnseenTasks(tasks, "2026-04-01T00:00:00Z", args);
+
+    expect(result.count).toBe(1);
+  });
+
   it("returns latestCreatedAt across all visible tasks even when none are new", () => {
     // Used by the worker shell to seed lastSeenAt on first load so the
     // initial flood of historical tasks doesn't trigger a banner.

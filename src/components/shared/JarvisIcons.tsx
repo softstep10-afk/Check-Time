@@ -6,6 +6,7 @@ export type JarvisIconName =
   | "overview"
   | "command"
   | "projects"
+  | "tasks"
   | "team"
   | "schedule"
   | "jarvis"
@@ -41,6 +42,15 @@ const glyphs: Record<JarvisIconName, ReactNode> = {
     <>
       <path d="M4 8.5h6l1.5 2H20v7.5H4z" />
       <path d="M7 14h10" />
+    </>
+  ),
+  tasks: (
+    <>
+      <path d="M8 5h8" />
+      <path d="M9 3h6v4H9z" />
+      <path d="M6 6h12v14H6z" />
+      <path d="M9 12h1.5M13 12h3" />
+      <path d="M9 16h1.5M13 16h3" />
     </>
   ),
   team: (

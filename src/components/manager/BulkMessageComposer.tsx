@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Send, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { logAudit } from "@/lib/audit";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import {
@@ -12,6 +14,8 @@ import {
 } from "@/lib/message-types";
 
 type CrewMember = { id: string; name: string; role: string };
+type ProjectOption = { id: string; name: string; status?: string | null };
+type InsertedMessage = { id: string; recipient_id: string };
 
 type HistoryRow = {
   id: string;
@@ -41,21 +45,27 @@ export function BulkMessageComposer({
   orgId,
   senderId,
   senderName,
+  senderRole = "manager",
   crew,
+  projects = [],
   embedded = false,
 }: {
   orgId: string;
   senderId: string;
   senderName: string;
+  senderRole?: string;
   crew: CrewMember[];
+  projects?: ProjectOption[];
   embedded?: boolean;
 }) {
   const { t, locale } = useTranslation();
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [sendToAll, setSendToAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [text, setText] = useState("");
   const [priority, setPriority] = useState<MessagePriority>("info");
+  const [taskProjectId, setTaskProjectId] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -126,27 +136,106 @@ export function BulkMessageComposer({
 
     // Chunk to 50 per insert to keep under request size on bigger orgs.
     let failures = 0;
+    const insertedMessages: InsertedMessage[] = [];
     for (let i = 0; i < rows.length; i += 50) {
-      const { error } = await supabase.from("messages").insert(rows.slice(i, i + 50));
+      const chunk = rows.slice(i, i + 50);
+      let result = await supabase
+        .from("messages")
+        .insert(chunk)
+        .select("id, recipient_id");
+      let error = result.error;
+      if (error && /column .* priority/i.test(error.message)) {
+        const fallbackChunk = chunk.map((row) => ({
+          org_id: row.org_id,
+          sender_id: row.sender_id,
+          recipient_id: row.recipient_id,
+          text: row.text,
+          color: row.color,
+          metadata: row.metadata,
+        }));
+        result = await supabase
+          .from("messages")
+          .insert(fallbackChunk)
+          .select("id, recipient_id");
+        error = result.error;
+      }
       if (error) failures += error ? 1 : 0;
+      else insertedMessages.push(...((result.data ?? []) as InsertedMessage[]));
     }
 
-    setSending(false);
     if (failures > 0) {
+      setSending(false);
       setMessage({
         kind: "err",
         text: `${failures} / ${Math.ceil(rows.length / 50)} ${t("common.errorTryAgain").toLowerCase()}`,
       });
       return;
     }
+
+    if (priority === "task") {
+      const taskTitle = text.trim().length > 140
+        ? `${text.trim().slice(0, 137)}...`
+        : text.trim();
+      const taskRows = insertedMessages.map((message) => ({
+        org_id: orgId,
+        project_id: taskProjectId || null,
+        assigned_to: message.recipient_id,
+        assigned_by: senderId,
+        title: taskTitle,
+        description: text.trim(),
+        priority: "medium",
+        status: "pending",
+        due_date: null,
+        metadata: {
+          source: "broadcast_task",
+          message_id: message.id,
+          broadcast: sendToAll,
+        },
+      }));
+      const { data: insertedTasks, error: taskError } = await supabase
+        .from("tasks")
+        .insert(taskRows)
+        .select("id");
+
+      if (taskError) {
+        setSending(false);
+        setMessage({
+          kind: "err",
+          text: t("messages.taskCreateFailed").replace("{error}", taskError.message),
+        });
+        return;
+      }
+
+      void logAudit({
+        orgId,
+        actorId: senderId,
+        actorName: senderName,
+        actorRole: senderRole,
+        action: "tasks_created_from_message",
+        targetType: "task",
+        beforeData: null,
+        afterData: {
+          project_id: taskProjectId || null,
+          recipient_ids: insertedMessages.map((message) => message.recipient_id),
+          task_ids: ((insertedTasks ?? []) as Array<{ id: string }>).map((task) => task.id),
+          count: insertedMessages.length,
+        },
+      });
+    }
+
+    setSending(false);
     setMessage({
       kind: "ok",
-      text: t("messages.sentTo").replace("{n}", String(rows.length)),
+      text: priority === "task"
+        ? t("messages.tasksCreated").replace("{n}", String(rows.length))
+        : t("messages.sentTo").replace("{n}", String(rows.length)),
     });
     setText("");
+    setTaskProjectId("");
     setSelectedIds(new Set());
     setSendToAll(false);
     void loadHistory();
+    router.refresh();
   }
 
   return (
@@ -258,6 +347,26 @@ export function BulkMessageComposer({
               })}
             </div>
           </fieldset>
+
+          {priority === "task" && projects.length > 0 ? (
+            <label className="block space-y-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                {t("messages.taskProject")}
+              </span>
+              <select
+                value={taskProjectId}
+                onChange={(event) => setTaskProjectId(event.target.value)}
+                className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="">{t("messages.taskProjectNone")}</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <TextInputWithVoice
             multiline

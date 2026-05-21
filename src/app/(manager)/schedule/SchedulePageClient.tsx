@@ -840,6 +840,15 @@ export default function SchedulePageClient() {
 
   const selectedDayEntries = selectedDay ? entriesByDay.get(selectedDay.iso) ?? [] : [];
 
+  useEffect(() => {
+    if (!selectedDay && !selectedEntry) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [selectedDay, selectedEntry]);
+
   const projectDeadlines = useMemo(() => {
     return projects
       .filter((project) => project.end_date && project.status !== "completed")
@@ -1514,7 +1523,7 @@ export default function SchedulePageClient() {
         >
           <div
             data-live-refresh-blocker="true"
-            className="surface-card max-h-[calc(100dvh-1.5rem)] w-full max-w-[900px] overflow-y-auto p-4 pb-24 sm:pb-4"
+            className="surface-card w-full max-w-[900px] p-4 pb-24 sm:pb-4"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-3">

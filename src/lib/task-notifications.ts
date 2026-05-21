@@ -42,6 +42,15 @@ export interface TaskLike {
   metadata?: Record<string, unknown> | null;
 }
 
+function hasWorkerSeenTask(task: TaskLike, profileId: string): boolean {
+  const seenBy = task.metadata?.seen_by;
+  if (!seenBy || typeof seenBy !== "object" || Array.isArray(seenBy)) {
+    return false;
+  }
+  const value = (seenBy as Record<string, unknown>)[profileId];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
 /**
  * True when this task should appear on the worker's queue. Mirrors the
  * server-side filter in worker-data.ts: personal tasks (assigned_to=me)
@@ -95,6 +104,7 @@ export function countUnseenTasks(
     if (!latestCreatedAt || task.created_at > latestCreatedAt) {
       latestCreatedAt = task.created_at;
     }
+    if (hasWorkerSeenTask(task, args.profileId)) continue;
     if (lastSeenIso && task.created_at <= lastSeenIso) continue;
     count += 1;
   }
