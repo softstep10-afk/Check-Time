@@ -456,6 +456,24 @@ export function ManagerTasksPage({
                               <span className="font-mono">{t("tasks.due")} {task.due_date}</span>
                             </>
                           ) : null}
+                          {rowAudit.seenByText ? (
+                            <>
+                              <span>·</span>
+                              <span>
+                                {t("tasks.rowSeenByLabel")}: {rowAudit.seenByText}
+                                {rowAudit.seenAtText ? ` · ${rowAudit.seenAtText}` : ""}
+                              </span>
+                            </>
+                          ) : null}
+                          {rowAudit.startedByText ? (
+                            <>
+                              <span>·</span>
+                              <span>
+                                {t("tasks.rowStartedByLabel")}: {rowAudit.startedByText}
+                                {rowAudit.startedAtText ? ` · ${rowAudit.startedAtText}` : ""}
+                              </span>
+                            </>
+                          ) : null}
                         </div>
                         {effectiveStatus === "done" ? (
                           <div

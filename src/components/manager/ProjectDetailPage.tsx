@@ -1947,6 +1947,18 @@ export function ProjectDetailPage({
                     <div className="mt-1 text-xs text-[var(--text-secondary)]">
                       {rowAudit.assignedToText}
                     </div>
+                    {rowAudit.seenByText ? (
+                      <div className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">
+                        {t("tasks.rowSeenByLabel")}: {rowAudit.seenByText}
+                        {rowAudit.seenAtText ? ` · ${rowAudit.seenAtText}` : ""}
+                      </div>
+                    ) : null}
+                    {rowAudit.startedByText ? (
+                      <div className="mt-1 text-[11px] font-medium text-[var(--text-muted)]">
+                        {t("tasks.rowStartedByLabel")}: {rowAudit.startedByText}
+                        {rowAudit.startedAtText ? ` · ${rowAudit.startedAtText}` : ""}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                     <span

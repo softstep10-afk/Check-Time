@@ -48,14 +48,14 @@ describe("getManagerTaskRowAuditText", () => {
     expect(row.completedAtText).toBe("formatted 2026-05-01T10:30:00Z");
   });
 
-  it("keeps a claimed common task visually unassigned while showing the finisher", () => {
+  it("shows who claimed a common task before completion", () => {
     const row = getManagerTaskRowAuditText(
       {
-        status: "done",
+        status: "pending",
         assigned_to: "worker-2",
         assigneeName: "Vasya",
-        completed_by: "worker-2",
-        completed_at: "2026-05-01T10:30:00Z",
+        completed_by: null,
+        completed_at: null,
         metadata: {
           claimed_from_unassigned: true,
           original_assigned_to: null,
@@ -66,8 +66,54 @@ describe("getManagerTaskRowAuditText", () => {
       labels,
     );
 
-    expect(row.assignedToText).toBe("Not assigned");
-    expect(row.completedByText).toBe("Vasya");
+    expect(row.assignedToText).toBe("Vasya");
+    expect(row.completedByText).toBeNull();
+  });
+
+  it("shows who has seen an open task", () => {
+    const row = getManagerTaskRowAuditText(
+      {
+        status: "pending",
+        assigned_to: "worker-2",
+        assigneeName: "Vasya",
+        completed_by: null,
+        completed_at: null,
+        metadata: {
+          seen_by: {
+            "worker-2": "2026-05-01T11:00:00Z",
+          },
+        },
+      },
+      new Map([["worker-2", "Vasya"]]),
+      labels,
+    );
+
+    expect(row.assignedToText).toBe("Vasya");
+    expect(row.seenByText).toBe("Vasya");
+    expect(row.seenAtText).toBe("formatted 2026-05-01T11:00:00Z");
+    expect(row.completedByText).toBeNull();
+  });
+
+  it("shows who started an in-progress task", () => {
+    const row = getManagerTaskRowAuditText(
+      {
+        status: "in_progress",
+        assigned_to: "worker-2",
+        assigneeName: "Vasya",
+        completed_by: null,
+        completed_at: null,
+        metadata: {
+          started_by: "worker-2",
+          started_at: "2026-05-01T12:00:00Z",
+        },
+      },
+      new Map([["worker-2", "Vasya"]]),
+      labels,
+    );
+
+    expect(row.startedByText).toBe("Vasya");
+    expect(row.startedAtText).toBe("formatted 2026-05-01T12:00:00Z");
+    expect(row.completedByText).toBeNull();
   });
 
   it("shows a visible unknown fallback for done tasks missing completed_by", () => {

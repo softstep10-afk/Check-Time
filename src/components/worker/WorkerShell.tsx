@@ -62,6 +62,7 @@ import {
   saveTaskLastSeen,
   shouldBlockCompletionFileUpload,
 } from "@/lib/task-notifications";
+import { isEffectiveOpenTask } from "@/lib/task-status";
 import { uploadTaskAttachment } from "@/lib/task-attachments";
 import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
@@ -829,11 +830,37 @@ export function WorkerShell({
     }).count;
   }, [shell.tasks, taskLastSeenAt, shell.profile.id, visibleProjectIds]);
 
+  const taskSeenSnapshotRef = useRef({
+    profileId: shell.profile.id,
+    tasks: shell.tasks,
+  });
+
+  useEffect(() => {
+    taskSeenSnapshotRef.current = {
+      profileId: shell.profile.id,
+      tasks: shell.tasks,
+    };
+  }, [shell.profile.id, shell.tasks]);
+
   const markTasksSeen = useCallback(() => {
     const now = new Date().toISOString();
-    saveTaskLastSeen(shell.profile.id, now);
+    const snapshot = taskSeenSnapshotRef.current;
+    saveTaskLastSeen(snapshot.profileId, now);
     setTaskLastSeenAt(now);
-  }, [shell.profile.id]);
+    const visibleOpenTaskIds = snapshot.tasks
+      .filter((task) => isEffectiveOpenTask(task))
+      .map((task) => task.id);
+    if (visibleOpenTaskIds.length > 0) {
+      fetch("/api/worker/tasks/seen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskIds: visibleOpenTaskIds }),
+        keepalive: true,
+      }).catch((error) => {
+        console.warn("markTasksSeen server update failed:", error);
+      });
+    }
+  }, []);
 
   useEffect(() => {
     const next = new Set(knownTaskIdsRef.current);

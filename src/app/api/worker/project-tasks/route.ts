@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Task, TaskPriority } from "@/types/database";
@@ -127,6 +128,20 @@ export async function POST(request: NextRequest) {
         { status: 500 },
       );
     }
+
+    revalidatePath("/tasks");
+    revalidatePath("/projects");
+    revalidatePath("/overview");
+    revalidatePath("/command-center");
+    revalidatePath("/schedule");
+    revalidatePath("/my-tasks");
+    revalidatePath("/my-projects");
+    revalidatePath("/project");
+    revalidatePath("/clock");
+    revalidatePath("/crew");
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath(`/project/${projectId}`);
+    revalidatePath(`/team/${user.id}`);
 
     return NextResponse.json({ ok: true, task });
   } catch (error) {

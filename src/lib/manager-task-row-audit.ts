@@ -13,6 +13,10 @@ export type ManagerTaskRowAuditInput = {
 
 export type ManagerTaskRowAuditText = {
   assignedToText: string;
+  seenByText: string | null;
+  seenAtText: string | null;
+  startedByText: string | null;
+  startedAtText: string | null;
   completedByText: string | null;
   completedAtText: string | null;
 };
@@ -41,10 +45,6 @@ export function getManagerTaskAssignedToText(
         ? null
         : undefined;
 
-  if (claimedFromUnassigned && originalAssignedTo === null) {
-    return labels.unassigned;
-  }
-
   const assignedTo = claimedFromUnassigned && originalAssignedTo
     ? originalAssignedTo
     : task.assigned_to;
@@ -64,10 +64,53 @@ export function getManagerTaskRowAuditText(
   },
 ): ManagerTaskRowAuditText {
   const assignedToText = getManagerTaskAssignedToText(task, profileNames, labels);
+  const meta = asRecord(task.metadata);
+  const seenBy = asRecord(meta?.seen_by);
+  const assignedSeenValue = task.assigned_to ? seenBy?.[task.assigned_to] : null;
+  const assignedSeenAt =
+    typeof assignedSeenValue === "string"
+      ? assignedSeenValue
+      : null;
+  const seenById =
+    typeof meta?.last_seen_by === "string"
+      ? meta.last_seen_by
+      : assignedSeenAt
+        ? task.assigned_to ?? null
+        : null;
+  const seenAt =
+    typeof meta?.last_seen_at === "string"
+      ? meta.last_seen_at
+      : assignedSeenAt;
+  const startedById =
+    typeof meta?.started_by === "string"
+      ? meta.started_by
+      : typeof meta?.delivery_started_by === "string"
+        ? meta.delivery_started_by
+        : typeof meta?.claimed_by === "string"
+          ? meta.claimed_by
+          : getEffectiveTaskStatus(task) === "in_progress"
+            ? task.assigned_to ?? null
+            : null;
+  const startedAt =
+    typeof meta?.started_at === "string"
+      ? meta.started_at
+      : typeof meta?.delivery_started_at === "string"
+        ? meta.delivery_started_at
+        : typeof meta?.claimed_at === "string"
+          ? meta.claimed_at
+          : null;
+  const startedByText = startedById
+    ? profileNames.get(startedById) ?? formatShortId(startedById)
+    : null;
+  const startedAtText = startedAt ? labels.formatCompletedAt?.(startedAt) ?? startedAt : null;
 
   if (getEffectiveTaskStatus(task) !== "done") {
     return {
       assignedToText,
+      seenByText: seenById ? profileNames.get(seenById) ?? formatShortId(seenById) : null,
+      seenAtText: seenAt ? labels.formatCompletedAt?.(seenAt) ?? seenAt : null,
+      startedByText,
+      startedAtText,
       completedByText: null,
       completedAtText: null,
     };
@@ -77,6 +120,10 @@ export function getManagerTaskRowAuditText(
 
   return {
     assignedToText,
+    seenByText: seenById ? profileNames.get(seenById) ?? formatShortId(seenById) : null,
+    seenAtText: seenAt ? labels.formatCompletedAt?.(seenAt) ?? seenAt : null,
+    startedByText: null,
+    startedAtText: null,
     completedByText: audit.completedByName
       ?? (audit.completedById ? formatShortId(audit.completedById) : labels.unknown),
     completedAtText: audit.completedAt

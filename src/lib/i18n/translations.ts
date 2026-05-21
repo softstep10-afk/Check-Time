@@ -1752,6 +1752,8 @@ export const translations = {
   "tasks.unknown": { en: "Unknown", ru: "Unknown" },
   "tasks.assignedToLabel": { en: "Assigned to", ru: "Назначено" },
   "tasks.rowAssignedLabel": { en: "Assigned to", ru: "Назначено" },
+  "tasks.rowSeenByLabel": { en: "Seen by", ru: "Прочитано" },
+  "tasks.rowStartedByLabel": { en: "Started by", ru: "Взял в работу" },
   "tasks.rowCompletedByLabel": { en: "Completed by", ru: "Выполнено" },
   "tasks.rowCompletedAtLabel": { en: "When", ru: "Когда" },
   "tasks.generalTask": { en: "General", ru: "Общее" },

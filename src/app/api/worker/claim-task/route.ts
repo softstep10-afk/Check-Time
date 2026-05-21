@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { logAuditServer } from "@/lib/audit-server";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import type { Task } from "@/types/database";
 
@@ -59,12 +61,13 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, org_id, role, project_access_mode")
+      .select("id, org_id, role, project_access_mode, name")
       .eq("id", user.id)
       .maybeSingle<{
         id: string;
         org_id: string;
         role: string;
+        name: string;
         project_access_mode: "list" | "all_active" | null;
       }>();
     if (profileError || !profile) {
@@ -231,6 +234,46 @@ export async function POST(request: NextRequest) {
         { error: "Task is already assigned or closed." },
         { status: 409 },
       );
+    }
+
+    await logAuditServer(admin, {
+      orgId: profile.org_id,
+      actorId: profile.id,
+      actorName: profile.name,
+      actorRole: profile.role,
+      action: "task_claimed",
+      targetType: "task",
+      targetId: taskId,
+      beforeData: {
+        assigned_to: task.assigned_to,
+        status: task.status,
+        metadata: taskMetadata,
+      },
+      afterData: {
+        assigned_to: user.id,
+        status: updated.status,
+        claimed_by: user.id,
+        claimed_at: claimedAt,
+        project_id: task.project_id,
+        title: updated.title,
+        metadata: nextMetadata,
+      },
+    });
+
+    revalidatePath("/tasks");
+    revalidatePath("/projects");
+    revalidatePath("/overview");
+    revalidatePath("/command-center");
+    revalidatePath("/schedule");
+    revalidatePath("/my-tasks");
+    revalidatePath("/my-projects");
+    revalidatePath("/project");
+    revalidatePath("/clock");
+    revalidatePath("/crew");
+    revalidatePath(`/team/${user.id}`);
+    if (task.project_id) {
+      revalidatePath(`/projects/${task.project_id}`);
+      revalidatePath(`/project/${task.project_id}`);
     }
 
     return NextResponse.json({ ok: true, task: updated });
