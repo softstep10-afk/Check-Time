@@ -18,7 +18,8 @@ import {
   isJarvisMemoryWriter,
   normalizeJarvisAttachments,
 } from "@/lib/ai/jarvis-memory";
-import type { AssistantConversationTurn } from "@/lib/ai/types";
+import { logJarvisPreparedActions } from "@/lib/ai/prepared-action-audit";
+import type { AssistantConversationTurn, AssistantResult } from "@/lib/ai/types";
 import type { DailyReport } from "@/types/database";
 
 export const runtime = "nodejs";
@@ -203,7 +204,7 @@ export async function POST(request: NextRequest) {
     const snapshot = buildAssistantSnapshot(managerData, reports, {
       includeFinancials: ownerJarvisAccess,
     });
-    const assistant = memorySaved
+    const assistant: AssistantResult = memorySaved
       ? {
           answer: /[а-яё]/i.test(question)
             ? "Принял. Правило сохранено."
@@ -218,6 +219,14 @@ export async function POST(request: NextRequest) {
           ...(await answerManagerAssistant(question, snapshot, { attachments, history })),
           memorySaved,
         };
+    if (auth.kind === "authenticated") {
+      await logJarvisPreparedActions(supabase, {
+        profile: auth.context.profile,
+        actions: assistant.actions,
+        route: "/api/ai/voice",
+        question,
+      });
+    }
 
     if (!hasGoogleTtsCredentials()) {
       return NextResponse.json({

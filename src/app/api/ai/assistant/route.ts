@@ -13,6 +13,7 @@ import {
   isJarvisMemoryWriter,
   normalizeJarvisAttachments,
 } from "@/lib/ai/jarvis-memory";
+import { logJarvisPreparedActions } from "@/lib/ai/prepared-action-audit";
 import type { DailyReport } from "@/types/database";
 import type { AssistantConversationTurn } from "@/lib/ai/types";
 
@@ -136,6 +137,14 @@ export async function POST(request: NextRequest) {
       });
     }
     const assistant = await answerManagerAssistant(question, snapshot, { attachments, history });
+    if (auth.kind === "authenticated") {
+      await logJarvisPreparedActions(supabase, {
+        profile: auth.context.profile,
+        actions: assistant.actions,
+        route: "/api/ai/assistant",
+        question,
+      });
+    }
 
     return NextResponse.json({
       ok: true,
