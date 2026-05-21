@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
       const { data: message, error: messageError } = await adminClient
         .from("messages")
-        .select("id, org_id, sender_id, recipient_id")
+        .select("id, org_id, sender_id, recipient_id, metadata")
         .eq("id", messageId)
         .eq("org_id", profile.org_id)
         .maybeSingle<{
@@ -76,6 +76,7 @@ export async function POST(request: NextRequest) {
           org_id: string;
           sender_id: string;
           recipient_id: string;
+          metadata: Record<string, unknown> | null;
         }>();
 
       if (messageError) {
@@ -101,6 +102,20 @@ export async function POST(request: NextRequest) {
           attachment_filename: readText(item.attachmentFilename) || null,
         },
       });
+      const nextMetadata = {
+        ...(message.metadata ?? {}),
+        priority: "task",
+        task_id: task.id,
+        task_created_at: new Date().toISOString(),
+      };
+      const { error: linkError } = await adminClient
+        .from("messages")
+        .update({ metadata: nextMetadata })
+        .eq("id", message.id)
+        .eq("org_id", profile.org_id);
+      if (linkError) {
+        console.warn("message task link update failed:", linkError.message);
+      }
       tasks.push(task);
     }
 

@@ -147,6 +147,7 @@ export function NotificationBell({
           priority: inferPriority(r),
           read: r.read,
           created_at: r.created_at,
+          metadata: r.metadata ?? null,
           attachment: r.attachment
             ? {
                 url: (r.attachment as Record<string, string>).url ?? "",

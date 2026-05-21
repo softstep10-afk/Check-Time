@@ -12,6 +12,7 @@ export type ServerTaskDispatchInput = {
   projectId?: string | null;
   assignedTo?: string | null;
   priority?: TaskPriority;
+  dueDate?: string | null;
   source: string;
   messageId?: string | null;
   metadata?: Record<string, unknown>;
@@ -100,6 +101,7 @@ export async function createManagerTask(
   const assignedTo = trimText(input.assignedTo) || null;
   const projectId = trimText(input.projectId) || null;
   const priority = input.priority ?? "medium";
+  const dueDate = trimText(input.dueDate) || null;
 
   await assertProfileTarget(adminClient, input.orgId, assignedTo);
   await assertProjectTarget(adminClient, input.orgId, projectId);
@@ -124,7 +126,7 @@ export async function createManagerTask(
       description,
       priority,
       status: "pending",
-      due_date: null,
+      due_date: dueDate,
       metadata,
     })
     .select("id, title, project_id, assigned_to")

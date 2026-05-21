@@ -386,6 +386,21 @@ export function ProjectDetailPage({
     () => buildProfileNameMap([...assignedProfiles, ...availableProfiles, ...(completionProfiles ?? [])]),
     [assignedProfiles, availableProfiles, completionProfiles],
   );
+  const taskAssigneeProjectProfiles = useMemo(
+    () =>
+      assignedProfiles
+        .filter((profile) => profile.is_active && !profile.deleted_at)
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    [assignedProfiles],
+  );
+  const taskAssigneeOtherProfiles = useMemo(() => {
+    const assignedIds = new Set(taskAssigneeProjectProfiles.map((profile) => profile.id));
+    return availableProfiles
+      .filter((profile) => profile.is_active && !profile.deleted_at && !assignedIds.has(profile.id))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [availableProfiles, taskAssigneeProjectProfiles]);
+  const hasTaskAssignees =
+    taskAssigneeProjectProfiles.length > 0 || taskAssigneeOtherProfiles.length > 0;
 
   // 3-button project media upload (photo / video / pdf). Separate from
   // receipts (no store/amount metadata) and from task attachments
@@ -1006,39 +1021,40 @@ export function ProjectDetailPage({
       uploadedMediaIds.push(result.mediaId);
     }
 
-    console.log("[task-attach] task insert begin", {
-      hasAttachments: uploadedMediaIds.length > 0,
-      attachmentCount: uploadedMediaIds.length,
-    });
-    const { data: insertedTask, error } = await supabase
-      .from("tasks")
-      .insert({
-        org_id: orgId,
-        project_id: project.id,
-        assigned_to: assignedTo || null,
-        assigned_by: managerId,
+    const response = await fetch("/api/manager/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         title,
         description: description || null,
+        projectId: project.id,
+        assignedTo: assignedTo || null,
         priority,
-        status: "pending",
-        due_date: dueDate || null,
-        metadata: uploadedMediaIds.length > 0
-          ? { attachment_media_ids: uploadedMediaIds }
-          : {},
-      })
-      .select("id")
-      .single<{ id: string }>();
+        dueDate: dueDate || null,
+        attachmentMediaIds: uploadedMediaIds,
+        source: "project_detail",
+      }),
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | { task?: { id: string } }
+      | { error?: string }
+      | null;
 
-    if (error || !insertedTask) {
-      console.error("[task-attach] task insert FAIL", error);
-      setMessage(`task-insert: ${error?.message ?? "no data"}`);
+    const insertedTaskId =
+      payload && "task" in payload && payload.task?.id ? payload.task.id : null;
+    if (!response.ok || !insertedTaskId) {
+      const errorMessage =
+        payload && "error" in payload && typeof payload.error === "string"
+          ? payload.error
+          : `Request failed (${response.status})`;
+      console.error("[task-attach] task create route FAIL", errorMessage);
+      setMessage(errorMessage);
       setBusyKey(null);
       return;
     }
-    console.log("[task-attach] task insert ok", { taskId: insertedTask.id });
 
     if (uploadedMediaIds.length > 0) {
-      void linkMediaToTask(supabase, insertedTask.id, uploadedMediaIds);
+      void linkMediaToTask(supabase, insertedTaskId, uploadedMediaIds);
     }
 
     form.reset();
@@ -1047,25 +1063,6 @@ export function ProjectDetailPage({
     setTaskComposerOpen(false);
     setBusyKey(null);
     setMessage(t("projectDetail.taskCreated"));
-    void logAudit({
-      orgId,
-      actorId: managerId,
-      actorName: managerName,
-      actorRole: managerRole,
-      action: "task_created",
-      targetType: "task",
-      targetId: insertedTask.id,
-      beforeData: null,
-      afterData: {
-        title,
-        project_id: project.id,
-        project_name: project.name,
-        assigned_to: assignedTo || null,
-        priority,
-        due_date: dueDate || null,
-        attachment_media_ids: uploadedMediaIds,
-      },
-    });
     router.refresh();
   }
 
@@ -1823,25 +1820,48 @@ export function ProjectDetailPage({
               placeholder={t("projectDetail.taskDescription")}
               className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
-            <div className="grid gap-3 sm:grid-cols-3">
-              <select
-                name="assigned_to"
-                defaultValue=""
-                aria-label={t("projectDetail.assignToWorkerOptional")}
-                title={t("projectDetail.assignToWorkerOptional")}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="">{t("projectDetail.assignToWorkerOptional")}</option>
-                {assignedProfiles.map((worker) => (
-                  <option key={worker.id} value={worker.id}>
-                    {worker.name}
-                  </option>
-                ))}
-              </select>
+            <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_minmax(140px,0.8fr)_minmax(150px,0.8fr)]">
+              <label className="grid min-w-0 gap-1">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  {t("tasks.assignedToLabel")}
+                </span>
+                <select
+                  name="assigned_to"
+                  defaultValue=""
+                  aria-label={t("projectDetail.assignToWorkerOptional")}
+                  title={t("projectDetail.assignToWorkerOptional")}
+                  className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                >
+                  <option value="">{t("common.unassigned")}</option>
+                  {taskAssigneeProjectProfiles.length > 0 ? (
+                    <optgroup label={t("projectDetail.taskAssigneeProjectCrew")}>
+                      {taskAssigneeProjectProfiles.map((worker) => (
+                        <option key={worker.id} value={worker.id}>
+                          {worker.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                  {taskAssigneeOtherProfiles.length > 0 ? (
+                    <optgroup label={t("projectDetail.taskAssigneeAllActive")}>
+                      {taskAssigneeOtherProfiles.map((worker) => (
+                        <option key={worker.id} value={worker.id}>
+                          {worker.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+                {!hasTaskAssignees ? (
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    {t("projectDetail.noActiveTaskAssignees")}
+                  </span>
+                ) : null}
+              </label>
               <select
                 name="priority"
                 defaultValue="medium"
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               >
                 <option value="low">{t("projectDetail.low")}</option>
                 <option value="medium">{t("projectDetail.medium")}</option>
@@ -2666,25 +2686,48 @@ export function ProjectDetailPage({
                 placeholder={t("projectDetail.taskDescription")}
                 className="min-h-[100px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
-              <div className="grid gap-3 sm:grid-cols-3">
-                <select
-                  name="assigned_to"
-                  defaultValue=""
-                  aria-label={t("projectDetail.assignToWorkerOptional")}
-                  title={t("projectDetail.assignToWorkerOptional")}
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
-                >
-                  <option value="">{t("projectDetail.assignToWorkerOptional")}</option>
-                  {assignedProfiles.map((worker) => (
-                    <option key={worker.id} value={worker.id}>
-                      {worker.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="grid gap-3 lg:grid-cols-[minmax(220px,1.4fr)_minmax(140px,0.8fr)_minmax(150px,0.8fr)]">
+                <label className="grid min-w-0 gap-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                    {t("tasks.assignedToLabel")}
+                  </span>
+                  <select
+                    name="assigned_to"
+                    defaultValue=""
+                    aria-label={t("projectDetail.assignToWorkerOptional")}
+                    title={t("projectDetail.assignToWorkerOptional")}
+                    className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  >
+                    <option value="">{t("common.unassigned")}</option>
+                    {taskAssigneeProjectProfiles.length > 0 ? (
+                      <optgroup label={t("projectDetail.taskAssigneeProjectCrew")}>
+                        {taskAssigneeProjectProfiles.map((worker) => (
+                          <option key={worker.id} value={worker.id}>
+                            {worker.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {taskAssigneeOtherProfiles.length > 0 ? (
+                      <optgroup label={t("projectDetail.taskAssigneeAllActive")}>
+                        {taskAssigneeOtherProfiles.map((worker) => (
+                          <option key={worker.id} value={worker.id}>
+                            {worker.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                  </select>
+                  {!hasTaskAssignees ? (
+                    <span className="text-[10px] text-[var(--text-muted)]">
+                      {t("projectDetail.noActiveTaskAssignees")}
+                    </span>
+                  ) : null}
+                </label>
                 <select
                   name="priority"
                   defaultValue="medium"
-                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                  className="w-full min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 >
                   <option value="low">{t("projectDetail.low")}</option>
                   <option value="medium">{t("projectDetail.medium")}</option>

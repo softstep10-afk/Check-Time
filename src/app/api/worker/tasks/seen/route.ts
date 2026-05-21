@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
 
     const seenAt = new Date().toISOString();
     let updated = 0;
+    const linkedMessageIds = new Set<string>();
 
     for (const task of (visibleTasks ?? []) as Array<{
       id: string;
@@ -80,6 +81,9 @@ export async function POST(request: NextRequest) {
       metadata: Record<string, unknown> | null;
     }>) {
       const metadata = asRecord(task.metadata);
+      if (typeof metadata.message_id === "string" && metadata.message_id.trim()) {
+        linkedMessageIds.add(metadata.message_id.trim());
+      }
       const seenBy = asRecord(metadata.seen_by);
       const nextMetadata = {
         ...metadata,
@@ -102,6 +106,21 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let messagesMarkedRead = 0;
+    if (linkedMessageIds.size > 0) {
+      const { data: linkedMessages, error: messageUpdateError } = await admin
+        .from("messages")
+        .update({ read: true })
+        .eq("org_id", profile.org_id)
+        .eq("recipient_id", profile.id)
+        .in("id", [...linkedMessageIds])
+        .select("id");
+
+      if (!messageUpdateError) {
+        messagesMarkedRead = linkedMessages?.length ?? 0;
+      }
+    }
+
     if (updated > 0) {
       revalidatePath("/command-center");
       revalidatePath("/overview");
@@ -110,7 +129,7 @@ export async function POST(request: NextRequest) {
       revalidatePath("/projects");
     }
 
-    return NextResponse.json({ ok: true, updated, seenAt });
+    return NextResponse.json({ ok: true, updated, messagesMarkedRead, seenAt });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });

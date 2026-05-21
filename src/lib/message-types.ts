@@ -41,5 +41,6 @@ export interface AppMessage {
   priority: MessagePriority;
   read: boolean;
   created_at: string;
+  metadata?: Record<string, unknown> | null;
   attachment?: MessageAttachment | null;
 }
