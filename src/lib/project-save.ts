@@ -16,8 +16,10 @@ export const PROJECT_RATE_DEFAULT = 25;
 const PROJECT_STATUSES: ProjectStatus[] = ["active", "paused", "completed", "archived"];
 const PROJECT_TIMELINE_STATUSES: ProjectTimelineStatus[] = ["on_track", "at_risk", "delayed"];
 const PROJECT_BUDGET_STATUSES: ProjectBudgetStatus[] = ["on_budget", "over_budget", "critical"];
+const OPTIONAL_PROJECT_SCHEMA_COLUMNS = ["gps_radius_m", "timeline_status", "budget_status"] as const;
 const CLIENT_TONES = ["green", "yellow", "red"] as const;
 type ClientTone = (typeof CLIENT_TONES)[number];
+type OptionalProjectSchemaColumn = (typeof OPTIONAL_PROJECT_SCHEMA_COLUMNS)[number];
 
 export type ProjectWriteRecord = Pick<
   Project,
@@ -245,29 +247,67 @@ export function validateProjectSaveBody(
 export function isMissingGpsRadiusColumnError(
   error: { message?: string; code?: string } | null,
 ): boolean {
+  return getMissingOptionalProjectColumn(error) === "gps_radius_m";
+}
+
+export function getMissingOptionalProjectColumn(
+  error: { message?: string; code?: string } | null,
+): OptionalProjectSchemaColumn | null {
   if (!error) {
-    return false;
+    return null;
   }
 
-  if (error.code === "PGRST204" || error.code === "42703") {
-    return true;
+  const message = error.message ?? "";
+  const isSchemaCacheError = error.code === "PGRST204" || error.code === "42703";
+  const mentionsMissingColumn =
+    /could not find/i.test(message) ||
+    /schema cache/i.test(message) ||
+    /column/i.test(message);
+
+  if (!isSchemaCacheError && !mentionsMissingColumn) {
+    return null;
   }
 
-  return /column .* gps_radius_m/i.test(error.message ?? "");
+  return OPTIONAL_PROJECT_SCHEMA_COLUMNS.find((column) => message.includes(column)) ?? null;
+}
+
+function omitProjectColumn(
+  payload: Record<string, unknown>,
+  column: OptionalProjectSchemaColumn,
+): Record<string, unknown> {
+  const { [column]: _omitted, ...rest } = payload;
+  void _omitted;
+  return rest;
+}
+
+function isPayloadColumnPresent(payload: Record<string, unknown>, column: OptionalProjectSchemaColumn): boolean {
+  return Object.prototype.hasOwnProperty.call(payload, column);
 }
 
 export async function insertProjectTolerant(
   supabase: SupabaseClient,
   payload: Record<string, unknown>,
 ) {
-  const first = await supabase.from("projects").insert(payload).select("id").single<{ id: string }>();
-  if (first.error && isMissingGpsRadiusColumnError(first.error)) {
-    const { gps_radius_m: _omit, ...rest } = payload;
-    void _omit;
-    return supabase.from("projects").insert(rest).select("id").single<{ id: string }>();
+  let currentPayload = payload;
+  const omittedColumns = new Set<OptionalProjectSchemaColumn>();
+
+  for (let attempt = 0; attempt <= OPTIONAL_PROJECT_SCHEMA_COLUMNS.length; attempt += 1) {
+    const result = await supabase.from("projects").insert(currentPayload).select("id").single<{ id: string }>();
+    const missingColumn = getMissingOptionalProjectColumn(result.error);
+    if (
+      !result.error ||
+      !missingColumn ||
+      omittedColumns.has(missingColumn) ||
+      !isPayloadColumnPresent(currentPayload, missingColumn)
+    ) {
+      return result;
+    }
+
+    currentPayload = omitProjectColumn(currentPayload, missingColumn);
+    omittedColumns.add(missingColumn);
   }
 
-  return first;
+  return supabase.from("projects").insert(currentPayload).select("id").single<{ id: string }>();
 }
 
 export async function updateProjectTolerant(
@@ -281,16 +321,30 @@ export async function updateProjectTolerant(
     firstQuery = firstQuery.eq("org_id", orgId);
   }
 
-  const first = await firstQuery;
-  if (first.error && isMissingGpsRadiusColumnError(first.error)) {
-    const { gps_radius_m: _omit, ...rest } = payload;
-    void _omit;
-    let fallbackQuery = supabase.from("projects").update(rest).eq("id", projectId);
+  let result = await firstQuery;
+  let currentPayload = payload;
+  const omittedColumns = new Set<OptionalProjectSchemaColumn>();
+
+  for (let attempt = 0; attempt < OPTIONAL_PROJECT_SCHEMA_COLUMNS.length; attempt += 1) {
+    const missingColumn = getMissingOptionalProjectColumn(result.error);
+    if (
+      !result.error ||
+      !missingColumn ||
+      omittedColumns.has(missingColumn) ||
+      !isPayloadColumnPresent(currentPayload, missingColumn)
+    ) {
+      return result;
+    }
+
+    currentPayload = omitProjectColumn(currentPayload, missingColumn);
+    omittedColumns.add(missingColumn);
+
+    let fallbackQuery = supabase.from("projects").update(currentPayload).eq("id", projectId);
     if (orgId) {
       fallbackQuery = fallbackQuery.eq("org_id", orgId);
     }
-    return fallbackQuery;
+    result = await fallbackQuery;
   }
 
-  return first;
+  return result;
 }
