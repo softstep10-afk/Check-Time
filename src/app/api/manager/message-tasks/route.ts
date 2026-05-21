@@ -122,6 +122,8 @@ export async function POST(request: NextRequest) {
     revalidatePath("/tasks");
     revalidatePath("/command-center");
     revalidatePath("/overview");
+    revalidatePath("/messages");
+    revalidatePath("/my-messages");
     revalidatePath("/my-tasks");
     for (const task of tasks) {
       if (task.project_id) {

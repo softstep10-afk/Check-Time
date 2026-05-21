@@ -283,7 +283,11 @@ export function NotificationBell({
         }
         return next;
       });
-      await supabase.from("messages").update({ read: true }).eq("id", id);
+      await supabase
+        .from("messages")
+        .update({ read: true })
+        .eq("recipient_id", profileId)
+        .eq("id", id);
     },
     [profileId, supabase],
   );
@@ -310,6 +314,7 @@ export function NotificationBell({
     const { error } = await supabase
       .from("messages")
       .update({ read: true })
+      .eq("recipient_id", profileId)
       .in("id", unreadIds);
     if (error) console.warn("markAllRead failed:", error.message);
   }, [messages, profileId, supabase]);

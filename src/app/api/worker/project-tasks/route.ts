@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Task, TaskPriority } from "@/types/database";
+import { createManagerTask, TaskDispatchError } from "@/lib/server/task-dispatch";
+import type { Profile, TaskPriority } from "@/types/database";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "urgent"];
 
@@ -39,14 +40,11 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, org_id, role, project_access_mode")
+      .select("id, name, org_id, role, project_access_mode")
       .eq("id", user.id)
-      .maybeSingle<{
-        id: string;
-        org_id: string;
-        role: string;
-        project_access_mode: "list" | "all_active" | null;
-      }>();
+      .maybeSingle<
+        Pick<Profile, "id" | "name" | "org_id" | "role" | "project_access_mode">
+      >();
     if (profileError || !profile) {
       return NextResponse.json(
         { error: profileError?.message ?? "Profile not found." },
@@ -103,31 +101,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: task, error: insertError } = await admin
-      .from("tasks")
-      .insert({
-        org_id: profile.org_id,
-        project_id: projectId,
-        assigned_to: null,
-        assigned_by: user.id,
-        title,
-        description,
-        priority: requestedPriority,
-        status: "pending",
-        metadata: {
-          createdByWorker: true,
-          source: "worker_project_view",
-        },
-      })
-      .select("*")
-      .single<Task>();
-
-    if (insertError || !task) {
-      return NextResponse.json(
-        { error: insertError?.message ?? "Task insert failed." },
-        { status: 500 },
-      );
-    }
+    const task = await createManagerTask(admin, {
+      orgId: profile.org_id,
+      actor: {
+        id: profile.id,
+        name: profile.name,
+        role: profile.role,
+      },
+      title,
+      description,
+      projectId,
+      assignedTo: null,
+      priority: requestedPriority,
+      source: "worker_project_view",
+      auditAction: "task_created_by_worker",
+      metadata: {
+        createdByWorker: true,
+      },
+    });
 
     revalidatePath("/tasks");
     revalidatePath("/projects");
@@ -145,6 +136,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, task });
   } catch (error) {
+    if (error instanceof TaskDispatchError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

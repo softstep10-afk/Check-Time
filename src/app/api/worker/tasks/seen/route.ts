@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
       revalidatePath("/overview");
       revalidatePath("/tasks");
       revalidatePath("/my-tasks");
+      revalidatePath("/my-messages");
       revalidatePath("/projects");
       for (const projectId of affectedProjectIds) {
         revalidatePath(`/projects/${projectId}`);
