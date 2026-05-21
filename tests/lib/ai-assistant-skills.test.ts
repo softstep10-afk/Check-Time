@@ -464,6 +464,44 @@ describe("AI assistant Jarvis routing", () => {
     });
   });
 
+  it("fast-parses Russian assignee inflection and colon task title", async () => {
+    await withModelDisabled(async () => {
+      const snapshot = buildAssistantSnapshot(workspace(), [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant(
+        "Создай задачу Васе: [QA SMOKE] проверить окна срочно",
+        snapshot,
+      );
+
+      expect(answer.answer).toContain("Подготовил задачу");
+      expect(answer.actions?.[0]).toMatchObject({
+        kind: "create_task",
+        payload: {
+          title: "[QA SMOKE] проверить окна срочно",
+          assignedTo: "vasia",
+          assignedToName: "Vasia",
+          priority: "urgent",
+        },
+      });
+    });
+  });
+
+  it("asks for a short clarification instead of guessing incomplete task commands", async () => {
+    await withModelDisabled(async () => {
+      const snapshot = buildAssistantSnapshot(workspace(), [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant("создай задачу", snapshot);
+
+      expect(answer.answer).toContain("кому");
+      expect(answer.actions ?? []).toEqual([]);
+      expect(answer.answer).not.toContain("создан");
+    });
+  });
+
   it("does not expose provider branding in user-facing unavailable output", async () => {
     await withModelDisabled(async () => {
       const snapshot = buildAssistantSnapshot(workspace(), [], {

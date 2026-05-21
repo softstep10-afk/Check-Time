@@ -17,6 +17,7 @@ import { getAssistantActionEndpoint } from "@/lib/ai/action-endpoints";
 import {
   JARVIS_DIAGNOSTIC_EVENT,
   readJarvisDiagnostic,
+  readJarvisDiagnosticHistory,
   writeJarvisDiagnostic,
   type JarvisDiagnosticRecord,
 } from "@/lib/ai/jarvis-diagnostics";
@@ -88,6 +89,32 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function getPreparedActionContext(action: AssistantAction | null): {
+  matchedWorker: string | null;
+  matchedProject: string | null;
+  executionEndpoint: string | null;
+} {
+  if (!action || action.kind === "navigate") {
+    return { matchedWorker: null, matchedProject: null, executionEndpoint: null };
+  }
+  const endpoint = getAssistantActionEndpoint(action);
+  if (action.kind === "create_task") {
+    return {
+      matchedWorker: action.payload.assignedToName ?? action.payload.assignedTo ?? null,
+      matchedProject: action.payload.projectName ?? action.payload.projectId ?? null,
+      executionEndpoint: endpoint?.url ?? null,
+    };
+  }
+  if (action.kind === "create_project") {
+    return {
+      matchedWorker: null,
+      matchedProject: action.payload.name,
+      executionEndpoint: endpoint?.url ?? null,
+    };
+  }
+  return { matchedWorker: null, matchedProject: null, executionEndpoint: endpoint?.url ?? null };
+}
+
 export function AiWorkspacePage({
   projects,
   reports,
@@ -135,6 +162,7 @@ export function AiWorkspacePage({
   const [assistantAttachments, setAssistantAttachments] = useState<JarvisSettingsAttachment[]>([]);
   const [jarvisMessages, setJarvisMessages] = useState<JarvisMessage[]>([]);
   const [latestDiagnostic, setLatestDiagnostic] = useState<JarvisDiagnosticRecord | null>(null);
+  const [diagnosticHistory, setDiagnosticHistory] = useState<JarvisDiagnosticRecord[]>([]);
   const [runtimeConfig, setRuntimeConfig] = useState(jarvisConfig);
   const [systemPromptDraft, setSystemPromptDraft] = useState(jarvisConfig.systemPrompt);
   const [voicePersonalityDraft, setVoicePersonalityDraft] = useState(jarvisConfig.voicePersonality);
@@ -187,10 +215,12 @@ export function AiWorkspacePage({
     if (!canViewDiagnostics) return;
     const initialLoad = window.setTimeout(() => {
       setLatestDiagnostic(readJarvisDiagnostic());
+      setDiagnosticHistory(readJarvisDiagnosticHistory());
     }, 0);
     function handleDiagnostic(event: Event) {
       const detail = (event as CustomEvent<JarvisDiagnosticRecord>).detail;
       setLatestDiagnostic(detail ?? readJarvisDiagnostic());
+      setDiagnosticHistory(readJarvisDiagnosticHistory());
     }
     window.addEventListener(JARVIS_DIAGNOSTIC_EVENT, handleDiagnostic);
     return () => {
@@ -202,6 +232,7 @@ export function AiWorkspacePage({
   function recordDiagnostic(input: Partial<JarvisDiagnosticRecord>) {
     if (!canViewDiagnostics) return;
     setLatestDiagnostic(writeJarvisDiagnostic(input));
+    setDiagnosticHistory(readJarvisDiagnosticHistory());
   }
 
   async function saveJarvisRuntimeSettings(mode: "save" | "reset") {
@@ -345,6 +376,17 @@ export function AiWorkspacePage({
 
     if (!response.ok || !result.command) {
       setMessage(result.error ?? t("ai.voiceFailed"));
+      recordDiagnostic({
+        inputMode: "voice",
+        userRequest: resolvedVoiceInput,
+        normalizedRequest: resolvedVoiceInput.toLowerCase(),
+        selectedIntent: "voice_command",
+        preparedAction: null,
+        executionStatus: "failed",
+        dataSourcesUsed: ["voice transcript"],
+        result: null,
+        error: result.error ?? t("ai.voiceFailed"),
+      });
       setBusyKey(null);
       return;
     }
@@ -357,6 +399,7 @@ export function AiWorkspacePage({
       selectedIntent: result.command.intent,
       preparedAction: null,
       executionStatus: "succeeded",
+      dataSourcesUsed: ["voice transcript", "routes"],
       result: result.command.answer,
       error: null,
     });
@@ -416,6 +459,7 @@ export function AiWorkspacePage({
       selectedIntent: "assistant",
       preparedAction: null,
       executionStatus: "executing",
+      dataSourcesUsed: ["projects", "workers", "tasks", "media", "audit"],
       result: null,
       error: null,
     });
@@ -445,6 +489,7 @@ export function AiWorkspacePage({
         selectedIntent: "assistant",
         preparedAction: null,
         executionStatus: "failed",
+        dataSourcesUsed: ["projects", "workers", "tasks", "media", "audit"],
         result: null,
         error: result.error ?? t("ai.assistantFailed"),
       });
@@ -454,6 +499,7 @@ export function AiWorkspacePage({
 
     const assistant = result.assistant;
     const preparedAction = assistant.actions?.find((action) => action.kind !== "navigate") ?? null;
+    const preparedContext = getPreparedActionContext(preparedAction);
     setJarvisMessages((current) => [
       ...current,
       {
@@ -475,6 +521,10 @@ export function AiWorkspacePage({
       selectedIntent: preparedAction?.kind ?? "answer",
       preparedAction,
       executionStatus: preparedAction ? "awaiting_owner_confirmation" : "succeeded",
+      dataSourcesUsed: ["projects", "workers", "tasks", "media", "audit"],
+      matchedWorker: preparedContext.matchedWorker,
+      matchedProject: preparedContext.matchedProject,
+      executionEndpoint: preparedContext.executionEndpoint,
       result: assistant.answer,
       error: null,
     });
@@ -504,6 +554,7 @@ export function AiWorkspacePage({
     }
 
     const endpoint = getAssistantActionEndpoint(action);
+    const actionContext = getPreparedActionContext(action);
     if (!endpoint) {
       const unsupported = t("jarvisDock.actionUnsupported");
       setMessage(unsupported);
@@ -514,6 +565,8 @@ export function AiWorkspacePage({
         selectedIntent: action.kind,
         preparedAction: action,
         executionStatus: "unsupported",
+        matchedWorker: actionContext.matchedWorker,
+        matchedProject: actionContext.matchedProject,
         result: null,
         error: unsupported,
       });
@@ -528,6 +581,9 @@ export function AiWorkspacePage({
       selectedIntent: action.kind,
       preparedAction: action,
       executionStatus: "executing",
+      matchedWorker: actionContext.matchedWorker,
+      matchedProject: actionContext.matchedProject,
+      executionEndpoint: endpoint.url,
       result: null,
       error: null,
     });
@@ -553,6 +609,9 @@ export function AiWorkspacePage({
           selectedIntent: action.kind,
           preparedAction: action,
           executionStatus: "failed",
+          matchedWorker: actionContext.matchedWorker,
+          matchedProject: actionContext.matchedProject,
+          executionEndpoint: endpoint.url,
           result: null,
           error,
         });
@@ -570,6 +629,10 @@ export function AiWorkspacePage({
         selectedIntent: action.kind,
         preparedAction: action,
         executionStatus: "succeeded",
+        matchedWorker: actionContext.matchedWorker,
+        matchedProject: actionContext.matchedProject,
+        executionEndpoint: endpoint.url,
+        resultId: String(successId),
         result: successMessage,
         error: null,
       });
@@ -588,6 +651,9 @@ export function AiWorkspacePage({
         selectedIntent: action.kind,
         preparedAction: action,
         executionStatus: "failed",
+        matchedWorker: actionContext.matchedWorker,
+        matchedProject: actionContext.matchedProject,
+        executionEndpoint: endpoint.url,
         result: null,
         error: message,
       });
@@ -661,13 +727,21 @@ export function AiWorkspacePage({
         <section className="grid gap-3 xl:grid-cols-[1fr_0.8fr]">
           <article className="surface-card p-4">
             <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ai-cyan)]">
-              Jarvis operating instructions
+              System Prompt / Системные инструкции
             </div>
+            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+              Canonical model instructions are kept in English for consistency. Русское описание
+              рядом помогает владельцу быстро понять, как Jarvis должен работать.
+            </p>
             <div className="mt-3 grid gap-3 lg:grid-cols-2">
               <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                  System prompt {runtimeConfig.hasSystemPromptOverride ? "(custom)" : "(default)"}
+                  System prompt / Системный промпт {runtimeConfig.hasSystemPromptOverride ? "(custom)" : "(default)"}
                 </div>
+                <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                  Jarvis должен отвечать честно, готовить действия, ждать подтверждения владельца
+                  и не раскрывать провайдеров, ключи или скрытые детали.
+                </p>
                 <textarea
                   value={systemPromptDraft}
                   onChange={(event) => setSystemPromptDraft(event.target.value)}
@@ -678,8 +752,12 @@ export function AiWorkspacePage({
               <div className="space-y-3">
                 <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                    Voice/personality {runtimeConfig.hasVoicePersonalityOverride ? "(custom)" : "(default)"}
+                    Voice & Personality / Голос и стиль {runtimeConfig.hasVoicePersonalityOverride ? "(custom)" : "(default)"}
                   </div>
+                  <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                    Направление: спокойный британский дворецкий-AI с лёгкой синтетической
+                    обработкой, без копирования актёров или персонажей.
+                  </p>
                   <textarea
                     value={voicePersonalityDraft}
                     onChange={(event) => setVoicePersonalityDraft(event.target.value)}
@@ -689,10 +767,14 @@ export function AiWorkspacePage({
                 </div>
                 <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                    Action policy
+                    Action Policy / Политика действий
                   </div>
                   <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
                     {runtimeConfig.actionPolicy}
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+                    Низкий риск: ответ или черновик. Запись в базу: только после подтверждения
+                    владельца и только через поддержанный серверный endpoint.
                   </p>
                 </div>
               </div>
@@ -704,7 +786,7 @@ export function AiWorkspacePage({
                 disabled={busyKey === "jarvis-settings"}
                 className="btn-primary px-4 py-2 text-sm"
               >
-                {busyKey === "jarvis-settings" ? "Saving..." : "Save Jarvis settings"}
+                {busyKey === "jarvis-settings" ? "Saving..." : "Save / Сохранить"}
               </button>
               <button
                 type="button"
@@ -715,7 +797,7 @@ export function AiWorkspacePage({
                 disabled={busyKey === "jarvis-settings"}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-4 py-2 text-sm font-semibold text-[var(--text-secondary)]"
               >
-                Revert edits
+                Revert / Вернуть
               </button>
               <button
                 type="button"
@@ -723,17 +805,18 @@ export function AiWorkspacePage({
                 disabled={busyKey === "jarvis-settings"}
                 className="rounded-[var(--radius-md)] border border-[rgba(255,91,110,0.45)] px-4 py-2 text-sm font-semibold text-[var(--red)]"
               >
-                Reset to default
+                Reset default / Сбросить
               </button>
             </div>
             <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
-              Secrets and API keys are never shown here. Dangerous actions still require owner confirmation.
+              Secrets and API keys are never shown here. Секреты и ключи здесь не показываются.
+              Опасные действия всё равно требуют подтверждения владельца.
             </p>
           </article>
 
           <article className="surface-card p-4">
             <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--ai-cyan)]">
-              Owner diagnostics
+              Owner Diagnostics / Диагностика владельца
             </div>
             <div className="mt-3 grid gap-2">
               {providerDiagnostics.map((item) => (
@@ -748,25 +831,45 @@ export function AiWorkspacePage({
             </div>
             <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                Latest Jarvis request
+                Latest Request / Последний запрос
               </div>
               {latestDiagnostic ? (
                 <dl className="mt-3 space-y-2 text-xs text-[var(--text-secondary)]">
                   <div>
-                    <dt className="font-semibold text-[var(--text-primary)]">Status</dt>
+                    <dt className="font-semibold text-[var(--text-primary)]">Execution Result / Результат</dt>
                     <dd>{latestDiagnostic.executionStatus}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-[var(--text-primary)]">Input</dt>
+                    <dt className="font-semibold text-[var(--text-primary)]">Heard Transcript / Что услышал Jarvis</dt>
                     <dd className="whitespace-pre-wrap">{latestDiagnostic.userRequest || "None"}</dd>
                   </div>
                   <div>
-                    <dt className="font-semibold text-[var(--text-primary)]">Intent</dt>
+                    <dt className="font-semibold text-[var(--text-primary)]">Detected Intent / Распознанное намерение</dt>
                     <dd>{latestDiagnostic.selectedIntent ?? "answer"}</dd>
                   </div>
+                  <div>
+                    <dt className="font-semibold text-[var(--text-primary)]">Normalized Request / Нормализованный запрос</dt>
+                    <dd className="whitespace-pre-wrap">{latestDiagnostic.normalizedRequest || "None"}</dd>
+                  </div>
+                  {latestDiagnostic.matchedWorker || latestDiagnostic.matchedProject ? (
+                    <div>
+                      <dt className="font-semibold text-[var(--text-primary)]">Matched Data / Найденные данные</dt>
+                      <dd>
+                        {latestDiagnostic.matchedWorker ? `Worker: ${latestDiagnostic.matchedWorker}` : ""}
+                        {latestDiagnostic.matchedWorker && latestDiagnostic.matchedProject ? " · " : ""}
+                        {latestDiagnostic.matchedProject ? `Project: ${latestDiagnostic.matchedProject}` : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                  {latestDiagnostic.dataSourcesUsed.length > 0 ? (
+                    <div>
+                      <dt className="font-semibold text-[var(--text-primary)]">Data Sources / Источники</dt>
+                      <dd>{latestDiagnostic.dataSourcesUsed.join(", ")}</dd>
+                    </div>
+                  ) : null}
                   {latestDiagnostic.preparedAction ? (
                     <div>
-                      <dt className="font-semibold text-[var(--text-primary)]">Prepared action</dt>
+                      <dt className="font-semibold text-[var(--text-primary)]">Prepared Action / Подготовленное действие</dt>
                       <dd>
                         <pre className="mt-1 max-h-[160px] overflow-auto whitespace-pre-wrap rounded-[var(--radius-sm)] bg-[rgba(255,255,255,0.03)] p-2">
                           {JSON.stringify(latestDiagnostic.preparedAction, null, 2)}
@@ -774,9 +877,18 @@ export function AiWorkspacePage({
                       </dd>
                     </div>
                   ) : null}
+                  {latestDiagnostic.executionEndpoint || latestDiagnostic.resultId ? (
+                    <div>
+                      <dt className="font-semibold text-[var(--text-primary)]">Execution / Выполнение</dt>
+                      <dd>
+                        {latestDiagnostic.executionEndpoint ?? "No endpoint"}
+                        {latestDiagnostic.resultId ? ` · result: ${latestDiagnostic.resultId}` : ""}
+                      </dd>
+                    </div>
+                  ) : null}
                   {latestDiagnostic.error ? (
                     <div>
-                      <dt className="font-semibold text-[var(--red)]">Error</dt>
+                      <dt className="font-semibold text-[var(--red)]">Stop / Failure Reason / Причина остановки</dt>
                       <dd>{latestDiagnostic.error}</dd>
                     </div>
                   ) : null}
@@ -787,6 +899,33 @@ export function AiWorkspacePage({
                 </p>
               )}
             </div>
+            {diagnosticHistory.length > 0 ? (
+              <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                  Work Log / Журнал работы
+                </div>
+                <div className="mt-3 max-h-[220px] space-y-2 overflow-auto">
+                  {diagnosticHistory.slice(0, 8).map((item) => (
+                    <div
+                      key={`${item.updatedAt}-${item.selectedIntent ?? "answer"}`}
+                      className="rounded-[var(--radius-sm)] border border-[var(--border-subtle)] bg-[rgba(255,255,255,0.02)] p-2 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-[var(--text-primary)]">
+                          {item.selectedIntent ?? "answer"} · {item.executionStatus}
+                        </span>
+                        <span className="text-[var(--text-muted)]">
+                          {new Date(item.updatedAt).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      <div className="mt-1 truncate text-[var(--text-secondary)]">
+                        {item.userRequest || item.result || "No text"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </article>
         </section>
       ) : null}

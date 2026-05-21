@@ -282,6 +282,8 @@ export type AssistantAction =
         projectName?: string | null;
         assignedTo?: string | null;
         assignedToName?: string | null;
+        priority?: "low" | "medium" | "high" | "urgent";
+        dueDate?: string | null;
       };
     };
 

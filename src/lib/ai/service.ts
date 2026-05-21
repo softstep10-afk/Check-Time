@@ -429,30 +429,167 @@ function extractProjectDraftFromCommand(question: string): JarvisCreateProjectPa
 }
 
 function findNamedWorker(question: string, snapshot: AssistantSnapshot): SnapshotWorkerMetric | null {
-  const normalized = normalizeSearchText(question);
   const workers = snapshot.workerMetrics.filter((worker) => worker.name.trim());
-  return (
-    workers
-      .slice()
-      .sort((a, b) => b.name.length - a.name.length)
-      .find((worker) => normalized.includes(normalizeSearchText(worker.name))) ?? null
-  );
+  const ranked = workers
+    .map((worker) => ({ worker, score: scoreNameMatch(question, worker.name) }))
+    .filter((item) => item.score >= 18)
+    .sort((a, b) => b.score - a.score || b.worker.name.length - a.worker.name.length);
+  if (!ranked[0]) return null;
+  if (ranked[1] && ranked[0].score - ranked[1].score < 4) return null;
+  return ranked[0].worker;
 }
 
 function findNamedProject(question: string, snapshot: AssistantSnapshot): SnapshotProject | null {
-  const normalized = normalizeSearchText(question);
-  return (
-    snapshot.projects
-      .filter((project) => project.status !== "archived")
-      .slice()
-      .sort((a, b) => b.name.length - a.name.length)
-      .find((project) => normalized.includes(normalizeSearchText(project.name))) ?? null
+  const ranked = snapshot.projects
+    .filter((project) => project.status !== "archived")
+    .map((project) => ({ project, score: scoreNameMatch(question, project.name) }))
+    .filter((item) => item.score >= 22)
+    .sort((a, b) => b.score - a.score || b.project.name.length - a.project.name.length);
+  if (!ranked[0]) return null;
+  if (ranked[1] && ranked[0].score - ranked[1].score < 4) return null;
+  return ranked[0].project;
+}
+
+function transliterateCyrillicToLatin(value: string): string {
+  const map: Record<string, string> = {
+    а: "a",
+    б: "b",
+    в: "v",
+    г: "g",
+    д: "d",
+    е: "e",
+    ё: "e",
+    ж: "zh",
+    з: "z",
+    и: "i",
+    й: "y",
+    к: "k",
+    л: "l",
+    м: "m",
+    н: "n",
+    о: "o",
+    п: "p",
+    р: "r",
+    с: "s",
+    т: "t",
+    у: "u",
+    ф: "f",
+    х: "h",
+    ц: "ts",
+    ч: "ch",
+    ш: "sh",
+    щ: "sch",
+    ы: "y",
+    э: "e",
+    ю: "yu",
+    я: "ya",
+    ъ: "",
+    ь: "",
+  };
+  return value
+    .toLowerCase()
+    .split("")
+    .map((char) => map[char] ?? char)
+    .join("");
+}
+
+function tokenizeForMatch(value: string): string[] {
+  return normalizeSearchText(value)
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+}
+
+function editDistanceWithin(left: string, right: string, maxDistance: number): boolean {
+  if (Math.abs(left.length - right.length) > maxDistance) return false;
+  const dp = Array.from({ length: left.length + 1 }, (_, row) => {
+    const cols = new Array<number>(right.length + 1).fill(0);
+    cols[0] = row;
+    return cols;
+  });
+  for (let col = 0; col <= right.length; col += 1) dp[0][col] = col;
+  for (let row = 1; row <= left.length; row += 1) {
+    let rowMin = Number.POSITIVE_INFINITY;
+    for (let col = 1; col <= right.length; col += 1) {
+      const cost = left[row - 1] === right[col - 1] ? 0 : 1;
+      dp[row][col] = Math.min(
+        dp[row - 1][col] + 1,
+        dp[row][col - 1] + 1,
+        dp[row - 1][col - 1] + cost,
+      );
+      rowMin = Math.min(rowMin, dp[row][col]);
+    }
+    if (rowMin > maxDistance) return false;
+  }
+  return dp[left.length][right.length] <= maxDistance;
+}
+
+function scoreNameMatch(question: string, targetName: string): number {
+  const questionVariants = Array.from(
+    new Set([normalizeSearchText(question), normalizeSearchText(transliterateCyrillicToLatin(question))]),
   );
+  const targetVariants = Array.from(
+    new Set([normalizeSearchText(targetName), normalizeSearchText(transliterateCyrillicToLatin(targetName))]),
+  );
+
+  let best = 0;
+  for (const questionVariant of questionVariants) {
+    for (const targetVariant of targetVariants) {
+      if (!questionVariant || !targetVariant) continue;
+      if (questionVariant.includes(targetVariant)) {
+        best = Math.max(best, 100 + Math.min(targetVariant.length, 40));
+      }
+      const questionTokens = tokenizeForMatch(questionVariant);
+      const targetTokens = tokenizeForMatch(targetVariant);
+      let tokenScore = 0;
+      for (const targetToken of targetTokens) {
+        for (const questionToken of questionTokens) {
+          if (questionToken === targetToken) {
+            tokenScore += 30;
+          } else if (targetToken.length >= 4 && questionToken.includes(targetToken)) {
+            tokenScore += 22;
+          } else if (questionToken.length >= 4 && targetToken.includes(questionToken)) {
+            tokenScore += 18;
+          } else {
+            const maxDistance = targetToken.length >= 5 ? 2 : 1;
+            if (editDistanceWithin(questionToken, targetToken, maxDistance)) tokenScore += 18;
+          }
+        }
+      }
+      best = Math.max(best, tokenScore);
+    }
+  }
+  return best;
 }
 
 function stripKnownName(value: string, name: string | null | undefined): string {
   if (!name) return value;
   return value.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ");
+}
+
+function stripLeadingTargetReference(value: string, targetName: string | null | undefined): string {
+  if (!targetName) return value;
+  const parts = value.trim().split(/\s+/);
+  if (parts.length < 2) return value;
+  const firstToken = parts[0] ?? "";
+  if (scoreNameMatch(firstToken, targetName) >= 18) {
+    return parts.slice(1).join(" ");
+  }
+  return value;
+}
+
+function inferTaskPriority(question: string): "low" | "medium" | "high" | "urgent" {
+  const normalized = normalizeSearchText(question);
+  if (/(?:не срочно|low priority|low)/i.test(normalized)) return "low";
+  if (/(?:срочно|urgent|asap|немедленно|critical)/i.test(normalized)) return "urgent";
+  if (/(?:важно|high priority|high|priority)/i.test(normalized)) return "high";
+  return "medium";
+}
+
+function inferTaskDueDate(question: string): string | null {
+  const isoDate = question.match(/\b(20\d{2}-\d{2}-\d{2})\b/);
+  if (isoDate?.[1]) return isoDate[1];
+  return null;
 }
 
 function extractTaskDraftFromCommand(
@@ -478,13 +615,15 @@ function extractTaskDraftFromCommand(
 
   const worker = findNamedWorker(question, snapshot);
   const project = findNamedProject(question, snapshot);
-  let title = question
+  const colonTitle = question.match(/[:：]\s*(.+)$/)?.[1]?.trim() ?? "";
+  let title = colonTitle.length >= 3 ? colonTitle : question
     .replace(/^(?:джарвис|jarvis)[,\s-]*/i, "")
     .replace(/(?:создай|создать|добавь|добавить|сделай|сделать|поставь|подготовь)\s+(?:мне\s+)?задач[ауи]?\s*/i, "")
     .replace(/(?:create|add|assign|prepare)\s+(?:a\s+)?task(?:\s+for)?\s*/i, "")
     .replace(/(^|\s)(?:для|кому|worker|for|на|проекте|проект|project)(?=\s|$)/gi, " ");
 
   title = stripKnownName(title, worker?.name);
+  title = stripLeadingTargetReference(title, worker?.name);
   title = stripKnownName(title, project?.name);
   title = title.replace(/\s+/g, " ").replace(/^[-:,.]+|[-:,.]+$/g, "").trim();
 
@@ -499,6 +638,8 @@ function extractTaskDraftFromCommand(
     projectName: project?.name ?? null,
     assignedTo: worker.id,
     assignedToName: worker.name,
+    priority: inferTaskPriority(question),
+    dueDate: inferTaskDueDate(question),
   };
 }
 

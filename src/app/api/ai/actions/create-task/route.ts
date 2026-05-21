@@ -7,9 +7,16 @@ import {
   createManagerTask,
   TaskDispatchError,
 } from "@/lib/server/task-dispatch";
+import type { TaskPriority } from "@/types/database";
 
 function readText(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readPriority(value: unknown): TaskPriority {
+  return value === "urgent" || value === "high" || value === "low" || value === "medium"
+    ? value
+    : "medium";
 }
 
 export async function POST(request: NextRequest) {
@@ -49,7 +56,8 @@ export async function POST(request: NextRequest) {
       description: readText(body.description) || null,
       projectId: readText(body.projectId) || null,
       assignedTo: readText(body.assignedTo) || null,
-      priority: "medium",
+      priority: readPriority(body.priority),
+      dueDate: readText(body.dueDate) || null,
       source: "jarvis_create_task",
       auditAction: "jarvis_task_created",
       metadata: {
