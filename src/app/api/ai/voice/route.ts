@@ -18,6 +18,7 @@ import {
   isJarvisMemoryWriter,
   normalizeJarvisAttachments,
 } from "@/lib/ai/jarvis-memory";
+import { resolveJarvisRuntimeConfig } from "@/lib/ai/jarvis-config";
 import { logJarvisPreparedActions } from "@/lib/ai/prepared-action-audit";
 import type { AssistantConversationTurn, AssistantResult } from "@/lib/ai/types";
 import type { DailyReport } from "@/types/database";
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
             memorySaved: null,
           },
           audio: null,
-          audioError: "Google Cloud Text-to-Speech credentials are not configured.",
+          audioError: "Jarvis voice is temporarily unavailable.",
         });
       }
 
@@ -129,10 +130,11 @@ export async function POST(request: NextRequest) {
       try {
         audio = await synthesizeJarvisSpeech(buildSpokenText(wakeResponse), { locale });
       } catch (ttsError) {
-        audioError = getErrorMessage(ttsError, "Google Cloud Text-to-Speech request failed.");
+        const diagnosticError = getErrorMessage(ttsError, "Jarvis voice request failed.");
+        audioError = "Jarvis voice is temporarily unavailable.";
         if (process.env.NODE_ENV !== "production") {
           console.warn("[Jarvis voice] TTS failed", {
-            audioError,
+            audioError: diagnosticError,
             credentials: getGoogleTtsCredentialDiagnostics(),
           });
         }
@@ -156,7 +158,7 @@ export async function POST(request: NextRequest) {
     if (memoryInstruction) {
       if (auth.kind !== "authenticated" || !isJarvisMemoryWriter(auth.context.profile)) {
         return NextResponse.json(
-          { error: "Only owner/admin can teach Gemini persistent rules." },
+          { error: "Only owner/admin can teach Jarvis persistent rules." },
           { status: 403 },
         );
       }
@@ -171,7 +173,7 @@ export async function POST(request: NextRequest) {
         .from("organizations")
         .update({ settings: updated.settings })
         .eq("id", managerData.org.id);
-      assertNoError(settingsError, "Gemini memory update failed");
+      assertNoError(settingsError, "Jarvis memory update failed");
 
       memorySaved = updated.rule;
       managerData = {
@@ -204,6 +206,7 @@ export async function POST(request: NextRequest) {
     const snapshot = buildAssistantSnapshot(managerData, reports, {
       includeFinancials: ownerJarvisAccess,
     });
+    const jarvisConfig = resolveJarvisRuntimeConfig(managerData.org.settings);
     const assistant: AssistantResult = memorySaved
       ? {
           answer: /[а-яё]/i.test(question)
@@ -216,7 +219,11 @@ export async function POST(request: NextRequest) {
           memorySaved,
         }
       : {
-          ...(await answerManagerAssistant(question, snapshot, { attachments, history })),
+          ...(await answerManagerAssistant(question, snapshot, {
+            attachments,
+            history,
+            systemPrompt: jarvisConfig.systemPrompt,
+          })),
           memorySaved,
         };
     if (auth.kind === "authenticated") {
@@ -233,7 +240,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         assistant,
         audio: null,
-        audioError: "Google Cloud Text-to-Speech credentials are not configured.",
+        audioError: "Jarvis voice is temporarily unavailable.",
       });
     }
 
@@ -242,10 +249,11 @@ export async function POST(request: NextRequest) {
     try {
       audio = await synthesizeJarvisSpeech(buildSpokenText(assistant), { locale });
     } catch (ttsError) {
-      audioError = getErrorMessage(ttsError, "Google Cloud Text-to-Speech request failed.");
+      const diagnosticError = getErrorMessage(ttsError, "Jarvis voice request failed.");
+      audioError = "Jarvis voice is temporarily unavailable.";
       if (process.env.NODE_ENV !== "production") {
         console.warn("[Jarvis voice] TTS failed", {
-          audioError,
+          audioError: diagnosticError,
           credentials: getGoogleTtsCredentialDiagnostics(),
         });
       }

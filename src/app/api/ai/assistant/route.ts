@@ -13,6 +13,7 @@ import {
   isJarvisMemoryWriter,
   normalizeJarvisAttachments,
 } from "@/lib/ai/jarvis-memory";
+import { resolveJarvisRuntimeConfig } from "@/lib/ai/jarvis-config";
 import { logJarvisPreparedActions } from "@/lib/ai/prepared-action-audit";
 import type { DailyReport } from "@/types/database";
 import type { AssistantConversationTurn } from "@/lib/ai/types";
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
     if (memoryInstruction) {
       if (auth.kind !== "authenticated" || !isJarvisMemoryWriter(auth.context.profile)) {
         return NextResponse.json(
-          { error: "Only owner/admin can teach Gemini persistent rules." },
+          { error: "Only owner/admin can teach Jarvis persistent rules." },
           { status: 403 },
         );
       }
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
         .from("organizations")
         .update({ settings: updated.settings })
         .eq("id", managerData.org.id);
-      assertNoError(settingsError, "Gemini memory update failed");
+      assertNoError(settingsError, "Jarvis memory update failed");
 
       memorySaved = updated.rule;
       managerData = {
@@ -120,14 +121,15 @@ export async function POST(request: NextRequest) {
     const snapshot = buildAssistantSnapshot(managerData, reports, {
       includeFinancials: ownerJarvisAccess,
     });
+    const jarvisConfig = resolveJarvisRuntimeConfig(managerData.org.settings);
     if (memorySaved) {
       const ru = /[а-яё]/i.test(question);
       return NextResponse.json({
         ok: true,
         assistant: {
           answer: ru
-            ? "Запомнил. Буду учитывать это правило в следующих ответах Gemini."
-            : "Remembered. Gemini will apply this rule in future answers.",
+            ? "Запомнил. Jarvis будет учитывать это правило в следующих ответах."
+            : "Remembered. Jarvis will apply this rule in future answers.",
           bullets: [memorySaved.text],
           links: [],
           confidence: 0.94,
@@ -136,7 +138,11 @@ export async function POST(request: NextRequest) {
         },
       });
     }
-    const assistant = await answerManagerAssistant(question, snapshot, { attachments, history });
+    const assistant = await answerManagerAssistant(question, snapshot, {
+      attachments,
+      history,
+      systemPrompt: jarvisConfig.systemPrompt,
+    });
     if (auth.kind === "authenticated") {
       await logJarvisPreparedActions(supabase, {
         profile: auth.context.profile,

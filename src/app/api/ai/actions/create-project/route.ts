@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const adminClient = createAdminClient();
     if (!adminClient) {
       return NextResponse.json(
-        { error: "Jarvis project creation needs SUPABASE_SERVICE_ROLE_KEY on the server." },
+        { error: "Jarvis project creation is temporarily unavailable." },
         { status: 503 },
       );
     }
@@ -58,7 +58,13 @@ export async function POST(request: NextRequest) {
     });
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error("[Jarvis action] create-project failed", {
+        message: error.message,
+      });
+      return NextResponse.json(
+        { error: "Jarvis could not create the project. No changes were made." },
+        { status: 500 },
+      );
     }
 
     await logAuditServer(adminClient, {
@@ -86,7 +92,10 @@ export async function POST(request: NextRequest) {
       projectId: data?.id ?? null,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
+    const message =
+      error instanceof Error && error.message
+        ? error.message
+        : "Jarvis could not create the project. No changes were made.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

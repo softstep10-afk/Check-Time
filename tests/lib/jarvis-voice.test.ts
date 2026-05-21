@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   detectJarvisSpeechLocale,
+  JARVIS_VOICE_PROFILE,
   resolveJarvisVoiceSelection,
 } from "@/lib/ai/jarvis-voice";
 
@@ -17,6 +18,11 @@ describe("Jarvis voice selection", () => {
     expect(voice.voiceName).toBe("en-GB-Neural2-B");
     expect(voice.speakingRate).toBe(1);
     expect(voice.pitch).toBe(-1);
+  });
+
+  it("documents the refined butler AI voice direction without actor cloning", () => {
+    expect(JARVIS_VOICE_PROFILE).toContain("refined British butler AI assistant");
+    expect(JARVIS_VOICE_PROFILE).toContain("Do not imitate any specific actor");
   });
 
   it("uses a Russian Google voice for Russian app mode", () => {

@@ -22,6 +22,7 @@ import {
 import {
   WASHINGTON_CODE_REFERENCES,
 } from "@/lib/ai/washington-code-knowledge";
+import { JARVIS_SYSTEM_PROMPT } from "@/lib/ai/jarvis-config";
 import {
   readProjectEstimations,
   readProjectMaterialSpec,
@@ -37,16 +38,14 @@ import {
   type GeneratedDailyReport,
   type PhotoAnalysisInput,
   type PhotoAnalysisResult,
+  type SnapshotProject,
+  type SnapshotWorkerMetric,
   type VoiceCommandResult,
 } from "@/lib/ai/types";
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
-export const JARVIS_GEMINI_SYSTEM_PROMPT = `You are Jarvis, the system assistant for Construction Clock.
-RULES:
-1. Answer extremely briefly and accurately. No filler words.
-2. If the user greets you, simply say "Сэр" or "Слушаю". Do not invent data.
-3. If data is provided in the prompt, answer the user's specific question about it. If no data is provided, do not hallucinate numbers.`;
+export const JARVIS_GEMINI_SYSTEM_PROMPT = JARVIS_SYSTEM_PROMPT;
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: ORG_TIME_ZONE,
@@ -400,6 +399,7 @@ export function buildJarvisWakeResponse(question: string): AssistantResult | nul
 }
 
 type JarvisCreateProjectPayload = Extract<AssistantAction, { kind: "create_project" }>["payload"];
+type JarvisCreateTaskPayload = Extract<AssistantAction, { kind: "create_task" }>["payload"];
 
 function extractProjectDraftFromCommand(question: string): JarvisCreateProjectPayload | null {
   const patterns = [
@@ -428,8 +428,83 @@ function extractProjectDraftFromCommand(question: string): JarvisCreateProjectPa
   };
 }
 
+function findNamedWorker(question: string, snapshot: AssistantSnapshot): SnapshotWorkerMetric | null {
+  const normalized = normalizeSearchText(question);
+  const workers = snapshot.workerMetrics.filter((worker) => worker.name.trim());
+  return (
+    workers
+      .slice()
+      .sort((a, b) => b.name.length - a.name.length)
+      .find((worker) => normalized.includes(normalizeSearchText(worker.name))) ?? null
+  );
+}
+
+function findNamedProject(question: string, snapshot: AssistantSnapshot): SnapshotProject | null {
+  const normalized = normalizeSearchText(question);
+  return (
+    snapshot.projects
+      .filter((project) => project.status !== "archived")
+      .slice()
+      .sort((a, b) => b.name.length - a.name.length)
+      .find((project) => normalized.includes(normalizeSearchText(project.name))) ?? null
+  );
+}
+
+function stripKnownName(value: string, name: string | null | undefined): string {
+  if (!name) return value;
+  return value.replace(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "ig"), " ");
+}
+
+function extractTaskDraftFromCommand(
+  question: string,
+  snapshot: AssistantSnapshot,
+): JarvisCreateTaskPayload | "missing_details" | null {
+  const normalized = normalizeSearchText(question);
+  const wantsTask =
+    normalized.includes("создай задачу") ||
+    normalized.includes("создать задачу") ||
+    normalized.includes("добавь задачу") ||
+    normalized.includes("добавить задачу") ||
+    normalized.includes("сделай задачу") ||
+    normalized.includes("сделать задачу") ||
+    normalized.includes("поставь задачу") ||
+    normalized.includes("подготовь задачу") ||
+    normalized.includes("create task") ||
+    normalized.includes("add task") ||
+    normalized.includes("assign task") ||
+    normalized.includes("task for");
+
+  if (!wantsTask) return null;
+
+  const worker = findNamedWorker(question, snapshot);
+  const project = findNamedProject(question, snapshot);
+  let title = question
+    .replace(/^(?:джарвис|jarvis)[,\s-]*/i, "")
+    .replace(/(?:создай|создать|добавь|добавить|сделай|сделать|поставь|подготовь)\s+(?:мне\s+)?задач[ауи]?\s*/i, "")
+    .replace(/(?:create|add|assign|prepare)\s+(?:a\s+)?task(?:\s+for)?\s*/i, "")
+    .replace(/(^|\s)(?:для|кому|worker|for|на|проекте|проект|project)(?=\s|$)/gi, " ");
+
+  title = stripKnownName(title, worker?.name);
+  title = stripKnownName(title, project?.name);
+  title = title.replace(/\s+/g, " ").replace(/^[-:,.]+|[-:,.]+$/g, "").trim();
+
+  if (!worker || title.length < 3) {
+    return "missing_details";
+  }
+
+  return {
+    title: title.slice(0, 180),
+    description: question.trim().slice(0, 800),
+    projectId: project?.id ?? null,
+    projectName: project?.name ?? null,
+    assignedTo: worker.id,
+    assignedToName: worker.name,
+  };
+}
+
 function buildSafeActionFallback(
   question: string,
+  snapshot: AssistantSnapshot,
 ): AssistantResult | null {
   const normalized = normalizeSearchText(question);
   const ru = isRussianText(question);
@@ -440,6 +515,44 @@ function buildSafeActionFallback(
     normalized.includes("добавить проект") ||
     normalized.includes("create project") ||
     normalized.includes("add project");
+
+  const taskDraft = extractTaskDraftFromCommand(question, snapshot);
+  if (taskDraft === "missing_details") {
+    return {
+      answer: ru
+        ? "Сначала нужно понять кому и что именно поставить задачей."
+        : "I need the assignee and task details before preparing a task.",
+      bullets: [],
+      links: [{ label: ru ? "Открыть задачи" : "Open tasks", href: "/tasks" }],
+      confidence: 0.68,
+      source: "fallback",
+    };
+  }
+  if (taskDraft) {
+    return {
+      answer: ru
+        ? "Подготовил задачу. Проверьте и подтвердите перед созданием."
+        : "Task prepared. Review and confirm before creation.",
+      bullets: [
+        taskDraft.assignedToName
+          ? `${ru ? "Исполнитель" : "Assignee"}: ${taskDraft.assignedToName}`
+          : ru ? "Исполнитель не выбран" : "No assignee selected",
+        taskDraft.projectName
+          ? `${ru ? "Проект" : "Project"}: ${taskDraft.projectName}`
+          : ru ? "Без проекта" : "No project",
+      ],
+      links: [{ label: ru ? "Открыть задачи" : "Open tasks", href: "/tasks" }],
+      actions: [
+        {
+          kind: "create_task",
+          label: ru ? `Создать задачу: ${taskDraft.title}` : `Create task: ${taskDraft.title}`,
+          payload: taskDraft,
+        },
+      ],
+      confidence: 0.84,
+      source: "fallback",
+    };
+  }
 
   if (!wantsCreateProject) return null;
 
@@ -457,7 +570,9 @@ function buildSafeActionFallback(
   }
 
   return {
-    answer: ru ? "В процессе." : "Processing.",
+    answer: ru
+      ? "Подготовил проект. Проверьте и подтвердите перед созданием."
+      : "Project prepared. Review and confirm before creation.",
     bullets: [],
     links: [{ label: ru ? "Открыть проекты" : "Open projects", href: "/projects" }],
     actions: [
@@ -491,8 +606,8 @@ function buildGeminiUnavailableFallback(question: string): AssistantResult {
 
   return {
     answer: ru
-      ? "Gemini недоступен. Повторите запрос позже."
-      : "Gemini is unavailable. Try again later.",
+      ? "Jarvis временно недоступен. Повторите запрос позже."
+      : "Jarvis is temporarily unavailable. Please try again.",
     bullets: [],
     links: [],
     confidence: 0.2,
@@ -649,7 +764,7 @@ function formatAssistantHistory(history: AssistantConversationTurn[]): string {
 
   return history
     .slice(-10)
-    .map((turn) => `${turn.role === "user" ? "Manager" : "Gemini"}: ${turn.text.slice(0, 900)}`)
+    .map((turn) => `${turn.role === "user" ? "Manager" : "Jarvis"}: ${turn.text.slice(0, 900)}`)
     .join("\n");
 }
 
@@ -679,6 +794,7 @@ async function tryGeminiObject(
   taskInstructions: string,
   prompt: string,
   attachments: JarvisAttachment[] = [],
+  systemInstruction = JARVIS_GEMINI_SYSTEM_PROMPT,
 ): Promise<Record<string, unknown> | null> {
   const apiKey = readGeminiApiKey();
   if (!apiKey) {
@@ -706,7 +822,7 @@ async function tryGeminiObject(
     const genAi = new GoogleGenerativeAI(apiKey);
     const model = genAi.getGenerativeModel({
       model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
-      systemInstruction: JARVIS_GEMINI_SYSTEM_PROMPT,
+      systemInstruction,
     });
     const result = await model.generateContent({
       contents: [{ role: "user", parts }],
@@ -733,8 +849,9 @@ async function tryAssistantModelObject(
   system: string,
   prompt: string,
   attachments: JarvisAttachment[] = [],
+  systemInstruction?: string,
 ): Promise<{ object: Record<string, unknown>; source: "gemini" } | null> {
-  const geminiObject = await tryGeminiObject(system, prompt, attachments);
+  const geminiObject = await tryGeminiObject(system, prompt, attachments, systemInstruction);
   return geminiObject ? { object: geminiObject, source: "gemini" } : null;
 }
 
@@ -1432,7 +1549,11 @@ export async function answerWorkerAssistant(
 export async function answerManagerAssistant(
   question: string,
   snapshot: AssistantSnapshot,
-  options: { attachments?: JarvisAttachment[]; history?: AssistantConversationTurn[] } = {},
+  options: {
+    attachments?: JarvisAttachment[];
+    history?: AssistantConversationTurn[];
+    systemPrompt?: string;
+  } = {},
 ): Promise<AssistantResult> {
   const attachments = options.attachments ?? [];
   const history = options.history ?? [];
@@ -1442,7 +1563,7 @@ export async function answerManagerAssistant(
     return buildFinanceRestrictedFallback(question);
   }
 
-  const safeActionAnswer = buildSafeActionFallback(question);
+  const safeActionAnswer = buildSafeActionFallback(question, snapshot);
   if (safeActionAnswer) {
     return safeActionAnswer;
   }
@@ -1510,6 +1631,7 @@ export async function answerManagerAssistant(
           ]),
     ].join("\n"),
     attachments,
+    options.systemPrompt,
   );
 
   if (!modelObject) {

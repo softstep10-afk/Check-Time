@@ -21,8 +21,9 @@ export interface JarvisVoiceSelection {
 type JarvisVoiceEnv = Record<string, string | undefined>;
 
 export const JARVIS_VOICE_PROFILE = [
-  "Voice profile: neutral operational assistant for an internal construction command app.",
-  "Tone profile is intentionally unset. Use the active system prompt only.",
+  "Voice profile: refined British butler AI assistant for an internal construction command app.",
+  "Delivery: calm, intelligent, composed, concise, and confident, with subtle synthetic processing.",
+  "Do not imitate any specific actor, film character, or copyrighted voice.",
   "Speak in the language selected by the application unless the user requests otherwise.",
 ].join(" ");
 

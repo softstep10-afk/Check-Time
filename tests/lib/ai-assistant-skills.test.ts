@@ -203,7 +203,7 @@ function workspace(): ManagerWorkspaceData {
   };
 }
 
-describe("AI assistant Gemini routing", () => {
+describe("AI assistant Jarvis routing", () => {
   it("keeps worker skills in the snapshot without local recommendation fallback", async () => {
     await withModelDisabled(async () => {
       const snapshot = buildAssistantSnapshot(workspace(), [], {
@@ -218,7 +218,7 @@ describe("AI assistant Gemini routing", () => {
         snapshot,
       );
 
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
       expect(answer.bullets).toEqual([]);
     });
   });
@@ -234,11 +234,11 @@ describe("AI assistant Gemini routing", () => {
       const answer = await answerManagerAssistant("найди фото glass delivery", snapshot);
 
       expect(snapshot.mediaIndex[0]?.filename).toBe("glass-delivery.jpg");
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
     });
   });
 
-  it("does not generate local rough estimates when Gemini is unavailable", async () => {
+  it("does not generate local rough estimates when Jarvis model is unavailable", async () => {
     await withModelDisabled(async () => {
       const data = workspace();
       data.org.settings = {
@@ -259,7 +259,7 @@ describe("AI assistant Gemini routing", () => {
       const answer = await answerManagerAssistant("Сделай эстимейт на фрейм Home", snapshot);
 
       expect(snapshot.memoryRules).toEqual([]);
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
       expect(answer.answer).not.toContain("человеко-часов");
     });
   });
@@ -291,7 +291,7 @@ describe("AI assistant Gemini routing", () => {
 
       expect(snapshot.recentShifts[0]?.workerName).toBe("Vasia");
       expect(snapshot.recentShifts[0]?.durationMinutes).toBe(510);
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
       expect(answer.answer.toLowerCase()).not.toContain("эстимейт");
       expect(answer.answer).not.toContain("человеко-часов");
     });
@@ -316,7 +316,7 @@ describe("AI assistant Gemini routing", () => {
       const answer = await answerManagerAssistant("кто сейчас на работе?", snapshot);
 
       expect(snapshot.liveWorkers[0]?.name).toBe("Vasia");
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
       expect(answer.answer.toLowerCase()).not.toContain("рейтинг");
       expect(answer.answer.toLowerCase()).not.toContain("месяц");
     });
@@ -331,7 +331,7 @@ describe("AI assistant Gemini routing", () => {
       const answer = await answerManagerAssistant("Что по коду Вашингтона для safety inspection?", snapshot);
 
       expect(snapshot.codeReferences.some((reference) => reference.url.startsWith("https://"))).toBe(true);
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
       expect(answer.links).toEqual([]);
     });
   });
@@ -407,7 +407,7 @@ describe("AI assistant Gemini routing", () => {
         snapshot,
       );
 
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
       expect(answer.answer).not.toContain("532");
       expect(answer.bullets).toEqual([]);
     });
@@ -432,9 +432,35 @@ describe("AI assistant Gemini routing", () => {
       });
 
       expect(wakeAnswer?.answer).toBe("Слушаю");
-      expect(answer.answer).toContain("Gemini недоступен");
+      expect(answer.answer).toContain("Jarvis временно недоступен");
       expect(answer.answer).not.toContain("файл");
       expect(answer.bullets).toEqual([]);
+    });
+  });
+
+  it("prepares a real task action without claiming it was created", async () => {
+    await withModelDisabled(async () => {
+      const snapshot = buildAssistantSnapshot(workspace(), [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant(
+        "создай задачу для Vasia проверить плитку на Home",
+        snapshot,
+      );
+
+      expect(answer.answer).toContain("Подготовил задачу");
+      expect(answer.answer).not.toContain("Задача создана");
+      expect(answer.actions?.[0]).toMatchObject({
+        kind: "create_task",
+        payload: {
+          title: "проверить плитку",
+          assignedTo: "vasia",
+          assignedToName: "Vasia",
+          projectId: "project",
+          projectName: "Home",
+        },
+      });
     });
   });
 });

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
 import { JarvisOrb, type JarvisOrbState } from "@/components/shared/JarvisOrb";
 import { useTranslation } from "@/lib/i18n";
-import type { AssistantConversationTurn } from "@/lib/ai/types";
+import { writeJarvisDiagnostic } from "@/lib/ai/jarvis-diagnostics";
+import type { AssistantAction, AssistantConversationTurn } from "@/lib/ai/types";
 
 type VoiceState = "idle" | "listening" | "thinking" | "speaking" | "error";
 type DockPosition = { x: number; y: number };
@@ -37,6 +38,7 @@ type VoiceApiResponse = {
   assistant?: {
     answer?: string;
     bullets?: string[];
+    actions?: AssistantAction[];
   };
   audio?: {
     base64?: string;
@@ -55,10 +57,10 @@ const VOICE_TEXT = {
     start: "Talk live",
     stop: "Stop voice",
     connecting: "Listening through this browser...",
-    connected: "Processing through Gemini and Google voice...",
+    connected: "Jarvis is thinking...",
     speaking: "Jarvis is speaking.",
-    failed: "Google voice request failed.",
-    needsKey: "Live voice needs Gemini and Google Cloud Text-to-Speech credentials in Vercel.",
+    failed: "Jarvis voice request failed.",
+    needsKey: "Jarvis voice is temporarily unavailable.",
     unsupported: "Voice input is not supported in this browser.",
     microphoneBlocked: "Microphone access is blocked. Allow microphone access in the browser and try again.",
     noSpeech: "I did not catch anything. Tap Jarvis and speak again.",
@@ -67,10 +69,10 @@ const VOICE_TEXT = {
     start: "Говорить",
     stop: "Остановить",
     connecting: "Слушаю через этот браузер...",
-    connected: "Обрабатываю через Gemini и голос Google...",
+    connected: "Jarvis думает...",
     speaking: "Jarvis отвечает голосом.",
-    failed: "Голосовой запрос Google не сработал.",
-    needsKey: "Для живого голоса нужны Gemini и Google Cloud Text-to-Speech credentials в Vercel.",
+    failed: "Голосовой запрос Jarvis не сработал.",
+    needsKey: "Голос Jarvis временно недоступен.",
     unsupported: "Голосовой ввод не поддерживается в этом браузере.",
     microphoneBlocked: "Доступ к микрофону заблокирован. Разрешите микрофон в браузере и попробуйте снова.",
     noSpeech: "Я ничего не услышал. Нажмите Jarvis и скажите ещё раз.",
@@ -464,6 +466,17 @@ export function JarvisDock() {
       }
 
       const assistantAnswer = payload.assistant?.answer?.trim() || "";
+      const preparedAction = payload.assistant?.actions?.find((action) => action.kind !== "navigate") ?? null;
+      writeJarvisDiagnostic({
+        inputMode: "voice",
+        userRequest: transcript,
+        normalizedRequest: transcript.toLowerCase(),
+        selectedIntent: preparedAction?.kind ?? "assistant",
+        preparedAction,
+        executionStatus: preparedAction ? "awaiting_owner_confirmation" : "succeeded",
+        result: assistantAnswer,
+        error: null,
+      });
       if (assistantAnswer) {
         const nextHistory: AssistantConversationTurn[] = voiceHistoryRef.current.slice(-8);
         nextHistory.push(
@@ -502,6 +515,16 @@ export function JarvisDock() {
     } catch (error) {
       if (voiceAttemptRef.current !== attempt) return;
       const message = error instanceof Error && error.message ? error.message : voiceText("jarvisDock.voiceFailed", text.failed);
+      writeJarvisDiagnostic({
+        inputMode: "voice",
+        userRequest: transcript,
+        normalizedRequest: transcript.toLowerCase(),
+        selectedIntent: "assistant",
+        preparedAction: null,
+        executionStatus: "failed",
+        result: null,
+        error: message,
+      });
       stopVoice("error", message);
     }
   }

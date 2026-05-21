@@ -26,6 +26,21 @@ function sanitizePreparedAction(action: AssistantAction): Record<string, unknown
     };
   }
 
+  if (action.kind === "create_task") {
+    return {
+      kind: action.kind,
+      label: action.label,
+      payload: {
+        title: action.payload.title,
+        description: action.payload.description ?? null,
+        projectId: action.payload.projectId ?? null,
+        projectName: action.payload.projectName ?? null,
+        assignedTo: action.payload.assignedTo ?? null,
+        assignedToName: action.payload.assignedToName ?? null,
+      },
+    };
+  }
+
   return {
     kind: action.kind,
     label: action.label,

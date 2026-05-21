@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Send, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { logAudit } from "@/lib/audit";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import {
@@ -45,7 +44,6 @@ export function BulkMessageComposer({
   orgId,
   senderId,
   senderName,
-  senderRole = "manager",
   crew,
   projects = [],
   embedded = false,
@@ -176,51 +174,37 @@ export function BulkMessageComposer({
       const taskTitle = text.trim().length > 140
         ? `${text.trim().slice(0, 137)}...`
         : text.trim();
-      const taskRows = insertedMessages.map((message) => ({
-        org_id: orgId,
-        project_id: taskProjectId || null,
-        assigned_to: message.recipient_id,
-        assigned_by: senderId,
-        title: taskTitle,
-        description: text.trim(),
-        priority: "medium",
-        status: "pending",
-        due_date: null,
-        metadata: {
-          source: "broadcast_task",
-          message_id: message.id,
-          broadcast: sendToAll,
-        },
-      }));
-      const { data: insertedTasks, error: taskError } = await supabase
-        .from("tasks")
-        .insert(taskRows)
-        .select("id");
+      const taskResponse = await fetch("/api/manager/message-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priority,
+          items: insertedMessages.map((message) => ({
+            messageId: message.id,
+            recipientId: message.recipient_id,
+            title: taskTitle,
+            description: text.trim(),
+            projectId: taskProjectId || null,
+            source: "broadcast_task",
+          })),
+        }),
+      });
+      const taskResult = (await taskResponse.json().catch(() => ({}))) as {
+        error?: string;
+        tasks?: Array<{ id: string }>;
+      };
 
-      if (taskError) {
+      if (!taskResponse.ok || (taskResult.tasks?.length ?? 0) !== insertedMessages.length) {
         setSending(false);
         setMessage({
           kind: "err",
-          text: t("messages.taskCreateFailed").replace("{error}", taskError.message),
+          text: t("messages.taskCreateFailed").replace(
+            "{error}",
+            taskResult.error ?? t("common.errorTryAgain"),
+          ),
         });
         return;
       }
-
-      void logAudit({
-        orgId,
-        actorId: senderId,
-        actorName: senderName,
-        actorRole: senderRole,
-        action: "tasks_created_from_message",
-        targetType: "task",
-        beforeData: null,
-        afterData: {
-          project_id: taskProjectId || null,
-          recipient_ids: insertedMessages.map((message) => message.recipient_id),
-          task_ids: ((insertedTasks ?? []) as Array<{ id: string }>).map((task) => task.id),
-          count: insertedMessages.length,
-        },
-      });
     }
 
     setSending(false);

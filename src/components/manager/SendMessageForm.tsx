@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import { FileText, Paperclip, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { logAudit } from "@/lib/audit";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import {
@@ -27,8 +26,6 @@ function classifyFile(file: File): "image" | "video" | "pdf" {
 export function SendMessageForm({
   orgId,
   senderId,
-  senderName = "Manager",
-  senderRole = "manager",
   recipientId,
   recipientName,
   projects = [],
@@ -189,55 +186,39 @@ export function SendMessageForm({
     if (priority === "task") {
       const body = text.trim();
       const taskTitle = buildTaskTitle(body, attachment?.filename);
-      const { data: insertedTask, error: taskErr } = await supabase
-        .from("tasks")
-        .insert({
-          org_id: orgId,
-          project_id: taskProjectId || null,
-          assigned_to: recipientId,
-          assigned_by: senderId,
-          title: taskTitle,
-          description: body || null,
-          priority: "medium",
-          status: "pending",
-          due_date: null,
-          metadata: {
-            source: "message_task",
-            message_id: messageId,
-            recipient_id: recipientId,
-            attachment_filename: attachment?.filename ?? null,
-          },
-        })
-        .select("id")
-        .single<{ id: string }>();
+      const taskResponse = await fetch("/api/manager/message-tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          priority,
+          items: [
+            {
+              messageId,
+              recipientId,
+              title: taskTitle,
+              description: body || null,
+              projectId: taskProjectId || null,
+              attachmentFilename: attachment?.filename ?? null,
+              source: "message_task",
+            },
+          ],
+        }),
+      });
+      const taskResult = (await taskResponse.json().catch(() => ({}))) as {
+        error?: string;
+        tasks?: Array<{ id: string }>;
+      };
 
-      if (taskErr || !insertedTask) {
+      if (!taskResponse.ok || !taskResult.tasks?.[0]?.id) {
         setError(
           t("messages.taskCreateFailed").replace(
             "{error}",
-            taskErr?.message ?? t("common.errorTryAgain"),
+            taskResult.error ?? t("common.errorTryAgain"),
           ),
         );
         setSending(false);
         return;
       }
-
-      void logAudit({
-        orgId,
-        actorId: senderId,
-        actorName: senderName,
-        actorRole: senderRole,
-        action: "task_created_from_message",
-        targetType: "task",
-        targetId: insertedTask.id,
-        beforeData: null,
-        afterData: {
-          title: taskTitle,
-          project_id: taskProjectId || null,
-          assigned_to: recipientId,
-          message_id: messageId,
-        },
-      });
     }
 
     setSending(false);

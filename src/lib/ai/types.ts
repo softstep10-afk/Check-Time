@@ -271,6 +271,18 @@ export type AssistantAction =
         startDate?: string | null;
         endDate?: string | null;
       };
+    }
+  | {
+      kind: "create_task";
+      label: string;
+      payload: {
+        title: string;
+        description?: string | null;
+        projectId?: string | null;
+        projectName?: string | null;
+        assignedTo?: string | null;
+        assignedToName?: string | null;
+      };
     };
 
 export interface AssistantConversationTurn {
