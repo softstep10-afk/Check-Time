@@ -102,6 +102,7 @@ export function WorkerMessagesPage() {
       }
 
       if (!active) return;
+      const unreadIds = rows.filter((row) => !row.read).map((row) => row.id);
       setMessages(
         rows.map((row) => ({
           id: row.id,
@@ -111,7 +112,7 @@ export function WorkerMessagesPage() {
           text: row.text,
           color: (row.color ?? PRIORITY_COLOR[inferPriority(row)]) as AppMessage["color"],
           priority: inferPriority(row),
-          read: row.read,
+          read: row.read || unreadIds.includes(row.id),
           created_at: row.created_at,
           metadata: row.metadata ?? null,
           attachment: row.attachment
@@ -127,6 +128,17 @@ export function WorkerMessagesPage() {
         })),
       );
       setLoading(false);
+
+      if (unreadIds.length > 0) {
+        void supabase
+          .from("messages")
+          .update({ read: true })
+          .eq("recipient_id", shell.profile.id)
+          .in("id", unreadIds)
+          .then(({ error }) => {
+            if (error) console.warn("Could not mark messages as read", error);
+          });
+      }
     }
 
     void loadMessages();

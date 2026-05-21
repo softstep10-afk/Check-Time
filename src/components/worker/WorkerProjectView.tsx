@@ -745,6 +745,7 @@ export function WorkerProjectView({
         id="tasks"
         projectId={project.id}
         defaultOpen={false}
+        persistState={false}
         dataTestid="worker-project-tasks-folder"
         className="p-4"
         contentClassName="space-y-4"

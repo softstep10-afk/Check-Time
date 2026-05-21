@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Send, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
@@ -57,7 +56,6 @@ export function BulkMessageComposer({
   embedded?: boolean;
 }) {
   const { t, locale } = useTranslation();
-  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [sendToAll, setSendToAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -69,7 +67,11 @@ export function BulkMessageComposer({
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  const allRecipientCount = crew.filter((member) => member.id !== senderId).length;
+  const recipientOptions = useMemo(
+    () => crew.filter((member) => member.id !== senderId),
+    [crew, senderId],
+  );
+  const allRecipientCount = recipientOptions.length;
   const recipientCount = sendToAll
     ? allRecipientCount
     : [...selectedIds].filter((id) => id !== senderId).length;
@@ -95,6 +97,36 @@ export function BulkMessageComposer({
     return () => clearTimeout(id);
   }, [loadHistory]);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel(`manager-message-history-${senderId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=eq.${senderId}`,
+        },
+        () => void loadHistory(),
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=eq.${senderId}`,
+        },
+        () => void loadHistory(),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadHistory, senderId, supabase]);
+
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -111,7 +143,7 @@ export function BulkMessageComposer({
       return;
     }
     const recipients = sendToAll
-      ? crew.filter((c) => c.id !== senderId).map((c) => c.id)
+      ? recipientOptions.map((c) => c.id)
       : [...selectedIds].filter((id) => id !== senderId);
     if (recipients.length === 0) {
       setMessage({ kind: "err", text: t("messages.pickRecipient") });
@@ -219,7 +251,6 @@ export function BulkMessageComposer({
     setSelectedIds(new Set());
     setSendToAll(false);
     void loadHistory();
-    router.refresh();
   }
 
   return (
@@ -264,7 +295,7 @@ export function BulkMessageComposer({
                 {t("messages.pickRecipients")}
               </legend>
               <div className="grid max-h-[200px] gap-1 overflow-y-auto rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-2 sm:grid-cols-2">
-                {crew.map((member) => {
+                {recipientOptions.map((member) => {
                   const checked = selectedIds.has(member.id);
                   return (
                     <label

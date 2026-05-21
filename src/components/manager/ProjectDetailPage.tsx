@@ -1810,6 +1810,7 @@ export function ProjectDetailPage({
           id="tasks"
           projectId={project.id}
           defaultOpen={false}
+          persistState={false}
           dataTestid="manager-project-tasks-folder"
           className="order-2 p-4"
           summary={

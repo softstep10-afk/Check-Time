@@ -21,6 +21,7 @@ type CollapsibleSectionProps = {
   dataTestid?: string;
   className?: string;
   contentClassName?: string;
+  persistState?: boolean;
 };
 
 const memoryState = new Map<string, boolean>();
@@ -78,6 +79,7 @@ export function CollapsibleSection({
   dataTestid,
   className = "",
   contentClassName = "",
+  persistState = true,
 }: CollapsibleSectionProps) {
   const panelId = useId();
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -98,7 +100,9 @@ export function CollapsibleSection({
     const shouldScroll = hashMatches(id);
     const nextOpen = hashMatches(id)
       ? true
-      : readSectionState(storageKey) ?? defaultOpen;
+      : persistState
+        ? readSectionState(storageKey) ?? defaultOpen
+        : defaultOpen;
     const frame = window.requestAnimationFrame(() => {
       setOpenState(nextOpen);
       setHydrated(true);
@@ -109,12 +113,13 @@ export function CollapsibleSection({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [defaultOpen, id, storageKey]);
+  }, [defaultOpen, id, persistState, storageKey]);
 
   useEffect(() => {
     if (!hydrated) return;
+    if (!persistState) return;
     writeSectionState(storageKey, open);
-  }, [hydrated, open, storageKey]);
+  }, [hydrated, open, persistState, storageKey]);
 
   useEffect(() => {
     function handleHashChange() {
