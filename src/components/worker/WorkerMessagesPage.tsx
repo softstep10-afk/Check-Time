@@ -7,6 +7,7 @@ import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import {
   PRIORITY_COLOR,
   type AppMessage,
+  type MessageAttachment,
   type MessagePriority,
 } from "@/lib/message-types";
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
@@ -118,7 +119,8 @@ export function WorkerMessagesPage() {
                 url: String(row.attachment.url ?? ""),
                 storagePath: String(row.attachment.storagePath ?? ""),
                 filename: String(row.attachment.filename ?? ""),
-                type: (String(row.attachment.type ?? "image") as "image" | "video" | "pdf"),
+                type: (String(row.attachment.type ?? "image") as MessageAttachment["type"]),
+                mimeType: row.attachment.mimeType ? String(row.attachment.mimeType) : undefined,
                 size: Number(row.attachment.size ?? 0),
               }
             : null,

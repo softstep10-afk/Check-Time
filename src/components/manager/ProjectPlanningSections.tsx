@@ -7,6 +7,7 @@ import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
 import { uploadProjectPlanningAttachment } from "@/lib/project-planning-attachments";
+import { ACCEPT_ALL_UPLOADS } from "@/lib/upload-limits";
 import {
   createProjectPlanningId,
   parseMaterialSpecText,
@@ -684,7 +685,7 @@ function ProjectEstimatesSection({
             <input
               ref={attachmentInputRef}
               type="file"
-              accept=".pdf,.csv,.tsv,.txt,.xls,.xlsx,.doc,.docx,image/*,video/*"
+              accept={ACCEPT_ALL_UPLOADS}
               className="hidden"
               onChange={(event) => {
                 void addDraftFileAttachment(event.target.files?.[0] ?? null);

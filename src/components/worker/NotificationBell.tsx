@@ -21,6 +21,7 @@ import {
   PRIORITY_COLOR,
   PRIORITY_ORDER,
   type AppMessage,
+  type MessageAttachment,
   type MessagePriority,
 } from "@/lib/message-types";
 
@@ -153,7 +154,8 @@ export function NotificationBell({
                 url: (r.attachment as Record<string, string>).url ?? "",
                 storagePath: (r.attachment as Record<string, string>).storagePath ?? "",
                 filename: (r.attachment as Record<string, string>).filename ?? "",
-                type: ((r.attachment as Record<string, string>).type ?? "image") as "image" | "video" | "pdf",
+                type: ((r.attachment as Record<string, string>).type ?? "image") as MessageAttachment["type"],
+                mimeType: (r.attachment as Record<string, string>).mimeType ?? undefined,
                 size: Number((r.attachment as Record<string, number>).size ?? 0),
               }
             : undefined,

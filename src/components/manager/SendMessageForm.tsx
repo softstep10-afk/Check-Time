@@ -12,15 +12,21 @@ import {
   type MessageAttachment,
   type MessagePriority,
 } from "@/lib/message-types";
-import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
+import {
+  ACCEPT_ALL_UPLOADS,
+  inferUploadContentType,
+  validateUploadFile,
+} from "@/lib/upload-limits";
 
 const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
 type ProjectOption = { id: string; name: string; status?: string | null };
 
-function classifyFile(file: File): "image" | "video" | "pdf" {
+function classifyFile(file: File): MessageAttachment["type"] {
   if (file.type.startsWith("image/")) return "image";
   if (file.type.startsWith("video/")) return "video";
-  return "pdf";
+  const lower = file.name.toLowerCase();
+  if (file.type === "application/pdf" || lower.endsWith(".pdf")) return "pdf";
+  return "document";
 }
 
 export function SendMessageForm({
@@ -69,7 +75,9 @@ export function SendMessageForm({
             ? "uploads.tooLargePhoto"
             : error.kind === "video"
               ? "uploads.tooLargeVideo"
-              : "uploads.tooLargePdf";
+              : error.kind === "pdf"
+                ? "uploads.tooLargePdf"
+                : "uploads.tooLargeDocument";
         setError(t(key));
       } else {
         setError(t("uploads.unsupportedType").replace("{kind}", error.mime));
@@ -101,7 +109,11 @@ export function SendMessageForm({
 
     const { error: uploadErr } = await supabase.storage
       .from("media")
-      .upload(path, file, { upsert: false, cacheControl: "3600" });
+      .upload(path, file, {
+        upsert: false,
+        cacheControl: "3600",
+        contentType: inferUploadContentType(file),
+      });
 
     if (uploadErr) {
       setError(t("messages.uploadFailed"));
@@ -113,6 +125,7 @@ export function SendMessageForm({
       storagePath: path,
       filename: file.name,
       type: classifyFile(file),
+      mimeType: inferUploadContentType(file),
       size: file.size,
     };
   }

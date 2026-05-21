@@ -24,7 +24,16 @@ import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { logAudit } from "@/lib/audit";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
-import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
+import {
+  ACCEPT_ALL_UPLOADS,
+  ACCEPT_DOCUMENT_UPLOADS,
+  ACCEPT_IMAGE_UPLOADS,
+  ACCEPT_PDF_UPLOADS,
+  ACCEPT_VIDEO_UPLOADS,
+  inferUploadContentType,
+  type UploadKind,
+  validateUploadFile,
+} from "@/lib/upload-limits";
 import {
   getAttachmentMediaIds,
   linkMediaToTask,
@@ -402,13 +411,14 @@ export function ProjectDetailPage({
   const hasTaskAssignees =
     taskAssigneeProjectProfiles.length > 0 || taskAssigneeOtherProfiles.length > 0;
 
-  // 3-button project media upload (photo / video / pdf). Separate from
+  // Project business-file upload (photo / video / PDF / documents). Separate from
   // receipts (no store/amount metadata) and from task attachments
   // (no task linkage). Lands in the same media table + bucket so the
   // existing Recent Media panel + tab counts pick it up automatically.
   const photoMediaInputRef = useRef<HTMLInputElement | null>(null);
   const videoMediaInputRef = useRef<HTMLInputElement | null>(null);
   const pdfMediaInputRef = useRef<HTMLInputElement | null>(null);
+  const documentMediaInputRef = useRef<HTMLInputElement | null>(null);
   const quickProjectMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   // Strict separation: the Project Media panel must show only rows the
@@ -1102,7 +1112,7 @@ export function ProjectDetailPage({
 
   async function handleProjectMediaUpload(
     files: FileList | File[] | null,
-    kind: "photo" | "video" | "pdf",
+    kind: UploadKind,
   ) {
     const list = files ? Array.from(files) : [];
     console.log("[project-media] start", { kind, fileCount: list.length });
@@ -1127,7 +1137,21 @@ export function ProjectDetailPage({
           reason: validation.error.reason,
           attempted,
         });
-        setMessage(`validation: ${validation.error.reason}${attempted ? ` (${attempted})` : ""}`);
+        if (validation.error.reason === "too_large") {
+          const key =
+            validation.error.kind === "photo"
+              ? "uploads.tooLargePhoto"
+              : validation.error.kind === "video"
+                ? "uploads.tooLargeVideo"
+                : validation.error.kind === "pdf"
+                  ? "uploads.tooLargePdf"
+                  : "uploads.tooLargeDocument";
+          setMessage(t(key));
+        } else {
+          setMessage(
+            t("uploads.unsupportedType").replace("{kind}", attempted ?? file.name),
+          );
+        }
         return;
       }
       console.log("[project-media] validation ok", { fileKind: validation.kind });
@@ -1147,9 +1171,7 @@ export function ProjectDetailPage({
     for (const file of list) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${orgId}/${project.id}/project-media/${createClientUuid()}-${safeName}`;
-      const contentType =
-        file.type ||
-        (kind === "pdf" ? "application/pdf" : kind === "photo" ? "image/jpeg" : "video/mp4");
+      const contentType = inferUploadContentType(file);
 
       console.log("[project-media] storage upload begin", {
         path,
@@ -1201,30 +1223,41 @@ export function ProjectDetailPage({
     const list = files ? Array.from(files) : [];
     if (list.length === 0) return;
 
-    const grouped: Record<"photo" | "video", File[]> = {
+    const grouped: Record<UploadKind, File[]> = {
       photo: [],
       video: [],
+      pdf: [],
+      document: [],
     };
 
     for (const file of list) {
       const validation = validateUploadFile(file);
       if (!validation.ok) {
         const attempted = "mime" in validation.error ? validation.error.mime : null;
-        setMessage(`validation: ${validation.error.reason}${attempted ? ` (${attempted})` : ""}`);
-        return;
-      }
-      if (validation.kind === "pdf") {
-        setMessage(t("projectDetail.mediaWrongKind"));
+        if (validation.error.reason === "too_large") {
+          const key =
+            validation.error.kind === "photo"
+              ? "uploads.tooLargePhoto"
+              : validation.error.kind === "video"
+                ? "uploads.tooLargeVideo"
+                : validation.error.kind === "pdf"
+                  ? "uploads.tooLargePdf"
+                  : "uploads.tooLargeDocument";
+          setMessage(t(key));
+        } else {
+          setMessage(
+            t("uploads.unsupportedType").replace("{kind}", attempted ?? file.name),
+          );
+        }
         return;
       }
       grouped[validation.kind].push(file);
     }
 
-    if (grouped.photo.length > 0) {
-      await handleProjectMediaUpload(grouped.photo, "photo");
-    }
-    if (grouped.video.length > 0) {
-      await handleProjectMediaUpload(grouped.video, "video");
+    for (const kind of ["photo", "video", "pdf", "document"] as const) {
+      if (grouped[kind].length > 0) {
+        await handleProjectMediaUpload(grouped[kind], kind);
+      }
     }
   }
 
@@ -2234,7 +2267,7 @@ export function ProjectDetailPage({
                 <input
                   ref={quickProjectMediaInputRef}
                   type="file"
-                  accept="image/*,video/*"
+                  accept={ACCEPT_ALL_UPLOADS}
                   multiple
                   className="hidden"
                   onChange={(event) => {
@@ -2256,17 +2289,17 @@ export function ProjectDetailPage({
                   }}
                 >
                   <Plus size={13} />
-                  {t("projectDetail.addPhotoVideo")}
+                  {t("projectDetail.addFiles")}
                 </button>
               </>
             }
           >
-            {/* 3-button upload triggers — photo / video / pdf. Local-device only. */}
+            {/* File-type upload triggers — photo / video / PDF / documents. Local-device only. */}
             <div className="mt-3 flex flex-wrap gap-2">
               <input
                 ref={photoMediaInputRef}
                 type="file"
-                accept="image/*"
+                accept={ACCEPT_IMAGE_UPLOADS}
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -2277,7 +2310,7 @@ export function ProjectDetailPage({
               <input
                 ref={videoMediaInputRef}
                 type="file"
-                accept="video/*"
+                accept={ACCEPT_VIDEO_UPLOADS}
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -2288,11 +2321,22 @@ export function ProjectDetailPage({
               <input
                 ref={pdfMediaInputRef}
                 type="file"
-                accept="application/pdf"
+                accept={ACCEPT_PDF_UPLOADS}
                 multiple
                 className="hidden"
                 onChange={(e) => {
                   void handleProjectMediaUpload(e.target.files, "pdf");
+                  e.target.value = "";
+                }}
+              />
+              <input
+                ref={documentMediaInputRef}
+                type="file"
+                accept={ACCEPT_DOCUMENT_UPLOADS}
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  void handleProjectMediaUpload(e.target.files, "document");
                   e.target.value = "";
                 }}
               />
@@ -2322,6 +2366,15 @@ export function ProjectDetailPage({
                 style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
               >
                 📄 {t("projectDetail.addPdf")}
+              </button>
+              <button
+                type="button"
+                onClick={() => documentMediaInputRef.current?.click()}
+                disabled={busyKey === "project-media"}
+                className="rounded-[var(--radius-sm)] border px-2.5 py-1 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                📎 {t("projectDetail.addDocument")}
               </button>
             </div>
             <div className="mt-1 text-[10px] text-[var(--text-muted)]">
@@ -3362,19 +3415,19 @@ function MaterialsSection({
 
   async function createDeliveryReceipt(file: File): Promise<ViewerMediaItem> {
     const validation = validateUploadFile(file);
-    if (!validation.ok || validation.kind === "video") {
+    if (!validation.ok || validation.kind === "video" || validation.kind === "document") {
       throw new Error(t("messages.uploadFailed"));
     }
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
-    const mimeType = file.type || "application/octet-stream";
+    const mimeType = inferUploadContentType(file);
     const { error: uploadErr } = await supabase.storage
       .from("media")
       .upload(path, file, { upsert: false, cacheControl: "3600", contentType: mimeType });
     if (uploadErr) throw new Error(uploadErr.message);
 
-    const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
+    const mediaType = validation.kind === "photo" ? "photo" : "pdf";
     const { data: row, error: insertErr } = await supabase
       .from("media")
       .insert({
@@ -4008,7 +4061,9 @@ function ReceiptsSection({
               ? "uploads.tooLargePhoto"
               : error.kind === "video"
                 ? "uploads.tooLargeVideo"
-                : "uploads.tooLargePdf";
+                : error.kind === "pdf"
+                  ? "uploads.tooLargePdf"
+                  : "uploads.tooLargeDocument";
           const text = t(key);
           setMessage(text);
           setReceiptUploadError(text);
@@ -4017,6 +4072,12 @@ function ReceiptsSection({
           setMessage(text);
           setReceiptUploadError(text);
         }
+        return;
+      }
+      if (validation.kind === "video" || validation.kind === "document") {
+        const text = t("uploads.unsupportedType").replace("{kind}", file.type || file.name);
+        setMessage(text);
+        setReceiptUploadError(text);
         return;
       }
     }
@@ -4028,10 +4089,11 @@ function ReceiptsSection({
     for (const file of Array.from(files)) {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
+      const mimeType = inferUploadContentType(file);
 
       const { error: uploadErr } = await supabase.storage
         .from("media")
-        .upload(path, file, { upsert: false, cacheControl: "3600" });
+        .upload(path, file, { upsert: false, cacheControl: "3600", contentType: mimeType });
 
       if (uploadErr) {
         const text = t("messages.uploadFailed");
@@ -4041,7 +4103,6 @@ function ReceiptsSection({
         return;
       }
 
-      const mimeType = file.type || "application/octet-stream";
       const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
 
       const metadata = {

@@ -12,6 +12,13 @@ import { createClient } from "@/lib/supabase/client";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { normalizeStoragePath } from "@/lib/task-attachments";
 import { MediaViewerModal } from "@/components/shared/MediaViewerModal";
+import {
+  ACCEPT_ALL_UPLOADS,
+  ACCEPT_DOCUMENT_UPLOADS,
+  ACCEPT_IMAGE_UPLOADS,
+  ACCEPT_PDF_UPLOADS,
+  ACCEPT_VIDEO_UPLOADS,
+} from "@/lib/upload-limits";
 import type { WorkerMediaItem } from "@/lib/worker-types";
 
 type PendingUpload = {
@@ -413,8 +420,7 @@ export function JournalPage() {
         <input
           ref={journalInputRef}
           type="file"
-          accept="image/*,video/*,application/pdf"
-          capture="environment"
+          accept={ACCEPT_ALL_UPLOADS}
           multiple
           onChange={(event) => replaceJournalFiles(event.target.files)}
           disabled={!shell.clockState.isClockedIn}
@@ -423,7 +429,7 @@ export function JournalPage() {
         <input
           ref={journalPhotoRef}
           type="file"
-          accept="image/*"
+          accept={ACCEPT_IMAGE_UPLOADS}
           capture="environment"
           multiple
           onChange={(event) => replaceJournalFiles(event.target.files)}
@@ -433,7 +439,7 @@ export function JournalPage() {
         <input
           ref={journalVideoRef}
           type="file"
-          accept="video/*"
+          accept={ACCEPT_VIDEO_UPLOADS}
           capture="environment"
           multiple
           onChange={(event) => replaceJournalFiles(event.target.files)}
@@ -443,7 +449,7 @@ export function JournalPage() {
         <input
           ref={journalPdfRef}
           type="file"
-          accept="application/pdf"
+          accept={`${ACCEPT_PDF_UPLOADS},${ACCEPT_DOCUMENT_UPLOADS}`}
           multiple
           onChange={(event) => replaceJournalFiles(event.target.files)}
           disabled={!shell.clockState.isClockedIn}
@@ -479,7 +485,7 @@ export function JournalPage() {
             style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)", background: "rgba(212, 81, 94, 0.06)" }}
           >
             <div className="text-2xl">📄</div>
-            <div className="mt-1 text-xs">{t("journal.bigBtnPdf")}</div>
+            <div className="mt-1 text-xs">{t("journal.bigBtnFiles")}</div>
           </button>
         </div>
         <div className="mt-1 text-[10px] text-[var(--text-muted)] text-center">

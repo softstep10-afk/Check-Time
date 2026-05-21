@@ -38,6 +38,20 @@ export function extensionFromMime(mime: string | null | undefined): string {
     // doc
     case "application/pdf":
       return ".pdf";
+    case "application/msword":
+      return ".doc";
+    case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      return ".docx";
+    case "application/vnd.ms-excel":
+      return ".xls";
+    case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+      return ".xlsx";
+    case "text/csv":
+      return ".csv";
+    case "text/plain":
+      return ".txt";
+    case "text/tab-separated-values":
+      return ".tsv";
     default:
       return "";
   }

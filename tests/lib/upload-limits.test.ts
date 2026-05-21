@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  ACCEPT_ALL_UPLOADS,
   classifyMime,
+  inferUploadContentType,
   STORAGE_LIMITS_MB,
   validateUploadFile,
 } from "@/lib/upload-limits";
@@ -29,9 +31,18 @@ describe("classifyMime", () => {
     expect(classifyMime("application/pdf")).toBe("pdf");
   });
 
+  it("recognises common business document MIMEs", () => {
+    expect(classifyMime("application/msword")).toBe("document");
+    expect(classifyMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe("document");
+    expect(classifyMime("application/vnd.ms-excel")).toBe("document");
+    expect(classifyMime("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).toBe("document");
+    expect(classifyMime("text/csv")).toBe("document");
+    expect(classifyMime("text/plain")).toBe("document");
+  });
+
   it("returns null for unknown types", () => {
     expect(classifyMime("application/octet-stream")).toBeNull();
-    expect(classifyMime("text/plain")).toBeNull();
+    expect(classifyMime("application/x-msdownload")).toBeNull();
   });
 });
 
@@ -69,5 +80,30 @@ describe("validateUploadFile", () => {
     const result = validateUploadFile(file);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.kind).toBe("video");
+  });
+
+  it("accepts Word, Excel, CSV, and PDF files by extension when MIME is empty", () => {
+    for (const [name, expected] of [
+      ["estimate.doc", "application/msword"],
+      ["scope.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+      ["materials.xls", "application/vnd.ms-excel"],
+      ["takeoff.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+      ["costs.csv", "text/csv"],
+      ["plans.pdf", "application/pdf"],
+    ] as const) {
+      const file = makeFile(name, "", 0.1);
+      const result = validateUploadFile(file);
+      expect(result.ok).toBe(true);
+      if (result.ok && name.endsWith(".pdf")) expect(result.kind).toBe("pdf");
+      if (result.ok && !name.endsWith(".pdf")) expect(result.kind).toBe("document");
+      expect(inferUploadContentType(file)).toBe(expected);
+    }
+  });
+
+  it("adds extensions to the shared accept filter so desktop pickers show office files", () => {
+    expect(ACCEPT_ALL_UPLOADS).toContain(".pdf");
+    expect(ACCEPT_ALL_UPLOADS).toContain(".docx");
+    expect(ACCEPT_ALL_UPLOADS).toContain(".xlsx");
+    expect(ACCEPT_ALL_UPLOADS).toContain(".csv");
   });
 });

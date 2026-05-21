@@ -1,29 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { validateUploadFile } from "@/lib/upload-limits";
+import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
 import { guessMediaType, slugifyFilename } from "@/lib/worker-utils";
-
-/**
- * Cloud-backed file pickers (Google Drive, iCloud, OneDrive) frequently
- * hand the browser a File whose `.type` is the empty string. Falling
- * back to the filename extension so Storage receives a real
- * Content-Type header instead of "application/octet-stream", which
- * many bucket configurations refuse outright.
- */
-function inferContentType(file: File): string {
-  if (file.type) return file.type;
-  const lower = file.name.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (/\.(jpe?g)$/.test(lower)) return "image/jpeg";
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".heic")) return "image/heic";
-  if (lower.endsWith(".heif")) return "image/heif";
-  if (lower.endsWith(".gif")) return "image/gif";
-  if (lower.endsWith(".mp4")) return "video/mp4";
-  if (lower.endsWith(".mov")) return "video/quicktime";
-  if (lower.endsWith(".webm")) return "video/webm";
-  return "application/octet-stream";
-}
 
 export type UploadAttachmentParams = {
   orgId: string;
@@ -88,7 +65,7 @@ export async function uploadTaskAttachment(
   const storagePath = `${orgId}/${projectId}/tasks/${Date.now()}-${safeName}`;
   console.log("[task-attach] storage upload begin", { storagePath });
 
-  const resolvedContentType = inferContentType(file);
+  const resolvedContentType = inferUploadContentType(file);
   const { error: uploadErr } = await supabase.storage
     .from("media")
     .upload(storagePath, file, {

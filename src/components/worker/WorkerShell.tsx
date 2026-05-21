@@ -1693,7 +1693,9 @@ export function WorkerShell({
               ? "uploads.tooLargePhoto"
               : error.kind === "video"
                 ? "uploads.tooLargeVideo"
-                : "uploads.tooLargePdf";
+                : error.kind === "pdf"
+                  ? "uploads.tooLargePdf"
+                  : "uploads.tooLargeDocument";
           setBanner({ tone: "error", text: t(key) });
         } else {
           setBanner({

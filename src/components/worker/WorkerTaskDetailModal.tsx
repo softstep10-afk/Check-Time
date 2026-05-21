@@ -14,6 +14,7 @@ import {
   getEffectiveTaskStatus,
   isEffectiveCompletedTask,
 } from "@/lib/task-status";
+import { ACCEPT_ALL_UPLOADS } from "@/lib/upload-limits";
 import type { TaskStatus } from "@/types/database";
 import type { TaskAttachmentRef } from "@/lib/task-attachments";
 import type { WorkerTaskModalMode } from "@/lib/worker-task-ui";
@@ -53,7 +54,7 @@ export interface WorkerTaskCompletionPayload {
   followUpRequired?: boolean;
   /** Free-form follow-up text. */
   followUpNote?: string;
-  /** Files the worker attached (photos / video / PDF). */
+  /** Files the worker attached (photos / video / PDF / business documents). */
   files?: File[];
 }
 
@@ -564,7 +565,7 @@ function WorkerTaskDetailModalBody({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*,video/*,application/pdf"
+                accept={ACCEPT_ALL_UPLOADS}
                 multiple
                 data-testid="worker-task-completion-files"
                 onChange={(event) => {

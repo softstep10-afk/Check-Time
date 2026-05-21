@@ -48,18 +48,28 @@ export function MessageAttachmentView({
 
   function attachmentToViewerItem(): ViewerMediaItem {
     const fallbackPath = attachment.storagePath || attachment.url || attachment.filename;
-    const mediaType = attachment.type === "image" ? "photo" : attachment.type === "pdf" ? "pdf" : "video";
+    const mediaType =
+      attachment.type === "image"
+        ? "photo"
+        : attachment.type === "video"
+          ? "video"
+          : attachment.type === "pdf"
+            ? "pdf"
+            : "document";
     return {
       id: `message-attachment-${attachment.storagePath || attachment.url || attachment.filename}`,
       storage_path: fallbackPath,
       directUrl: attachment.storagePath ? null : resolvedUrl || attachment.url || null,
       filename: attachment.filename,
       mime_type:
-        attachment.type === "image"
+        attachment.mimeType ??
+        (attachment.type === "image"
           ? "image/*"
           : attachment.type === "video"
             ? "video/*"
-            : "application/pdf",
+            : attachment.type === "pdf"
+              ? "application/pdf"
+              : "application/octet-stream"),
       media_type: mediaType,
       metadata: resolvedUrl && !attachment.storagePath ? { direct_url: resolvedUrl } : null,
     };
@@ -141,7 +151,8 @@ export function MessageAttachmentView({
     );
   }
 
-  // PDF
+  const fileTypeLabel = attachment.type === "pdf" ? "PDF" : "FILE";
+
   return (
     <>
       <button
@@ -150,13 +161,17 @@ export function MessageAttachmentView({
         className="mt-2 flex items-center gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] p-2.5"
         style={{ background: "var(--bg-primary)" }}
       >
-        <FileText size={18} className="shrink-0 text-[var(--red)]" />
+        <FileText
+          size={18}
+          className="shrink-0"
+          style={{ color: attachment.type === "pdf" ? "var(--red)" : "var(--brand-yellow)" }}
+        />
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
             {attachment.filename}
           </div>
           <div className="text-[10px] text-[var(--text-muted)]">
-            PDF • {formatFileSize(attachment.size)}
+            {fileTypeLabel} • {formatFileSize(attachment.size)}
           </div>
         </div>
         <span className="shrink-0 text-[10px] font-semibold text-[var(--brand-yellow)]">

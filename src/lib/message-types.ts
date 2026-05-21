@@ -27,7 +27,8 @@ export interface MessageAttachment {
   url: string;
   storagePath?: string;
   filename: string;
-  type: "image" | "video" | "pdf";
+  type: "image" | "video" | "pdf" | "document";
+  mimeType?: string;
   size: number;
 }
 

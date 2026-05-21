@@ -12,7 +12,11 @@ import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
 import { WorkerMaterialSpecSection } from "@/components/worker/WorkerMaterialSpecSection";
-import { validateUploadFile } from "@/lib/upload-limits";
+import {
+  ACCEPT_ALL_UPLOADS,
+  inferUploadContentType,
+  validateUploadFile,
+} from "@/lib/upload-limits";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
 import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
@@ -491,20 +495,28 @@ export function WorkerProjectView({
     const uploadedItems: TaskAttachmentRef[] = [];
     for (const file of list) {
       const validation = validateUploadFile(file);
-      if (!validation.ok || validation.kind === "pdf") {
-        const attempted =
-          validation.ok ? "pdf" : "mime" in validation.error ? validation.error.mime : "";
-        setOpenError(
-          validation.ok
-            ? t("projectDetail.mediaWrongKind")
-            : t("uploads.unsupportedType").replace("{kind}", attempted),
-        );
+      if (!validation.ok) {
+        if (validation.error.reason === "too_large") {
+          const key =
+            validation.error.kind === "photo"
+              ? "uploads.tooLargePhoto"
+              : validation.error.kind === "video"
+                ? "uploads.tooLargeVideo"
+                : validation.error.kind === "pdf"
+                  ? "uploads.tooLargePdf"
+                  : "uploads.tooLargeDocument";
+          setOpenError(t(key));
+        } else {
+          setOpenError(
+            t("uploads.unsupportedType").replace("{kind}", validation.error.mime),
+          );
+        }
         return;
       }
 
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const path = `${orgId}/${project.id}/project-media/${createClientUuid()}-${safeName}`;
-      const mimeType = file.type || (validation.kind === "photo" ? "image/jpeg" : "video/mp4");
+      const mimeType = inferUploadContentType(file);
       const { error: uploadErr } = await supabase.storage
         .from("media")
         .upload(path, file, {
@@ -669,7 +681,7 @@ export function WorkerProjectView({
             <input
               ref={projectMediaInputRef}
               type="file"
-              accept="image/*,video/*"
+              accept={ACCEPT_ALL_UPLOADS}
               multiple
               className="hidden"
               onChange={(event) => {
@@ -690,7 +702,7 @@ export function WorkerProjectView({
               }}
             >
               <Plus size={13} />
-              {t("projectDetail.addPhotoVideo")}
+              {t("projectDetail.addFiles")}
             </button>
           </>
         }
@@ -1724,19 +1736,19 @@ function WorkerMaterialsList({
 
   async function createDeliveryReceipt(file: File): Promise<ViewerMediaItem> {
     const validation = validateUploadFile(file);
-    if (!validation.ok || validation.kind === "video") {
+    if (!validation.ok || validation.kind === "video" || validation.kind === "document") {
       throw new Error(t("messages.uploadFailed"));
     }
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
-    const mimeType = file.type || "application/octet-stream";
+    const mimeType = inferUploadContentType(file);
     const { error: uploadErr } = await supabase.storage
       .from("media")
       .upload(path, file, { upsert: false, cacheControl: "3600", contentType: mimeType });
     if (uploadErr) throw new Error(uploadErr.message);
 
-    const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
+    const mediaType = validation.kind === "photo" ? "photo" : "pdf";
     const { data: row, error: insertErr } = await supabase
       .from("media")
       .insert({
@@ -2282,8 +2294,16 @@ function WorkerReceiptUpload({
     }
 
     const validation = validateUploadFile(file);
-    if (!validation.ok) {
-      setMessage({ kind: "err", text: t("uploads.unsupportedType").replace("{kind}", "mime" in validation.error ? validation.error.mime : "") });
+    if (!validation.ok || validation.kind === "video" || validation.kind === "document") {
+      const attempted = validation.ok
+        ? file.type || file.name
+        : "mime" in validation.error
+          ? validation.error.mime
+          : "";
+      setMessage({
+        kind: "err",
+        text: t("uploads.unsupportedType").replace("{kind}", attempted),
+      });
       return;
     }
 
@@ -2292,7 +2312,7 @@ function WorkerReceiptUpload({
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
-    const mimeType = file.type || "application/octet-stream";
+    const mimeType = inferUploadContentType(file);
 
     const { error: uploadErr } = await supabase.storage
       .from("media")
@@ -2303,7 +2323,7 @@ function WorkerReceiptUpload({
       return;
     }
 
-    const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
+    const mediaType = validation.kind === "photo" ? "photo" : "pdf";
     const metadata = {
       kind: "receipt" as const,
       category: "receipt" as const,

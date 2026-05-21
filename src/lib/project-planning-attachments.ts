@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createProjectPlanningId, type ProjectPlanningAttachment } from "@/lib/project-planning";
+import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
 import { guessMediaType, slugifyFilename } from "@/lib/worker-utils";
 
 type UploadPlanningAttachmentParams = {
@@ -14,43 +15,13 @@ type UploadPlanningAttachmentResult =
   | { ok: false; error: string };
 
 function validatePlanningFile(file: File): string | null {
-  const lower = file.name.toLowerCase();
-  const type = file.type.toLowerCase();
-  const knownType =
-    type.startsWith("image/") ||
-    type.startsWith("video/") ||
-    type === "application/pdf" ||
-    type === "text/csv" ||
-    type === "text/plain" ||
-    type === "application/vnd.ms-excel" ||
-    type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-    type === "application/msword" ||
-    type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  const knownExtension = /\.(pdf|csv|tsv|txt|xlsx?|docx?|jpe?g|png|webp|heic|heif|gif|mp4|mov|webm)$/i.test(lower);
-  if (!knownType && !knownExtension) return "unsupported_type";
-
-  const limitMb = type.startsWith("video/") || /\.(mp4|mov|webm)$/i.test(lower) ? 500 : 100;
-  const sizeMb = file.size / (1024 * 1024);
-  return sizeMb > limitMb ? `too_large:${limitMb}` : null;
-}
-
-function inferContentType(file: File): string {
-  if (file.type) return file.type;
-  const lower = file.name.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (/\.(jpe?g)$/.test(lower)) return "image/jpeg";
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".heic")) return "image/heic";
-  if (lower.endsWith(".heif")) return "image/heif";
-  if (lower.endsWith(".gif")) return "image/gif";
-  if (lower.endsWith(".mp4")) return "video/mp4";
-  if (lower.endsWith(".mov")) return "video/quicktime";
-  if (lower.endsWith(".webm")) return "video/webm";
-  if (lower.endsWith(".csv")) return "text/csv";
-  if (lower.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  if (lower.endsWith(".xls")) return "application/vnd.ms-excel";
-  return "application/octet-stream";
+  const validation = validateUploadFile(file);
+  if (!validation.ok) {
+    return validation.error.reason === "too_large"
+      ? `too_large:${validation.error.limitMb}`
+      : "unsupported_type";
+  }
+  return null;
 }
 
 export async function uploadProjectPlanningAttachment(
@@ -64,7 +35,7 @@ export async function uploadProjectPlanningAttachment(
 
   const safeName = slugifyFilename(file.name || `planning-${Date.now()}`);
   const storagePath = `${orgId}/${projectId}/planning/${Date.now()}-${safeName}`;
-  const contentType = inferContentType(file);
+  const contentType = inferUploadContentType(file);
   const { error: uploadError } = await supabase.storage
     .from("media")
     .upload(storagePath, file, {
