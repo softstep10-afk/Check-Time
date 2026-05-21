@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import { logAuditServer } from "@/lib/audit-server";
 import { requireManagerContext } from "@/lib/manager-data";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import {
@@ -33,14 +34,14 @@ export async function DELETE(
       );
     }
 
-    // Scope the row lookup AND the delete by org_id so a manager can
+    // Scope the row lookup AND the update by org_id so a manager can
     // never reach across orgs even if RLS is widened later.
     const { data: existingProject, error: existingProjectError } = await adminClient
       .from("projects")
-      .select("id, org_id")
+      .select("id, org_id, name, status, deleted_at")
       .eq("id", id)
       .eq("org_id", profile.org_id)
-      .maybeSingle<{ id: string; org_id: string }>();
+      .maybeSingle<{ id: string; org_id: string; name: string; status: string; deleted_at: string | null }>();
 
     if (existingProjectError) {
       return NextResponse.json({ error: existingProjectError.message }, { status: 500 });
@@ -50,14 +51,13 @@ export async function DELETE(
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
     }
 
-    // Hard delete. FK cascade behavior (defined in 00001_foundation.sql):
-    //   time_events.project_id        ON DELETE CASCADE  → events purged
-    //   project_assignments.project_id ON DELETE CASCADE → assignments purged
-    //   media.project_id              ON DELETE SET NULL → media kept, unlinked
-    //   tasks.project_id              ON DELETE SET NULL → tasks kept, unlinked
+    const deletedAt = new Date().toISOString();
     const { error: deleteError } = await adminClient
       .from("projects")
-      .delete()
+      .update({
+        deleted_at: deletedAt,
+        status: "archived",
+      })
       .eq("id", id)
       .eq("org_id", profile.org_id);
 
@@ -65,9 +65,33 @@ export async function DELETE(
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
-    revalidatePath("/projects");
+    await logAuditServer(adminClient, {
+      orgId: profile.org_id,
+      actorId: profile.id,
+      actorName: profile.name,
+      actorRole: profile.role,
+      action: "project_moved_to_trash",
+      targetType: "project",
+      targetId: id,
+      beforeData: {
+        name: existingProject.name,
+        status: existingProject.status,
+        deleted_at: existingProject.deleted_at,
+      },
+      afterData: {
+        status: "archived",
+        deleted_at: deletedAt,
+      },
+    });
 
-    return NextResponse.json({ ok: true });
+    revalidatePath("/overview");
+    revalidatePath("/projects");
+    revalidatePath("/tasks");
+    revalidatePath("/archive");
+    revalidatePath("/trash");
+    revalidatePath(`/projects/${id}`);
+
+    return NextResponse.json({ ok: true, softDeleted: true });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Internal server error";

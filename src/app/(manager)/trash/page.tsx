@@ -26,11 +26,19 @@ export default function TrashPage() {
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmEmptyAll, setConfirmEmptyAll] = useState(false);
+  const removableItemCount = items.filter((item) => item.kind !== "project").length;
 
   async function handleEmptyAll() {
     setBusyKey("empty-all");
     setMessage("");
-    const snapshot = [...items];
+    const snapshot = items.filter((item) => item.kind !== "project");
+    if (snapshot.length === 0) {
+      setBusyKey(null);
+      setConfirmEmptyAll(false);
+      setMessage(t("trash.projectProtected"));
+      setMessageType("success");
+      return;
+    }
     let failures = 0;
     for (const item of snapshot) {
       const { error } = await supabase
@@ -135,6 +143,12 @@ export default function TrashPage() {
   }
 
   async function handlePermanentDelete(item: TrashItem) {
+    if (item.kind === "project") {
+      setMessage(t("trash.projectProtected"));
+      setMessageType("success");
+      setConfirmDeleteId(null);
+      return;
+    }
     setBusyKey(`delete-${item.id}`);
     setMessage("");
 
@@ -219,8 +233,8 @@ export default function TrashPage() {
               <button
                 type="button"
                 onClick={() => setConfirmEmptyAll(true)}
-                disabled={busyKey === "empty-all"}
-                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
+                disabled={busyKey === "empty-all" || removableItemCount === 0}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)" }}
               >
                 <Trash2 size={12} /> {t("trash.emptyAll")}
@@ -296,6 +310,10 @@ export default function TrashPage() {
                           {t("common.cancel")}
                         </button>
                       </div>
+                    ) : item.kind === "project" ? (
+                      <div className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs leading-5 text-[var(--text-secondary)]" style={{ borderColor: "var(--border-default)" }}>
+                        {t("trash.projectProtected")}
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -340,13 +358,13 @@ export default function TrashPage() {
               </button>
             </div>
             <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {t("trash.emptyAllConfirmBody").replace("{n}", String(items.length))}
+              {t("trash.emptyAllConfirmBody").replace("{n}", String(removableItemCount))}
             </p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => void handleEmptyAll()}
-                disabled={busyKey === "empty-all"}
+                disabled={busyKey === "empty-all" || removableItemCount === 0}
                 className="rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
                 style={{ background: "var(--red)", color: "white" }}
               >
