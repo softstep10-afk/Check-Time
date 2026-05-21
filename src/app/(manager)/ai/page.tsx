@@ -5,12 +5,13 @@ import {
   getTodayInOrgTimeZone,
 } from "@/lib/ai/service";
 import { resolveJarvisRuntimeConfig } from "@/lib/ai/jarvis-config";
+import { getJarvisRoutingDiagnostics } from "@/lib/ai/provider-routing";
 
 export default async function AiPage() {
   const data = await getAiWorkspaceData();
   const canViewDiagnostics = data.manager.role === "owner" || data.manager.role === "admin";
   const jarvisConfig = resolveJarvisRuntimeConfig(data.org.settings);
-  const primaryModel = process.env.GEMINI_MODEL || "default Jarvis reasoning model";
+  const routingDiagnostics = getJarvisRoutingDiagnostics();
   const projectNameById = new Map(data.projects.map((project) => [project.id, project.name]));
   const reports = data.dailyReports.map((report) => ({
     id: report.id,
@@ -54,40 +55,14 @@ export default async function AiPage() {
       hasModelProvider={Boolean(
         process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
           process.env.GEMINI_API_KEY ||
-          process.env.GOOGLE_AI_API_KEY,
+          process.env.GOOGLE_AI_API_KEY ||
+          process.env.OPENAI_API_KEY ||
+          process.env.ANTHROPIC_API_KEY,
       )}
       hasAnalysisPersistence={Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)}
       canViewDiagnostics={canViewDiagnostics}
       jarvisConfig={jarvisConfig}
-      providerDiagnostics={
-        canViewDiagnostics
-          ? [
-              {
-                label: "Primary reasoning",
-                value:
-                  process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-                  process.env.GEMINI_API_KEY ||
-                  process.env.GOOGLE_AI_API_KEY
-                    ? "configured"
-                    : "not configured",
-              },
-              { label: "Reasoning model", value: primaryModel },
-              {
-                label: "Voice synthesis",
-                value: process.env.GOOGLE_CLOUD_CREDENTIALS ||
-                  process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
-                  process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON ||
-                  process.env.GOOGLE_APPLICATION_CREDENTIALS
-                    ? "configured"
-                    : "not configured",
-              },
-              {
-                label: "Anthropic route",
-                value: process.env.ANTHROPIC_API_KEY ? "configured, not routed" : "not configured",
-              },
-            ]
-          : []
-      }
+      providerDiagnostics={canViewDiagnostics ? routingDiagnostics : []}
     />
   );
 }

@@ -32,10 +32,14 @@ async function withModelDisabled<T>(fn: () => Promise<T>): Promise<T> {
   const oldGoogleKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   const oldGeminiKey = process.env.GEMINI_API_KEY;
   const oldGoogleAiKey = process.env.GOOGLE_AI_API_KEY;
+  const oldOpenAiKey = process.env.OPENAI_API_KEY;
+  const oldAnthropicKey = process.env.ANTHROPIC_API_KEY;
   const oldGeminiModel = process.env.GEMINI_MODEL;
   delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   delete process.env.GEMINI_API_KEY;
   delete process.env.GOOGLE_AI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
   delete process.env.GEMINI_MODEL;
 
   try {
@@ -47,6 +51,10 @@ async function withModelDisabled<T>(fn: () => Promise<T>): Promise<T> {
     else process.env.GEMINI_API_KEY = oldGeminiKey;
     if (oldGoogleAiKey === undefined) delete process.env.GOOGLE_AI_API_KEY;
     else process.env.GOOGLE_AI_API_KEY = oldGoogleAiKey;
+    if (oldOpenAiKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = oldOpenAiKey;
+    if (oldAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = oldAnthropicKey;
     if (oldGeminiModel === undefined) delete process.env.GEMINI_MODEL;
     else process.env.GEMINI_MODEL = oldGeminiModel;
   }

@@ -22,6 +22,10 @@ export type JarvisDiagnosticRecord = {
   executionEndpoint: string | null;
   resultId: string | null;
   providerModel: string | null;
+  selectedRoute: string | null;
+  fallbackUsed: boolean;
+  latencyMs: number | null;
+  estimatedCostTier: string | null;
   result: string | null;
   error: string | null;
 };
@@ -87,6 +91,13 @@ export function buildJarvisDiagnostic(
     executionEndpoint: sanitizeText(input.executionEndpoint ?? "") || null,
     resultId: sanitizeText(input.resultId ?? "") || null,
     providerModel: sanitizeText(input.providerModel ?? "") || null,
+    selectedRoute: sanitizeText(input.selectedRoute ?? "") || null,
+    fallbackUsed: Boolean(input.fallbackUsed),
+    latencyMs:
+      typeof input.latencyMs === "number" && Number.isFinite(input.latencyMs)
+        ? Math.max(0, Math.round(input.latencyMs))
+        : null,
+    estimatedCostTier: sanitizeText(input.estimatedCostTier ?? "") || null,
     result: sanitizeText(input.result ?? "") || null,
     error: sanitizeText(input.error ?? "") || null,
   };

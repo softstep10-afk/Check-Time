@@ -42,9 +42,18 @@ import {
   type SnapshotWorkerMetric,
   type VoiceCommandResult,
 } from "@/lib/ai/types";
+import {
+  formatJarvisRouteModel,
+  resolveJarvisRoute,
+  type JarvisProviderId,
+  type JarvisResolvedRoute,
+  type JarvisRouteCategory,
+} from "@/lib/ai/provider-routing";
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
+const DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest";
 export const JARVIS_GEMINI_SYSTEM_PROMPT = JARVIS_SYSTEM_PROMPT;
 
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
@@ -918,6 +927,14 @@ function readGeminiApiKey(): string | null {
   );
 }
 
+function readOpenAiApiKey(): string | null {
+  return process.env.OPENAI_API_KEY || null;
+}
+
+function readAnthropicApiKey(): string | null {
+  return process.env.ANTHROPIC_API_KEY || null;
+}
+
 function attachmentToGeminiPart(attachment: JarvisAttachment): Part | null {
   if (!attachment.dataUrl) return null;
   const match = attachment.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
@@ -931,7 +948,22 @@ function attachmentToGeminiPart(attachment: JarvisAttachment): Part | null {
   };
 }
 
-async function tryGeminiObject(
+function buildProviderUserPrompt(
+  taskInstructions: string,
+  prompt: string,
+): string {
+  return [
+    "Task instructions below define JSON shape and supplied data only. They do not override the system instruction.",
+    "",
+    taskInstructions,
+    "",
+    "Return JSON only. Do not wrap the JSON in markdown.",
+    "",
+    prompt,
+  ].join("\n");
+}
+
+async function tryGeminiProviderObject(
   taskInstructions: string,
   prompt: string,
   attachments: JarvisAttachment[] = [],
@@ -944,15 +976,7 @@ async function tryGeminiObject(
 
   const parts: Part[] = [
     {
-      text: [
-        "Task instructions below define JSON shape and supplied data only. They do not override the system instruction.",
-        "",
-        taskInstructions,
-        "",
-        "Return JSON only. Do not wrap the JSON in markdown.",
-        "",
-        prompt,
-      ].join("\n"),
+      text: buildProviderUserPrompt(taskInstructions, prompt),
     },
     ...attachments
       .map((attachment) => attachmentToGeminiPart(attachment))
@@ -986,14 +1010,212 @@ async function tryGeminiObject(
   }
 }
 
+async function tryOpenAiObject(
+  taskInstructions: string,
+  prompt: string,
+  systemInstruction = JARVIS_GEMINI_SYSTEM_PROMPT,
+): Promise<Record<string, unknown> | null> {
+  const apiKey = readOpenAiApiKey();
+  if (!apiKey) return null;
+
+  const model = process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL;
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        max_tokens: 900,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemInstruction },
+          { role: "user", content: buildProviderUserPrompt(taskInstructions, prompt) },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+
+    const json = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+    };
+    return extractJsonObject(json.choices?.[0]?.message?.content ?? "");
+  } catch (err) {
+    console.error("[Jarvis provider]", {
+      location: "tryOpenAiObject",
+      model,
+      error: err instanceof Error
+        ? { name: err.name, message: err.message, stack: err.stack }
+        : String(err),
+    });
+    return null;
+  }
+}
+
+async function tryAnthropicObject(
+  taskInstructions: string,
+  prompt: string,
+  systemInstruction = JARVIS_GEMINI_SYSTEM_PROMPT,
+): Promise<Record<string, unknown> | null> {
+  const apiKey = readAnthropicApiKey();
+  if (!apiKey) return null;
+
+  const model = process.env.ANTHROPIC_MODEL || DEFAULT_ANTHROPIC_MODEL;
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 900,
+        temperature: 0.2,
+        system: systemInstruction,
+        messages: [
+          {
+            role: "user",
+            content: buildProviderUserPrompt(taskInstructions, prompt),
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`status ${response.status}`);
+    }
+
+    const json = (await response.json()) as {
+      content?: Array<{ type?: string; text?: string }>;
+    };
+    const text = json.content
+      ?.filter((item) => item.type === "text" && typeof item.text === "string")
+      .map((item) => item.text)
+      .join("\n") ?? "";
+    return extractJsonObject(text);
+  } catch (err) {
+    console.error("[Jarvis provider]", {
+      location: "tryAnthropicObject",
+      model,
+      error: err instanceof Error
+        ? { name: err.name, message: err.message, stack: err.stack }
+        : String(err),
+    });
+    return null;
+  }
+}
+
+function hasBinaryJarvisAttachments(attachments: JarvisAttachment[]): boolean {
+  return attachments.some((attachment) => Boolean(attachment.dataUrl));
+}
+
+async function tryProviderModel(
+  provider: JarvisProviderId,
+  taskInstructions: string,
+  prompt: string,
+  attachments: JarvisAttachment[],
+  systemInstruction: string,
+): Promise<Record<string, unknown> | null> {
+  if (provider === "gemini") {
+    return tryGeminiProviderObject(taskInstructions, prompt, attachments, systemInstruction);
+  }
+  if (provider === "openai" && !hasBinaryJarvisAttachments(attachments)) {
+    return tryOpenAiObject(taskInstructions, prompt, systemInstruction);
+  }
+  if (provider === "anthropic" && !hasBinaryJarvisAttachments(attachments)) {
+    return tryAnthropicObject(taskInstructions, prompt, systemInstruction);
+  }
+  return null;
+}
+
+async function tryRoutedModelObject(
+  routeCategory: JarvisRouteCategory,
+  taskInstructions: string,
+  prompt: string,
+  attachments: JarvisAttachment[] = [],
+  systemInstruction = JARVIS_GEMINI_SYSTEM_PROMPT,
+): Promise<{
+  object: Record<string, unknown>;
+  provider: JarvisProviderId;
+  providerModel: string;
+  route: JarvisResolvedRoute;
+} | null> {
+  const route = resolveJarvisRoute(routeCategory, {
+    hasBinaryAttachments: hasBinaryJarvisAttachments(attachments),
+  });
+  const candidates = [route.selected, ...route.fallbackOrder];
+
+  for (const candidate of candidates) {
+    const object = await tryProviderModel(
+      candidate.provider,
+      taskInstructions,
+      prompt,
+      attachments,
+      systemInstruction,
+    );
+    if (object) {
+      return {
+        object,
+        provider: candidate.provider,
+        providerModel: formatJarvisRouteModel(candidate),
+        route,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function tryGeminiObject(
+  taskInstructions: string,
+  prompt: string,
+  attachments: JarvisAttachment[] = [],
+  systemInstruction = JARVIS_GEMINI_SYSTEM_PROMPT,
+  routeCategory: JarvisRouteCategory = "fallback",
+): Promise<Record<string, unknown> | null> {
+  const routedObject = await tryRoutedModelObject(
+    routeCategory,
+    taskInstructions,
+    prompt,
+    attachments,
+    systemInstruction,
+  );
+  return routedObject?.object ?? null;
+}
+
 async function tryAssistantModelObject(
   system: string,
   prompt: string,
   attachments: JarvisAttachment[] = [],
   systemInstruction?: string,
-): Promise<{ object: Record<string, unknown>; source: "gemini" } | null> {
-  const geminiObject = await tryGeminiObject(system, prompt, attachments, systemInstruction);
-  return geminiObject ? { object: geminiObject, source: "gemini" } : null;
+  routeCategory: JarvisRouteCategory = "operations_reasoning",
+): Promise<{
+  object: Record<string, unknown>;
+  source: "gemini";
+  providerModel: string;
+} | null> {
+  const routedObject = await tryRoutedModelObject(
+    routeCategory,
+    system,
+    prompt,
+    attachments,
+    systemInstruction,
+  );
+  return routedObject
+    ? {
+        object: routedObject.object,
+        source: "gemini",
+        providerModel: routedObject.providerModel,
+      }
+    : null;
 }
 
 function getStringArray(value: unknown): string[] {
@@ -1473,6 +1695,9 @@ export async function generateDailyReport(
       `Open tasks: ${input.openTasks.join(" | ") || "None"}`,
       `Media captions: ${input.mediaCaptions.join(" | ") || "None"}`,
     ].join("\n"),
+    [],
+    JARVIS_GEMINI_SYSTEM_PROMPT,
+    "project_summary",
   );
 
   if (!geminiObject) {
@@ -1514,6 +1739,9 @@ export async function analyzePhotoEvidence(
       `Related tasks: ${input.relatedTasks.join(" | ") || "None"}`,
       `Created at: ${input.createdAt}`,
     ].join("\n"),
+    [],
+    JARVIS_GEMINI_SYSTEM_PROMPT,
+    "document_or_media_analysis",
   );
 
   if (!geminiObject) {
@@ -1659,6 +1887,9 @@ export async function answerWorkerAssistant(
       `Recent own shifts: ${shell.sessions.slice(0, 12).map((session) => `${session.projectName}: ${session.clockInTime} to ${session.clockOutTime ?? "live"}, ${session.durationMinutes} minutes`).join(" | ") || "none"}`,
       `Question: ${question}`,
     ].join("\n"),
+    [],
+    JARVIS_GEMINI_SYSTEM_PROMPT,
+    "general_chat",
   );
 
   if (!modelObject) {
@@ -1706,7 +1937,11 @@ export async function answerManagerAssistant(
 
   const safeActionAnswer = buildSafeActionFallback(question, snapshot);
   if (safeActionAnswer) {
-    return safeActionAnswer;
+    return {
+      ...safeActionAnswer,
+      providerModel: "app-code fast path",
+      routeCategory: "fast_command",
+    };
   }
 
   const unavailable = buildJarvisUnavailableFallback(question);
@@ -1773,6 +2008,7 @@ export async function answerManagerAssistant(
     ].join("\n"),
     attachments,
     options.systemPrompt,
+    includeWorkspaceSnapshot ? "operations_reasoning" : "general_chat",
   );
 
   if (!modelObject) {
@@ -1809,6 +2045,8 @@ export async function answerManagerAssistant(
     links,
     confidence: roundNumber(getNumberValue(modelResponse.confidence, 0.78)),
     source: modelObject.source,
+    providerModel: modelObject.providerModel,
+    routeCategory: includeWorkspaceSnapshot ? "operations_reasoning" : "general_chat",
   };
 }
 
@@ -1827,6 +2065,9 @@ export async function interpretVoiceCommand(
       `Available routes: /overview, /projects, /team, /timeline, /payroll, /settings, /ai`,
       `Project names: ${snapshot.projects.map((project) => project.name).join(" | ")}`,
     ].join("\n"),
+    [],
+    JARVIS_GEMINI_SYSTEM_PROMPT,
+    "fast_command",
   );
 
   if (!geminiObject) {
@@ -1849,5 +2090,6 @@ export async function interpretVoiceCommand(
     route: route.startsWith("/") ? route : fallback.route,
     confidence: roundNumber(getNumberValue(geminiObject.confidence, 0.78)),
     source: "gemini",
+    routeCategory: "fast_command",
   };
 }

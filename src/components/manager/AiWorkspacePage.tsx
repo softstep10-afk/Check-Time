@@ -397,9 +397,11 @@ export function AiWorkspacePage({
       userRequest: resolvedVoiceInput,
       normalizedRequest: result.command.normalized,
       selectedIntent: result.command.intent,
+      selectedRoute: result.command.routeCategory ?? "fast_command",
       preparedAction: null,
       executionStatus: "succeeded",
       dataSourcesUsed: ["voice transcript", "routes"],
+      providerModel: result.command.providerModel ?? null,
       result: result.command.answer,
       error: null,
     });
@@ -457,6 +459,7 @@ export function AiWorkspacePage({
       userRequest: trimmed,
       normalizedRequest: trimmed.toLowerCase(),
       selectedIntent: "assistant",
+      selectedRoute: "pending",
       preparedAction: null,
       executionStatus: "executing",
       dataSourcesUsed: ["projects", "workers", "tasks", "media", "audit"],
@@ -464,6 +467,7 @@ export function AiWorkspacePage({
       error: null,
     });
 
+    const startedAt = performance.now();
     const response = await fetch("/api/ai/assistant", {
       method: "POST",
       headers: {
@@ -487,9 +491,11 @@ export function AiWorkspacePage({
         userRequest: trimmed,
         normalizedRequest: trimmed.toLowerCase(),
         selectedIntent: "assistant",
+        selectedRoute: "unknown",
         preparedAction: null,
         executionStatus: "failed",
         dataSourcesUsed: ["projects", "workers", "tasks", "media", "audit"],
+        latencyMs: performance.now() - startedAt,
         result: null,
         error: result.error ?? t("ai.assistantFailed"),
       });
@@ -519,12 +525,16 @@ export function AiWorkspacePage({
       userRequest: trimmed,
       normalizedRequest: trimmed.toLowerCase(),
       selectedIntent: preparedAction?.kind ?? "answer",
+      selectedRoute: assistant.routeCategory ?? (preparedAction ? "fast_command" : "general_chat"),
       preparedAction,
       executionStatus: preparedAction ? "awaiting_owner_confirmation" : "succeeded",
       dataSourcesUsed: ["projects", "workers", "tasks", "media", "audit"],
       matchedWorker: preparedContext.matchedWorker,
       matchedProject: preparedContext.matchedProject,
       executionEndpoint: preparedContext.executionEndpoint,
+      providerModel: assistant.providerModel ?? (preparedAction ? "app-code fast path" : null),
+      estimatedCostTier: preparedAction ? "free_app_logic" : null,
+      latencyMs: performance.now() - startedAt,
       result: assistant.answer,
       error: null,
     });
@@ -563,6 +573,7 @@ export function AiWorkspacePage({
         userRequest: action.label,
         normalizedRequest: action.kind,
         selectedIntent: action.kind,
+        selectedRoute: "action_execution",
         preparedAction: action,
         executionStatus: "unsupported",
         matchedWorker: actionContext.matchedWorker,
@@ -579,6 +590,7 @@ export function AiWorkspacePage({
       userRequest: action.label,
       normalizedRequest: action.kind,
       selectedIntent: action.kind,
+      selectedRoute: "action_execution",
       preparedAction: action,
       executionStatus: "executing",
       matchedWorker: actionContext.matchedWorker,
@@ -607,6 +619,7 @@ export function AiWorkspacePage({
           userRequest: action.label,
           normalizedRequest: action.kind,
           selectedIntent: action.kind,
+          selectedRoute: "action_execution",
           preparedAction: action,
           executionStatus: "failed",
           matchedWorker: actionContext.matchedWorker,
@@ -627,6 +640,7 @@ export function AiWorkspacePage({
         userRequest: action.label,
         normalizedRequest: action.kind,
         selectedIntent: action.kind,
+        selectedRoute: "action_execution",
         preparedAction: action,
         executionStatus: "succeeded",
         matchedWorker: actionContext.matchedWorker,
@@ -649,6 +663,7 @@ export function AiWorkspacePage({
         userRequest: action.label,
         normalizedRequest: action.kind,
         selectedIntent: action.kind,
+        selectedRoute: "action_execution",
         preparedAction: action,
         executionStatus: "failed",
         matchedWorker: actionContext.matchedWorker,
@@ -848,6 +863,23 @@ export function AiWorkspacePage({
                     <dd>{latestDiagnostic.selectedIntent ?? "answer"}</dd>
                   </div>
                   <div>
+                    <dt className="font-semibold text-[var(--text-primary)]">Selected Route / Выбранный маршрут</dt>
+                    <dd>
+                      {latestDiagnostic.selectedRoute ?? "Not recorded"}
+                      {latestDiagnostic.fallbackUsed ? " · fallback used" : ""}
+                    </dd>
+                  </div>
+                  {latestDiagnostic.providerModel || latestDiagnostic.estimatedCostTier || latestDiagnostic.latencyMs !== null ? (
+                    <div>
+                      <dt className="font-semibold text-[var(--text-primary)]">Provider Diagnostics / Диагностика провайдера</dt>
+                      <dd>
+                        {latestDiagnostic.providerModel ?? "No model call"}
+                        {latestDiagnostic.estimatedCostTier ? ` · cost: ${latestDiagnostic.estimatedCostTier}` : ""}
+                        {latestDiagnostic.latencyMs !== null ? ` · ${latestDiagnostic.latencyMs} ms` : ""}
+                      </dd>
+                    </div>
+                  ) : null}
+                  <div>
                     <dt className="font-semibold text-[var(--text-primary)]">Normalized Request / Нормализованный запрос</dt>
                     <dd className="whitespace-pre-wrap">{latestDiagnostic.normalizedRequest || "None"}</dd>
                   </div>
@@ -919,7 +951,7 @@ export function AiWorkspacePage({
                         </span>
                       </div>
                       <div className="mt-1 truncate text-[var(--text-secondary)]">
-                        {item.userRequest || item.result || "No text"}
+                        {(item.selectedRoute ? `${item.selectedRoute}: ` : "") + (item.userRequest || item.result || "No text")}
                       </div>
                     </div>
                   ))}

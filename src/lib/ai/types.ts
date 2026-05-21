@@ -299,6 +299,8 @@ export interface AssistantResult {
   actions?: AssistantAction[];
   confidence: number;
   source: "gemini" | "fallback";
+  providerModel?: string | null;
+  routeCategory?: string | null;
   memorySaved?: JarvisMemoryRule | null;
 }
 
@@ -313,6 +315,8 @@ export interface VoiceCommandResult {
   route: string | null;
   confidence: number;
   source: "gemini" | "fallback";
+  providerModel?: string | null;
+  routeCategory?: string | null;
 }
 
 export interface AiReportCard {
