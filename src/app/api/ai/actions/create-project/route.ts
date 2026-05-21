@@ -92,10 +92,12 @@ export async function POST(request: NextRequest) {
       projectId: data?.id ?? null,
     });
   } catch (error) {
-    const message =
-      error instanceof Error && error.message
-        ? error.message
-        : "Jarvis could not create the project. No changes were made.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Jarvis action] create-project exception", error);
+    }
+    return NextResponse.json(
+      { error: "Jarvis could not create the project. No changes were made." },
+      { status: 500 },
+    );
   }
 }

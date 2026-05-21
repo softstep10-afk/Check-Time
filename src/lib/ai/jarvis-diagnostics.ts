@@ -4,7 +4,8 @@ export type JarvisActionExecutionStatus =
   | "awaiting_owner_confirmation"
   | "executing"
   | "succeeded"
-  | "failed";
+  | "failed"
+  | "unsupported";
 
 export type JarvisDiagnosticRecord = {
   updatedAt: string;

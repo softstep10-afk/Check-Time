@@ -160,7 +160,12 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Jarvis assistant]", error);
+    }
+    return NextResponse.json(
+      { error: "Jarvis is temporarily unavailable. Please try again shortly." },
+      { status: 500 },
+    );
   }
 }

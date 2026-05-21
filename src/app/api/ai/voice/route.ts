@@ -266,7 +266,12 @@ export async function POST(request: NextRequest) {
       audioError,
     });
   } catch (error) {
-    const message = getErrorMessage(error, "Internal server error");
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[Jarvis voice]", getErrorMessage(error, "Jarvis voice request failed."));
+    }
+    return NextResponse.json(
+      { error: "Jarvis voice is temporarily unavailable." },
+      { status: 500 },
+    );
   }
 }

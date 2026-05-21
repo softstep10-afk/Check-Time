@@ -601,13 +601,13 @@ function buildFinanceRestrictedFallback(question: string): AssistantResult {
   };
 }
 
-function buildGeminiUnavailableFallback(question: string): AssistantResult {
+function buildJarvisUnavailableFallback(question: string): AssistantResult {
   const ru = isRussianText(question);
 
   return {
     answer: ru
       ? "Jarvis временно недоступен. Повторите запрос позже."
-      : "Jarvis is temporarily unavailable. Please try again.",
+      : "Jarvis is temporarily unavailable. Please try again shortly.",
     bullets: [],
     links: [],
     confidence: 0.2,
@@ -618,7 +618,7 @@ function buildGeminiUnavailableFallback(question: string): AssistantResult {
 function buildAssistantFallback(
   question: string,
 ): AssistantResult {
-  return buildGeminiUnavailableFallback(question);
+  return buildJarvisUnavailableFallback(question);
 }
 function buildVoiceFallback(
   transcript: string,
@@ -1568,7 +1568,7 @@ export async function answerManagerAssistant(
     return safeActionAnswer;
   }
 
-  const unavailable = buildGeminiUnavailableFallback(question);
+  const unavailable = buildJarvisUnavailableFallback(question);
   const includeWorkspaceSnapshot = !isSimpleGreetingQuestion(question);
   const financialPromptLines = snapshot.hasFinanceAccess
     ? [

@@ -13,6 +13,7 @@ import { JarvisOrb } from "@/components/shared/JarvisOrb";
 import {
   type JarvisRuntimeConfig,
 } from "@/lib/ai/jarvis-config";
+import { getAssistantActionEndpoint } from "@/lib/ai/action-endpoints";
 import {
   JARVIS_DIAGNOSTIC_EVENT,
   readJarvisDiagnostic,
@@ -502,6 +503,23 @@ export function AiWorkspacePage({
       return;
     }
 
+    const endpoint = getAssistantActionEndpoint(action);
+    if (!endpoint) {
+      const unsupported = t("jarvisDock.actionUnsupported");
+      setMessage(unsupported);
+      recordDiagnostic({
+        inputMode: "action",
+        userRequest: action.label,
+        normalizedRequest: action.kind,
+        selectedIntent: action.kind,
+        preparedAction: action,
+        executionStatus: "unsupported",
+        result: null,
+        error: unsupported,
+      });
+      return;
+    }
+
     setMessage(t("jarvisDock.actionRunning"));
     recordDiagnostic({
       inputMode: "action",
@@ -514,11 +532,7 @@ export function AiWorkspacePage({
       error: null,
     });
     try {
-      const endpoint =
-        action.kind === "create_project"
-          ? "/api/ai/actions/create-project"
-          : "/api/ai/actions/create-task";
-      const response = await fetch(endpoint, {
+      const response = await fetch(endpoint.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(action.payload),
@@ -528,7 +542,7 @@ export function AiWorkspacePage({
         projectId?: string | null;
         taskId?: string | null;
       };
-      const successId = action.kind === "create_project" ? result.projectId : result.taskId;
+      const successId = result[endpoint.successIdKey];
       if (!response.ok || !successId) {
         const error = result.error ?? t("jarvisDock.actionFailed");
         setMessage(error);
@@ -564,8 +578,8 @@ export function AiWorkspacePage({
       } else {
         router.refresh();
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t("jarvisDock.actionFailed");
+    } catch {
+      const message = t("jarvisDock.actionFailed");
       setMessage(message);
       recordDiagnostic({
         inputMode: "action",
@@ -900,22 +914,28 @@ export function AiWorkspacePage({
                     ) : null}
                     {item.actions.length > 0 ? (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {item.actions.map((action) => (
-                          <button
-                            key={`${item.id}-${action.kind}-${action.label}`}
-                            type="button"
-                            onClick={() => void runAssistantAction(action)}
-                            disabled={busyKey !== null}
-                            className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                            style={{
-                              borderColor: "rgba(105, 231, 255, 0.3)",
-                              background: "rgba(105, 231, 255, 0.08)",
-                              color: "var(--ai-cyan-bright)",
-                            }}
-                          >
-                            {action.label}
-                          </button>
-                        ))}
+                        {item.actions.map((action) => {
+                          const unsupportedWriteAction =
+                            action.kind !== "navigate" && getAssistantActionEndpoint(action) === null;
+                          return (
+                            <button
+                              key={`${item.id}-${action.kind}-${action.label}`}
+                              type="button"
+                              onClick={() => void runAssistantAction(action)}
+                              disabled={busyKey !== null || unsupportedWriteAction}
+                              className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                              style={{
+                                borderColor: "rgba(105, 231, 255, 0.3)",
+                                background: "rgba(105, 231, 255, 0.08)",
+                                color: "var(--ai-cyan-bright)",
+                              }}
+                            >
+                              {unsupportedWriteAction
+                                ? t("jarvisDock.actionUnsupported")
+                                : action.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     ) : null}
                   </div>

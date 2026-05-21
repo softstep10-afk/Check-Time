@@ -463,4 +463,17 @@ describe("AI assistant Jarvis routing", () => {
       });
     });
   });
+
+  it("does not expose provider branding in user-facing unavailable output", async () => {
+    await withModelDisabled(async () => {
+      const snapshot = buildAssistantSnapshot(workspace(), [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant("что сейчас происходит?", snapshot);
+
+      expect(answer.answer).toContain("Jarvis");
+      expect(answer.answer).not.toMatch(/Gemini|OpenAI|Anthropic|Google/i);
+    });
+  });
 });
