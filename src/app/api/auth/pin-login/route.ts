@@ -12,6 +12,7 @@ import type { UserRole } from "@/types/database";
 
 type PinProfile = {
   id: string;
+  name: string | null;
   role: UserRole;
   pin_hash: string | null;
   is_active: boolean;
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profiles, error: profilesError } = await adminClient
       .from("profiles")
-      .select("id, role, pin_hash, is_active")
+      .select("id, name, role, pin_hash, is_active")
       .eq("is_active", true)
       .not("pin_hash", "is", null)
       .returns<PinProfile[]>();
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       access_token: sessionData.session.access_token,
       refresh_token: sessionData.session.refresh_token,
+      name: matchedProfile.name?.trim() || null,
       role: matchedProfile.role,
     });
   } catch (error) {

@@ -21,6 +21,7 @@ import {
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
+import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { logAudit } from "@/lib/audit";
 import { buildSafeUploadName } from "@/lib/media-extension";
@@ -56,6 +57,7 @@ import {
   type ViewerMediaItem,
 } from "@/components/shared/MediaViewerModal";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
+import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
   isEffectiveOpenTask,
@@ -391,6 +393,66 @@ export function ProjectDetailPage({
   useEffect(() => {
     setTaskList(tasks);
   }, [tasks]);
+  useEffect(() => {
+    const channel = supabase
+      .channel(`manager-project-tasks-${project.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "tasks",
+          filter: `project_id=eq.${project.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Task | null;
+          if (!row) return;
+          setTaskList((current) =>
+            mergeRealtimeTaskRow(current, row, {
+              shouldInclude: (task) => task.project_id === project.id,
+            }),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tasks",
+          filter: `project_id=eq.${project.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Task | null;
+          if (!row) return;
+          setTaskList((current) =>
+            mergeRealtimeTaskRow(current, row, {
+              shouldInclude: (task) => task.project_id === project.id,
+            }),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "tasks",
+          filter: `project_id=eq.${project.id}`,
+        },
+        (payload) => {
+          const oldRow = payload.old as { id?: string } | null;
+          const taskId = oldRow?.id;
+          if (!taskId) return;
+          setTaskList((current) => removeTaskById(current, taskId));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [project.id, supabase]);
   const [mediaViewerItem, setMediaViewerItem] = useState<ViewerMediaItem | null>(null);
   const {
     canOpenViewerItem: canOpenMediaViewerItem,
@@ -1322,7 +1384,6 @@ export function ProjectDetailPage({
         completed_by: completedBy,
       },
     });
-    router.refresh();
   }
 
   // Two-step soft-delete for project tasks. First click arms the
@@ -1391,6 +1452,13 @@ export function ProjectDetailPage({
             {project.address ? (
               <p className="mt-1 text-sm text-[var(--text-secondary)]">{project.address}</p>
             ) : null}
+            <div className="mt-2">
+              <ProjectNavigationActions
+                projectName={project.name}
+                address={project.address}
+                siteCoordinates={site}
+              />
+            </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span
                 className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
@@ -2944,10 +3012,7 @@ export function ProjectDetailPage({
                   <input
                     ref={editLatRef}
                     name="lat"
-                    type="number"
-                    step="any"
-                    min={-90}
-                    max={90}
+                    type="text"
                     inputMode="decimal"
                     required={!project.hasValidSiteCoordinates}
                     onPaste={(event) =>
@@ -2983,10 +3048,7 @@ export function ProjectDetailPage({
                 <input
                   ref={editLngRef}
                   name="lng"
-                  type="number"
-                  step="any"
-                  min={-180}
-                  max={180}
+                  type="text"
                   inputMode="decimal"
                   required={!project.hasValidSiteCoordinates}
                   onPaste={(event) =>

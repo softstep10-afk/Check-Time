@@ -24,7 +24,22 @@ This is a static inventory for stabilization. It is not a redesign plan.
 - Subscribes to worker profile, tasks, time events, media, assignments, exclusions, payroll closures, and projects.
 - Purpose: keep worker shell/task/clock state current.
 - Fix Pack 4: fallback new-task polling now skips hidden tabs and catches up on visibility return.
+- Fix Pack 5: task INSERT/UPDATE payloads merge into local worker task state before slower fallback refresh.
 - Deferred: app-wide worker shell realtime consolidation.
+
+## Manager Tasks
+
+- File: `src/components/manager/ManagerTasksPage.tsx`
+- Subscribes to org-scoped task INSERT/UPDATE/DELETE events.
+- Purpose: keep manager task statuses live without manual browser refresh.
+- Fix Pack 5: task payloads merge into local task rows and preserve derived project/worker labels.
+
+## Manager Project Detail Tasks
+
+- File: `src/components/manager/ProjectDetailPage.tsx`
+- Subscribes to project-scoped task INSERT/UPDATE/DELETE events.
+- Purpose: keep the project task folder current without a full page refresh on every task update.
+- Fix Pack 5: task payloads merge into the local project task list; deleted rows are removed.
 
 ## Worker Notification Bell
 

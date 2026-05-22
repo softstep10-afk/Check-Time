@@ -199,3 +199,30 @@ Manual checks:
 - Jarvis owner/admin diagnostics remain hidden from normal users.
 - Files still open/download.
 - No missing records compared with before this pack.
+
+## Mobile UX / Realtime Task Status Fix Pack
+
+Run this after deploying `fix(alpha7): restore mobile navigation and realtime task updates`.
+
+What was fixed:
+
+- Top quick navigation is visible near the top for manager and worker mobile shells.
+- Project navigation actions offer Apple Maps, Google Maps, and Tesla-friendly copy/share.
+- Copy address remains available.
+- Greetings use the signed-in person's name instead of raw role labels.
+- High-precision coordinate inputs no longer trigger browser nearest-valid-value popups.
+- Manager work alert bell no longer overlaps the mobile sign-out button.
+- Manager task board, project detail task list, and worker task state merge realtime task status updates.
+
+Manual checks:
+
+- Log in by PIN and confirm the greeting uses the actual profile name.
+- Confirm manager/worker top quick navigation appears near the top and does not replace existing nav.
+- Open Projects from the quick row.
+- On a project, test Apple Maps, Google Maps, Tesla/share, and copy address.
+- Paste `47.799137872580424, -122.24154212345678` into project coordinates and confirm it saves without browser step validation.
+- On mobile manager view, confirm notification bells do not cover sign out.
+- Worker opens a task, marks it taken, then done.
+- Manager sees task status update on Tasks and Project Detail without manual browser refresh.
+- Worker still sees task rows after read/taken/done in the existing expected sections.
+- Notification read/dismiss still does not hide source task/message.

@@ -109,6 +109,7 @@ export const translations = {
   "common.openProjects": { en: "Open projects", ru: "Открыть проекты" },
   "common.generalTask": { en: "General task", ru: "Общая задача" },
   "common.projectNotResolved": { en: "Project not resolved", ru: "Проект не определён" },
+  "nav.quick": { en: "Quick navigation", ru: "Быстрая навигация" },
 
   // ── Manager Layout ──
   "manager.dashboard": { en: "Manager Dashboard", ru: "Панель менеджера" },
@@ -135,13 +136,17 @@ export const translations = {
   "login.verifying": { en: "Verifying\u2026", ru: "Проверка\u2026" },
   "login.loginFailed": { en: "Login failed.", ru: "Ошибка входа." },
   "login.signIn": { en: "Sign In", ru: "Войти" },
-  "login.welcome": { en: "Welcome,", ru: "Добро пожаловать," },
+  "login.welcome": { en: "Good to see you,", ru: "Рады видеть," },
+  "login.defaultUserName": { en: "team", ru: "команда" },
   "login.shiftStarted": { en: "Shift started", ru: "Смена начата" },
   "login.clockedInAt": { en: "Clocked in at", ru: "Начало в" },
   "login.clr": { en: "CLR", ru: "СБР" },
 
   // ── Worker Shell ──
   "worker.flow": { en: "Worker Flow", ru: "Рабочий режим" },
+  "worker.headerGreeting": { en: "Have a safe, productive shift, {name}. Everything you need is here.", ru: "Хорошей смены, {name}! Всё нужное для работы — здесь." },
+  "manager.headerGreeting": { en: "Good to see you, {name}. Projects, team, and tasks are under control.", ru: "Добрый день, {name}! Проекты, команда и задачи — под контролем." },
+  "owner.headerGreeting": { en: "Good to see you, {name}. Projects, team, and system controls are here.", ru: "Добрый день, {name}! Управление проектами, командой и системой — здесь." },
   "worker.readyToStart": { en: "Ready to start the next shift", ru: "Готов начать следующую смену" },
   "worker.checkoutVideoNeeded": { en: "Checkout video still needs upload for", ru: "Видео при выходе ещё нужно загрузить для" },
   "worker.navClock": { en: "Clock", ru: "Смена" },
@@ -340,6 +345,11 @@ export const translations = {
   "projects.fixCoordinates": { en: "Fix GPS", ru: "Исправить GPS" },
   "projects.fixCoordinatesHint": { en: "Use Fix GPS to add latitude and longitude before crews rely on this project for location truth.", ru: "Используйте «Исправить GPS», чтобы добавить широту и долготу до того, как бригада начнёт полагаться на этот проект для проверки местоположения." },
   "projects.openDetail": { en: "Open detail", ru: "Подробности" },
+  "projects.navigationActions": { en: "Project navigation actions", ru: "Навигация к объекту" },
+  "projects.appleMaps": { en: "Apple", ru: "Apple" },
+  "projects.googleMaps": { en: "Google", ru: "Google" },
+  "projects.teslaShare": { en: "Tesla/share", ru: "Tesla/share" },
+  "projects.copyDestination": { en: "Copy destination", ru: "Скопировать точку" },
   "projects.saveChanges": { en: "Save Changes", ru: "Сохранить изменения" },
   "projects.archive": { en: "Archive", ru: "Архивировать" },
   "projects.archiving": { en: "Archiving...", ru: "Архивация..." },

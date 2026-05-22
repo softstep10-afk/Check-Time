@@ -108,7 +108,11 @@ export default function Page() {
 
       // Success
       setPhase("success");
-      setUserName(payload.name ?? "Worker");
+      setUserName(
+        typeof payload.name === "string" && payload.name.trim()
+          ? payload.name.trim()
+          : t("login.defaultUserName"),
+      );
       setStatusText("");
 
       setTimeout(() => {

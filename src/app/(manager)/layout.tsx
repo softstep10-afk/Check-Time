@@ -91,12 +91,59 @@ function getManagerRealtimeTables(pathname: string | null): string[] {
   }
 
   if (pathname.startsWith("/command-center")) return [...managerRefreshTables.command];
-  if (pathname.startsWith("/projects") || pathname.startsWith("/tasks")) return [...managerRefreshTables.projects];
+  if (pathname.startsWith("/tasks")) return ["projects", "profiles"];
+  if (pathname.startsWith("/projects/")) {
+    return managerRefreshTables.projects.filter((table) => table !== "tasks");
+  }
+  if (pathname.startsWith("/projects")) return [...managerRefreshTables.projects];
   if (pathname.startsWith("/team")) return [...managerRefreshTables.team];
   if (pathname.startsWith("/payroll") || pathname.startsWith("/reports/annual")) return [...managerRefreshTables.payroll];
   if (pathname.startsWith("/admin/settings") || pathname.startsWith("/settings")) return [...managerRefreshTables.settings];
 
   return [];
+}
+
+function ManagerQuickNav({
+  items,
+  pathname,
+}: {
+  items: Array<{ href: string; icon: JarvisIconName; labelKey: TranslationKey }>;
+  pathname: string | null;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <nav
+      className="shrink-0 overflow-x-auto border-b border-[rgba(105,231,255,0.12)] bg-[rgba(8,13,22,0.92)] px-4 py-2"
+      aria-label={t("nav.quick")}
+      style={{ scrollbarWidth: "thin" }}
+    >
+      <div className="flex min-w-max items-center gap-2">
+        {items.map((item) => {
+          const active = pathname === item.href || pathname?.startsWith(item.href + "/");
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold"
+              style={{
+                borderColor: active ? "rgba(105, 231, 255, 0.32)" : "var(--border-default)",
+                background: active ? "rgba(105, 231, 255, 0.10)" : "rgba(15, 17, 23, 0.35)",
+                color: active ? "var(--ai-cyan-bright)" : "var(--text-secondary)",
+              }}
+            >
+              {item.icon === "jarvis" ? (
+                <JarvisOrb size="xs" state={active ? "notification" : "idle"} />
+              ) : (
+                <JarvisIcon name={item.icon} size={15} active={active} />
+              )}
+              <span>{t(item.labelKey)}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
 }
 
 export default function ManagerLayout({
@@ -220,6 +267,9 @@ export default function ManagerLayout({
     if (scheduleOnlyUser) return item.href === "/schedule";
     return !item.financeOnly || hasFinanceMenu;
   });
+  const greetingName = userName.trim() || t("login.defaultUserName");
+  const headerGreeting = t(isOwnerUser ? "owner.headerGreeting" : "manager.headerGreeting")
+    .replace("{name}", greetingName);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -351,11 +401,16 @@ export default function ManagerLayout({
         <header
           className="app-topbar sticky top-0 z-10 flex items-center justify-between px-5 py-4 md:hidden"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <JarvisOrb size="xs" state="idle" />
-            <h2 className="text-[15px] font-bold">
-              Check-<span className="text-brand">Time</span>
-            </h2>
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-bold">
+                Check-<span className="text-brand">Time</span>
+              </h2>
+              <p className="truncate text-[10px] font-medium text-[var(--text-muted)]">
+                {headerGreeting}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
@@ -376,6 +431,8 @@ export default function ManagerLayout({
             {t("owner.demoBanner")}
           </div>
         ) : null}
+
+        <ManagerQuickNav items={visibleMobileNav} pathname={pathname} />
 
         <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
             {children}

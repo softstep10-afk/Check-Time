@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Copy, Check, Plus, Pencil, Trash2, X, FileText, Play } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { DateField } from "@/components/shared/DateField";
 import {
   GpsRadiusSlider,
@@ -1346,10 +1347,7 @@ export function ProjectsPage({
             <input
               ref={createLatRef}
               name="lat"
-              type="number"
-              step="any"
-              min={-90}
-              max={90}
+              type="text"
               inputMode="decimal"
               required
               onPaste={(event) =>
@@ -1393,10 +1391,7 @@ export function ProjectsPage({
           <input
             ref={createLngRef}
             name="lng"
-            type="number"
-            step="any"
-            min={-180}
-            max={180}
+            type="text"
             inputMode="decimal"
             required
             onPaste={(event) =>
@@ -1614,6 +1609,14 @@ export function ProjectsPage({
                     <div className="mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
                       <span className="truncate">{project.address ?? t("common.noAddressSet")}</span>
                       {project.address ? <CopyAddressButton address={project.address} /> : null}
+                    </div>
+                    <div className="mt-2">
+                      <ProjectNavigationActions
+                        projectName={project.name}
+                        address={project.address}
+                        siteCoordinates={project.siteCoordinates}
+                        compact
+                      />
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <span
@@ -1943,10 +1946,7 @@ export function ProjectsPage({
                   <input
                     ref={editLatRef}
                     name="lat"
-                    type="number"
-                    step="any"
-                    min={-90}
-                    max={90}
+                    type="text"
                     inputMode="decimal"
                     required={!editingProject.hasValidSiteCoordinates}
                     onPaste={(event) =>
@@ -1991,10 +1991,7 @@ export function ProjectsPage({
                 <input
                   ref={editLngRef}
                   name="lng"
-                  type="number"
-                  step="any"
-                  min={-180}
-                  max={180}
+                  type="text"
                   inputMode="decimal"
                   required={!editingProject.hasValidSiteCoordinates}
                   onPaste={(event) =>

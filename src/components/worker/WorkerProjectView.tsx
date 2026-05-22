@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
 import { WorkerMaterialSpecSection } from "@/components/worker/WorkerMaterialSpecSection";
@@ -33,6 +34,7 @@ import {
   submitWorkerTaskCompletion,
   type WorkerTaskModalMode,
 } from "@/lib/worker-task-ui";
+import { parseGeoPoint } from "@/lib/worker-utils";
 import {
   MediaViewerModal,
   useMediaViewerOpenGuard,
@@ -274,6 +276,7 @@ export function WorkerProjectView({
   const workerShell = useWorkerShell();
   const { busyAction, updateTaskStatus } = workerShell;
   const supabase = useMemo(() => createClient(), []);
+  const projectSite = useMemo(() => parseGeoPoint(project.site_point), [project.site_point]);
   const [taskList, setTaskList] = useState<TaskWithAttachments[]>(tasks);
   const [projectMediaList, setProjectMediaList] = useState<TaskAttachmentRef[]>(projectMedia);
   const [selectedTask, setSelectedTask] = useState<TaskWithAttachments | null>(null);
@@ -593,6 +596,14 @@ export function WorkerProjectView({
         {project.address ? (
           <p className="mt-1 text-xs text-[var(--text-muted)]">{project.address}</p>
         ) : null}
+        <div className="mt-3">
+          <ProjectNavigationActions
+            projectName={project.name}
+            address={project.address}
+            siteCoordinates={projectSite}
+            compact
+          />
+        </div>
       </section>
 
       {/* Clock In / Clock Out for THIS project. Reuses the shell's existing

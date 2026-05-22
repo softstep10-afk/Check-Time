@@ -22,16 +22,18 @@ function getProjectCoordinateInputs(source: string) {
 }
 
 describe("coordinate inputs", () => {
-  it("allow high-precision decimal coordinates through browser validation", () => {
+  it("avoid native number-step validation for high-precision decimal coordinates", () => {
     for (const file of coordinateInputFiles) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8");
       const inputs = getProjectCoordinateInputs(source);
 
       expect(inputs.length).toBeGreaterThan(0);
       for (const input of inputs) {
-        expect(input).toContain('type="number"');
-        expect(input).toContain('step="any"');
+        expect(input).toContain('type="text"');
+        expect(input).toContain('inputMode="decimal"');
+        expect(input).not.toContain('type="number"');
         expect(input).not.toContain('step="0.000001"');
+        expect(input).not.toContain('step="any"');
       }
     }
   });

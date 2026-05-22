@@ -107,3 +107,34 @@ Deferred until separate owner approval:
 - Message/task data-loading redesign.
 - Database indexes, migrations, or query-plan optimization.
 - Production runtime profiling requiring authenticated session.
+
+## Mobile UX / Realtime Task Status Fix Pack
+
+Completed scope:
+
+- Restore top quick navigation in manager and worker shells.
+- Add project navigation links/actions without changing project data or GPS logic.
+- Use signed-in profile names in greetings instead of raw role labels.
+- Move manager work alert bell away from the mobile sign-out area.
+- Merge realtime task status updates into manager task board, project detail tasks, and worker task state.
+- Avoid native number-input coordinate step validation for high-precision project/store coordinates while keeping existing parser validation.
+
+Not changed:
+
+- Roles, permissions, and auth/session behavior.
+- Project visibility and project lifecycle.
+- Archive/Trash business meaning.
+- Payroll or salary archive.
+- GPS, geofence, clock-in, clock-out, and shifts.
+- Supabase RLS, Storage policies, schema, or migrations.
+- File allowed types.
+- Jarvis permissions and model routing.
+- Message/task/notification business meaning.
+
+Deferred until separate owner approval:
+
+- Supervisor access policy changes.
+- App-wide realtime architecture rewrite.
+- Query/filter changes that alter visible data.
+- Pagination or virtualized task/project lists.
+- Database indexes, migrations, or query-plan optimization.

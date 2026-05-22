@@ -74,3 +74,27 @@ Deferred performance work:
 Known limitation:
 
 - No authenticated production performance profile was captured. Owner should manually compare Projects, Project Detail, Messages, Tasks, notification bells, Command Center, Jarvis, and file open/download after deployment.
+
+## Mobile UX / Realtime Task Status Fix Pack
+
+Low-risk refresh/render changes applied:
+
+- Manager `/tasks` and `/projects/:id` no longer depend on the manager layout's broad task-triggered `router.refresh()` for task status visibility.
+- Manager task board and project detail task section now merge realtime task payloads locally.
+- Worker shell now merges task realtime INSERT/UPDATE payloads locally and keeps a slower fallback refresh for attachment/hydration catch-up.
+- Manager work alert bell moved away from the mobile top bar to avoid covering sign out.
+- Coordinate inputs use text + decimal keyboard hints so high-precision coordinates avoid browser number-step validation flicker/popups.
+
+Visible behavior preserved:
+
+- Realtime task updates remain enabled.
+- Existing fallback refresh remains where needed for correctness.
+- No task filters or visibility rules changed.
+- No GPS/geofence/project lifecycle behavior changed.
+
+Deferred performance work:
+
+- App-wide realtime consolidation.
+- Pagination or virtualization.
+- Query-scope changes.
+- Authenticated production runtime profiling.

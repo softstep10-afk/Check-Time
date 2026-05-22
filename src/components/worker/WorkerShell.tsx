@@ -5,13 +5,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logAudit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/client";
-import type { TaskStatus, TimeEvent } from "@/types/database";
+import type { Task, TaskStatus, TimeEvent } from "@/types/database";
 import type {
   WorkerGeoPoint,
   WorkerGpsCheck,
   WorkerMediaItem,
   WorkerSession,
   WorkerShellData,
+  WorkerTaskItem,
 } from "@/lib/worker-types";
 import {
   deriveClockState,
@@ -67,6 +68,7 @@ import { isEffectiveOpenTask } from "@/lib/task-status";
 import { uploadTaskAttachment } from "@/lib/task-attachments";
 import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
+import { mergeRealtimeTaskRow } from "@/lib/task-realtime";
 
 const navItems = [
   { href: "/clock", icon: Timer, label: "Clock", labelKey: "worker.navClock" as TranslationKey },
@@ -76,6 +78,39 @@ const navItems = [
   { href: "/schedule", icon: CalendarDays, label: "Schedule", labelKey: "nav.schedule" as TranslationKey },
   { href: "/hours", icon: CalendarClock, label: "Hours", labelKey: "worker.navHours" as TranslationKey },
 ];
+
+function WorkerQuickNav({ pathname }: { pathname: string | null }) {
+  const { t } = useTranslation();
+
+  return (
+    <nav
+      className="shrink-0 overflow-x-auto border-b border-[var(--border-subtle)] bg-[rgba(15,17,23,0.92)] px-3 py-2"
+      aria-label={t("nav.quick")}
+      style={{ scrollbarWidth: "thin" }}
+    >
+      <div className="flex min-w-max items-center gap-2">
+        {navItems.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold"
+              style={{
+                borderColor: active ? "rgba(191, 162, 52, 0.4)" : "var(--border-default)",
+                background: active ? "rgba(191, 162, 52, 0.14)" : "rgba(15, 17, 23, 0.35)",
+                color: active ? "var(--brand-yellow)" : "var(--text-secondary)",
+              }}
+            >
+              <item.icon size={15} strokeWidth={1.8} />
+              <span>{t(item.labelKey)}</span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
 
 type BannerState = {
   tone: "success" | "error" | "info";
@@ -871,6 +906,36 @@ export function WorkerShell({
     knownTaskIdsRef.current = next;
   }, [shell.tasks]);
 
+  const buildWorkerTaskItem = useCallback(
+    (row: Task, existing: WorkerTaskItem | null): WorkerTaskItem => ({
+      ...(existing ?? {}),
+      ...row,
+      projectName: row.project_id
+        ? shell.projects.find((project) => project.id === row.project_id)?.name ?? existing?.projectName ?? null
+        : null,
+      attachments: existing?.attachments,
+      completionAttachments: existing?.completionAttachments,
+    }),
+    [shell.projects],
+  );
+
+  const mergeVisibleRealtimeTask = useCallback(
+    (row: Task) => {
+      setShell((current) => ({
+        ...current,
+        tasks: mergeRealtimeTaskRow(current.tasks, row, {
+          shouldInclude: (task) =>
+            isTaskVisibleToWorker(task, {
+              profileId: current.profile.id,
+              visibleProjectIds: new Set(current.projects.map((project) => project.id)),
+            }),
+          decorate: buildWorkerTaskItem,
+        }),
+      }));
+    },
+    [buildWorkerTaskItem],
+  );
+
   const notifyVisibleTask = useCallback(
     (row: TaskNotificationRow): boolean => {
       if (
@@ -899,10 +964,9 @@ export function WorkerShell({
       if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
         navigator.vibrate([120, 60, 120]);
       }
-      scheduleShellRefresh(600);
       return true;
     },
-    [muted, scheduleShellRefresh, shell.profile.id, shell.projects, t, visibleProjectIds],
+    [muted, shell.profile.id, shell.projects, t, visibleProjectIds],
   );
 
   // ── Tasks realtime subscription ─────────────────────────────────────
@@ -929,9 +993,11 @@ export function WorkerShell({
           table: "tasks",
         },
         (payload) => {
-          const row = payload.new as TaskNotificationRow | null;
+          const row = payload.new as Task | null;
           if (!row) return;
+          mergeVisibleRealtimeTask(row);
           notifyVisibleTask(row);
+          scheduleShellRefresh(1800);
         },
       )
       .on(
@@ -942,16 +1008,18 @@ export function WorkerShell({
           table: "tasks",
         },
         (payload) => {
-          const row = payload.new as TaskNotificationRow | null;
-          if (row && notifyVisibleTask(row)) return;
-          scheduleShellRefresh();
+          const row = payload.new as Task | null;
+          if (row) {
+            mergeVisibleRealtimeTask(row);
+            notifyVisibleTask(row);
+          }
         },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, notifyVisibleTask, scheduleShellRefresh, shell.profile.id]);
+  }, [supabase, notifyVisibleTask, mergeVisibleRealtimeTask, scheduleShellRefresh, shell.profile.id]);
 
   useEffect(() => {
     const channel = supabase
@@ -2157,7 +2225,7 @@ export function WorkerShell({
               : null,
         },
       });
-      router.refresh();
+      scheduleShellRefresh(1800);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Task update failed.";
@@ -2329,9 +2397,14 @@ export function WorkerShell({
                 Header scrolls with page (no `sticky`). */}
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
-                <h1 className="truncate text-base font-bold text-[var(--text-primary)]">
-                  {shell.profile.name}
-                </h1>
+                <div className="min-w-0">
+                  <h1 className="truncate text-base font-bold text-[var(--text-primary)]">
+                    {shell.profile.name}
+                  </h1>
+                  <p className="truncate text-[11px] font-medium text-[var(--text-muted)]">
+                    {t("worker.headerGreeting").replace("{name}", shell.profile.name)}
+                  </p>
+                </div>
                 <span
                   className="shrink-0 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
                   style={{
@@ -2503,6 +2576,8 @@ export function WorkerShell({
               </div>
             ) : null}
           </header>
+
+          <WorkerQuickNav pathname={pathname} />
 
           <main className="flex-1 px-4 pb-24 pt-4">
             {children}

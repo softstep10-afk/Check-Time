@@ -332,7 +332,7 @@ export function ManagerWorkAlertBell() {
   if (!profile || !loaded) return null;
 
   return (
-    <div className="fixed right-5 top-5 z-[70] md:bottom-5 md:top-auto" ref={dropdownRef}>
+    <div className="fixed bottom-24 right-4 z-[70] md:bottom-5 md:right-5" ref={dropdownRef}>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -374,7 +374,7 @@ export function ManagerWorkAlertBell() {
 
       {open ? (
         <div
-          className="absolute right-0 top-12 w-[320px] overflow-hidden rounded-[var(--radius-lg)] border shadow-xl md:bottom-12 md:top-auto"
+          className="absolute bottom-12 right-0 w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-[var(--radius-lg)] border shadow-xl"
           style={{
             background: "var(--bg-surface)",
             borderColor: "var(--border-default)",

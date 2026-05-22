@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
@@ -23,6 +23,7 @@ import {
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { formatDateTime } from "@/lib/worker-utils";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
+import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
   isEffectiveCompletedTask,
@@ -98,11 +99,94 @@ export function ManagerTasksPage({
     setTasks(initialTasks);
   }, [initialTasks]);
 
+  const projectNameById = useMemo(
+    () => new Map(projects.map((project) => [project.id, project.name])),
+    [projects],
+  );
   const workerNameById = useMemo(() => buildProfileNameMap(workers), [workers]);
   const attachmentById = useMemo(
     () => new Map(attachmentMedia.map((m) => [m.id, m])),
     [attachmentMedia],
   );
+  const buildTaskRow = useCallback(
+    (task: Task, existing: TaskRow | null): TaskRow => ({
+      ...(existing ?? {}),
+      ...task,
+      projectName: task.project_id
+        ? projectNameById.get(task.project_id) ?? existing?.projectName ?? null
+        : null,
+      assigneeName: task.assigned_to
+        ? workerNameById.get(task.assigned_to) ?? existing?.assigneeName ?? null
+        : null,
+      completedByName: task.completed_by
+        ? workerNameById.get(task.completed_by) ?? existing?.completedByName ?? null
+        : null,
+    }),
+    [projectNameById, workerNameById],
+  );
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`manager-tasks-page-${orgId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "tasks",
+          filter: `org_id=eq.${orgId}`,
+        },
+        (payload) => {
+          const row = payload.new as Task | null;
+          if (!row) return;
+          setTasks((current) =>
+            mergeRealtimeTaskRow(current, row, {
+              shouldInclude: (task) => task.org_id === orgId,
+              decorate: buildTaskRow,
+            }),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tasks",
+          filter: `org_id=eq.${orgId}`,
+        },
+        (payload) => {
+          const row = payload.new as Task | null;
+          if (!row) return;
+          setTasks((current) =>
+            mergeRealtimeTaskRow(current, row, {
+              shouldInclude: (task) => task.org_id === orgId,
+              decorate: buildTaskRow,
+            }),
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "tasks",
+          filter: `org_id=eq.${orgId}`,
+        },
+        (payload) => {
+          const oldRow = payload.old as { id?: string } | null;
+          const taskId = oldRow?.id;
+          if (!taskId) return;
+          setTasks((current) => removeTaskById(current, taskId));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [buildTaskRow, orgId, supabase]);
 
   const visibleTasks = useMemo(() => {
     return tasks.filter((task) => {

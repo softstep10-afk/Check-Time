@@ -193,16 +193,16 @@ export default function StoresPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <input
                 name="lat"
-                type="number"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 required
                 placeholder={t("projects.latitude")}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
               <input
                 name="lng"
-                type="number"
-                step="any"
+                type="text"
+                inputMode="decimal"
                 required
                 placeholder={t("projects.longitude")}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
