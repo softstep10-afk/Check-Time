@@ -194,7 +194,7 @@ export default function StoresPage() {
               <input
                 name="lat"
                 type="number"
-                step="0.000001"
+                step="any"
                 required
                 placeholder={t("projects.latitude")}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
@@ -202,7 +202,7 @@ export default function StoresPage() {
               <input
                 name="lng"
                 type="number"
-                step="0.000001"
+                step="any"
                 required
                 placeholder={t("projects.longitude")}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"

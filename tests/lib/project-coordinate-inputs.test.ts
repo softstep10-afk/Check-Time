@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const projectCoordinateFiles = [
+const coordinateInputFiles = [
   "src/components/manager/ProjectsPage.tsx",
   "src/components/manager/ProjectDetailPage.tsx",
+  "src/app/(manager)/stores/page.tsx",
 ];
 
 function getProjectCoordinateInputs(source: string) {
@@ -20,9 +21,9 @@ function getProjectCoordinateInputs(source: string) {
     );
 }
 
-describe("project coordinate inputs", () => {
+describe("coordinate inputs", () => {
   it("allow high-precision decimal coordinates through browser validation", () => {
-    for (const file of projectCoordinateFiles) {
+    for (const file of coordinateInputFiles) {
       const source = readFileSync(resolve(process.cwd(), file), "utf8");
       const inputs = getProjectCoordinateInputs(source);
 
@@ -32,6 +33,13 @@ describe("project coordinate inputs", () => {
         expect(input).toContain('step="any"');
         expect(input).not.toContain('step="0.000001"');
       }
+    }
+  });
+
+  it("does not leave any coordinate input on the restrictive six-decimal step", () => {
+    for (const file of coordinateInputFiles) {
+      const source = readFileSync(resolve(process.cwd(), file), "utf8");
+      expect(source).not.toContain('step="0.000001"');
     }
   });
 });
