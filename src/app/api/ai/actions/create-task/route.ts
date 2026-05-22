@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
+import { canConfirmJarvisWriteAction } from "@/lib/role-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { profile } = auth.context;
-    if (profile.role !== "owner" && profile.role !== "admin") {
+    if (!canConfirmJarvisWriteAction(profile.role)) {
       return NextResponse.json(
         { error: "Only owner/admin can confirm Jarvis task actions." },
         { status: 403 },

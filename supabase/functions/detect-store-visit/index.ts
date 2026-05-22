@@ -26,6 +26,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 // @ts-expect-error — Deno global is provided by the edge runtime.
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+// Optional shared secret. When set, database webhooks must send
+// x-check-time-webhook-secret with the same value before this function
+// accepts the request. Leaving it unset preserves the existing webhook.
+// @ts-expect-error — Deno global is provided by the edge runtime.
+const WEBHOOK_SECRET = Deno.env.get("DETECT_STORE_VISIT_WEBHOOK_SECRET")?.trim() ?? "";
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
   throw new Error(
@@ -89,6 +94,36 @@ const SETTINGS_TTL_MS = 60_000;   // Cache app_settings for one minute.
 
 let cachedRadiusM: number | null = null;
 let cachedRadiusAt = 0;
+
+function timingSafeEqual(left: string, right: string): boolean {
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+
+  let diff = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    diff |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return diff === 0;
+}
+
+function readBearerToken(value: string | null): string {
+  const match = value?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? "";
+}
+
+function isAuthorizedWebhook(req: Request): boolean {
+  if (!WEBHOOK_SECRET) {
+    return true;
+  }
+
+  const headerSecret = req.headers.get("x-check-time-webhook-secret")?.trim() ?? "";
+  const bearerSecret = readBearerToken(req.headers.get("authorization"));
+  return (
+    timingSafeEqual(headerSecret, WEBHOOK_SECRET) ||
+    timingSafeEqual(bearerSecret, WEBHOOK_SECRET)
+  );
+}
 
 async function getGeofenceRadiusM(): Promise<number> {
   const now = Date.now();
@@ -399,6 +434,10 @@ async function handleLocationPoint(point: LocationRecord): Promise<{
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("method not allowed", { status: 405 });
+  }
+
+  if (!isAuthorizedWebhook(req)) {
+    return new Response("unauthorized", { status: 401 });
   }
 
   let payload: WebhookPayload;

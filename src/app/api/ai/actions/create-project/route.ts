@@ -1,11 +1,12 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { logAuditServer } from "@/lib/audit-server";
-import { requireManagerContext } from "@/lib/manager-data";
 import {
   insertProjectTolerant,
   validateProjectSaveBody,
 } from "@/lib/project-save";
+import { canConfirmJarvisWriteAction } from "@/lib/role-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,7 +17,19 @@ function readText(value: unknown): string {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { profile } = await requireManagerContext(supabase);
+    const auth = await resolveAiApiContext(supabase);
+    if (auth.kind !== "authenticated") {
+      return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
+    }
+
+    const { profile } = auth.context;
+    if (!canConfirmJarvisWriteAction(profile.role)) {
+      return NextResponse.json(
+        { error: "Only owner/admin can confirm Jarvis project actions." },
+        { status: 403 },
+      );
+    }
+
     const adminClient = createAdminClient();
     if (!adminClient) {
       return NextResponse.json(

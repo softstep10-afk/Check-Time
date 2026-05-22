@@ -2,7 +2,9 @@ import { hash } from "@node-rs/argon2";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireManagerContext } from "@/lib/manager-data";
+import { canManageTeamMember } from "@/lib/role-permissions";
 import { createClient } from "@/lib/supabase/server";
+import type { UserRole } from "@/types/database";
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,10 +28,10 @@ export async function POST(request: NextRequest) {
 
     const { data: targetProfile, error: targetProfileError } = await adminClient
       .from("profiles")
-      .select("id, org_id")
+      .select("id, org_id, role")
       .eq("id", profileId)
       .eq("org_id", manager.org_id)
-      .maybeSingle<{ id: string; org_id: string }>();
+      .maybeSingle<{ id: string; org_id: string; role: UserRole }>();
 
     if (targetProfileError) {
       return NextResponse.json({ error: targetProfileError.message }, { status: 500 });
@@ -37,6 +39,13 @@ export async function POST(request: NextRequest) {
 
     if (!targetProfile) {
       return NextResponse.json({ error: "Team member not found." }, { status: 404 });
+    }
+
+    if (!canManageTeamMember(manager.role, targetProfile.role)) {
+      return NextResponse.json(
+        { error: "Only owner/admin can reset owner/admin PINs." },
+        { status: 403 },
+      );
     }
 
     // Generate a new random 4-digit PIN

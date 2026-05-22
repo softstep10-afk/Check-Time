@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
+import { canCreateTeamRole } from "@/lib/role-permissions";
 import { createClient } from "@/lib/supabase/server";
 import { buildTeamMemberEmail, isValidTeamPasscode } from "@/lib/team-member-provisioning";
 import type { UserRole } from "@/types/database";
@@ -45,6 +46,14 @@ export async function POST(request: NextRequest) {
     const requireVideo = Boolean(body.requireVideo);
     const hourlyRateRaw =
       typeof body.hourlyRate === "string" ? body.hourlyRate.trim() : "";
+
+    if (!canCreateTeamRole(profile.role, role)) {
+      return NextResponse.json(
+        { error: "Only owner/admin can create admin team members." },
+        { status: 403 },
+      );
+    }
+
     const canSetFinancials = await hasFinanceAccess(supabase, {
       id: profile.id,
       role: profile.role,

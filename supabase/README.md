@@ -46,6 +46,16 @@ export SUPABASE_SERVICE_ROLE_KEY=<service-role-jwt>
 > **Never commit the service-role key.** It bypasses RLS by design; treat it
 > like a root password.
 
+Optional request hardening:
+
+```sh
+export DETECT_STORE_VISIT_WEBHOOK_SECRET=<long-random-shared-secret>
+```
+
+When `DETECT_STORE_VISIT_WEBHOOK_SECRET` is set, every request must include
+`x-check-time-webhook-secret: <same-secret>` or `Authorization: Bearer
+<same-secret>`. Leaving it unset preserves the existing webhook behavior.
+
 ### Deploy
 
 ```sh
@@ -69,6 +79,8 @@ in the dashboard. Replicate per environment (dev / staging / prod).
      - `Authorization: Bearer <SUPABASE_ANON_KEY>` (Supabase requires this
        even though the function uses the service-role key internally)
      - `Content-Type: application/json`
+     - Optional after setting `DETECT_STORE_VISIT_WEBHOOK_SECRET` on the
+       function: `x-check-time-webhook-secret: <same-secret>`
    - **HTTP Params:** none.
    - **Payload:** leave the default `record` body — the function expects
      the standard `{ type, table, schema, record, old_record }` envelope.
