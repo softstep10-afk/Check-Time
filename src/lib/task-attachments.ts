@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
-import { guessMediaType, slugifyFilename } from "@/lib/worker-utils";
+import { buildSafeUploadName } from "@/lib/media-extension";
+import { guessMediaType } from "@/lib/worker-utils";
 
 export type UploadAttachmentParams = {
   orgId: string;
@@ -61,7 +62,8 @@ export async function uploadTaskAttachment(
   }
   console.log("[task-attach] validation ok", { kind: validation.kind });
 
-  const safeName = slugifyFilename(file.name || `attachment-${Date.now()}`);
+  const safeName = buildSafeUploadName(file, "task-attachment");
+  const displayName = file.name || safeName;
   const storagePath = `${orgId}/${projectId}/tasks/${Date.now()}-${safeName}`;
   console.log("[task-attach] storage upload begin", { storagePath });
 
@@ -91,7 +93,7 @@ export async function uploadTaskAttachment(
       uploaded_by: uploadedBy,
       media_type: guessMediaType(file),
       storage_path: storagePath,
-      filename: file.name,
+      filename: displayName,
       file_size: file.size,
       mime_type: resolvedContentType,
       caption: null,

@@ -40,3 +40,37 @@ Not changed:
 ## Known Limitation
 
 Authenticated production testing was not available in this pass. Manual owner/manager/worker QA is required after deployment using `docs/OWNER_MANUAL_QA_CHECKLIST.md`.
+
+## File / Media Reliability Fix Pack
+
+Completed scope:
+
+- Keep existing PDF, Word, Excel, CSV, photo, and video support consistent across validation and upload helpers.
+- Preserve original display filenames while generating safe storage filenames when needed.
+- Handle iPhone `.mov` / `video/quicktime` and generic picker MIME cases without changing allowed business file categories.
+- Keep task attachment upload success tied to both Storage upload and media metadata insert.
+- Normalize private bucket paths before receipt signed URL batch creation.
+- Validate manager task attachment media IDs as same-org/same-project before storing them in task metadata.
+
+Not changed:
+
+- Storage policies.
+- Supabase RLS.
+- Bucket config.
+- Database schema or migrations.
+- Who can view/upload files in normal same-org workflows.
+- Archive/Trash business meaning.
+- Payroll or salary archive.
+- GPS, shifts, clock-in, clock-out, and Safety Brief.
+- Message/task business meaning.
+
+Deferred until separate owner approval:
+
+- Direct SQL Storage/RLS verification.
+- Storage policy hardening.
+- RLS file access hardening.
+- File metadata schema redesign.
+- Broad file access redesign.
+- Orphaned storage cleanup jobs.
+- Archive/Trash file retention redesign.
+- App-wide media pagination, lazy loading, or performance redesign if it changes visible behavior.

@@ -36,6 +36,7 @@ describe("classifyMime", () => {
     expect(classifyMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document")).toBe("document");
     expect(classifyMime("application/vnd.ms-excel")).toBe("document");
     expect(classifyMime("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).toBe("document");
+    expect(classifyMime("application/csv")).toBe("document");
     expect(classifyMime("text/csv")).toBe("document");
     expect(classifyMime("text/plain")).toBe("document");
   });
@@ -80,6 +81,50 @@ describe("validateUploadFile", () => {
     const result = validateUploadFile(file);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.kind).toBe("video");
+  });
+
+  it("infers a useful content type when MIME is generic", () => {
+    expect(
+      inferUploadContentType(makeFile("clip.MOV", "application/octet-stream", 0.1)),
+    ).toBe("video/quicktime");
+    expect(
+      inferUploadContentType(makeFile("plans.PDF", "application/octet-stream", 0.1)),
+    ).toBe("application/pdf");
+    expect(
+      inferUploadContentType(makeFile("costs.CSV", "application/octet-stream", 0.1)),
+    ).toBe("text/csv");
+  });
+
+  it("accepts current project file types through MIME or extension fallback", () => {
+    for (const file of [
+      makeFile("plans.pdf", "application/pdf", 0.1),
+      makeFile("scope.doc", "application/msword", 0.1),
+      makeFile(
+        "scope.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        0.1,
+      ),
+      makeFile("materials.xls", "application/vnd.ms-excel", 0.1),
+      makeFile(
+        "materials.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        0.1,
+      ),
+      makeFile("costs.csv", "application/csv", 0.1),
+      makeFile("photo.jpeg", "image/jpeg", 0.1),
+      makeFile("photo.png", "image/png", 0.1),
+      makeFile("iphone.mov", "video/quicktime", 0.1),
+      makeFile("walkthrough.mp4", "video/mp4", 0.1),
+      makeFile("UPPER.CSV", "", 0.1),
+      makeFile("NO-MIME.MOV", "application/octet-stream", 0.1),
+    ]) {
+      expect(validateUploadFile(file).ok, file.name).toBe(true);
+    }
+  });
+
+  it("rejects files without an allowed MIME or extension", () => {
+    expect(validateUploadFile(makeFile("no-extension", "", 0.1)).ok).toBe(false);
+    expect(validateUploadFile(makeFile("archive.zip", "application/zip", 0.1)).ok).toBe(false);
   });
 
   it("accepts Word, Excel, CSV, and PDF files by extension when MIME is empty", () => {

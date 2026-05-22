@@ -23,6 +23,7 @@ import { DateField } from "@/components/shared/DateField";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { logAudit } from "@/lib/audit";
+import { buildSafeUploadName } from "@/lib/media-extension";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import {
   ACCEPT_ALL_UPLOADS,
@@ -1011,11 +1012,11 @@ export function ProjectDetailPage({
     // creating the task so we don't end up with orphan task rows.
     const uploadedMediaIds: string[] = [];
     for (const file of taskAttachmentFiles) {
-      // Cloud-picker guard: zero-byte or nameless File usually means the
+      // Cloud-picker guard: zero-byte File usually means the
       // browser handed back a streaming reference (Google Drive, iCloud)
-      // it can't materialize. Surface the user-facing fallback rather
-      // than letting the validator/storage emit a cryptic error.
-      if (!file || file.size === 0 || !file.name) {
+      // it can't materialize. Nameless but non-empty files are still safe:
+      // upload helpers derive a storage filename from MIME/extension.
+      if (!file || file.size === 0) {
         console.error("[task-attach] invalid File detected (likely cloud picker)", {
           name: file?.name,
           size: file?.size,
@@ -1185,7 +1186,8 @@ export function ProjectDetailPage({
     setMessage("");
 
     for (const file of list) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const safeName = buildSafeUploadName(file, "project-media");
+      const displayName = file.name || safeName;
       const path = `${orgId}/${project.id}/project-media/${createClientUuid()}-${safeName}`;
       const contentType = inferUploadContentType(file);
 
@@ -1213,7 +1215,7 @@ export function ProjectDetailPage({
         uploaded_by: managerId,
         media_type: kind,
         storage_path: path,
-        filename: file.name,
+        filename: displayName,
         file_size: file.size,
         mime_type: contentType,
         caption: null,
@@ -3452,7 +3454,8 @@ function MaterialsSection({
       throw new Error(t("messages.uploadFailed"));
     }
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeName = buildSafeUploadName(file, "receipt");
+    const displayName = file.name || safeName;
     const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
     const mimeType = inferUploadContentType(file);
     const { error: uploadErr } = await supabase.storage
@@ -3469,7 +3472,7 @@ function MaterialsSection({
         uploaded_by: managerId,
         media_type: mediaType,
         storage_path: path,
-        filename: file.name,
+        filename: displayName,
         file_size: file.size,
         mime_type: mimeType,
         caption: null,
@@ -4016,7 +4019,7 @@ function ReceiptsSection({
       // Sign every receipt URL in one batch round-trip. The "media" bucket
       // is Private, so getPublicUrl produces 404'ing URLs — same root cause
       // already fixed in TaskAttachmentList. 1h TTL is plenty for browsing.
-      const paths = rows.map((r) => r.storage_path);
+      const paths = rows.map((r) => normalizeStoragePath(r.storage_path));
       let signedByPath = new Map<string, string>();
       if (paths.length > 0) {
         const { data: signed } = await supabase.storage
@@ -4035,7 +4038,7 @@ function ReceiptsSection({
         rows.map((r) => ({
           id: r.id,
           storagePath: r.storage_path,
-          url: signedByPath.get(r.storage_path) ?? "",
+          url: signedByPath.get(normalizeStoragePath(r.storage_path)) ?? "",
           filename: r.filename ?? "receipt",
           storeName: (r.metadata?.store_name as string) ?? "",
           amount: (r.metadata?.amount as number) ?? 0,
@@ -4120,7 +4123,8 @@ function ReceiptsSection({
     setReceiptUploadError("");
 
     for (const file of Array.from(files)) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const safeName = buildSafeUploadName(file, "receipt");
+      const displayName = file.name || safeName;
       const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
       const mimeType = inferUploadContentType(file);
 
@@ -4157,7 +4161,7 @@ function ReceiptsSection({
           uploaded_by: managerId,
           media_type: mediaType,
           storage_path: path,
-          filename: file.name,
+          filename: displayName,
           file_size: file.size,
           mime_type: mimeType,
           caption: note || null,
@@ -4184,7 +4188,7 @@ function ReceiptsSection({
           id: row.id,
           storagePath: path,
           url: signedData?.signedUrl ?? "",
-          filename: file.name,
+          filename: displayName,
           storeName: finalStore,
           amount,
           purchaseDate,
@@ -4205,7 +4209,7 @@ function ReceiptsSection({
         beforeData: null,
         afterData: {
           project_id: projectId,
-          filename: file.name,
+          filename: displayName,
           media_type: mediaType,
           amount,
           store_name: finalStore || null,

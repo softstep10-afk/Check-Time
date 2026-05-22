@@ -18,6 +18,16 @@ describe("extensionFromMime", () => {
     expect(extensionFromMime("image/png")).toBe(".png");
     expect(extensionFromMime("image/heic")).toBe(".heic");
     expect(extensionFromMime("application/pdf")).toBe(".pdf");
+    expect(extensionFromMime("application/msword")).toBe(".doc");
+    expect(
+      extensionFromMime("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    ).toBe(".docx");
+    expect(extensionFromMime("application/vnd.ms-excel")).toBe(".xls");
+    expect(
+      extensionFromMime("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    ).toBe(".xlsx");
+    expect(extensionFromMime("application/csv")).toBe(".csv");
+    expect(extensionFromMime("text/csv")).toBe(".csv");
   });
 
   it("is case-insensitive", () => {
@@ -64,6 +74,14 @@ describe("buildSafeUploadName", () => {
       "checkout",
     );
     expect(out).toMatch(/^checkout-\d+\.mov$/);
+  });
+
+  it("adds a document extension when the picker omits the filename", () => {
+    const out = buildSafeUploadName(
+      { name: "", type: "application/csv" },
+      "attachment",
+    );
+    expect(out).toMatch(/^attachment-\d+\.csv$/);
   });
 
   it("uses .bin-equivalent (no extension) for unknown MIMEs with empty name", () => {

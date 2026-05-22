@@ -15,11 +15,13 @@ Use this before any production deploy.
 
 - Install dependencies only if needed.
 - Run `npm run check:dangerous`.
+- Run `npm run inventory:service-role`.
 - Run `npm run lint`.
 - Run `npx tsc --noEmit`.
 - Run `npm test`.
 - Run `npm run build`.
 - Run `npm run smoke:public` when network access is available.
+- Run `npm run alpha7:predeploy` before owner-approved deploys.
 - Confirm `git status --short` is still clean after checks.
 
 ## Public Smoke
@@ -42,6 +44,7 @@ Use this before any production deploy.
 - No bucket changes.
 - No production data mutation.
 - No business logic changes unless explicitly owner-approved.
+- If file/media code changed, confirm the owner manual QA file section is scheduled after deploy.
 
 ## Forbidden Without Owner Approval
 
@@ -55,4 +58,3 @@ Use this before any production deploy.
 - Jarvis action behavior.
 - File upload behavior.
 - Supabase RLS, Storage policies, and schema.
-

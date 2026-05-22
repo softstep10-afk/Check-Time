@@ -30,6 +30,7 @@ export const MIMES: Record<UploadKind, readonly string[]> = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/csv",
     "text/csv",
     "text/plain",
     "text/tab-separated-values",
@@ -119,7 +120,13 @@ function classifyByExtension(name: string): UploadKind | null {
 }
 
 export function inferUploadContentType(file: File): string {
-  if (file.type) return file.type;
+  const declaredType = file.type.trim();
+  if (
+    declaredType &&
+    declaredType.toLowerCase() !== "application/octet-stream"
+  ) {
+    return declaredType;
+  }
   const lower = file.name.toLowerCase();
   if (lower.endsWith(".pdf")) return "application/pdf";
   if (/\.(jpe?g)$/.test(lower)) return "image/jpeg";

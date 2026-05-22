@@ -20,6 +20,7 @@ import {
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
 import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
+import { buildSafeUploadName } from "@/lib/media-extension";
 import {
   DEFAULT_SAFETY_VERSION,
   writeSafetyAck,
@@ -514,7 +515,8 @@ export function WorkerProjectView({
         return;
       }
 
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const safeName = buildSafeUploadName(file, "project-media");
+      const displayName = file.name || safeName;
       const path = `${orgId}/${project.id}/project-media/${createClientUuid()}-${safeName}`;
       const mimeType = inferUploadContentType(file);
       const { error: uploadErr } = await supabase.storage
@@ -538,7 +540,7 @@ export function WorkerProjectView({
           uploaded_by: profileId,
           media_type: validation.kind,
           storage_path: path,
-          filename: file.name,
+          filename: displayName,
           file_size: file.size,
           mime_type: mimeType,
           caption: null,
@@ -1745,7 +1747,8 @@ function WorkerMaterialsList({
       throw new Error(t("messages.uploadFailed"));
     }
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeName = buildSafeUploadName(file, "receipt");
+    const displayName = file.name || safeName;
     const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
     const mimeType = inferUploadContentType(file);
     const { error: uploadErr } = await supabase.storage
@@ -1762,7 +1765,7 @@ function WorkerMaterialsList({
         uploaded_by: profileId,
         media_type: mediaType,
         storage_path: path,
-        filename: file.name,
+        filename: displayName,
         file_size: file.size,
         mime_type: mimeType,
         caption: null,
@@ -2315,7 +2318,8 @@ function WorkerReceiptUpload({
     setBusy(true);
     setMessage(null);
 
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeName = buildSafeUploadName(file, "receipt");
+    const displayName = file.name || safeName;
     const path = `${orgId}/${projectId}/receipts/${createClientUuid()}-${safeName}`;
     const mimeType = inferUploadContentType(file);
 
@@ -2344,7 +2348,7 @@ function WorkerReceiptUpload({
       uploaded_by: profileId,
       media_type: mediaType,
       storage_path: path,
-      filename: file.name,
+      filename: displayName,
       file_size: file.size,
       mime_type: mimeType,
       caption: note || null,

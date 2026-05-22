@@ -5,6 +5,7 @@ import {
   createManagerTask,
   TaskDispatchError,
 } from "@/lib/server/task-dispatch";
+import { assertTaskAttachmentMediaTargets } from "@/lib/server/file-attachment-guard";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { TaskPriority } from "@/types/database";
@@ -51,6 +52,11 @@ export async function POST(request: NextRequest) {
 
     const attachmentMediaIds = readStringArray(body.attachmentMediaIds);
     const projectId = readText(body.projectId) || null;
+    const safeAttachmentMediaIds = await assertTaskAttachmentMediaTargets(adminClient, {
+      orgId: profile.org_id,
+      projectId,
+      mediaIds: attachmentMediaIds,
+    });
     const task = await createManagerTask(adminClient, {
       orgId: profile.org_id,
       actor: profile,
@@ -63,7 +69,7 @@ export async function POST(request: NextRequest) {
       source: readText(body.source) || "manager_task",
       auditAction: "task_created",
       metadata: {
-        attachment_media_ids: attachmentMediaIds,
+        attachment_media_ids: safeAttachmentMediaIds,
       },
     });
 

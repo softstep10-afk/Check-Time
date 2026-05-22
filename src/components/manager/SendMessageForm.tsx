@@ -13,6 +13,7 @@ import {
   type MessagePriority,
 } from "@/lib/message-types";
 import { isTaskMessagePriority } from "@/lib/message-state";
+import { buildSafeUploadName } from "@/lib/media-extension";
 import {
   ACCEPT_ALL_UPLOADS,
   inferUploadContentType,
@@ -105,7 +106,8 @@ export function SendMessageForm({
   }
 
   async function uploadFile(file: File): Promise<MessageAttachment | null> {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const safeName = buildSafeUploadName(file, "message");
+    const displayName = file.name || safeName;
     const path = `messages/${recipientId}/${Date.now()}-${safeName}`;
 
     const { error: uploadErr } = await supabase.storage
@@ -124,7 +126,7 @@ export function SendMessageForm({
     return {
       url: "",
       storagePath: path,
-      filename: file.name,
+      filename: displayName,
       type: classifyFile(file),
       mimeType: inferUploadContentType(file),
       size: file.size,

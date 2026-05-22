@@ -35,6 +35,8 @@ Run this after deploys that touch application code or user workflows.
 - Task attachments still open.
 - Message attachments still open.
 - Open/download fallback works for unsupported preview formats.
+- iPhone `.mov` video uploads do not break the flow.
+- Files remain linked to the correct project/task/message after read, taken, done, and notification-read actions.
 
 ## Coordinates
 
@@ -124,3 +126,44 @@ Notification checks:
 - Source message remains visible in message history.
 - Source task remains visible in open/completed task views.
 - No duplicate message/task cards appear after repeated realtime updates.
+
+## File / Media Reliability Fix Pack
+
+Run this after deploying `fix(alpha7): harden file and media reliability`.
+
+What was fixed:
+
+- Existing PDF, Word, Excel, CSV, photo, and video support is validated consistently.
+- Generic picker MIME with a known allowed extension is handled before upload.
+- Storage filenames are safe even when a picker omits the original filename.
+- iPhone `.mov` / `video/quicktime` uploads keep a usable extension.
+- Task attachment IDs are validated as same-org/same-project before manager task metadata stores them.
+- Private bucket open/download paths are signed and normalized.
+
+What was not changed:
+
+- No Storage policy, RLS, bucket, schema, migration, payroll, GPS, shift, archive/trash, role, or business-access behavior changed.
+- No new file categories were added.
+- No production authenticated smoke was performed by the agent; owner/manual QA is still required after deployment.
+
+Owner/manager checks:
+
+- Upload PDF, Word, Excel, CSV, photo, and video files to a project.
+- Open and download each document/video file.
+- Open project photos normally.
+- Create a task with an attachment if the current UI supports it.
+- Send a message with an attachment if the current UI supports it.
+- Confirm attachments remain after read, taken, done, and notification-clear actions.
+
+Worker checks:
+
+- Open/download project files where the existing worker workflow allows it.
+- Open/download task attachments.
+- Open/download message attachments.
+- Upload worker media/video where the existing workflow supports it.
+- Confirm iPhone `.mov` video does not break upload/open/download.
+
+Archive/Trash checks:
+
+- Confirm file history is not unexpectedly removed by Archive or Trash.
+- Confirm payroll archive is not touched.

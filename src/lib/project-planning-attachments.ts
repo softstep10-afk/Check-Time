@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createProjectPlanningId, type ProjectPlanningAttachment } from "@/lib/project-planning";
 import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
-import { guessMediaType, slugifyFilename } from "@/lib/worker-utils";
+import { buildSafeUploadName } from "@/lib/media-extension";
+import { guessMediaType } from "@/lib/worker-utils";
 
 type UploadPlanningAttachmentParams = {
   orgId: string;
@@ -33,7 +34,8 @@ export async function uploadProjectPlanningAttachment(
     return { ok: false, error: `validation: ${validationError}` };
   }
 
-  const safeName = slugifyFilename(file.name || `planning-${Date.now()}`);
+  const safeName = buildSafeUploadName(file, "planning");
+  const displayName = file.name || safeName;
   const storagePath = `${orgId}/${projectId}/planning/${Date.now()}-${safeName}`;
   const contentType = inferUploadContentType(file);
   const { error: uploadError } = await supabase.storage
@@ -56,7 +58,7 @@ export async function uploadProjectPlanningAttachment(
       uploaded_by: uploadedBy,
       media_type: guessMediaType(file),
       storage_path: storagePath,
-      filename: file.name,
+      filename: displayName,
       file_size: file.size,
       mime_type: contentType,
       caption: null,
@@ -75,13 +77,13 @@ export async function uploadProjectPlanningAttachment(
     ok: true,
     attachment: {
       id: createProjectPlanningId("att"),
-      name: file.name || "Project planning file",
+      name: displayName,
       url: "",
       kind: "file",
       note: "",
       mediaId: data.id,
       storagePath,
-      fileName: file.name,
+      fileName: displayName,
       mimeType: contentType,
       createdAt: new Date().toISOString(),
     },

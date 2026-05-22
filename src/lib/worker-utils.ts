@@ -527,27 +527,27 @@ export function slugifyFilename(filename: string): string {
 }
 
 export function guessMediaType(file: File): Media["media_type"] {
-  if (file.type.startsWith("image/")) {
+  const mime = file.type.toLowerCase();
+  const lowerName = file.name.toLowerCase();
+
+  if (mime.startsWith("image/")) {
     return "photo";
   }
 
-  if (file.type.startsWith("video/")) {
+  if (mime.startsWith("video/")) {
     return "video";
   }
 
-  if (file.type === "application/pdf") {
+  if (mime === "application/pdf") {
     return "pdf";
   }
 
   // Cloud pickers (Google Drive, iCloud, OneDrive) often hand back a File
-  // with file.type === "". Fall back to the filename extension so the
-  // media row's media_type is still classified correctly.
-  if (file.type === "") {
-    const lower = file.name.toLowerCase();
-    if (/\.(jpe?g|png|webp|heic|heif|gif)$/.test(lower)) return "photo";
-    if (/\.(mp4|mov|webm)$/.test(lower)) return "video";
-    if (lower.endsWith(".pdf")) return "pdf";
-  }
+  // with file.type === "" or application/octet-stream. Fall back to the
+  // filename extension so the media row's media_type remains accurate.
+  if (/\.(jpe?g|png|webp|heic|heif|gif)$/.test(lowerName)) return "photo";
+  if (/\.(mp4|mov|webm)$/.test(lowerName)) return "video";
+  if (lowerName.endsWith(".pdf")) return "pdf";
 
   return "document";
 }

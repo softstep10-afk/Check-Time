@@ -46,6 +46,8 @@ export function extensionFromMime(mime: string | null | undefined): string {
       return ".xls";
     case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
       return ".xlsx";
+    case "application/csv":
+      return ".csv";
     case "text/csv":
       return ".csv";
     case "text/plain":
