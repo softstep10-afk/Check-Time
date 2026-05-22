@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
+import { parsePastedCoordinatePair } from "@/lib/coordinate-paste";
 import {
   assessDeviceLocationAccuracy,
   type DeviceLocationAssessment,
@@ -529,6 +530,21 @@ function setInputElementValue(
   }
 
   input.value = value;
+}
+
+function applyPastedCoordinatePair(
+  event: React.ClipboardEvent<HTMLInputElement>,
+  latInput: HTMLInputElement | null,
+  lngInput: HTMLInputElement | null,
+  onApplied: () => void,
+) {
+  const pair = parsePastedCoordinatePair(event.clipboardData.getData("text"));
+  if (!pair || !latInput || !lngInput) return;
+
+  event.preventDefault();
+  setInputElementValue(latInput, pair.lat);
+  setInputElementValue(lngInput, pair.lng);
+  onApplied();
 }
 
 export function ProjectsPage({
@@ -1336,6 +1352,14 @@ export function ProjectsPage({
               max={90}
               inputMode="decimal"
               required
+              onPaste={(event) =>
+                applyPastedCoordinatePair(event, createLatRef.current, createLngRef.current, () => {
+                  setCreateCoordinatesConfirmed(false);
+                  setCreateDeviceLocation(null);
+                  setCreateAddressLookup(null);
+                  setCreateAddressLookupError("");
+                })
+              }
               onChange={() => {
                 setCreateCoordinatesConfirmed(false);
                 setCreateDeviceLocation(null);
@@ -1375,6 +1399,14 @@ export function ProjectsPage({
             max={180}
             inputMode="decimal"
             required
+            onPaste={(event) =>
+              applyPastedCoordinatePair(event, createLatRef.current, createLngRef.current, () => {
+                setCreateCoordinatesConfirmed(false);
+                setCreateDeviceLocation(null);
+                setCreateAddressLookup(null);
+                setCreateAddressLookupError("");
+              })
+            }
             onChange={() => {
               setCreateCoordinatesConfirmed(false);
               setCreateDeviceLocation(null);
@@ -1917,6 +1949,14 @@ export function ProjectsPage({
                     max={90}
                     inputMode="decimal"
                     required={!editingProject.hasValidSiteCoordinates}
+                    onPaste={(event) =>
+                      applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
+                        setEditCoordinatesConfirmed(false);
+                        setEditDeviceLocation(null);
+                        setEditAddressLookup(null);
+                        setEditAddressLookupError("");
+                      })
+                    }
                     onChange={() => {
                       setEditCoordinatesConfirmed(false);
                       setEditDeviceLocation(null);
@@ -1957,6 +1997,14 @@ export function ProjectsPage({
                   max={180}
                   inputMode="decimal"
                   required={!editingProject.hasValidSiteCoordinates}
+                  onPaste={(event) =>
+                    applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
+                      setEditCoordinatesConfirmed(false);
+                      setEditDeviceLocation(null);
+                      setEditAddressLookup(null);
+                      setEditAddressLookupError("");
+                    })
+                  }
                   onChange={() => {
                     setEditCoordinatesConfirmed(false);
                     setEditDeviceLocation(null);

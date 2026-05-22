@@ -61,6 +61,7 @@ import {
 } from "@/lib/task-status";
 import { createClient } from "@/lib/supabase/client";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
+import { parsePastedCoordinatePair } from "@/lib/coordinate-paste";
 import {
   assessDeviceLocationAccuracy,
   type DeviceLocationAssessment,
@@ -313,6 +314,21 @@ function setInputElementValue(
   }
 
   input.value = value;
+}
+
+function applyPastedCoordinatePair(
+  event: React.ClipboardEvent<HTMLInputElement>,
+  latInput: HTMLInputElement | null,
+  lngInput: HTMLInputElement | null,
+  onApplied: () => void,
+) {
+  const pair = parsePastedCoordinatePair(event.clipboardData.getData("text"));
+  if (!pair || !latInput || !lngInput) return;
+
+  event.preventDefault();
+  setInputElementValue(latInput, pair.lat);
+  setInputElementValue(lngInput, pair.lng);
+  onApplied();
 }
 
 export function ProjectDetailPage({
@@ -2954,6 +2970,14 @@ export function ProjectDetailPage({
                     max={90}
                     inputMode="decimal"
                     required={!project.hasValidSiteCoordinates}
+                    onPaste={(event) =>
+                      applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
+                        setCoordinatesConfirmed(false);
+                        setDeviceLocation(null);
+                        setAddressLookup(null);
+                        setAddressLookupError("");
+                      })
+                    }
                     onChange={() => {
                       setCoordinatesConfirmed(false);
                       setDeviceLocation(null);
@@ -2985,6 +3009,14 @@ export function ProjectDetailPage({
                   max={180}
                   inputMode="decimal"
                   required={!project.hasValidSiteCoordinates}
+                  onPaste={(event) =>
+                    applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
+                      setCoordinatesConfirmed(false);
+                      setDeviceLocation(null);
+                      setAddressLookup(null);
+                      setAddressLookupError("");
+                    })
+                  }
                   onChange={() => {
                     setCoordinatesConfirmed(false);
                     setDeviceLocation(null);

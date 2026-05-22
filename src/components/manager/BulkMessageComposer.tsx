@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Send, Users } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
@@ -66,6 +66,7 @@ export function BulkMessageComposer({
   const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const historyReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recipientOptions = useMemo(
     () => crew.filter((member) => member.id !== senderId),
@@ -88,6 +89,14 @@ export function BulkMessageComposer({
     setHistoryLoading(false);
   }, [supabase, senderId]);
 
+  const scheduleHistoryLoad = useCallback(() => {
+    if (historyReloadTimerRef.current) clearTimeout(historyReloadTimerRef.current);
+    historyReloadTimerRef.current = setTimeout(() => {
+      historyReloadTimerRef.current = null;
+      void loadHistory();
+    }, 250);
+  }, [loadHistory]);
+
   useEffect(() => {
     // Defer to microtask so the initial load's setState doesn't fire
     // inside the render/effect body synchronously.
@@ -96,6 +105,15 @@ export function BulkMessageComposer({
     }, 0);
     return () => clearTimeout(id);
   }, [loadHistory]);
+
+  useEffect(() => {
+    return () => {
+      if (historyReloadTimerRef.current) {
+        clearTimeout(historyReloadTimerRef.current);
+        historyReloadTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const channel = supabase
@@ -108,7 +126,7 @@ export function BulkMessageComposer({
           table: "messages",
           filter: `sender_id=eq.${senderId}`,
         },
-        () => void loadHistory(),
+        scheduleHistoryLoad,
       )
       .on(
         "postgres_changes",
@@ -118,14 +136,14 @@ export function BulkMessageComposer({
           table: "messages",
           filter: `sender_id=eq.${senderId}`,
         },
-        () => void loadHistory(),
+        scheduleHistoryLoad,
       )
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadHistory, senderId, supabase]);
+  }, [scheduleHistoryLoad, senderId, supabase]);
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {
@@ -250,7 +268,7 @@ export function BulkMessageComposer({
     setTaskProjectId("");
     setSelectedIds(new Set());
     setSendToAll(false);
-    void loadHistory();
+    scheduleHistoryLoad();
   }
 
   return (
