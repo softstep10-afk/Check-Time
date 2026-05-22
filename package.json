@@ -9,6 +9,10 @@
     "lint": "eslint",
     "test": "vitest run",
     "smoke:core": "node scripts/core-smoke.mjs",
+    "check:dangerous": "node scripts/check-dangerous-files.mjs",
+    "inventory:service-role": "node scripts/inventory-service-role-routes.mjs",
+    "smoke:public": "node scripts/smoke-public-routes.mjs",
+    "alpha7:predeploy": "node scripts/alpha7-predeploy-check.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
