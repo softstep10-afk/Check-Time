@@ -27,27 +27,6 @@ export async function uploadTaskAttachment(
   supabase: SupabaseClient,
   { orgId, projectId, uploadedBy, file }: UploadAttachmentParams,
 ): Promise<UploadAttachmentResult> {
-  // Heuristics that hint at local-picker vs cloud-picker (Google Drive,
-  // OneDrive, iCloud, etc). The JS File API does not expose source,
-  // but cloud-backed pickers usually leave file.type empty and may
-  // strip the extension off file.name.
-  const hasExtension = /\.[A-Za-z0-9]{2,5}$/.test(file.name);
-  const ctor = (file as { constructor?: { name?: string } }).constructor?.name;
-  console.log("[task-attach] upload start", {
-    name: file.name,
-    type: file.type,
-    size: file.size,
-    lastModified: file.lastModified,
-    isFile: file instanceof File,
-    isBlob: file instanceof Blob,
-    constructor: ctor,
-    hasExtension,
-    mimeEmpty: file.type === "",
-    orgId,
-    projectId,
-    uploadedBy,
-  });
-
   const validation = validateUploadFile(file);
   if (!validation.ok) {
     console.error("[task-attach] validation REJECTED", {
@@ -60,12 +39,10 @@ export async function uploadTaskAttachment(
     });
     return { ok: false, error: `validation: ${validation.error.reason}` };
   }
-  console.log("[task-attach] validation ok", { kind: validation.kind });
 
   const safeName = buildSafeUploadName(file, "task-attachment");
   const displayName = file.name || safeName;
   const storagePath = `${orgId}/${projectId}/tasks/${Date.now()}-${safeName}`;
-  console.log("[task-attach] storage upload begin", { storagePath });
 
   const resolvedContentType = inferUploadContentType(file);
   const { error: uploadErr } = await supabase.storage
@@ -79,7 +56,6 @@ export async function uploadTaskAttachment(
     console.error("[task-attach] storage upload FAIL", uploadErr);
     return { ok: false, error: `storage: ${uploadErr.message}` };
   }
-  console.log("[task-attach] storage upload ok");
 
   const metadata = { kind: "task_attachment" as const };
   if (metadata.kind !== "task_attachment") {
@@ -108,7 +84,6 @@ export async function uploadTaskAttachment(
     console.error("[task-attach] media insert FAIL", insertErr);
     return { ok: false, error: `media-insert: ${insertErr?.message ?? "no data"}` };
   }
-  console.log("[task-attach] media insert ok", { mediaId: data.id });
   return { ok: true, mediaId: data.id };
 }
 
@@ -125,7 +100,6 @@ export async function linkMediaToTask(
   mediaIds: string[],
 ): Promise<void> {
   if (mediaIds.length === 0) return;
-  console.log("[task-attach] linkMediaToTask start", { taskId, count: mediaIds.length });
   const { data: rows, error: selErr } = await supabase
     .from("media")
     .select("id, metadata")
@@ -142,7 +116,6 @@ export async function linkMediaToTask(
       .eq("id", row.id);
     if (updErr) console.error("[task-attach] linkMediaToTask update FAIL", { id: row.id, err: updErr });
   }
-  console.log("[task-attach] linkMediaToTask done");
 }
 
 export type TaskAttachmentRef = {

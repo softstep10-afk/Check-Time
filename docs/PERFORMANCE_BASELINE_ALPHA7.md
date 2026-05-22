@@ -29,3 +29,48 @@ Deferred performance work:
 Known limitation:
 
 - No authenticated production timing baseline was captured in this pass. Owner should manually compare Messages, Tasks, and Command Center after deployment.
+
+## File / Media Reliability Fix Pack
+
+Relevant performance observations:
+
+- Project and task attachment upload flows still wait for Storage + metadata success before showing success.
+- Private bucket open/download still uses signed URLs.
+- Receipt batch signing now normalizes paths before signing, avoiding retry-like failures for bucket-prefixed legacy paths.
+
+Deferred:
+
+- Media pagination/lazy loading.
+- Signed URL memoization beyond a single component render/effect.
+- Orphan cleanup jobs.
+- Storage policy or RLS performance work.
+
+## Low-Risk Performance Fix Pack
+
+Low-risk refresh/render changes applied:
+
+- Worker notification bell skips 30-second fallback polling while the tab is hidden; visibility return still reloads.
+- Manager work alert bell skips hidden-tab poll/realtime scheduling; visibility return still reloads.
+- Worker task fallback polling skips hidden-tab intervals; realtime and visibility refreshes remain.
+- Notification/work-alert state keeps existing list references when polling returns identical records.
+- Command Center route refresh remains live but has a less aggressive burst debounce.
+- Project media and task attachment upload debug logs were removed.
+
+Visible behavior preserved:
+
+- Realtime updates were not removed.
+- Fallback polling still runs while pages are visible.
+- Visibility return still performs a catch-up load.
+- No filters, query scopes, route permissions, or visible record sets changed.
+
+Deferred performance work:
+
+- Pagination or virtualized large lists.
+- Replacing full route refreshes with complete local reducers.
+- App-wide realtime channel consolidation.
+- Query scope changes.
+- Database indexes or query-plan tuning.
+
+Known limitation:
+
+- No authenticated production performance profile was captured. Owner should manually compare Projects, Project Detail, Messages, Tasks, notification bells, Command Center, Jarvis, and file open/download after deployment.

@@ -154,9 +154,9 @@ export default function ManagerLayout({
     const tables = getManagerRealtimeTables(pathname);
     if (tables.length === 0) return;
     const isCommandCenter = pathname?.startsWith("/command-center") ?? false;
-    const blockedRetryMs = isCommandCenter ? 1200 : 2500;
-    const minDelayMs = isCommandCenter ? 800 : 1800;
-    const maxIntervalMs = isCommandCenter ? 1800 : 4500;
+    const blockedRetryMs = isCommandCenter ? 1800 : 2500;
+    const minDelayMs = isCommandCenter ? 1500 : 1800;
+    const maxIntervalMs = isCommandCenter ? 4000 : 4500;
 
     function scheduleRefresh() {
       if (document.visibilityState !== "visible") {

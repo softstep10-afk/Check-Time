@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, BellOff, CheckSquare, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
+import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { markMessagesReadById } from "@/lib/message-state";
 import {
   PRIORITY_COLOR,
@@ -87,6 +88,29 @@ function mapMessages(rows: unknown[]): AppMessage[] {
   }));
 }
 
+function messageFingerprint(message: AppMessage): string {
+  return [
+    message.id,
+    message.read ? "1" : "0",
+    message.priority,
+    message.color,
+    message.created_at,
+    message.text,
+  ].join("\u001f");
+}
+
+function taskFingerprint(task: AlertTask): string {
+  return [
+    task.id,
+    task.status,
+    task.updated_at,
+    task.due_date ?? "",
+    task.title,
+    task.project_id ?? "",
+    String(task.metadata?.schedule_kind ?? ""),
+  ].join("\u001f");
+}
+
 export function ManagerWorkAlertBell() {
   const supabase = useMemo(() => createClient(), []);
   const [profile, setProfile] = useState<ManagerProfile | null>(null);
@@ -139,8 +163,12 @@ export function ManagerWorkAlertBell() {
 
       const nextMessages = mapMessages(messagesResult.data ?? []);
       const nextTasks = (tasksResult.data ?? []) as AlertTask[];
-      setMessages(nextMessages);
-      setTasks(nextTasks);
+      setMessages((current) =>
+        keepStableListIfUnchanged(current, nextMessages, messageFingerprint),
+      );
+      setTasks((current) =>
+        keepStableListIfUnchanged(current, nextTasks, taskFingerprint),
+      );
       setLoaded(true);
 
       const total = nextMessages.filter((message) => !message.read).length + nextTasks.length;
@@ -197,6 +225,7 @@ export function ManagerWorkAlertBell() {
     const initialTimer = window.setTimeout(() => void loadAlerts("initial"), 0);
 
     function scheduleAlertsLoad(reason: "visibility" | "realtime" | "poll") {
+      if (document.visibilityState !== "visible") return;
       if (reason === "realtime" || pendingReason !== "realtime") {
         pendingReason = reason;
       }
@@ -228,7 +257,9 @@ export function ManagerWorkAlertBell() {
       )
       .subscribe();
 
-    const interval = window.setInterval(() => scheduleAlertsLoad("poll"), 30_000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") scheduleAlertsLoad("poll");
+    }, 30_000);
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") scheduleAlertsLoad("visibility");
     }

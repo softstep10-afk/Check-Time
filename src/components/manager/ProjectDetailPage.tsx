@@ -1006,8 +1006,6 @@ export function ProjectDetailPage({
     setBusyKey("create-task");
     setMessage("");
 
-    console.log("[task-attach] handleCreateTask: file count", taskAttachmentFiles.length);
-
     // Upload any attachments first; if any one fails, abort before
     // creating the task so we don't end up with orphan task rows.
     const uploadedMediaIds: string[] = [];
@@ -1132,21 +1130,11 @@ export function ProjectDetailPage({
     kind: UploadKind,
   ) {
     const list = files ? Array.from(files) : [];
-    console.log("[project-media] start", { kind, fileCount: list.length });
     if (list.length === 0) return;
 
     // Pre-validate all files before any upload starts so a single bad
     // file in a multi-select doesn't leave half the batch in storage.
     for (const file of list) {
-      console.log("[project-media] file metadata", {
-        kind,
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        lastModified: file.lastModified,
-        mimeEmpty: file.type === "",
-        hasExtension: /\.[A-Za-z0-9]{2,5}$/.test(file.name),
-      });
       const validation = validateUploadFile(file);
       if (!validation.ok) {
         const attempted = "mime" in validation.error ? validation.error.mime : null;
@@ -1171,7 +1159,6 @@ export function ProjectDetailPage({
         }
         return;
       }
-      console.log("[project-media] validation ok", { fileKind: validation.kind });
       if (validation.kind !== kind) {
         console.error("[project-media] kind mismatch", {
           expectedKind: kind,
@@ -1191,12 +1178,6 @@ export function ProjectDetailPage({
       const path = `${orgId}/${project.id}/project-media/${createClientUuid()}-${safeName}`;
       const contentType = inferUploadContentType(file);
 
-      console.log("[project-media] storage upload begin", {
-        path,
-        contentType,
-        size: file.size,
-      });
-
       const { error: uploadErr } = await supabase.storage
         .from("media")
         .upload(path, file, { upsert: false, cacheControl: "3600", contentType });
@@ -1206,8 +1187,6 @@ export function ProjectDetailPage({
         setBusyKey(null);
         return;
       }
-      console.log("[project-media] storage upload ok");
-
       const metadata = { kind: "project_media" as const };
       const { error: insertErr } = await supabase.from("media").insert({
         org_id: orgId,
@@ -1229,7 +1208,6 @@ export function ProjectDetailPage({
         setBusyKey(null);
         return;
       }
-      console.log("[project-media] media insert ok");
     }
 
     setBusyKey(null);

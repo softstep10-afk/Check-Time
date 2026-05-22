@@ -6,6 +6,7 @@ import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
 import { useTranslation } from "@/lib/i18n";
+import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { markMessagesReadById } from "@/lib/message-state";
 function relativeTime(iso: string, lang: "en" | "ru"): string {
   const diff = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -40,6 +41,22 @@ function inferPriority(row: { priority?: string | null; color?: string | null; m
   if (row.color === "#22c55e") return "good";
   if (row.color === "#3b82f6") return "task";
   return "info";
+}
+
+function messageFingerprint(message: AppMessage): string {
+  const attachment = message.attachment;
+  return [
+    message.id,
+    message.read ? "1" : "0",
+    message.priority,
+    message.color,
+    message.created_at,
+    message.text,
+    attachment?.storagePath ?? "",
+    attachment?.filename ?? "",
+    attachment?.mimeType ?? "",
+    String(attachment?.size ?? ""),
+  ].join("\u001f");
 }
 
 export function NotificationBell({
@@ -162,7 +179,9 @@ export function NotificationBell({
               }
             : undefined,
         }));
-        setMessages(mapped);
+        setMessages((current) =>
+          keepStableListIfUnchanged(current, mapped, messageFingerprint),
+        );
         // Fire the urgent-arrival callback once per newly-seen unread urgent
         // message. Tracking via ref so it survives re-renders + multiple polls.
         for (const msg of mapped) {
@@ -181,6 +200,7 @@ export function NotificationBell({
     }
 
     function scheduleLoad() {
+      if (document.visibilityState !== "visible") return;
       if (reloadTimer) clearTimeout(reloadTimer);
       reloadTimer = setTimeout(() => {
         reloadTimer = null;
@@ -231,7 +251,9 @@ export function NotificationBell({
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    const interval = setInterval(() => void load(), 30_000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 30_000);
     return () => {
       if (reloadTimer) {
         clearTimeout(reloadTimer);

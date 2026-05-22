@@ -1036,7 +1036,9 @@ export function WorkerShell({
     }
 
     const timer = window.setInterval(() => {
-      void pollNewTasks();
+      if (document.visibilityState === "visible") {
+        void pollNewTasks();
+      }
     }, 15_000);
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {

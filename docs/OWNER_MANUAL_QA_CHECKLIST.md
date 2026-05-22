@@ -76,6 +76,8 @@ Run this after deploys that touch application code or user workflows.
 - Messages page speed feels acceptable.
 - Tasks page speed feels acceptable.
 - No obvious refresh storm after sending messages or updating tasks.
+- Notification bells update after new message/task events.
+- Returning to the app after the tab was hidden refreshes message/task signals.
 
 ## Messages / Tasks / Notifications Fix Pack
 
@@ -167,3 +169,33 @@ Archive/Trash checks:
 
 - Confirm file history is not unexpectedly removed by Archive or Trash.
 - Confirm payroll archive is not touched.
+
+## Low-Risk Performance Fix Pack
+
+Run this after deploying `fix(alpha7): reduce redundant refresh and subscriptions`.
+
+What was fixed:
+
+- Hidden tabs do less fallback polling for notification/task signals.
+- Visible tabs still receive realtime and fallback polling updates.
+- Command Center live refresh remains active but refresh bursts are coalesced more calmly.
+- Notification/work-alert polls no longer force state updates when the returned list is identical.
+- Upload debug logs were removed from file/media hot paths.
+
+What was not changed:
+
+- No project, message, task, notification, file, archive/trash, payroll, GPS, shift, role, permission, RLS, Storage, schema, migration, or Jarvis action behavior changed.
+
+Manual checks:
+
+- Projects page speed feels normal.
+- Project detail opens normally.
+- Messages send, open, read, and remain in history.
+- Tasks open, can be taken, can be marked done, and remain visible where expected.
+- Worker notification bell count updates while visible.
+- Manager work alert bell updates while visible.
+- Hide the tab, return to it, and confirm notification/task signals catch up.
+- Command Center opens and live data is not visibly missing.
+- Jarvis owner/admin diagnostics remain hidden from normal users.
+- Files still open/download.
+- No missing records compared with before this pack.

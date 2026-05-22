@@ -74,3 +74,36 @@ Deferred until separate owner approval:
 - Orphaned storage cleanup jobs.
 - Archive/Trash file retention redesign.
 - App-wide media pagination, lazy loading, or performance redesign if it changes visible behavior.
+
+## Low-Risk Performance Fix Pack
+
+Completed scope:
+
+- Reduce hidden-tab fallback polling for worker notification bell, manager work alert bell, and worker task polling.
+- Preserve catch-up reload on visibility return.
+- Keep realtime subscriptions and fallback polling while pages are visible.
+- Avoid notification/work-alert state updates when polls return identical lists.
+- Reduce Command Center route refresh bursts without removing live refresh.
+- Remove verbose upload debug logs from project media and task attachment hot paths.
+
+Not changed:
+
+- Which projects, tasks, messages, notifications, or files are visible.
+- Message/task read, taken, done, history, or notification behavior.
+- Archive/Trash behavior.
+- Payroll or salary archive.
+- GPS, shifts, clock-in, clock-out, and Safety Brief.
+- Roles, permissions, auth/session behavior.
+- Supabase RLS, Storage policies, schema, or migrations.
+- Jarvis action permissions or model routing.
+
+Deferred until separate owner approval:
+
+- Pagination or virtualized large lists.
+- Changing query scopes or filters.
+- Changing which records are loaded.
+- App-wide realtime architecture rewrite.
+- Command Center data-loading redesign.
+- Message/task data-loading redesign.
+- Database indexes, migrations, or query-plan optimization.
+- Production runtime profiling requiring authenticated session.
