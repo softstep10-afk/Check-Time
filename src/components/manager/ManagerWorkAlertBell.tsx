@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, BellOff, CheckSquare, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
+import { markMessagesReadById } from "@/lib/message-state";
 import {
   PRIORITY_COLOR,
   PRIORITY_ORDER,
@@ -191,35 +192,54 @@ export function ManagerWorkAlertBell() {
 
   useEffect(() => {
     if (!profile) return;
+    let reloadTimer: number | null = null;
+    let pendingReason: "initial" | "visibility" | "realtime" | "poll" = "poll";
     const initialTimer = window.setTimeout(() => void loadAlerts("initial"), 0);
+
+    function scheduleAlertsLoad(reason: "visibility" | "realtime" | "poll") {
+      if (reason === "realtime" || pendingReason !== "realtime") {
+        pendingReason = reason;
+      }
+      if (reloadTimer) window.clearTimeout(reloadTimer);
+      reloadTimer = window.setTimeout(() => {
+        const reasonToLoad = pendingReason;
+        pendingReason = "poll";
+        reloadTimer = null;
+        void loadAlerts(reasonToLoad);
+      }, 250);
+    }
 
     const channel = supabase
       .channel(`manager-work-alerts-${profile.id}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${profile.id}` },
-        () => void loadAlerts("realtime"),
+        () => scheduleAlertsLoad("realtime"),
       )
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "messages", filter: `recipient_id=eq.${profile.id}` },
-        () => void loadAlerts("poll"),
+        () => scheduleAlertsLoad("poll"),
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tasks", filter: `assigned_to=eq.${profile.id}` },
-        () => void loadAlerts("realtime"),
+        () => scheduleAlertsLoad("realtime"),
       )
       .subscribe();
 
-    const interval = window.setInterval(() => void loadAlerts("poll"), 30_000);
+    const interval = window.setInterval(() => scheduleAlertsLoad("poll"), 30_000);
     function handleVisibilityChange() {
-      if (document.visibilityState === "visible") void loadAlerts("visibility");
+      if (document.visibilityState === "visible") scheduleAlertsLoad("visibility");
     }
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       window.clearTimeout(initialTimer);
+      if (reloadTimer) {
+        window.clearTimeout(reloadTimer);
+        reloadTimer = null;
+      }
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
@@ -249,10 +269,24 @@ export function ManagerWorkAlertBell() {
 
   const markRead = useCallback(
     async (id: string) => {
-      setMessages((prev) => prev.map((message) => (message.id === id ? { ...message, read: true } : message)));
-      await supabase.from("messages").update({ read: true }).eq("id", id);
+      if (!profile) return;
+      setMessages((prev) => markMessagesReadById(prev, [id]));
+      const { error } = await supabase
+        .from("messages")
+        .update({ read: true })
+        .eq("id", id)
+        .eq("recipient_id", profile.id)
+        .eq("org_id", profile.org_id);
+      if (error) {
+        console.warn("manager markRead failed:", error.message);
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === id ? { ...message, read: false } : message,
+          ),
+        );
+      }
     },
-    [supabase],
+    [profile, supabase],
   );
 
   const toggleMuted = useCallback(() => {

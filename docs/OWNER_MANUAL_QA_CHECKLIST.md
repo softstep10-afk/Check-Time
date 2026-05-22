@@ -75,3 +75,52 @@ Run this after deploys that touch application code or user workflows.
 - Tasks page speed feels acceptable.
 - No obvious refresh storm after sending messages or updating tasks.
 
+## Messages / Tasks / Notifications Fix Pack
+
+Run this after deploying `fix(alpha7): harden message task notification flows`.
+
+What was fixed:
+
+- Worker message history marks messages read only after the read update succeeds.
+- Message/task conversion remains explicit: only Priority `Task` creates a task.
+- Priority-task conversion is idempotent, so retries should not create duplicate tasks for the same message.
+- Worker project task start state updates locally only after the task update succeeds.
+- Worker and manager notification bells mark message notifications read without deleting or hiding the source message.
+- Message and notification realtime refreshes are debounced to avoid burst reloads.
+
+What was not changed:
+
+- No payroll, archive, role, RLS, Storage, GPS, shift, file type, or schema behavior changed.
+- No new message, task, or notification features were added.
+- No production authenticated smoke was performed by the agent; owner/manual QA is still required after deployment.
+
+Manager checks:
+
+- Send a message to one worker.
+- Send a second message without reload.
+- Confirm both messages remain in history.
+- Confirm read status appears after the worker opens the message.
+- Send a normal message and confirm it does not become a task.
+- Select Priority `Task` and confirm exactly one real task is created.
+- Create a normal task.
+- Confirm the worker sees the task.
+- Confirm manager sees taken/done statuses after worker action.
+
+Worker checks:
+
+- Open a message.
+- Confirm the message remains in message history.
+- Open a task.
+- Confirm the task remains visible after opening.
+- Mark the task taken/started.
+- Confirm the task remains visible.
+- Mark the task done.
+- Confirm the task appears in completed/history area instead of disappearing.
+
+Notification checks:
+
+- Bell count updates when a new message/task arrives.
+- Clicking or marking a notification read can clear the signal.
+- Source message remains visible in message history.
+- Source task remains visible in open/completed task views.
+- No duplicate message/task cards appear after repeated realtime updates.

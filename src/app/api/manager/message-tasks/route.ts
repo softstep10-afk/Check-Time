@@ -7,7 +7,12 @@ import {
   createManagerTask,
   TaskDispatchError,
 } from "@/lib/server/task-dispatch";
+import {
+  buildMessageTaskMetadata,
+  readLinkedTaskId,
+} from "@/lib/message-state";
 import type { MessagePriority } from "@/lib/message-types";
+import type { Task } from "@/types/database";
 
 type MessageTaskInput = {
   messageId?: unknown;
@@ -86,6 +91,46 @@ export async function POST(request: NextRequest) {
         throw new TaskDispatchError("Message does not belong to this dispatch.", 403);
       }
 
+      const linkedTaskId = readLinkedTaskId(message.metadata);
+      const existingTaskQuery = adminClient
+        .from("tasks")
+        .select("*")
+        .eq("org_id", profile.org_id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      const existingTaskResult = linkedTaskId
+        ? await existingTaskQuery.eq("id", linkedTaskId).maybeSingle<Task>()
+        : await existingTaskQuery
+            .filter("metadata->>message_id", "eq", messageId)
+            .maybeSingle<Task>();
+      if (existingTaskResult.error) {
+        throw new TaskDispatchError(existingTaskResult.error.message, 500);
+      }
+      if (linkedTaskId && !existingTaskResult.data) {
+        throw new TaskDispatchError("Message is already linked to a task.", 409);
+      }
+      if (existingTaskResult.data) {
+        const existingTask = existingTaskResult.data;
+        const nextMetadata = buildMessageTaskMetadata(
+          message.metadata,
+          existingTask.id,
+          typeof message.metadata?.task_created_at === "string"
+            ? message.metadata.task_created_at
+            : existingTask.created_at,
+        );
+        const { error: linkError } = await adminClient
+          .from("messages")
+          .update({ metadata: nextMetadata })
+          .eq("id", message.id)
+          .eq("org_id", profile.org_id);
+        if (linkError) {
+          console.warn("message task link update failed:", linkError.message);
+        }
+        tasks.push(existingTask);
+        continue;
+      }
+
       const task = await createManagerTask(adminClient, {
         orgId: profile.org_id,
         actor: profile,
@@ -102,12 +147,11 @@ export async function POST(request: NextRequest) {
           attachment_filename: readText(item.attachmentFilename) || null,
         },
       });
-      const nextMetadata = {
-        ...(message.metadata ?? {}),
-        priority: "task",
-        task_id: task.id,
-        task_created_at: new Date().toISOString(),
-      };
+      const nextMetadata = buildMessageTaskMetadata(
+        message.metadata,
+        task.id,
+        new Date().toISOString(),
+      );
       const { error: linkError } = await adminClient
         .from("messages")
         .update({ metadata: nextMetadata })

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, type TranslationKey } from "@/lib/i18n";
+import { markMessagesReadById } from "@/lib/message-state";
 import {
   PRIORITY_COLOR,
   type AppMessage,
@@ -68,6 +69,7 @@ export function WorkerMessagesPage() {
 
   useEffect(() => {
     let active = true;
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function loadMessages() {
       const { data } = await supabase
@@ -112,7 +114,7 @@ export function WorkerMessagesPage() {
           text: row.text,
           color: (row.color ?? PRIORITY_COLOR[inferPriority(row)]) as AppMessage["color"],
           priority: inferPriority(row),
-          read: row.read || unreadIds.includes(row.id),
+          read: row.read,
           created_at: row.created_at,
           metadata: row.metadata ?? null,
           attachment: row.attachment
@@ -136,9 +138,23 @@ export function WorkerMessagesPage() {
           .eq("recipient_id", shell.profile.id)
           .in("id", unreadIds)
           .then(({ error }) => {
-            if (error) console.warn("Could not mark messages as read", error);
+            if (error) {
+              console.warn("Could not mark messages as read", error);
+              return;
+            }
+            if (active) {
+              setMessages((current) => markMessagesReadById(current, unreadIds));
+            }
           });
       }
+    }
+
+    function scheduleMessagesLoad() {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        void loadMessages();
+      }, 250);
     }
 
     void loadMessages();
@@ -152,7 +168,7 @@ export function WorkerMessagesPage() {
           table: "messages",
           filter: `recipient_id=eq.${shell.profile.id}`,
         },
-        () => void loadMessages(),
+        scheduleMessagesLoad,
       )
       .on(
         "postgres_changes",
@@ -162,11 +178,15 @@ export function WorkerMessagesPage() {
           table: "messages",
           filter: `recipient_id=eq.${shell.profile.id}`,
         },
-        () => void loadMessages(),
+        scheduleMessagesLoad,
       )
       .subscribe();
     return () => {
       active = false;
+      if (reloadTimer) {
+        clearTimeout(reloadTimer);
+        reloadTimer = null;
+      }
       void supabase.removeChannel(channel);
     };
   }, [shell.profile.id, supabase]);

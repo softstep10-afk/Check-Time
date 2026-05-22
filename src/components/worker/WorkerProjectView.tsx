@@ -1020,8 +1020,12 @@ export function WorkerProjectView({
         }
         onClose={closeDetails}
         onStart={(taskId) => {
-          markLocalTask(taskId, "in_progress");
-          void updateTaskStatus(taskId, "in_progress");
+          void (async () => {
+            const ok = await updateTaskStatus(taskId, "in_progress");
+            if (ok) {
+              markLocalTask(taskId, "in_progress");
+            }
+          })();
         }}
         onDone={(taskId, payload) => {
           // Defer the optimistic flip to "done" until updateTaskStatus

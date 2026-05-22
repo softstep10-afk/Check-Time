@@ -10,6 +10,7 @@ import {
   PRIORITY_EMOJI,
   type MessagePriority,
 } from "@/lib/message-types";
+import { isTaskMessagePriority } from "@/lib/message-state";
 
 type CrewMember = { id: string; name: string; role: string };
 type ProjectOption = { id: string; name: string; status?: string | null };
@@ -220,7 +221,7 @@ export function BulkMessageComposer({
       return;
     }
 
-    if (priority === "task") {
+    if (isTaskMessagePriority(priority)) {
       const taskTitle = text.trim().length > 140
         ? `${text.trim().slice(0, 137)}...`
         : text.trim();

@@ -6,6 +6,7 @@ import { Bell } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
 import { useTranslation } from "@/lib/i18n";
+import { markMessagesReadById } from "@/lib/message-state";
 function relativeTime(iso: string, lang: "en" | "ru"): string {
   const diff = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   if (diff < 60) return lang === "ru" ? "только что" : "just now";
@@ -116,6 +117,7 @@ export function NotificationBell({
   // Load messages
   useEffect(() => {
     if (!profileId) return;
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function load() {
       const { data } = await supabase
@@ -177,6 +179,15 @@ export function NotificationBell({
       }
       setLoaded(true);
     }
+
+    function scheduleLoad() {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        void load();
+      }, 250);
+    }
+
     void load();
 
     function unlock() {
@@ -199,7 +210,7 @@ export function NotificationBell({
           table: "messages",
           filter: `recipient_id=eq.${profileId}`,
         },
-        () => { void load(); },
+        scheduleLoad,
       )
       .on(
         "postgres_changes",
@@ -209,7 +220,7 @@ export function NotificationBell({
           table: "messages",
           filter: `recipient_id=eq.${profileId}`,
         },
-        () => { void load(); },
+        scheduleLoad,
       )
       .subscribe();
 
@@ -222,6 +233,10 @@ export function NotificationBell({
 
     const interval = setInterval(() => void load(), 30_000);
     return () => {
+      if (reloadTimer) {
+        clearTimeout(reloadTimer);
+        reloadTimer = null;
+      }
       clearInterval(interval);
       document.removeEventListener("pointerdown", unlock);
       document.removeEventListener("touchstart", unlock);
@@ -266,9 +281,7 @@ export function NotificationBell({
 
   const markRead = useCallback(
     async (id: string) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, read: true } : m)),
-      );
+      setMessages((prev) => markMessagesReadById(prev, [id]));
       setDeferredIds((prev) => {
         if (!prev.has(id)) return prev;
         const next = new Set(prev);
@@ -285,11 +298,19 @@ export function NotificationBell({
         }
         return next;
       });
-      await supabase
+      const { error } = await supabase
         .from("messages")
         .update({ read: true })
         .eq("recipient_id", profileId)
         .eq("id", id);
+      if (error) {
+        console.warn("markRead failed:", error.message);
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === id ? { ...message, read: false } : message,
+          ),
+        );
+      }
     },
     [profileId, supabase],
   );
@@ -297,7 +318,7 @@ export function NotificationBell({
   const markAllRead = useCallback(async () => {
     const unreadIds = messages.filter((m) => !m.read).map((m) => m.id);
     if (unreadIds.length === 0) return;
-    setMessages((prev) => prev.map((m) => ({ ...m, read: true })));
+    setMessages((prev) => markMessagesReadById(prev, unreadIds));
     setDeferredIds((prev) => {
       const next = new Set(prev);
       for (const id of unreadIds) next.delete(id);
@@ -318,7 +339,14 @@ export function NotificationBell({
       .update({ read: true })
       .eq("recipient_id", profileId)
       .in("id", unreadIds);
-    if (error) console.warn("markAllRead failed:", error.message);
+    if (error) {
+      console.warn("markAllRead failed:", error.message);
+      setMessages((prev) =>
+        prev.map((message) =>
+          unreadIds.includes(message.id) ? { ...message, read: false } : message,
+        ),
+      );
+    }
   }, [messages, profileId, supabase]);
 
   // Close dropdown when clicking outside

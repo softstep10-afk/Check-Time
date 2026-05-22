@@ -12,6 +12,7 @@ import {
   type MessageAttachment,
   type MessagePriority,
 } from "@/lib/message-types";
+import { isTaskMessagePriority } from "@/lib/message-state";
 import {
   ACCEPT_ALL_UPLOADS,
   inferUploadContentType,
@@ -196,7 +197,7 @@ export function SendMessageForm({
       return;
     }
 
-    if (priority === "task") {
+    if (isTaskMessagePriority(priority)) {
       const body = text.trim();
       const taskTitle = buildTaskTitle(body, attachment?.filename);
       const taskResponse = await fetch("/api/manager/message-tasks", {

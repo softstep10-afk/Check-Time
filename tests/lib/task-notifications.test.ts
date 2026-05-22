@@ -384,6 +384,39 @@ describe("applyClaimedTaskAssignment", () => {
 });
 
 describe("splitWorkerProjectTasks", () => {
+  it("keeps read/seen and taken tasks visible in the open worker sections", () => {
+    const split = splitWorkerProjectTasks(
+      [
+        {
+          id: "seen-personal",
+          assigned_to: "worker-1",
+          status: "pending",
+          metadata: { seen_by: { "worker-1": "2026-05-21T10:00:00Z" } },
+        },
+        {
+          id: "taken-personal",
+          assigned_to: "worker-1",
+          status: "in_progress",
+          metadata: { started_by: "worker-1", started_at: "2026-05-21T10:05:00Z" },
+        },
+        {
+          id: "seen-project",
+          assigned_to: null,
+          status: "pending",
+          metadata: { seen_by: { "worker-1": "2026-05-21T10:10:00Z" } },
+        },
+      ],
+      "worker-1",
+    );
+
+    expect(split.mineTasks.map((task) => task.id)).toEqual([
+      "seen-personal",
+      "taken-personal",
+    ]);
+    expect(split.projectLevelTasks.map((task) => task.id)).toEqual(["seen-project"]);
+    expect(split.completedTasks).toHaveLength(0);
+  });
+
   it("keeps completed project-view tasks in a separate completed section", () => {
     const split = splitWorkerProjectTasks(
       [
