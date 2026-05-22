@@ -1347,7 +1347,7 @@ export function ProjectsPage({
               ref={createLatRef}
               name="lat"
               type="number"
-              step="0.000001"
+              step="any"
               min={-90}
               max={90}
               inputMode="decimal"
@@ -1394,7 +1394,7 @@ export function ProjectsPage({
             ref={createLngRef}
             name="lng"
             type="number"
-            step="0.000001"
+            step="any"
             min={-180}
             max={180}
             inputMode="decimal"
@@ -1944,7 +1944,7 @@ export function ProjectsPage({
                     ref={editLatRef}
                     name="lat"
                     type="number"
-                    step="0.000001"
+                    step="any"
                     min={-90}
                     max={90}
                     inputMode="decimal"
@@ -1992,7 +1992,7 @@ export function ProjectsPage({
                   ref={editLngRef}
                   name="lng"
                   type="number"
-                  step="0.000001"
+                  step="any"
                   min={-180}
                   max={180}
                   inputMode="decimal"

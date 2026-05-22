@@ -2945,7 +2945,7 @@ export function ProjectDetailPage({
                     ref={editLatRef}
                     name="lat"
                     type="number"
-                    step="0.000001"
+                    step="any"
                     min={-90}
                     max={90}
                     inputMode="decimal"
@@ -2984,7 +2984,7 @@ export function ProjectDetailPage({
                   ref={editLngRef}
                   name="lng"
                   type="number"
-                  step="0.000001"
+                  step="any"
                   min={-180}
                   max={180}
                   inputMode="decimal"
