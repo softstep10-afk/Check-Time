@@ -7,6 +7,12 @@ export type AssistantActionEndpoint = {
   successIdKey: "projectId" | "taskId";
 };
 
+export type AssistantActionEndpointResult = {
+  error?: string;
+  projectId?: string | null;
+  taskId?: string | null;
+};
+
 export function getAssistantActionEndpoint(
   action: AssistantAction,
 ): AssistantActionEndpoint | null {
@@ -26,6 +32,14 @@ export function getAssistantActionEndpoint(
     default:
       return null;
   }
+}
+
+export function getAssistantActionSuccessId(
+  endpoint: AssistantActionEndpoint,
+  result: AssistantActionEndpointResult,
+): string | null {
+  const value = result[endpoint.successIdKey];
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
 export function isSupportedAssistantWriteAction(action: AssistantAction): boolean {

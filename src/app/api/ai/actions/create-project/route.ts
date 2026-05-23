@@ -80,6 +80,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!data?.id) {
+      console.error("[Jarvis action] create-project missing id after insert");
+      return NextResponse.json(
+        { error: "Jarvis could not create the project. No changes were made." },
+        { status: 500 },
+      );
+    }
+
     await logAuditServer(adminClient, {
       orgId: profile.org_id,
       actorId: profile.id,
@@ -87,7 +95,7 @@ export async function POST(request: NextRequest) {
       actorRole: profile.role,
       action: "jarvis_project_created",
       targetType: "project",
-      targetId: data?.id ?? undefined,
+      targetId: data.id,
       afterData: {
         name: validation.payload.name,
         address: validation.payload.address,
@@ -102,7 +110,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      projectId: data?.id ?? null,
+      projectId: data.id,
     });
   } catch (error) {
     if (process.env.NODE_ENV !== "production") {

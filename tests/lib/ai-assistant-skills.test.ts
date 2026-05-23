@@ -498,6 +498,29 @@ describe("AI assistant Jarvis routing", () => {
     });
   });
 
+  it("prepares a real project action without claiming it was created", async () => {
+    await withModelDisabled(async () => {
+      const snapshot = buildAssistantSnapshot(workspace(), [], {
+        includeFinancials: true,
+      });
+
+      const answer = await answerManagerAssistant(
+        "создай проект QA Дом по адресу 123 Main St",
+        snapshot,
+      );
+
+      expect(answer.answer).toContain("Подготовил проект");
+      expect(answer.answer).not.toContain("Проект создан");
+      expect(answer.actions?.[0]).toMatchObject({
+        kind: "create_project",
+        payload: {
+          name: "QA Дом",
+          address: "123 Main St",
+        },
+      });
+    });
+  });
+
   it("asks for a short clarification instead of guessing incomplete task commands", async () => {
     await withModelDisabled(async () => {
       const snapshot = buildAssistantSnapshot(workspace(), [], {

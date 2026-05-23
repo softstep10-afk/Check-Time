@@ -11,7 +11,7 @@ export default async function AiPage() {
   const data = await getAiWorkspaceData();
   const canViewDiagnostics = data.manager.role === "owner" || data.manager.role === "admin";
   const jarvisConfig = resolveJarvisRuntimeConfig(data.org.settings);
-  const routingDiagnostics = getJarvisRoutingDiagnostics();
+  const routingDiagnostics = canViewDiagnostics ? getJarvisRoutingDiagnostics() : [];
   const projectNameById = new Map(data.projects.map((project) => [project.id, project.name]));
   const reports = data.dailyReports.map((report) => ({
     id: report.id,

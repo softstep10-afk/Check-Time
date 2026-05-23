@@ -195,3 +195,29 @@ Deferred until separate owner approval:
 - Production Vercel/Supabase log review.
 - Auth/session behavior changes.
 - Any change to the owner-approved team/PIN provisioning workflow.
+
+## Jarvis Action Audit / Safe Hardening
+
+Completed scope:
+
+- Confirmed Jarvis assistant and voice routes prepare write actions instead of executing them directly.
+- Kept `create_task` and `create_project` behind owner/admin confirmation endpoints.
+- Required a real created row id before the Jarvis UI reports a confirmed action as successful.
+- Kept unsupported write-like actions without execution endpoints.
+- Avoided collecting provider/model routing diagnostics for users who cannot view owner/admin diagnostics.
+
+Not changed:
+
+- Jarvis model routing or provider selection.
+- Jarvis prompts or answer style beyond existing prepared-action wording.
+- Jarvis permissions except the existing owner/admin confirmation boundary.
+- Project/task business meaning.
+- Payroll, archive/trash, GPS, shifts, file allowed types, RLS, Storage policies, schema, or migrations.
+
+Deferred until separate owner approval:
+
+- New Jarvis write powers.
+- Role/access redesign.
+- Direct SQL production verification.
+- Full authenticated production Jarvis QA.
+- Model routing or prompt architecture redesign.

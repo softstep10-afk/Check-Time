@@ -13,7 +13,11 @@ import { JarvisOrb } from "@/components/shared/JarvisOrb";
 import {
   type JarvisRuntimeConfig,
 } from "@/lib/ai/jarvis-config";
-import { getAssistantActionEndpoint } from "@/lib/ai/action-endpoints";
+import {
+  getAssistantActionEndpoint,
+  getAssistantActionSuccessId,
+  type AssistantActionEndpointResult,
+} from "@/lib/ai/action-endpoints";
 import {
   JARVIS_DIAGNOSTIC_EVENT,
   readJarvisDiagnostic,
@@ -605,12 +609,8 @@ export function AiWorkspacePage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(action.payload),
       });
-      const result = (await response.json()) as {
-        error?: string;
-        projectId?: string | null;
-        taskId?: string | null;
-      };
-      const successId = result[endpoint.successIdKey];
+      const result = (await response.json()) as AssistantActionEndpointResult;
+      const successId = getAssistantActionSuccessId(endpoint, result);
       if (!response.ok || !successId) {
         const error = result.error ?? t("jarvisDock.actionFailed");
         setMessage(error);
@@ -651,7 +651,7 @@ export function AiWorkspacePage({
         error: null,
       });
       if (action.kind === "create_project") {
-        router.push(`/projects/${result.projectId}`);
+        router.push(`/projects/${successId}`);
       } else {
         router.refresh();
       }

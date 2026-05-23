@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getAssistantActionEndpoint,
+  getAssistantActionSuccessId,
   isSupportedAssistantWriteAction,
 } from "@/lib/ai/action-endpoints";
 import type { AssistantAction } from "@/lib/ai/types";
@@ -47,5 +48,26 @@ describe("Jarvis action endpoint mapping", () => {
 
     expect(getAssistantActionEndpoint(unsupported)).toBeNull();
     expect(isSupportedAssistantWriteAction(unsupported)).toBe(false);
+  });
+
+  it("requires a real result id before reporting a confirmed write as successful", () => {
+    const projectEndpoint = getAssistantActionEndpoint({
+      kind: "create_project",
+      label: "Create project",
+      payload: { name: "QA Project" },
+    });
+    const taskEndpoint = getAssistantActionEndpoint({
+      kind: "create_task",
+      label: "Create task",
+      payload: { title: "Check tile", assignedTo: "worker-1" },
+    });
+
+    expect(projectEndpoint).not.toBeNull();
+    expect(taskEndpoint).not.toBeNull();
+    expect(getAssistantActionSuccessId(projectEndpoint!, { projectId: "project-1" })).toBe("project-1");
+    expect(getAssistantActionSuccessId(taskEndpoint!, { taskId: "task-1" })).toBe("task-1");
+    expect(getAssistantActionSuccessId(projectEndpoint!, { projectId: null })).toBeNull();
+    expect(getAssistantActionSuccessId(projectEndpoint!, { projectId: "" })).toBeNull();
+    expect(getAssistantActionSuccessId(taskEndpoint!, { projectId: "wrong-id" })).toBeNull();
   });
 });
