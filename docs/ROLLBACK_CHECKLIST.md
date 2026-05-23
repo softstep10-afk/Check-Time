@@ -4,6 +4,8 @@ Production URL: `https://check-time-five.vercel.app`
 
 Use rollback only after identifying the exact bad deploy or commit.
 
+Alpha-7 reminder: app rollback is separate from database rollback. None of the Alpha-7 deploy readiness steps require SQL, migrations, RLS changes, Storage policy changes, or production data mutation.
+
 ## Identify Current State
 
 - Current branch: `git branch --show-current`.
@@ -26,6 +28,7 @@ Use rollback only after identifying the exact bad deploy or commit.
 - Confirm no database migration is required for the rollback.
 - Confirm no production data change is needed.
 - Confirm owner approval if user-visible behavior will change.
+- Confirm whether the issue is in app code, environment config, external provider, or Supabase data/policy state.
 
 ## Do Not Roll Back Blindly
 
@@ -43,10 +46,20 @@ Use rollback only after identifying the exact bad deploy or commit.
 - Run owner manual QA for the affected workflow.
 - Record rollback deployment ID and commit.
 
+## Alpha-7 Rollback Smoke
+
+- Confirm login works for owner/manager/worker.
+- Confirm top quick nav does not block sign out or notification bells.
+- Confirm realtime task status updates or document if the rollback target predates that fix.
+- Confirm messages/history/read status.
+- Confirm project files and attachments.
+- Confirm Archive and Trash still mean separate things.
+- Confirm payroll archive remains visible.
+- Confirm Jarvis write actions do not mutate without confirmation.
+
 ## After Rollback
 
 - Confirm production URL points to the intended deployment.
 - Confirm `git status --short` is clean locally.
 - Record what changed and what did not change.
 - Create a separate follow-up task for the root cause.
-

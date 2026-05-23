@@ -2,6 +2,29 @@
 
 Run this after deploys that touch application code or user workflows.
 
+## Alpha-7 Deploy Candidate Must-Check
+
+- Top quick nav row appears near the top on mobile.
+- Project navigation offers Apple Maps.
+- Project navigation offers Google Maps.
+- Tesla-friendly share/copy option is available.
+- Copy address remains available.
+- Mobile flicker/blinking is not obvious during normal navigation.
+- Manager sees worker task status changes without manual browser refresh.
+- Worker task state updates without losing the task.
+- Messages send, read status appears, and history stays intact.
+- Notification bell count updates and clearing a notification does not hide the source message/task.
+- Project PDF, Word, Excel, CSV, photo, and video uploads/open/download work.
+- Task attachments open/download.
+- Message attachments open/download.
+- iPhone `.mov` video upload/open/download does not break the flow.
+- Archive and Trash remain separate.
+- Payroll archive/paid history remains visible.
+- Worker flow works: clock screen, tasks, messages, files allowed by existing workflow.
+- Manager flow works: projects, team, messages, tasks, schedule.
+- Owner/admin Jarvis diagnostics are visible only to owner/admin.
+- Normal users do not see provider/model diagnostics.
+
 ## Messages
 
 - Manager sends a message to one worker.
@@ -64,7 +87,9 @@ Run this after deploys that touch application code or user workflows.
 ## Jarvis
 
 - `create_task` requires confirmation.
+- `create_project` requires confirmation.
 - Jarvis does not say done before the confirmed action completes.
+- Jarvis reports failure if a confirmed write does not return a real created record id.
 - No owner-only action happens without confirmation.
 - Provider/model names do not appear to normal users.
 - Diagnostics remain owner/admin-only.
@@ -252,3 +277,30 @@ Manual checks:
 - Project videos that need transcoding still start processing.
 - AI photo analysis remains available to the same manager/owner flows as before.
 - No supervisor/role access policy should be considered fixed by this pack; that requires a separate owner decision.
+
+## Jarvis Action Audit / Safe Hardening
+
+Run this after deploying `fix(alpha7): harden jarvis action confirmation`.
+
+Manual checks:
+
+- Ask Jarvis to create a task and confirm it only prepares an action first.
+- Confirm the task is created only after owner/admin presses the prepared action.
+- Ask Jarvis to create a project and confirm it only prepares an action first.
+- Confirm the project is created only after owner/admin presses the prepared action.
+- Confirm Jarvis does not say the action is done before the confirmed write succeeds.
+- Confirm a normal manager/supervisor/worker cannot confirm owner/admin Jarvis write actions.
+- Confirm unsupported write requests do not silently mutate messages, documents, payroll, projects, or tasks.
+- Confirm provider/model diagnostics are visible only to owner/admin.
+
+## Deploy Readiness Smoke
+
+Run this immediately after any owner-approved Alpha-7 deployment:
+
+- Production `/` redirects or responds as expected.
+- Production `/login` returns 200.
+- Owner PIN login works.
+- Manager PIN login works.
+- Worker PIN login works.
+- Perform the Alpha-7 deploy candidate must-check section above.
+- Record deployment ID, deployment URL, commit hash, and any failed manual QA item.
