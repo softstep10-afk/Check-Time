@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readOptionalUuid, readUuidArray } from "@/lib/server/id-guards";
 import { TaskDispatchError } from "@/lib/server/task-dispatch";
 
 type MediaAttachmentRow = {
@@ -22,9 +23,18 @@ export async function assertTaskAttachmentMediaTargets(
     mediaIds: string[];
   },
 ): Promise<string[]> {
-  const ids = Array.from(
-    new Set(mediaIds.map((id) => id.trim()).filter(Boolean)),
-  ).slice(0, 50);
+  const projectIdResult = readOptionalUuid(projectId, "project id");
+  if (!projectIdResult.ok) {
+    throw new TaskDispatchError(projectIdResult.error, projectIdResult.status);
+  }
+  const mediaIdResult = readUuidArray(mediaIds, {
+    label: "attachment media id",
+    limit: 50,
+  });
+  if (!mediaIdResult.ok) {
+    throw new TaskDispatchError(mediaIdResult.error, mediaIdResult.status);
+  }
+  const ids = mediaIdResult.value;
   if (ids.length === 0) return [];
 
   const { data, error } = await adminClient
@@ -41,8 +51,8 @@ export async function assertTaskAttachmentMediaTargets(
   const allPresent = ids.every((id) => rowsById.has(id));
   const allSameOrg = rows.every((row) => row.org_id === orgId && !row.deleted_at);
   const allSameProject =
-    !projectId ||
-    rows.every((row) => !row.project_id || row.project_id === projectId);
+    !projectIdResult.value ||
+    rows.every((row) => !row.project_id || row.project_id === projectIdResult.value);
 
   if (!allPresent || !allSameOrg || !allSameProject) {
     throw new TaskDispatchError("Attachment is not available.", 404);

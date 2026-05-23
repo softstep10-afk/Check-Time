@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analyzePhotoEvidence } from "@/lib/ai/service";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
+import { readRequiredUuid } from "@/lib/server/id-guards";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Media } from "@/types/database";
@@ -20,20 +21,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
     }
     const body = (await request.json()) as Record<string, unknown>;
-    const mediaId = typeof body.mediaId === "string" ? body.mediaId : "";
+    const mediaId = readRequiredUuid(body.mediaId, "media id");
 
-    if (!mediaId) {
-      return NextResponse.json({ error: "Media id is required." }, { status: 400 });
+    if (!mediaId.ok) {
+      return NextResponse.json({ error: mediaId.error }, { status: mediaId.status });
     }
 
     let media: Media | null = null;
     if (auth.kind === "preview") {
-      media = auth.managerData.media.find((item) => item.id === mediaId) ?? null;
+      media = auth.managerData.media.find((item) => item.id === mediaId.value) ?? null;
     } else {
       const mediaResult = await supabase
         .from("media")
         .select("*")
-        .eq("id", mediaId)
+        .eq("id", mediaId.value)
         .single<Media>();
 
       assertNoError(mediaResult.error, "Media query failed");
@@ -41,6 +42,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (!media) {
+      return NextResponse.json({ error: "Media not found." }, { status: 404 });
+    }
+    if (auth.kind === "authenticated" && media.org_id !== auth.context.profile.org_id) {
       return NextResponse.json({ error: "Media not found." }, { status: 404 });
     }
 

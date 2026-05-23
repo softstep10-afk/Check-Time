@@ -226,3 +226,29 @@ Manual checks:
 - Manager sees task status update on Tasks and Project Detail without manual browser refresh.
 - Worker still sees task rows after read/taken/done in the existing expected sections.
 - Notification read/dismiss still does not hide source task/message.
+
+## Project Route Guardrails Fix Pack
+
+Run this after deploying `fix(alpha7): add org guards to elevated project routes`.
+
+What was fixed:
+
+- Elevated project/task/message/media/schedule routes reject malformed IDs before service-role mutations.
+- Media transcode and AI photo analysis verify the authenticated actor org matches the target media org before elevated metadata writes.
+- Existing same-org manager/supervisor and worker workflows were preserved.
+
+Manual checks:
+
+- Manager creates a project normally.
+- Manager edits a project normally.
+- Manager archives a project and confirms it appears in Archive, not Trash.
+- Manager moves a project to Trash and confirms Trash remains a recovery area.
+- Manager creates a task with and without attachments.
+- Priority `Task` message creates a task only when explicitly selected.
+- Worker creates a project task where the existing worker project workflow allows it.
+- Worker claims an available project/delivery task.
+- Worker opens tasks so seen/read metadata updates without hiding the task.
+- Schedule delivery claim/complete still works for the same users as before.
+- Project videos that need transcoding still start processing.
+- AI photo analysis remains available to the same manager/owner flows as before.
+- No supervisor/role access policy should be considered fixed by this pack; that requires a separate owner decision.

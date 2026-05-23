@@ -3,6 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { readRequiredUuid } from "@/lib/server/id-guards";
 import { runLinkCheckoutVideo } from "@/lib/checkout-link-server";
 
 export const runtime = "nodejs";
@@ -43,13 +44,9 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as {
       timeEventId?: unknown;
     } | null;
-    const timeEventId =
-      typeof body?.timeEventId === "string" ? body.timeEventId : "";
-    if (!timeEventId) {
-      return NextResponse.json(
-        { error: "timeEventId required" },
-        { status: 400 },
-      );
+    const timeEventId = readRequiredUuid(body?.timeEventId, "time event id");
+    if (!timeEventId.ok) {
+      return NextResponse.json({ error: timeEventId.error }, { status: timeEventId.status });
     }
 
     const admin = createAdminClient();
@@ -62,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const outcome = await runLinkCheckoutVideo({
       userId: user.id,
-      timeEventId,
+      timeEventId: timeEventId.value,
       supabase,
       admin,
     });

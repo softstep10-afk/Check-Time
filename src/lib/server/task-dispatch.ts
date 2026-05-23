@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAuditServer } from "@/lib/audit-server";
+import { readOptionalUuid } from "@/lib/server/id-guards";
 import type { Profile, Project, Task, TaskPriority } from "@/types/database";
 
 export type ServerTaskDispatchInput = {
@@ -93,8 +94,16 @@ export async function createManagerTask(
   }
 
   const description = trimText(input.description) || null;
-  const assignedTo = trimText(input.assignedTo) || null;
-  const projectId = trimText(input.projectId) || null;
+  const assignedToResult = readOptionalUuid(input.assignedTo, "assigned worker id");
+  if (!assignedToResult.ok) {
+    throw new TaskDispatchError(assignedToResult.error, assignedToResult.status);
+  }
+  const projectIdResult = readOptionalUuid(input.projectId, "project id");
+  if (!projectIdResult.ok) {
+    throw new TaskDispatchError(projectIdResult.error, projectIdResult.status);
+  }
+  const assignedTo = assignedToResult.value;
+  const projectId = projectIdResult.value;
   const priority = input.priority ?? "medium";
   const dueDate = trimText(input.dueDate) || null;
 

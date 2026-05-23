@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditServer } from "@/lib/audit-server";
+import { readRequiredUuid } from "@/lib/server/id-guards";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import type { Task } from "@/types/database";
 
@@ -54,9 +55,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json().catch(() => null)) as { taskId?: unknown } | null;
-    const taskId = typeof body?.taskId === "string" ? body.taskId : "";
-    if (!taskId) {
-      return NextResponse.json({ error: "taskId is required." }, { status: 400 });
+    const taskId = readRequiredUuid(body?.taskId, "task id");
+    if (!taskId.ok) {
+      return NextResponse.json({ error: taskId.error }, { status: taskId.status });
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
     const { data: task, error: taskError } = await supabase
       .from("tasks")
       .select("id, project_id, assigned_to, org_id, status, completed_at, deleted_at, metadata")
-      .eq("id", taskId)
+      .eq("id", taskId.value)
       .maybeSingle<{
         id: string;
         project_id: string | null;
@@ -207,7 +208,7 @@ export async function POST(request: NextRequest) {
     let updateQuery = admin
       .from("tasks")
       .update({ assigned_to: user.id, metadata: nextMetadata })
-      .eq("id", taskId)
+      .eq("id", taskId.value)
       .is("assigned_to", null)
       .is("deleted_at", null)
       .eq("org_id", profile.org_id)
@@ -243,7 +244,7 @@ export async function POST(request: NextRequest) {
       actorRole: profile.role,
       action: "task_claimed",
       targetType: "task",
-      targetId: taskId,
+      targetId: taskId.value,
       beforeData: {
         assigned_to: task.assigned_to,
         status: task.status,

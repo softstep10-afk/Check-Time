@@ -3,6 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { readRequiredUuid } from "@/lib/server/id-guards";
 import { normalizeStoragePath } from "@/lib/task-attachments";
 import type { Media } from "@/types/database";
 
@@ -48,11 +49,20 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as {
       mediaId?: unknown;
     } | null;
-    const mediaId = typeof body?.mediaId === "string" ? body.mediaId : "";
-    if (!mediaId) {
+    const mediaId = readRequiredUuid(body?.mediaId, "media id");
+    if (!mediaId.ok) {
+      return NextResponse.json({ error: mediaId.error }, { status: mediaId.status });
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, org_id")
+      .eq("id", user.id)
+      .maybeSingle<{ id: string; org_id: string }>();
+    if (profileError || !profile) {
       return NextResponse.json(
-        { error: "mediaId is required." },
-        { status: 400 },
+        { error: profileError?.message ?? "Profile not found." },
+        { status: 403 },
       );
     }
 
@@ -70,7 +80,7 @@ export async function POST(request: NextRequest) {
     const mediaResult = await supabase
       .from("media")
       .select("id, org_id, media_type, storage_path, metadata")
-      .eq("id", mediaId)
+      .eq("id", mediaId.value)
       .maybeSingle<Pick<Media, "id" | "org_id" | "media_type" | "storage_path" | "metadata">>();
 
     if (mediaResult.error) {
@@ -84,6 +94,9 @@ export async function POST(request: NextRequest) {
     }
 
     const media = mediaResult.data;
+    if (media.org_id !== profile.org_id) {
+      return NextResponse.json({ error: "Media is not available." }, { status: 403 });
+    }
     if (media.media_type !== "video") {
       return NextResponse.json({ ok: true, skipped: "not_video" });
     }
@@ -157,7 +170,7 @@ export async function POST(request: NextRequest) {
             transcoding_error: errorText.slice(0, 500),
           },
         })
-        .eq("id", mediaId)
+        .eq("id", mediaId.value)
         .eq("org_id", media.org_id);
       return NextResponse.json(
         { error: "Mux create asset failed", detail: errorText },
@@ -190,7 +203,7 @@ export async function POST(request: NextRequest) {
           transcoding_status: "pending",
         },
       })
-      .eq("id", mediaId)
+      .eq("id", mediaId.value)
       .eq("org_id", media.org_id);
 
     if (updateError) {

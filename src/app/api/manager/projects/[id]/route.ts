@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { logAuditServer } from "@/lib/audit-server";
 import { requireManagerContext } from "@/lib/manager-data";
 import { hasFinanceAccess } from "@/lib/finance-access";
+import { readRequiredUuid } from "@/lib/server/id-guards";
 import {
   clampProjectGpsRadius,
   hasValidProjectSiteCoordinates,
@@ -19,7 +20,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await params;
+    const { id: rawId } = await params;
+    const projectId = readRequiredUuid(rawId, "project id");
+    if (!projectId.ok) {
+      return NextResponse.json({ error: projectId.error }, { status: projectId.status });
+    }
+    const id = projectId.value;
     const supabase = await createClient();
     const { profile } = await requireManagerContext(supabase);
     const adminClient = createAdminClient();
@@ -105,7 +111,12 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { id } = await params;
+    const { id: rawId } = await params;
+    const projectId = readRequiredUuid(rawId, "project id");
+    if (!projectId.ok) {
+      return NextResponse.json({ error: projectId.error }, { status: projectId.status });
+    }
+    const id = projectId.value;
     const supabase = await createClient();
     const { profile } = await requireManagerContext(supabase);
     const adminClient = createAdminClient();

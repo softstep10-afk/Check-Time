@@ -138,3 +138,33 @@ Deferred until separate owner approval:
 - Query/filter changes that alter visible data.
 - Pagination or virtualized task/project lists.
 - Database indexes, migrations, or query-plan optimization.
+
+## Project Route Guardrails Fix Pack
+
+Completed scope:
+
+- Added shared UUID validation for elevated server routes before service-role mutations.
+- Added malformed-ID rejection to project edit/trash/archive/planning routes.
+- Added ID validation around manager task creation, message-to-task dispatch, worker project tasks, worker task claim/seen, schedule actions, media transcode, AI photo analysis, and worker video-link routes.
+- Added explicit actor-org check before media transcode and AI photo-analysis service-role metadata writes.
+- Preserved same-org manager/supervisor operational workflows and worker workflows.
+
+Not changed:
+
+- Roles, permissions, or broad project visibility rules.
+- Supervisor access policy.
+- Project lifecycle meaning.
+- Archive/Trash business meaning.
+- Payroll or salary archive.
+- GPS, geofence, clock-in, clock-out, and shifts.
+- Message/task lifecycle or business meaning.
+- File allowed types, Storage policies, Supabase RLS, database schema, or migrations.
+
+Deferred until separate owner approval:
+
+- Supervisor access tightening or role/access redesign.
+- Hard/permanent delete policy decisions.
+- Direct SQL Supabase Step 0.
+- RLS/Storage hardening.
+- Project access model changes.
+- GPS/clock/shift route behavior changes.

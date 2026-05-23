@@ -7,6 +7,7 @@ import {
   createManagerTask,
   TaskDispatchError,
 } from "@/lib/server/task-dispatch";
+import { readOptionalUuid, readRequiredUuid } from "@/lib/server/id-guards";
 import {
   buildMessageTaskMetadata,
   readLinkedTaskId,
@@ -65,16 +66,23 @@ export async function POST(request: NextRequest) {
 
     const tasks = [];
     for (const item of items) {
-      const messageId = readText(item.messageId);
-      const recipientId = readText(item.recipientId);
-      if (!messageId || !recipientId) {
-        throw new TaskDispatchError("Message and recipient are required.", 400);
+      const messageId = readRequiredUuid(item.messageId, "message id");
+      const recipientId = readRequiredUuid(item.recipientId, "recipient id");
+      const projectId = readOptionalUuid(item.projectId, "project id");
+      if (!messageId.ok) {
+        throw new TaskDispatchError(messageId.error, messageId.status);
+      }
+      if (!recipientId.ok) {
+        throw new TaskDispatchError(recipientId.error, recipientId.status);
+      }
+      if (!projectId.ok) {
+        throw new TaskDispatchError(projectId.error, projectId.status);
       }
 
       const { data: message, error: messageError } = await adminClient
         .from("messages")
         .select("id, org_id, sender_id, recipient_id, metadata")
-        .eq("id", messageId)
+        .eq("id", messageId.value)
         .eq("org_id", profile.org_id)
         .maybeSingle<{
           id: string;
@@ -87,7 +95,7 @@ export async function POST(request: NextRequest) {
       if (messageError) {
         throw new TaskDispatchError(messageError.message, 500);
       }
-      if (!message || message.sender_id !== profile.id || message.recipient_id !== recipientId) {
+      if (!message || message.sender_id !== profile.id || message.recipient_id !== recipientId.value) {
         throw new TaskDispatchError("Message does not belong to this dispatch.", 403);
       }
 
@@ -102,7 +110,7 @@ export async function POST(request: NextRequest) {
       const existingTaskResult = linkedTaskId
         ? await existingTaskQuery.eq("id", linkedTaskId).maybeSingle<Task>()
         : await existingTaskQuery
-            .filter("metadata->>message_id", "eq", messageId)
+            .filter("metadata->>message_id", "eq", messageId.value)
             .maybeSingle<Task>();
       if (existingTaskResult.error) {
         throw new TaskDispatchError(existingTaskResult.error.message, 500);
@@ -136,14 +144,14 @@ export async function POST(request: NextRequest) {
         actor: profile,
         title: readText(item.title),
         description: readText(item.description) || null,
-        projectId: readText(item.projectId) || null,
-        assignedTo: recipientId,
+        projectId: projectId.value,
+        assignedTo: recipientId.value,
         priority: taskPriorityFromMessage(body.priority),
         source: readText(item.source) || "message_task",
-        messageId,
+        messageId: messageId.value,
         auditAction: "task_created_from_message",
         metadata: {
-          recipient_id: recipientId,
+          recipient_id: recipientId.value,
           attachment_filename: readText(item.attachmentFilename) || null,
         },
       });

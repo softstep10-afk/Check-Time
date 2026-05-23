@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readOptionalUuid, readRequiredUuid } from "@/lib/server/id-guards";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, UserRole } from "@/types/database";
@@ -126,8 +127,14 @@ export async function POST(request: Request) {
     const rawKind = isScheduleKind(body?.kind) ? body.kind : "client_meeting";
     const kind: ScheduleKind = rawKind === "meeting" ? "client_meeting" : rawKind;
     const description = stringOrNull(body?.description);
-    const projectId = stringOrNull(body?.projectId);
-    const assignedTo = stringOrNull(body?.assignedTo);
+    const projectId = readOptionalUuid(body?.projectId, "project id");
+    if (!projectId.ok) {
+      return NextResponse.json({ error: projectId.error }, { status: projectId.status });
+    }
+    const assignedTo = readOptionalUuid(body?.assignedTo, "assignee id");
+    if (!assignedTo.ok) {
+      return NextResponse.json({ error: assignedTo.error }, { status: assignedTo.status });
+    }
     const startsAt = validDateTime(stringOrNull(body?.startsAt));
     const endsAt = validDateTime(stringOrNull(body?.endsAt));
 
@@ -143,11 +150,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "End time must be after start time." }, { status: 400 });
     }
 
-    if (projectId) {
+    if (projectId.value) {
       const { data: project, error } = await admin
         .from("projects")
         .select("id")
-        .eq("id", projectId)
+        .eq("id", projectId.value)
         .eq("org_id", actor.profile.org_id)
         .maybeSingle<{ id: string }>();
 
@@ -156,11 +163,11 @@ export async function POST(request: Request) {
       }
     }
 
-    if (assignedTo) {
+    if (assignedTo.value) {
       const { data: assignee, error } = await admin
         .from("profiles")
         .select("id")
-        .eq("id", assignedTo)
+        .eq("id", assignedTo.value)
         .eq("org_id", actor.profile.org_id)
         .maybeSingle<{ id: string }>();
 
@@ -173,8 +180,8 @@ export async function POST(request: Request) {
       .from("tasks")
       .insert({
         org_id: actor.profile.org_id,
-        project_id: projectId,
-        assigned_to: assignedTo,
+        project_id: projectId.value,
+        assigned_to: assignedTo.value,
         assigned_by: actor.profile.id,
         title,
         description,
@@ -188,7 +195,7 @@ export async function POST(request: Request) {
           schedule_visible_to_workers: kind === "delivery" || kind === "task",
           schedule_delivery_status:
             kind === "delivery"
-              ? assignedTo
+              ? assignedTo.value
                 ? "assigned"
                 : "open"
               : null,
@@ -213,12 +220,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Project date edits are not available from the delivery calendar." }, { status: 403 });
     }
 
-    const projectId = stringOrNull(body?.projectId);
+    const projectId = readRequiredUuid(body?.projectId, "project id");
     const startDate = validDateOnly(stringOrNull(body?.startDate));
     const endDate = validDateOnly(stringOrNull(body?.endDate));
 
-    if (!projectId) {
-      return NextResponse.json({ error: "Project is required." }, { status: 400 });
+    if (!projectId.ok) {
+      return NextResponse.json({ error: projectId.error }, { status: projectId.status });
     }
 
     if (body?.startDate && !startDate) {
@@ -236,7 +243,7 @@ export async function POST(request: Request) {
     const { data: project, error: lookupError } = await admin
       .from("projects")
       .select("id")
-      .eq("id", projectId)
+      .eq("id", projectId.value)
       .eq("org_id", actor.profile.org_id)
       .maybeSingle<{ id: string }>();
 
@@ -250,7 +257,7 @@ export async function POST(request: Request) {
         start_date: startDate,
         end_date: endDate,
       })
-      .eq("id", projectId)
+      .eq("id", projectId.value)
       .eq("org_id", actor.profile.org_id)
       .select("*")
       .single();
@@ -267,15 +274,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "This role cannot claim deliveries." }, { status: 403 });
     }
 
-    const taskId = stringOrNull(body?.taskId);
-    if (!taskId) {
-      return NextResponse.json({ error: "taskId is required." }, { status: 400 });
+    const taskId = readRequiredUuid(body?.taskId, "task id");
+    if (!taskId.ok) {
+      return NextResponse.json({ error: taskId.error }, { status: taskId.status });
     }
 
     const { data: task, error: taskError } = await admin
       .from("tasks")
       .select("id, org_id, project_id, assigned_to, status, completed_at, deleted_at, metadata")
-      .eq("id", taskId)
+      .eq("id", taskId.value)
       .eq("org_id", actor.profile.org_id)
       .maybeSingle<{
         id: string;
@@ -318,7 +325,7 @@ export async function POST(request: Request) {
         assigned_to: actor.profile.id,
         metadata: nextMetadata,
       })
-      .eq("id", taskId)
+      .eq("id", taskId.value)
       .eq("org_id", actor.profile.org_id)
       .is("deleted_at", null)
       .neq("status", "done")
@@ -338,16 +345,16 @@ export async function POST(request: Request) {
   }
 
   if (action === "complete_delivery") {
-    const taskId = stringOrNull(body?.taskId);
+    const taskId = readRequiredUuid(body?.taskId, "task id");
     const note = stringOrNull(body?.note);
-    if (!taskId) {
-      return NextResponse.json({ error: "taskId is required." }, { status: 400 });
+    if (!taskId.ok) {
+      return NextResponse.json({ error: taskId.error }, { status: taskId.status });
     }
 
     const { data: task, error: taskError } = await admin
       .from("tasks")
       .select("id, org_id, assigned_to, status, completed_at, deleted_at, metadata")
-      .eq("id", taskId)
+      .eq("id", taskId.value)
       .eq("org_id", actor.profile.org_id)
       .maybeSingle<{
         id: string;
@@ -397,7 +404,7 @@ export async function POST(request: Request) {
         completed_by: completedBy,
         metadata: nextMetadata,
       })
-      .eq("id", taskId)
+      .eq("id", taskId.value)
       .eq("org_id", actor.profile.org_id)
       .is("deleted_at", null)
       .select("*")

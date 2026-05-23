@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { logAuditServer } from "@/lib/audit-server";
+import { readUuidArray } from "@/lib/server/id-guards";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,18 +9,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? { ...(value as Record<string, unknown>) }
     : {};
-}
-
-function readTaskIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return Array.from(
-    new Set(
-      value
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  ).slice(0, 100);
 }
 
 export async function POST(request: NextRequest) {
@@ -48,8 +37,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
-    const taskIds = readTaskIds(body.taskIds);
-    if (taskIds.length === 0) {
+    const taskIds = readUuidArray(body.taskIds, { label: "task id", limit: 100 });
+    if (!taskIds.ok) {
+      return NextResponse.json({ error: taskIds.error }, { status: taskIds.status });
+    }
+    if (taskIds.value.length === 0) {
       return NextResponse.json({ ok: true, updated: 0 });
     }
 
@@ -57,7 +49,7 @@ export async function POST(request: NextRequest) {
       .from("tasks")
       .select("id, org_id, project_id, assigned_to, metadata")
       .eq("org_id", profile.org_id)
-      .in("id", taskIds)
+      .in("id", taskIds.value)
       .is("deleted_at", null);
 
     if (visibleError) {

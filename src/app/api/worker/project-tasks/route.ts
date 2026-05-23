@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createManagerTask, TaskDispatchError } from "@/lib/server/task-dispatch";
+import { readRequiredUuid } from "@/lib/server/id-guards";
 import type { Profile, TaskPriority } from "@/types/database";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "urgent"];
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as Record<string, unknown>;
-    const projectId = typeof body.projectId === "string" ? body.projectId : "";
+    const projectId = readRequiredUuid(body.projectId, "project id");
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const description =
       typeof body.description === "string" && body.description.trim()
@@ -31,8 +32,8 @@ export async function POST(request: NextRequest) {
         ? (body.priority as TaskPriority)
         : "medium";
 
-    if (!projectId) {
-      return NextResponse.json({ error: "Project id is required." }, { status: 400 });
+    if (!projectId.ok) {
+      return NextResponse.json({ error: projectId.error }, { status: projectId.status });
     }
     if (!title) {
       return NextResponse.json({ error: "Task title is required." }, { status: 400 });
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     const { data: project, error: projectError } = await supabase
       .from("projects")
       .select("id, org_id, status")
-      .eq("id", projectId)
+      .eq("id", projectId.value)
       .eq("org_id", profile.org_id)
       .is("deleted_at", null)
       .maybeSingle<{ id: string; org_id: string; status: string }>();
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
       const { data: assignment } = await supabase
         .from("project_assignments")
         .select("project_id")
-        .eq("project_id", projectId)
+        .eq("project_id", projectId.value)
         .eq("profile_id", user.id)
         .maybeSingle();
       allowed = Boolean(assignment);
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
       const { data: exclusion, error: exclusionError } = await supabase
         .from("project_exclusions")
         .select("id")
-        .eq("project_id", projectId)
+        .eq("project_id", projectId.value)
         .eq("profile_id", user.id)
         .maybeSingle();
       allowed = exclusionError ? true : !exclusion;
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
       },
       title,
       description,
-      projectId,
+      projectId: projectId.value,
       assignedTo: null,
       priority: requestedPriority,
       source: "worker_project_view",
@@ -130,8 +131,8 @@ export async function POST(request: NextRequest) {
     revalidatePath("/project");
     revalidatePath("/clock");
     revalidatePath("/crew");
-    revalidatePath(`/projects/${projectId}`);
-    revalidatePath(`/project/${projectId}`);
+    revalidatePath(`/projects/${projectId.value}`);
+    revalidatePath(`/project/${projectId.value}`);
     revalidatePath(`/team/${user.id}`);
 
     return NextResponse.json({ ok: true, task });

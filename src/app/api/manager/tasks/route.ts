@@ -6,6 +6,7 @@ import {
   TaskDispatchError,
 } from "@/lib/server/task-dispatch";
 import { assertTaskAttachmentMediaTargets } from "@/lib/server/file-attachment-guard";
+import { readOptionalUuid, readUuidArray } from "@/lib/server/id-guards";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { TaskPriority } from "@/types/database";
@@ -18,18 +19,6 @@ function readPriority(value: unknown): TaskPriority {
   return value === "urgent" || value === "high" || value === "low" || value === "medium"
     ? value
     : "medium";
-}
-
-function readStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return Array.from(
-    new Set(
-      value
-        .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean),
-    ),
-  ).slice(0, 50);
 }
 
 export async function POST(request: NextRequest) {
@@ -50,20 +39,36 @@ export async function POST(request: NextRequest) {
         ? (rawBody as Record<string, unknown>)
         : {};
 
-    const attachmentMediaIds = readStringArray(body.attachmentMediaIds);
-    const projectId = readText(body.projectId) || null;
+    const attachmentMediaIds = readUuidArray(body.attachmentMediaIds, {
+      label: "attachment media id",
+      limit: 50,
+    });
+    if (!attachmentMediaIds.ok) {
+      return NextResponse.json(
+        { error: attachmentMediaIds.error },
+        { status: attachmentMediaIds.status },
+      );
+    }
+    const projectId = readOptionalUuid(body.projectId, "project id");
+    if (!projectId.ok) {
+      return NextResponse.json({ error: projectId.error }, { status: projectId.status });
+    }
+    const assignedTo = readOptionalUuid(body.assignedTo, "assigned worker id");
+    if (!assignedTo.ok) {
+      return NextResponse.json({ error: assignedTo.error }, { status: assignedTo.status });
+    }
     const safeAttachmentMediaIds = await assertTaskAttachmentMediaTargets(adminClient, {
       orgId: profile.org_id,
-      projectId,
-      mediaIds: attachmentMediaIds,
+      projectId: projectId.value,
+      mediaIds: attachmentMediaIds.value,
     });
     const task = await createManagerTask(adminClient, {
       orgId: profile.org_id,
       actor: profile,
       title: readText(body.title),
       description: readText(body.description) || null,
-      projectId,
-      assignedTo: readText(body.assignedTo) || null,
+      projectId: projectId.value,
+      assignedTo: assignedTo.value,
       priority: readPriority(body.priority),
       dueDate: readText(body.dueDate) || null,
       source: readText(body.source) || "manager_task",
