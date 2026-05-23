@@ -114,7 +114,7 @@ function ManagerQuickNav({
 
   return (
     <nav
-      className="shrink-0 overflow-x-auto border-b border-[rgba(105,231,255,0.12)] bg-[rgba(8,13,22,0.92)] px-4 py-2"
+      className="shrink-0 overflow-x-auto border-b border-[rgba(105,231,255,0.12)] bg-[rgba(8,13,22,0.92)] px-4 py-2 md:hidden"
       aria-label={t("nav.quick")}
       style={{ scrollbarWidth: "thin" }}
     >
