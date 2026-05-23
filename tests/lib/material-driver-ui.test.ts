@@ -10,6 +10,7 @@ const projectDetailSource = readFileSync(
 describe("material driver UI", () => {
   it("passes only driver profiles to the material assignment modal", () => {
     expect(projectDetailSource).toContain("filterMaterialDriverProfiles");
+    expect(projectDetailSource).toContain("configuredDriverProfileIds");
     expect(projectDetailSource).toContain("assigneeProfiles={materialDriverProfiles}");
   });
 

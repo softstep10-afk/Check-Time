@@ -364,6 +364,7 @@ export function ProjectDetailPage({
   safetyAcksToday,
   hasFinanceAccess,
   canDeleteMedia,
+  configuredMaterialDriverIds,
 }: {
   orgId: string;
   managerId: string;
@@ -383,6 +384,7 @@ export function ProjectDetailPage({
   safetyAcksToday: number;
   hasFinanceAccess: boolean;
   canDeleteMedia: boolean;
+  configuredMaterialDriverIds?: string[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -507,8 +509,10 @@ export function ProjectDetailPage({
       filterMaterialDriverProfiles([
         ...taskAssigneeProjectProfiles,
         ...taskAssigneeOtherProfiles,
-      ]).sort((left, right) => left.name.localeCompare(right.name)),
-    [taskAssigneeOtherProfiles, taskAssigneeProjectProfiles],
+      ], {
+        configuredDriverProfileIds: configuredMaterialDriverIds,
+      }).sort((left, right) => left.name.localeCompare(right.name)),
+    [configuredMaterialDriverIds, taskAssigneeOtherProfiles, taskAssigneeProjectProfiles],
   );
 
   // Project business-file upload (photo / video / PDF / documents). Separate from

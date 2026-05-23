@@ -49,16 +49,18 @@ Run this after deploys that touch application code or user workflows.
 
 ## Materials / Driver Workflow
 
-- Driver setup note: Sanya appears in material driver dropdown only after his profile role is set to `driver`.
-- Owner/admin can set this through `Команда` -> Sanya profile -> `Роль` -> `Водитель` -> `Сохранить профиль`.
+- Driver setup note: Sanya appears in material driver dropdown only after his profile role is set to `driver` or his stable profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
+- If Sanya must remain supervisor-driver, do not change him from `supervisor` to `driver`; configure his profile id in `MATERIAL_DRIVER_PROFILE_IDS`.
+- Owner/admin can set a normal driver through `Команда` -> Sanya profile -> `Роль` -> `Водитель` -> `Сохранить профиль`.
 - No hardcoded Sanya rule is used.
 - Driver remains worker-like and sees the material-focused workflow.
+- Supervisor-driver configured by profile id remains worker-like and does not gain manager/admin powers.
 - Normal workers still see normal tasks.
 - No SQL/manual DB mutation is required when the owner/admin UI is available.
 - Direct SQL Supabase Step 0 and production RLS/Storage verification remain separate blocked items.
 - Open "Добавить материал".
 - Confirm the assignee dropdown shows only users with role `driver`.
-- Confirm Sanya appears only if his production profile has role `driver`.
+- Confirm Sanya appears only if his production profile has role `driver` or his profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
 - Confirm the dropdown does not fall back to the full team.
 - If no drivers exist, confirm the UI shows an empty/no-driver state instead of workers/managers/supervisors.
 - Manager creates an urgent material task for a driver.
@@ -81,7 +83,7 @@ Material drivers:
 
 - Open "Добавить материал".
 - Confirm the assignee dropdown shows only drivers.
-- Confirm Sanya appears only if his profile role is `driver`.
+- Confirm Sanya appears only if his profile role is `driver` or his profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
 - Confirm there is no full-team fallback.
 - Create an urgent material task.
 - Create a non-urgent material task.

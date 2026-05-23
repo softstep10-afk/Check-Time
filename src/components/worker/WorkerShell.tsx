@@ -928,6 +928,7 @@ export function WorkerShell({
         ...current,
         tasks: mergeRealtimeTaskRow(current.tasks, row, {
           shouldInclude: (task) =>
+            (!current.materialDriverView || isMaterialTask(task)) &&
             isTaskVisibleToWorker(task, {
               profileId: current.profile.id,
               visibleProjectIds: new Set(current.projects.map((project) => project.id)),
@@ -943,6 +944,12 @@ export function WorkerShell({
 
   const notifyVisibleTask = useCallback(
     (row: TaskNotificationRow): boolean => {
+      if (
+        shell.materialDriverView &&
+        !isMaterialTask(row)
+      ) {
+        return false;
+      }
       if (
         !isTaskVisibleToWorker(row, {
           profileId: shell.profile.id,
@@ -979,7 +986,7 @@ export function WorkerShell({
       }
       return true;
     },
-    [muted, shell.profile.id, shell.profile.role, shell.projects, t, visibleProjectIds],
+    [muted, shell.materialDriverView, shell.profile.id, shell.profile.role, shell.projects, t, visibleProjectIds],
   );
 
   // ── Tasks realtime subscription ─────────────────────────────────────

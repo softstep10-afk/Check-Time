@@ -71,7 +71,7 @@ export function TasksPage() {
 
   const todayIsoRef = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const currentProjectId = shell.clockState.currentProjectId;
-  const driverMaterialView = canUseDriverMaterialView(shell.profile);
+  const driverMaterialView = shell.materialDriverView ?? canUseDriverMaterialView(shell.profile);
 
   // Visiting /my-tasks acknowledges all currently-pending task
   // notifications. Stored in localStorage by markTasksSeen so future

@@ -12,6 +12,7 @@ import {
 } from "@/lib/task-attachments";
 import { isMaterialTask } from "@/lib/material-tasks";
 import { shouldFilterWorkerTasksToMaterials } from "@/lib/material-driver-permissions";
+import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import { getCompletionMediaIds } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import type { WorkerMediaItem, WorkerShellData, WorkerTaskItem } from "@/lib/worker-types";
@@ -117,6 +118,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   assertNoError(mediaResult.error, "Media query failed");
 
   const profile = profileResult.data;
+  const configuredMaterialDriverIds = readMaterialDriverProfileIdsFromEnv();
   if (!profile) {
     if (AUTH_BYPASS_ENABLED) {
       return buildPreviewWorkerShellData();
@@ -326,7 +328,10 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       visibleProjectIds.has(task.project_id) ||
       isUnclaimedDeliveryTask(task),
   );
-  if (shouldFilterWorkerTasksToMaterials(profile)) {
+  const materialDriverView = shouldFilterWorkerTasksToMaterials(profile, {
+    configuredDriverProfileIds: configuredMaterialDriverIds,
+  });
+  if (materialDriverView) {
     tasks = tasks.filter(isMaterialTask);
   }
   media = media.filter((entry) => !entry.project_id || visibleProjectIds.has(entry.project_id));
@@ -403,6 +408,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
 
   return {
     profile,
+    materialDriverView,
     projects: visibleProjects.sort((left, right) => left.name.localeCompare(right.name)),
     tasks: taskItems,
     media: mediaItems,

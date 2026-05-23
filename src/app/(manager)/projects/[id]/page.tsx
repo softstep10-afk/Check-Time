@@ -18,6 +18,7 @@ import {
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { canDeleteMediaEverywhereServer } from "@/lib/server/media-delete-permissions";
+import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import type { Media } from "@/types/database";
 
 export default async function ProjectDetailRoutePage({
@@ -52,6 +53,7 @@ export default async function ProjectDetailRoutePage({
   const availableProfiles = profileSummaries.filter((profile) => {
     return !assignedIds.has(profile.id) && profile.is_active && !isManagerRole(profile.role);
   });
+  const configuredMaterialDriverIds = [...readMaterialDriverProfileIdsFromEnv()];
   const tasks = data.tasks.filter((task) => task.project_id === id && !task.deleted_at).slice(0, 24);
   const completionProfileIds = new Set(
     tasks
@@ -232,6 +234,7 @@ export default async function ProjectDetailRoutePage({
       safetyAcksToday={safetyAcksToday}
       hasFinanceAccess={managerHasFinanceAccess}
       canDeleteMedia={canDeleteMediaEverywhereServer(data.manager)}
+      configuredMaterialDriverIds={configuredMaterialDriverIds}
     />
   );
 }

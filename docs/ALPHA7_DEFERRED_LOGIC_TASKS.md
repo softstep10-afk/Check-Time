@@ -255,6 +255,7 @@ Completed scope:
 
 - Added material task classification using existing `tasks.metadata`, `assigned_to`, `due_date`, `priority`, and task status fields.
 - Used the existing `driver` role for focused driver material views; no display-name/Sanya hardcode was added.
+- Added config-based material-driver profile ids via `MATERIAL_DRIVER_PROFILE_IDS` so a supervisor-driver can remain `supervisor`.
 - Added owner/admin-safe setup path for assigning the existing `driver` role through team profile editing.
 - Kept manager/supervisor/worker from assigning the `driver` role.
 - Kept material requests as normal tasks with material/delivery metadata.
@@ -272,12 +273,12 @@ Not changed:
 - Media delete privilege for Andrey and Sergey.
 - Normal worker task visibility for non-driver workers.
 - No SQL/manual production data mutation is required when owner/admin uses the UI.
+- No role change is required for a supervisor-driver when `MATERIAL_DRIVER_PROFILE_IDS` is configured.
 - Direct SQL Supabase Step 0 remains separate/blocked.
 - Production RLS/Storage verification remains separate/blocked.
 
 Deferred until separate owner approval:
 
-- Config-based driver profile IDs if owner wants a named person to get driver filtering without the existing `driver` role.
 - New database columns/indexes for material tasks.
 - Dedicated Materials/Driver dashboard redesign.
 - Route planning, Tesla API/OAuth, or dispatch optimization.

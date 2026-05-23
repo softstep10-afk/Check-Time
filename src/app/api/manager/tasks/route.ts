@@ -13,6 +13,7 @@ import {
   normalizeMaterialTaskUrgency,
 } from "@/lib/material-tasks";
 import { isMaterialDriverProfile } from "@/lib/material-driver-permissions";
+import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { TaskPriority } from "@/types/database";
@@ -109,6 +110,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: assignedTo.error }, { status: assignedTo.status });
     }
     const material = readMaterialPayload(body.material);
+    const configuredMaterialDriverIds = readMaterialDriverProfileIdsFromEnv();
     const safeAttachmentMediaIds = await assertTaskAttachmentMediaTargets(adminClient, {
       orgId: profile.org_id,
       projectId: projectId.value,
@@ -146,7 +148,9 @@ export async function POST(request: NextRequest) {
           { status: 404 },
         );
       }
-      if (!isMaterialDriverProfile(assignee)) {
+      if (!isMaterialDriverProfile(assignee, {
+        configuredDriverProfileIds: configuredMaterialDriverIds,
+      })) {
         return NextResponse.json(
           { error: "Material tasks can only be assigned to drivers." },
           { status: 403 },

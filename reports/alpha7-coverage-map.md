@@ -5,8 +5,8 @@ Static local scan of tests, source, and docs for critical Alpha-7 invariants.
 | Category | Coverage | Tests | Source | Recommendation |
 | --- | --- | --- | --- | --- |
 | material driver-only dropdown | covered | 3 | 3 | None |
-| material task server validation | covered | 2 | 4 | None |
-| driver role filtering | covered | 2 | 11 | None |
+| material task server validation | covered | 3 | 4 | None |
+| driver role filtering | covered | 2 | 12 | None |
 | private message sender/recipient persistence | covered | 1 | 9 | None |
 | task read/taken/done visibility | covered | 3 | 16 | None |
 | notification-as-signal | covered | 3 | 24 | None |

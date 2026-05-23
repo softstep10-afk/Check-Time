@@ -103,6 +103,7 @@ export interface WorkerPayrollClosureItem {
 
 export interface WorkerShellData {
   profile: Profile;
+  materialDriverView?: boolean;
   projects: WorkerProject[];
   tasks: WorkerTaskItem[];
   media: WorkerMediaItem[];

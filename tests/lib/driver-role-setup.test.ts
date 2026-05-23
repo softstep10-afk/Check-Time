@@ -19,8 +19,17 @@ const createRouteSource = readFileSync(
   resolve(process.cwd(), "src/app/api/team/create/route.ts"),
   "utf8",
 );
+const workerDataSource = readFileSync(
+  resolve(process.cwd(), "src/lib/worker-data.ts"),
+  "utf8",
+);
+const workerShellSource = readFileSync(
+  resolve(process.cwd(), "src/components/worker/WorkerShell.tsx"),
+  "utf8",
+);
 const srcBusinessSources = [
   "src/lib/material-driver-permissions.ts",
+  "src/lib/server/material-driver-config.ts",
   "src/components/manager/ProjectDetailPage.tsx",
   "src/app/api/manager/tasks/route.ts",
   "src/components/worker/WorkerShell.tsx",
@@ -52,5 +61,12 @@ describe("driver role setup path", () => {
 
   it("does not hardcode Sanya in source business logic", () => {
     expect(srcBusinessSources).not.toMatch(/\bSanya\b|Саня/);
+  });
+
+  it("supports configured supervisor-driver material filtering without changing role hierarchy", () => {
+    expect(workerDataSource).toContain("readMaterialDriverProfileIdsFromEnv");
+    expect(workerDataSource).toContain("materialDriverView");
+    expect(workerShellSource).toContain("current.materialDriverView || isMaterialTask(task)");
+    expect(workerShellSource).toContain("shell.materialDriverView");
   });
 });

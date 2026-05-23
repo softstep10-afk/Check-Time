@@ -12,6 +12,8 @@ describe("manager material task route guard", () => {
     expect(routeSource).toContain("Choose a driver for the material task.");
     expect(routeSource).toContain("Material tasks can only be assigned to drivers.");
     expect(routeSource).toContain("isMaterialDriverProfile");
+    expect(routeSource).toContain("readMaterialDriverProfileIdsFromEnv");
+    expect(routeSource).toContain("configuredDriverProfileIds");
     expect(routeSource).toContain(".select(\"id, org_id, role, is_active, deleted_at\")");
   });
 

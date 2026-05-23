@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-23T08:11:17.428Z",
+  "generatedAt": "2026-05-23T16:22:09.311Z",
   "rows": [
     {
       "path": "src/app/api/ai/actions/create-project/route.ts",
@@ -488,6 +488,26 @@
     },
     {
       "path": "src/app/api/team/reset-pin/route.ts",
+      "classification": "team/auth sensitive",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/team/update-profile/route.ts",
       "classification": "team/auth sensitive",
       "mutationEvidence": [
         ".update("

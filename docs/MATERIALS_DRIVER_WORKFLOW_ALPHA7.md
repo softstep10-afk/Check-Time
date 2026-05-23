@@ -10,7 +10,7 @@ Material requests are still normal task rows. The material-specific meaning is s
 
 - Manager/owner project detail has a Materials section for material orders.
 - A material order writes one or more normal `tasks` rows.
-- The material assignee dropdown shows only profiles with role `driver`.
+- The material assignee dropdown shows profiles with role `driver` plus explicitly configured material-driver profile ids from `MATERIAL_DRIVER_PROFILE_IDS`.
 - Missing or non-driver material assignees are rejected by the server route.
 - The material flow no longer falls back to the full team when assigning delivery.
 - Metadata marks the task as material:
@@ -32,17 +32,19 @@ Normal task creation remains available and unchanged.
 
 ## Driver Identification
 
-The app uses the existing `driver` role for the focused material queue and for material assignment options. There is no hardcoded `Sanya` or display-name rule.
+The app uses the existing `driver` role for the focused material queue and material assignment options. It also supports `MATERIAL_DRIVER_PROFILE_IDS` for a stable profile-id-based material-driver capability when someone must remain in another worker-like role, such as supervisor.
+
+There is no hardcoded `Sanya` or display-name rule.
 
 If Sanya is the assigned driver, the UI shows his profile display name from normal profile data.
 
-If Sanya should appear in the material assignee dropdown in production, his profile must be configured with role `driver`. Owner/admin can do this through the normal team UI: `Команда` -> Sanya profile -> `Роль` -> `Водитель` -> `Сохранить профиль`.
+If Sanya should appear in the material assignee dropdown in production, either his profile must be configured with role `driver`, or his stable profile id must be listed in `MATERIAL_DRIVER_PROFILE_IDS` so he can stay supervisor-driver. Owner/admin can set a normal driver role through the team UI: `Команда` -> Sanya profile -> `Роль` -> `Водитель` -> `Сохранить профиль`.
 
 No hardcoded Sanya rule is used. No SQL/manual database mutation is required when the owner/admin UI is available.
 
 ## Driver View
 
-- Users with role `driver` see the worker task queue focused to material tasks.
+- Users with role `driver`, plus configured profile ids in `MATERIAL_DRIVER_PROFILE_IDS`, see the worker task queue focused to material tasks.
 - Non-driver workers keep the normal task queue behavior.
 - Material task cards show project, material name, urgent/non-urgent state, needed date, and normal task status.
 - Read/taken/done stays the existing task lifecycle.
@@ -71,7 +73,7 @@ Existing task realtime is reused:
 
 ## Production QA Hotfix Notes
 
-- Material tasks can only be assigned to driver-role profiles.
+- Material tasks can only be assigned to driver-role profiles or configured material-driver profile ids.
 - Normal task assignment remains unchanged.
 - Material save shows pending feedback and prevents duplicate save clicks.
 - Task take/done actions show pending feedback while the server request is active.
@@ -100,7 +102,7 @@ Existing task realtime is reused:
 - Manager creates an urgent material task for a driver.
 - Manager creates a non-urgent material task for a driver.
 - Confirm "Добавить материал" only lists drivers in the assignee dropdown.
-- Confirm Sanya appears only if his profile role is `driver`.
+- Confirm Sanya appears only if his profile role is `driver` or his profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
 - Confirm there is no full-team fallback.
 - Confirm saving material shows "Сохраняем..." / "Сохраняем материал..." and duplicate save does not duplicate a task.
 - Driver sees material tasks without manual refresh.
@@ -115,8 +117,9 @@ Existing task realtime is reused:
 
 ## Driver Role Setup
 
-- Confirm Sanya has role `driver` before testing driver-only dropdowns.
-- If not, owner/admin sets it in team profile settings.
+- Confirm Sanya has role `driver` or his profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS` before testing driver-only dropdowns.
+- If he should stay supervisor-driver, keep role `supervisor` and use `MATERIAL_DRIVER_PROFILE_IDS`.
+- If he should be a normal driver, owner/admin sets it in team profile settings.
 - Manager/supervisor/worker cannot assign the driver role.
 - Driver remains worker-like and does not become manager-tier.
 - Driver sees the material-focused workflow.
@@ -126,7 +129,6 @@ Existing task realtime is reused:
 
 ## Deferred
 
-- Config-based special driver assignment if owner does not want to use the existing `driver` role.
 - Database-level material task indexes or schema columns.
 - RLS policy review for material tasks through Direct SQL.
 - Separate Materials/Driver dashboard redesign.

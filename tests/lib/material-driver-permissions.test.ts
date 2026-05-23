@@ -22,6 +22,31 @@ describe("material driver permissions", () => {
     }
   });
 
+  it("allows an explicitly configured supervisor-driver by stable profile id", () => {
+    const configuredIds = new Set(["supervisor-driver-1"]);
+    const supervisor = { id: "supervisor-driver-1", name: "Field Lead", role: "supervisor" as const };
+
+    expect(isMaterialDriverProfile(supervisor, { configuredDriverProfileIds: configuredIds })).toBe(true);
+    expect(canUseDriverMaterialView(supervisor, { configuredDriverProfileIds: configuredIds })).toBe(true);
+    expect(
+      shouldFilterWorkerTasksToMaterials(supervisor, {
+        configuredDriverProfileIds: configuredIds,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not make an unconfigured supervisor a material driver", () => {
+    const configuredIds = new Set(["another-profile"]);
+    const supervisor = { id: "supervisor-1", name: "Field Lead", role: "supervisor" as const };
+
+    expect(isMaterialDriverProfile(supervisor, { configuredDriverProfileIds: configuredIds })).toBe(false);
+    expect(
+      shouldFilterWorkerTasksToMaterials(supervisor, {
+        configuredDriverProfileIds: configuredIds,
+      }),
+    ).toBe(false);
+  });
+
   it("rejects missing or unknown profiles", () => {
     expect(isMaterialDriverProfile(null)).toBe(false);
     expect(isMaterialDriverProfile(undefined)).toBe(false);
@@ -36,6 +61,11 @@ describe("material driver permissions", () => {
     expect(isMaterialDriverProfile(sanyaWorker)).toBe(false);
     expect(isMaterialDriverProfile(sanyaRuWorker)).toBe(false);
     expect(isMaterialDriverProfile(sanyaDriver)).toBe(true);
+    expect(
+      isMaterialDriverProfile(sanyaRuWorker, {
+        configuredDriverProfileIds: new Set(["different-profile"]),
+      }),
+    ).toBe(false);
   });
 
   it("filters material assignment choices down to drivers only", () => {
@@ -51,6 +81,35 @@ describe("material driver permissions", () => {
     expect(filterMaterialDriverProfiles(profiles).map((profile) => profile.id)).toEqual([
       "driver-1",
       "driver-2",
+    ]);
+  });
+
+  it("includes configured supervisor-drivers in material assignment choices", () => {
+    const profiles = [
+      { id: "driver-1", name: "Driver One", role: "driver" },
+      { id: "supervisor-driver-1", name: "Supervisor Driver", role: "supervisor" },
+      { id: "supervisor-1", name: "Supervisor One", role: "supervisor" },
+      { id: "worker-1", name: "Worker One", role: "worker" },
+    ];
+
+    expect(
+      filterMaterialDriverProfiles(profiles, {
+        configuredDriverProfileIds: new Set(["supervisor-driver-1"]),
+      }).map((profile) => profile.id),
+    ).toEqual(["driver-1", "supervisor-driver-1"]);
+  });
+
+  it("parses configured material driver ids safely", async () => {
+    const { parseMaterialDriverProfileIds } = await import("@/lib/material-driver-permissions");
+
+    expect([...parseMaterialDriverProfileIds(" ID-1, id-2;id-3  ")]).toEqual([
+      "id-1",
+      "id-2",
+      "id-3",
+    ]);
+    expect([...parseMaterialDriverProfileIds([" Driver-A ", "", "driver-b"])]).toEqual([
+      "driver-a",
+      "driver-b",
     ]);
   });
 });

@@ -33,6 +33,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/app/api/team/delete/route.ts` | team/auth sensitive | yes | confirmed guarded | auth.admin, .update(, createAdminClient, auth.admin, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/team/pay-worker/route.ts` | team/auth sensitive | yes | confirmed guarded | .insert(, .update(, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/team/reset-pin/route.ts` | team/auth sensitive | yes | confirmed guarded | .update(, createAdminClient, role checks, profile lookup, same-org guard helper, org/company guard |
+| `src/app/api/team/update-profile/route.ts` | team/auth sensitive | yes | confirmed guarded | .update(, createAdminClient, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/worker/claim-task/route.ts` | task/message sensitive | no | confirmed guarded | .update(, revalidatePath, createAdminClient, service role, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/worker/clock-out/route.ts` | payroll/archive/GPS sensitive | yes | confirmed guarded | .insert(, .update(, createAdminClient, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/worker/jarvis/route.ts` | read-only | yes | confirmed guarded | none |

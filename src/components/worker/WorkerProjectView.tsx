@@ -366,10 +366,10 @@ export function WorkerProjectView({
   // already loaded by the server route, just split here for display.
   const visibleProjectTaskList = useMemo(
     () =>
-      canUseDriverMaterialView(workerShell.shell.profile)
+      (workerShell.shell.materialDriverView ?? canUseDriverMaterialView(workerShell.shell.profile))
         ? taskList.filter(isMaterialTask)
         : taskList,
-    [taskList, workerShell.shell.profile],
+    [taskList, workerShell.shell.materialDriverView, workerShell.shell.profile],
   );
   const { mineTasks, projectLevelTasks, completedTasks } = splitWorkerProjectTasks(
     visibleProjectTaskList,
