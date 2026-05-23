@@ -40,6 +40,17 @@ export function markMessagesReadById<T extends MessageStateItem>(
   );
 }
 
+export function isPrivateMessageVisibleToProfile(
+  message: { sender_id?: string | null; recipient_id?: string | null },
+  profileId: string,
+): boolean {
+  return message.sender_id === profileId || message.recipient_id === profileId;
+}
+
+export function buildPrivateMessageParticipantFilter(profileId: string): string {
+  return `sender_id.eq.${profileId},recipient_id.eq.${profileId}`;
+}
+
 export function readLinkedTaskId(
   metadata: Record<string, unknown> | null | undefined,
 ): string | null {

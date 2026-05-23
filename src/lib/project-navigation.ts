@@ -6,6 +6,19 @@ export type ProjectNavigationDestination = {
   source: "coordinates" | "address";
 };
 
+export const PROJECT_NAVIGATION_PREFERENCE_KEY = "projectNavigationPreferredApp";
+
+export const PROJECT_NAVIGATION_APPS = ["apple", "google", "tesla"] as const;
+
+export type ProjectNavigationApp = (typeof PROJECT_NAVIGATION_APPS)[number];
+
+export function isProjectNavigationApp(value: unknown): value is ProjectNavigationApp {
+  return (
+    typeof value === "string" &&
+    (PROJECT_NAVIGATION_APPS as readonly string[]).includes(value)
+  );
+}
+
 export function getProjectNavigationDestination(input: {
   address?: string | null;
   siteCoordinates?: WorkerGeoPoint | null;

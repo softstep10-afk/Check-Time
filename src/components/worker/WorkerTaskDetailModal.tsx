@@ -70,6 +70,7 @@ type WorkerTaskDetailModalProps = {
   initialMode?: WorkerTaskModalMode;
   profileId: string;
   busy: boolean;
+  busyLabel?: string;
   onClose: () => void;
   onStart: (taskId: string) => void;
   /**
@@ -261,6 +262,7 @@ function WorkerTaskDetailModalBody({
   initialMode = "details",
   profileId,
   busy,
+  busyLabel,
   onClose,
   onStart,
   onDone,
@@ -640,7 +642,7 @@ function WorkerTaskDetailModalBody({
               style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
             >
               <Hand size={14} />
-              {busy ? t("common.saving") : t("tasks.claimCta")}
+              {busy ? busyLabel ?? t("tasks.taking") : t("tasks.claimCta")}
             </button>
           ) : null}
           {canStart ? (
@@ -652,7 +654,7 @@ function WorkerTaskDetailModalBody({
               style={{ borderColor: "var(--brand-yellow)", color: "var(--brand-yellow)" }}
             >
               <Play size={14} />
-              {t("common.start")}
+              {busy ? busyLabel ?? t("tasks.taking") : t("common.start")}
             </button>
           ) : null}
           {canFinish ? (
@@ -681,7 +683,7 @@ function WorkerTaskDetailModalBody({
             >
               <CheckCircle2 size={14} />
               {busy
-                ? t("common.saving")
+                ? busyLabel ?? t("tasks.finishing")
                 : followUpRequired
                   ? t("tasks.markDoneWithFollowUp")
                   : t("tasks.markDone")}

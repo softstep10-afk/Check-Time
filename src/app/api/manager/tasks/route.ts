@@ -12,6 +12,7 @@ import {
   buildMaterialTaskTitle,
   normalizeMaterialTaskUrgency,
 } from "@/lib/material-tasks";
+import { isMaterialDriverProfile } from "@/lib/material-driver-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { TaskPriority } from "@/types/database";
@@ -32,18 +33,42 @@ function readMaterialPayload(value: unknown): {
   urgency: "urgent" | "normal";
   neededDate: string;
   notes: string;
+  quantity: string;
+  unit: string;
+  orderId: string;
+  orderNote: string;
+  orderSize: number | null;
 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { enabled: false, materialName: "", urgency: "normal", neededDate: "", notes: "" };
+    return {
+      enabled: false,
+      materialName: "",
+      urgency: "normal",
+      neededDate: "",
+      notes: "",
+      quantity: "",
+      unit: "",
+      orderId: "",
+      orderNote: "",
+      orderSize: null,
+    };
   }
   const input = value as Record<string, unknown>;
   const enabled = input.enabled === true || input.materialRequest === true;
+  const orderSize = typeof input.orderSize === "number" && Number.isFinite(input.orderSize)
+    ? Math.max(1, Math.floor(input.orderSize))
+    : null;
   return {
     enabled,
     materialName: readText(input.materialName),
     urgency: normalizeMaterialTaskUrgency(input.urgency),
     neededDate: readText(input.neededDate),
     notes: readText(input.notes),
+    quantity: readText(input.quantity),
+    unit: readText(input.unit),
+    orderId: readText(input.orderId),
+    orderNote: readText(input.orderNote),
+    orderSize,
   };
 }
 
@@ -90,8 +115,46 @@ export async function POST(request: NextRequest) {
       mediaIds: attachmentMediaIds.value,
     });
     const materialEnabled = material.enabled && material.materialName.length > 0;
+    if (materialEnabled && !assignedTo.value) {
+      return NextResponse.json(
+        { error: "Choose a driver for the material task." },
+        { status: 400 },
+      );
+    }
+    if (materialEnabled && assignedTo.value) {
+      const { data: assignee, error: assigneeError } = await adminClient
+        .from("profiles")
+        .select("id, org_id, role, is_active, deleted_at")
+        .eq("id", assignedTo.value)
+        .eq("org_id", profile.org_id)
+        .maybeSingle<{
+          id: string;
+          org_id: string;
+          role: string;
+          is_active: boolean;
+          deleted_at: string | null;
+        }>();
+      if (assigneeError) {
+        return NextResponse.json(
+          { error: "Driver validation failed." },
+          { status: 500 },
+        );
+      }
+      if (!assignee || assignee.deleted_at || !assignee.is_active) {
+        return NextResponse.json(
+          { error: "Driver is not available." },
+          { status: 404 },
+        );
+      }
+      if (!isMaterialDriverProfile(assignee)) {
+        return NextResponse.json(
+          { error: "Material tasks can only be assigned to drivers." },
+          { status: 403 },
+        );
+      }
+    }
     const title = materialEnabled
-      ? buildMaterialTaskTitle(null, material.materialName)
+      ? readText(body.title) || buildMaterialTaskTitle(null, material.materialName)
       : readText(body.title);
     const description = materialEnabled
       ? material.notes || readText(body.description) || null
@@ -126,6 +189,11 @@ export async function POST(request: NextRequest) {
               requestedBy: profile.id,
               driverUserId: assignedTo.value,
               projectId: projectId.value,
+              quantity: material.quantity || null,
+              unit: material.unit || null,
+              orderId: material.orderId || null,
+              orderNote: material.orderNote || material.notes || null,
+              orderSize: material.orderSize,
             })
           : {}),
       },

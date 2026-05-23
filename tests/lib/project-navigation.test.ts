@@ -4,6 +4,8 @@ import {
   buildGoogleMapsDirectionsUrl,
   buildProjectNavigationShareText,
   getProjectNavigationDestination,
+  isProjectNavigationApp,
+  PROJECT_NAVIGATION_PREFERENCE_KEY,
 } from "@/lib/project-navigation";
 
 describe("project navigation actions", () => {
@@ -63,5 +65,13 @@ describe("project navigation actions", () => {
         destination: destination!,
       }),
     ).toBe("Kitchen Remodel\n47.799137872580424,-122.24154212345678\n123 Main St");
+  });
+
+  it("defines a local mobile navigation preference without server storage", () => {
+    expect(PROJECT_NAVIGATION_PREFERENCE_KEY).toBe("projectNavigationPreferredApp");
+    expect(isProjectNavigationApp("apple")).toBe(true);
+    expect(isProjectNavigationApp("google")).toBe(true);
+    expect(isProjectNavigationApp("tesla")).toBe(true);
+    expect(isProjectNavigationApp("sanya")).toBe(false);
   });
 });

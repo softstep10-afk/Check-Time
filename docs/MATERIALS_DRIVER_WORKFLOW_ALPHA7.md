@@ -10,6 +10,9 @@ Material requests are still normal task rows. The material-specific meaning is s
 
 - Manager/owner project detail has a Materials section for material orders.
 - A material order writes one or more normal `tasks` rows.
+- The material assignee dropdown shows only profiles with role `driver`.
+- Missing or non-driver material assignees are rejected by the server route.
+- The material flow no longer falls back to the full team when assigning delivery.
 - Metadata marks the task as material:
   - `category: "material"`
   - `taskKind: "material"`
@@ -23,14 +26,17 @@ Material requests are still normal task rows. The material-specific meaning is s
 - The selected assignee is stored in `assigned_to`.
 - The needed day is stored in existing `due_date`.
 - Urgent material requests use existing urgent priority.
+- The UI shows a saving state while the material task is being created and does not show success before the server responds.
 
 Normal task creation remains available and unchanged.
 
 ## Driver Identification
 
-The app uses the existing `driver` role for the focused material queue. There is no hardcoded `Sanya` or display-name rule.
+The app uses the existing `driver` role for the focused material queue and for material assignment options. There is no hardcoded `Sanya` or display-name rule.
 
 If Sanya is the assigned driver, the UI shows his profile display name from normal profile data.
+
+If Sanya should appear in the material assignee dropdown in production, his profile must be configured with role `driver`.
 
 ## Driver View
 
@@ -61,6 +67,16 @@ Existing task realtime is reused:
 - Manager/owner task/project views merge realtime task status updates.
 - Notification behavior remains a signal; it does not convert tasks into messages or delete source tasks.
 
+## Production QA Hotfix Notes
+
+- Material tasks can only be assigned to driver-role profiles.
+- Normal task assignment remains unchanged.
+- Material save shows pending feedback and prevents duplicate save clicks.
+- Task take/done actions show pending feedback while the server request is active.
+- Private/direct message persistence remains separate from material tasks; no material task creates a chat message automatically.
+- Mobile project navigation can show "Поехать", ask for Apple Maps / Google Maps / Tesla-share preference once, and then reuse that local preference.
+- Navigation preference is stored locally in the browser only and does not require schema changes.
+
 ## What Was Not Changed
 
 - No payroll calculation.
@@ -81,7 +97,12 @@ Existing task realtime is reused:
 
 - Manager creates an urgent material task for a driver.
 - Manager creates a non-urgent material task for a driver.
+- Confirm "Добавить материал" only lists drivers in the assignee dropdown.
+- Confirm Sanya appears only if his profile role is `driver`.
+- Confirm there is no full-team fallback.
+- Confirm saving material shows "Сохраняем..." / "Сохраняем материал..." and duplicate save does not duplicate a task.
 - Driver sees material tasks without manual refresh.
+- Driver receives the material task notification/banner.
 - Driver sees project name, material name, urgency, and needed date.
 - Driver schedule shows the material task on the selected day.
 - Owner/manager sees material-needed badge on project card/detail.

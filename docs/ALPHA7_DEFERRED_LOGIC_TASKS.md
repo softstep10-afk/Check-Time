@@ -277,3 +277,37 @@ Deferred until separate owner approval:
 - Dedicated Materials/Driver dashboard redesign.
 - Route planning, Tesla API/OAuth, or dispatch optimization.
 - Direct SQL verification of task/material RLS behavior.
+
+## Production QA Combined Hotfix: Materials, Messages, Feedback, Mobile Navigation
+
+Completed scope:
+
+- Restricted material assignee options to profiles with role `driver`.
+- Added server-side validation so material tasks reject missing or non-driver assignees.
+- Kept normal task assignee behavior unchanged.
+- Added local pending labels for material save, media delete, and task take/done actions.
+- Prevented duplicate material save clicks while the server request is active.
+- Kept private/direct messages visible for sender and recipient by loading both sides of the conversation.
+- Kept message read status as a marker, not a history filter.
+- Added mobile "Поехать" navigation preference flow using local browser storage.
+- Preserved Apple Maps, Google Maps, Tesla-safe share/copy, and copy-address behavior.
+
+Not changed:
+
+- No payroll or salary archive.
+- No archive/trash business meaning.
+- No GPS, geofence, clock-in, clock-out, or shifts.
+- No Supabase RLS, Storage policies, database schema, or migrations.
+- No media delete privilege changes.
+- No message/task lifecycle redesign.
+- No automatic conversion between messages and tasks.
+- No production data mutation or deployment.
+
+Deferred until separate owner approval:
+
+- Dedicated material dispatch dashboard.
+- Tesla API/OAuth or vehicle integration.
+- Database-backed navigation preference.
+- Global toast/notification redesign.
+- Broader message history pagination or data-loading redesign.
+- Direct SQL verification of production message/material task RLS behavior.

@@ -311,7 +311,9 @@ export function TasksPage() {
   }
 
   function renderActiveCard(task: WorkerTaskItem) {
-    const updating = busyAction === `task-${task.id}`;
+    const updating = busyAction?.startsWith(`task-${task.id}-`) ?? false;
+    const taking = busyAction === `task-${task.id}-in_progress`;
+    const finishing = busyAction === `task-${task.id}-done`;
     const accent = getPriorityAccent(task.priority);
     const ownership = classifyTaskForWorker(task, shell.profile.id);
     const effectiveStatus = getEffectiveTaskStatus(task);
@@ -483,7 +485,7 @@ export function TasksPage() {
               className="button-base button-secondary flex-1"
             >
               <Play size={14} />
-              {t("common.start")}
+              {taking ? t("tasks.taking") : t("common.start")}
             </button>
           ) : null}
           {isMine ? (
@@ -495,7 +497,7 @@ export function TasksPage() {
               className="button-base button-primary flex-1"
             >
               <CheckCircle2 size={14} />
-              {updating ? t("common.saving") : t("tasks.markDone")}
+              {finishing ? t("tasks.finishing") : t("tasks.markDone")}
             </button>
           ) : isClaimable ? (
             <button
@@ -711,9 +713,18 @@ export function TasksPage() {
         profileId={shell.profile.id}
         busy={
           liveSelectedTask
-            ? busyAction === `task-${liveSelectedTask.id}` ||
+            ? (busyAction?.startsWith(`task-${liveSelectedTask.id}-`) ?? false) ||
               claimBusyTaskId === liveSelectedTask.id
             : false
+        }
+        busyLabel={
+          liveSelectedTask && busyAction === `task-${liveSelectedTask.id}-done`
+            ? t("tasks.finishing")
+            : liveSelectedTask && busyAction === `task-${liveSelectedTask.id}-in_progress`
+              ? t("tasks.taking")
+              : claimBusyTaskId === liveSelectedTask?.id
+                ? t("tasks.taking")
+                : undefined
         }
         onClose={closeDetails}
         onStart={(taskId) => {

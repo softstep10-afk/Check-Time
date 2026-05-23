@@ -49,9 +49,16 @@ Run this after deploys that touch application code or user workflows.
 
 ## Materials / Driver Workflow
 
+- Open "Добавить материал".
+- Confirm the assignee dropdown shows only users with role `driver`.
+- Confirm Sanya appears only if his production profile has role `driver`.
+- Confirm the dropdown does not fall back to the full team.
+- If no drivers exist, confirm the UI shows an empty/no-driver state instead of workers/managers/supervisors.
 - Manager creates an urgent material task for a driver.
 - Manager creates a non-urgent material task for a driver.
+- Confirm saving material shows "Сохраняем..." / "Сохраняем материал..." and duplicate save does not create duplicate tasks.
 - Driver sees the material task immediately in the worker task area.
+- Driver receives the existing task notification/banner for the material task.
 - Driver sees project name, material name, urgency, and needed date.
 - Driver schedule shows the material task on the selected needed date.
 - Owner/manager sees a material-needed badge on project card/detail.
@@ -60,6 +67,49 @@ Run this after deploys that touch application code or user workflows.
 - Normal tasks do not disappear after read/taken/done.
 - Messages remain messages; material request remains a task.
 - Notifications can clear without deleting or hiding source tasks.
+
+## Production QA Combined Hotfix
+
+Material drivers:
+
+- Open "Добавить материал".
+- Confirm the assignee dropdown shows only drivers.
+- Confirm Sanya appears only if his profile role is `driver`.
+- Confirm there is no full-team fallback.
+- Create an urgent material task.
+- Create a non-urgent material task.
+- Confirm the driver receives the task notification/banner.
+
+Action indicators:
+
+- Saving material shows "Сохраняем..." / "Сохраняем материал...".
+- Duplicate save does not duplicate a material task.
+- Saved photo/media delete shows "Удаляем...".
+- Failed delete shows an error and the UI does not pretend the item was deleted.
+- Taking a task shows a pending state.
+- Marking a task done shows a pending state.
+- False success does not appear before the server response.
+
+Private messages:
+
+- Sender sees a private message after sending.
+- Recipient sees the private message after opening/reading.
+- Message remains after notification clear.
+- Message remains after read status update.
+- Owner/manager read status remains visible where supported.
+- No private message disappears by itself.
+- Private message does not become a task automatically.
+
+Mobile "Поехать":
+
+- Mobile project card/detail shows "Поехать".
+- First tap asks for Apple Maps, Google Maps, or Tesla/share/copy.
+- Apple Maps works.
+- Google Maps works.
+- Tesla/share/copy copies or shares a safe destination; no Tesla login/API is used.
+- Future tap opens the saved app directly.
+- User can change/reset navigation preference with "Сменить приложение".
+- Copy address/location still works.
 
 ## Files
 

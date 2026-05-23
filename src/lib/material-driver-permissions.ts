@@ -22,3 +22,9 @@ export function shouldFilterWorkerTasksToMaterials(
 ): boolean {
   return isMaterialDriverProfile(profile);
 }
+
+export function filterMaterialDriverProfiles<T extends MaterialDriverProfileLike>(
+  profiles: readonly T[],
+): T[] {
+  return profiles.filter(isMaterialDriverProfile);
+}

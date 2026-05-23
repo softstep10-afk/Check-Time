@@ -1046,9 +1046,18 @@ export function WorkerProjectView({
         profileId={profileId}
         busy={
           liveSelectedTask
-            ? busyAction === `task-${liveSelectedTask.id}` ||
+            ? (busyAction?.startsWith(`task-${liveSelectedTask.id}-`) ?? false) ||
               claimBusyTaskId === liveSelectedTask.id
             : false
+        }
+        busyLabel={
+          liveSelectedTask && busyAction === `task-${liveSelectedTask.id}-done`
+            ? t("tasks.finishing")
+            : liveSelectedTask && busyAction === `task-${liveSelectedTask.id}-in_progress`
+              ? t("tasks.taking")
+              : claimBusyTaskId === liveSelectedTask?.id
+                ? t("tasks.taking")
+                : undefined
         }
         onClose={closeDetails}
         onStart={(taskId) => {

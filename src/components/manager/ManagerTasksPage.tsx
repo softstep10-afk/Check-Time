@@ -292,7 +292,7 @@ export function ManagerTasksPage({
   }
 
   async function handleStatusChange(taskId: string, status: TaskStatus) {
-    setBusyKey(`status-${taskId}`);
+    setBusyKey(`status-${taskId}-${status}`);
     const previousTask = tasks.find((task) => task.id === taskId) ?? null;
     const patch: Record<string, unknown> = { status };
     const completedAt = status === "done" ? new Date().toISOString() : null;
@@ -644,7 +644,16 @@ export function ManagerTasksPage({
                 const effectiveStatus = getEffectiveTaskStatus(task);
                 const accent = PRIORITY_COLORS[task.priority];
                 const statusColor = STATUS_COLORS[effectiveStatus];
-                const updating = busyKey === `status-${task.id}` || busyKey === `delete-${task.id}`;
+                const updating =
+                  busyKey?.startsWith(`status-${task.id}-`) || busyKey === `delete-${task.id}`;
+                const statusPendingText =
+                  busyKey === `status-${task.id}-in_progress`
+                    ? t("tasks.taking")
+                    : busyKey === `status-${task.id}-done`
+                      ? t("tasks.finishing")
+                      : busyKey?.startsWith(`status-${task.id}-`)
+                        ? t("common.saving")
+                        : "";
                 const materialTask = isMaterialTask(task);
                 const materialUrgency = getMaterialTaskUrgency(task);
                 const materialNeededDate = getMaterialTaskNeededDate(task);
@@ -890,7 +899,7 @@ export function ManagerTasksPage({
                           onClick={() => void handleDelete(task.id)}
                           disabled={updating}
                           aria-label={t("team.actionRemove")}
-                          title={t("team.actionRemove")}
+                          title={busyKey === `delete-${task.id}` ? t("common.deleting") : t("team.actionRemove")}
                           className="inline-flex h-7 w-7 items-center justify-center rounded-[var(--radius-sm)] border"
                           style={{
                             borderColor:
@@ -904,8 +913,17 @@ export function ManagerTasksPage({
                                 : "transparent",
                           }}
                         >
-                          <Trash2 size={12} />
+                          {busyKey === `delete-${task.id}` ? (
+                            <span className="px-1 text-[9px]">{t("common.deleting")}</span>
+                          ) : (
+                            <Trash2 size={12} />
+                          )}
                         </button>
+                        {statusPendingText ? (
+                          <span className="text-[10px] font-semibold text-[var(--brand-yellow)]">
+                            {statusPendingText}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   </article>

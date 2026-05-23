@@ -2068,7 +2068,7 @@ export function WorkerShell({
       existingMetadata?: Record<string, unknown> | null;
     },
   ) {
-    setBusyAction(`task-${taskId}`);
+    setBusyAction(`task-${taskId}-${nextStatus}`);
     setBanner(null);
 
     try {

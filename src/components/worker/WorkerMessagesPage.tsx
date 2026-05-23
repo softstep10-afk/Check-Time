@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation, type TranslationKey } from "@/lib/i18n";
-import { markMessagesReadById } from "@/lib/message-state";
+import {
+  buildPrivateMessageParticipantFilter,
+  isPrivateMessageVisibleToProfile,
+  markMessagesReadById,
+} from "@/lib/message-state";
 import {
   PRIORITY_COLOR,
   type AppMessage,
@@ -75,7 +79,7 @@ export function WorkerMessagesPage() {
       const { data } = await supabase
         .from("messages")
         .select("*")
-        .eq("recipient_id", shell.profile.id)
+        .or(buildPrivateMessageParticipantFilter(shell.profile.id))
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -91,43 +95,60 @@ export function WorkerMessagesPage() {
         metadata?: Record<string, unknown> | null;
         created_at: string;
       }>;
-      const senderIds = Array.from(new Set(rows.map((row) => row.sender_id).filter(Boolean)));
+      const visibleRows = rows.filter((row) =>
+        isPrivateMessageVisibleToProfile(row, shell.profile.id),
+      );
+      const participantIds = Array.from(
+        new Set(
+          visibleRows
+            .flatMap((row) => [row.sender_id, row.recipient_id])
+            .filter(Boolean),
+        ),
+      );
       const nameById = new Map<string, string>();
-      if (senderIds.length > 0) {
+      if (participantIds.length > 0) {
         const { data: profiles } = await supabase
           .from("profiles")
           .select("id, name")
-          .in("id", senderIds);
+          .in("id", participantIds);
         for (const profile of (profiles ?? []) as Array<{ id: string; name: string }>) {
           nameById.set(profile.id, profile.name);
         }
       }
 
       if (!active) return;
-      const unreadIds = rows.filter((row) => !row.read).map((row) => row.id);
+      const unreadIds = visibleRows
+        .filter((row) => row.recipient_id === shell.profile.id && !row.read)
+        .map((row) => row.id);
       setMessages(
-        rows.map((row) => ({
-          id: row.id,
-          from_id: row.sender_id,
-          from_name: nameById.get(row.sender_id) ?? "",
-          to_id: row.recipient_id,
-          text: row.text,
-          color: (row.color ?? PRIORITY_COLOR[inferPriority(row)]) as AppMessage["color"],
-          priority: inferPriority(row),
-          read: row.read,
-          created_at: row.created_at,
-          metadata: row.metadata ?? null,
-          attachment: row.attachment
-            ? {
-                url: String(row.attachment.url ?? ""),
-                storagePath: String(row.attachment.storagePath ?? ""),
-                filename: String(row.attachment.filename ?? ""),
-                type: (String(row.attachment.type ?? "image") as MessageAttachment["type"]),
-                mimeType: row.attachment.mimeType ? String(row.attachment.mimeType) : undefined,
-                size: Number(row.attachment.size ?? 0),
-              }
-            : null,
-        })),
+        visibleRows.map((row) => {
+          const sentByMe = row.sender_id === shell.profile.id;
+          const recipientName = nameById.get(row.recipient_id) ?? "";
+          return {
+            id: row.id,
+            from_id: row.sender_id,
+            from_name: sentByMe
+              ? `${t("messages.you")} → ${recipientName || t("messages.recipient")}`
+              : nameById.get(row.sender_id) ?? "",
+            to_id: row.recipient_id,
+            text: row.text,
+            color: (row.color ?? PRIORITY_COLOR[inferPriority(row)]) as AppMessage["color"],
+            priority: inferPriority(row),
+            read: row.read,
+            created_at: row.created_at,
+            metadata: row.metadata ?? null,
+            attachment: row.attachment
+              ? {
+                  url: String(row.attachment.url ?? ""),
+                  storagePath: String(row.attachment.storagePath ?? ""),
+                  filename: String(row.attachment.filename ?? ""),
+                  type: (String(row.attachment.type ?? "image") as MessageAttachment["type"]),
+                  mimeType: row.attachment.mimeType ? String(row.attachment.mimeType) : undefined,
+                  size: Number(row.attachment.size ?? 0),
+                }
+              : null,
+          };
+        }),
       );
       setLoading(false);
 
@@ -180,6 +201,26 @@ export function WorkerMessagesPage() {
         },
         scheduleMessagesLoad,
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=eq.${shell.profile.id}`,
+        },
+        scheduleMessagesLoad,
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=eq.${shell.profile.id}`,
+        },
+        scheduleMessagesLoad,
+      )
       .subscribe();
     return () => {
       active = false;
@@ -189,7 +230,7 @@ export function WorkerMessagesPage() {
       }
       void supabase.removeChannel(channel);
     };
-  }, [shell.profile.id, supabase]);
+  }, [shell.profile.id, supabase, t]);
 
   return (
     <section className="mx-auto max-w-[760px] space-y-4">

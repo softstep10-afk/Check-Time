@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canUseDriverMaterialView,
+  filterMaterialDriverProfiles,
   isMaterialDriverProfile,
   shouldFilterWorkerTasksToMaterials,
 } from "@/lib/material-driver-permissions";
@@ -29,5 +30,21 @@ describe("material driver permissions", () => {
 
   it("does not rely on a hardcoded display name", () => {
     expect(isMaterialDriverProfile({ id: "sanya", role: "worker" })).toBe(false);
+  });
+
+  it("filters material assignment choices down to drivers only", () => {
+    const profiles = [
+      { id: "driver-1", name: "Driver One", role: "driver" },
+      { id: "worker-1", name: "Worker One", role: "worker" },
+      { id: "manager-1", name: "Manager One", role: "manager" },
+      { id: "supervisor-1", name: "Supervisor One", role: "supervisor" },
+      { id: "owner-1", name: "Owner One", role: "owner" },
+      { id: "driver-2", name: "Driver Two", role: "driver" },
+    ];
+
+    expect(filterMaterialDriverProfiles(profiles).map((profile) => profile.id)).toEqual([
+      "driver-1",
+      "driver-2",
+    ]);
   });
 });

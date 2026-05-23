@@ -58,7 +58,6 @@ import {
 } from "@/components/shared/MediaViewerModal";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import {
-  buildMaterialTaskMetadata,
   getMaterialIndicatorState,
   getMaterialTaskNeededDate,
   getMaterialTaskUrgency,
@@ -66,6 +65,7 @@ import {
   isMaterialTask,
   type MaterialTaskUrgency,
 } from "@/lib/material-tasks";
+import { filterMaterialDriverProfiles } from "@/lib/material-driver-permissions";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
@@ -502,6 +502,14 @@ export function ProjectDetailPage({
   }, [availableProfiles, taskAssigneeProjectProfiles]);
   const hasTaskAssignees =
     taskAssigneeProjectProfiles.length > 0 || taskAssigneeOtherProfiles.length > 0;
+  const materialDriverProfiles = useMemo(
+    () =>
+      filterMaterialDriverProfiles([
+        ...taskAssigneeProjectProfiles,
+        ...taskAssigneeOtherProfiles,
+      ]).sort((left, right) => left.name.localeCompare(right.name)),
+    [taskAssigneeOtherProfiles, taskAssigneeProjectProfiles],
+  );
 
   // Project business-file upload (photo / video / PDF / documents). Separate from
   // receipts (no store/amount metadata) and from task attachments
@@ -1341,7 +1349,7 @@ export function ProjectDetailPage({
   }
 
   async function handleUpdateTask(taskId: string, nextStatus: TaskStatus) {
-    setBusyKey(`task-${taskId}`);
+    setBusyKey(`task-${taskId}-${nextStatus}`);
     setMessage("");
     const previousTask = taskList.find((task) => task.id === taskId) ?? null;
 
@@ -2084,7 +2092,10 @@ export function ProjectDetailPage({
               const canCancel = effectiveStatus !== "cancelled" && effectiveStatus !== "done";
               const isPendingDelete = pendingDeleteTaskId === task.id;
               const isBusy =
-                busyKey === `task-${task.id}` || busyKey === `task-delete-${task.id}`;
+                busyKey?.startsWith(`task-${task.id}-`) || busyKey === `task-delete-${task.id}`;
+              const isStartingTask = busyKey === `task-${task.id}-in_progress`;
+              const isCompletingTask = busyKey === `task-${task.id}-done`;
+              const isDeletingTask = busyKey === `task-delete-${task.id}`;
               const materialTask = isMaterialTask(task);
               const materialUrgency = getMaterialTaskUrgency(task);
               const materialNeededDate = getMaterialTaskNeededDate(task);
@@ -2328,7 +2339,7 @@ export function ProjectDetailPage({
                       disabled={isBusy}
                       className="button-base button-secondary min-h-0 px-3 py-2 text-xs"
                     >
-                      {t("common.start")}
+                      {isStartingTask ? t("tasks.taking") : t("common.start")}
                     </button>
                   ) : null}
                   {canMarkDone ? (
@@ -2338,7 +2349,7 @@ export function ProjectDetailPage({
                       disabled={isBusy}
                       className="button-base button-primary min-h-0 px-3 py-2 text-xs"
                     >
-                      {t("common.done")}
+                      {isCompletingTask ? t("tasks.finishing") : t("common.done")}
                     </button>
                   ) : null}
                   {canCancel ? (
@@ -2367,9 +2378,13 @@ export function ProjectDetailPage({
                         ? "rgba(212, 81, 94, 0.12)"
                         : "transparent",
                     }}
-                  >
+                    >
                     <Trash2 size={12} />
-                    {isPendingDelete ? t("common.yes") : null}
+                    {isDeletingTask
+                      ? t("common.deleting")
+                      : isPendingDelete
+                        ? t("common.yes")
+                        : null}
                   </button>
                   {isPendingDelete ? (
                     <button
@@ -2830,7 +2845,7 @@ export function ProjectDetailPage({
         projectId={project.id}
         managerId={managerId}
         knownProfileNames={profileNameById}
-        assigneeProfiles={[...taskAssigneeProjectProfiles, ...taskAssigneeOtherProfiles]}
+        assigneeProfiles={materialDriverProfiles}
       />
       {/* ── Receipts ── */}
       <ReceiptsSection
@@ -3517,6 +3532,7 @@ function MaterialsSection({
 
   async function handleAddOrder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (savingOrder) return;
     const materialRows = orderRows
       .map((row) => ({
         name: row.name.trim(),
@@ -3529,47 +3545,54 @@ function MaterialsSection({
       .filter((row) => row.name.length > 0);
 
     if (materialRows.length === 0) return;
+    if (!orderAssignedTo) {
+      setOrderError(t("materials.driverRequired"));
+      return;
+    }
 
     setSavingOrder(true);
     setOrderError("");
     const orderId = createClientUuid();
     const trimmedOrderNote = orderNote.trim();
-    const driverUserId = orderAssignedTo || null;
+    const driverUserId = orderAssignedTo;
     const neededDate = orderNeededDate || null;
     const urgency: MaterialTaskUrgency =
       orderPriority === "urgent" || orderPriority === "high" ? "urgent" : "normal";
-    const { error } = await supabase
-      .from("tasks")
-      .insert(materialRows.map((row) => ({
-        org_id: orgId,
-        project_id: projectId,
-        assigned_to: driverUserId,
-        assigned_by: managerId,
-        title: row.name,
-        description: null,
-        priority: orderPriority,
-        status: "pending",
-        due_date: neededDate,
-        metadata: buildMaterialTaskMetadata({
-          materialName: row.name,
-          urgency,
-          neededDate,
-          requestedBy: managerId,
-          driverUserId,
+    for (const row of materialRows) {
+      const response = await fetch("/api/manager/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: row.name,
+          description: trimmedOrderNote || null,
           projectId,
-          quantity: row.quantity,
-          unit: row.unit,
-          orderId,
-          orderNote: trimmedOrderNote || null,
-          orderSize: materialRows.length,
+          assignedTo: driverUserId,
+          priority: orderPriority,
+          dueDate: neededDate,
+          source: "project_material_order",
+          material: {
+            enabled: true,
+            materialName: row.name,
+            urgency,
+            neededDate,
+            notes: trimmedOrderNote,
+            quantity: row.quantity,
+            unit: row.unit,
+            orderId,
+            orderNote: trimmedOrderNote,
+            orderSize: materialRows.length,
+          },
         }),
-      })));
-    setSavingOrder(false);
-
-    if (error) {
-      setOrderError(error.message);
-      return;
+      });
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        setSavingOrder(false);
+        setOrderError(payload?.error ?? `Request failed (${response.status})`);
+        await refreshMaterials();
+        return;
+      }
     }
+    setSavingOrder(false);
 
     setAddMaterialOpen(false);
     resetOrderDraft();
@@ -3958,13 +3981,18 @@ function MaterialsSection({
                 aria-label={t("materials.assignDriver")}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
               >
-                <option value="">{t("materials.noDriver")}</option>
+                <option value="">{t("materials.chooseDriver")}</option>
                 {assigneeProfiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
                     {profile.name}
                   </option>
                 ))}
               </select>
+              {assigneeProfiles.length === 0 ? (
+                <div className="text-[10px] font-semibold text-[var(--text-muted)]">
+                  {t("materials.noDriversAvailable")}
+                </div>
+              ) : null}
               <DateField
                 value={orderNeededDate}
                 onChange={(event) => setOrderNeededDate(event.target.value)}
@@ -4060,7 +4088,7 @@ function MaterialsSection({
                 className="rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
               >
-                {savingOrder ? t("common.saving") : t("materials.saveOrder")}
+                {savingOrder ? t("materials.savingOrder") : t("materials.saveOrder")}
               </button>
             </div>
           </form>
@@ -4192,6 +4220,7 @@ function ReceiptsSection({
   const [receipts, setReceipts] = useState<ReceiptItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deletingReceiptId, setDeletingReceiptId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [dragging, setDragging] = useState(false);
   const [receiptUploadOpen, setReceiptUploadOpen] = useState(false);
@@ -4434,11 +4463,14 @@ function ReceiptsSection({
   }
 
   async function handleDelete(receipt: ReceiptItem) {
+    if (deletingReceiptId) return;
     if (!canDeleteMedia) {
       setMessage("Only Andrey and Sergey can delete media.");
       return;
     }
 
+    setDeletingReceiptId(receipt.id);
+    setMessage("");
     const response = await fetch(`/api/media/${receipt.id}`, { method: "DELETE" });
     const payload = (await response.json().catch(() => ({}))) as {
       error?: string;
@@ -4446,6 +4478,7 @@ function ReceiptsSection({
     };
     if (!response.ok) {
       setMessage(payload.error ?? `Request failed (${response.status})`);
+      setDeletingReceiptId(null);
       return;
     }
     const deletedAt = payload.deletedAt ?? new Date().toISOString();
@@ -4470,6 +4503,7 @@ function ReceiptsSection({
         deleted_at: deletedAt,
       },
     });
+    setDeletingReceiptId(null);
     setTimeout(() => setMessage(""), 2000);
   }
 
@@ -4702,10 +4736,11 @@ function ReceiptsSection({
                     <button
                       type="button"
                       onClick={() => void handleDelete(r)}
+                      disabled={deletingReceiptId === r.id}
                       className="shrink-0 text-[10px] text-[var(--text-muted)] hover:text-[var(--red)]"
-                      title="Delete"
+                      title={deletingReceiptId === r.id ? t("common.deleting") : t("common.delete")}
                     >
-                      ✕
+                      {deletingReceiptId === r.id ? t("common.deleting") : "✕"}
                     </button>
                   ) : null}
                 </div>

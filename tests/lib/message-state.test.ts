@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildPrivateMessageParticipantFilter,
   buildMessageTaskMetadata,
   isTaskMessagePriority,
+  isPrivateMessageVisibleToProfile,
   markMessagesReadById,
   mergeMessagesById,
   readLinkedTaskId,
@@ -79,5 +81,19 @@ describe("message state helpers", () => {
       task_created_at: "2026-05-21T10:10:00Z",
     });
     expect(readLinkedTaskId(linked)).toBe("task-1");
+  });
+
+  it("keeps private messages visible to sender and recipient only", () => {
+    const message = { sender_id: "sender-1", recipient_id: "recipient-1" };
+
+    expect(isPrivateMessageVisibleToProfile(message, "sender-1")).toBe(true);
+    expect(isPrivateMessageVisibleToProfile(message, "recipient-1")).toBe(true);
+    expect(isPrivateMessageVisibleToProfile(message, "other-1")).toBe(false);
+  });
+
+  it("builds a sender-or-recipient history filter for direct message history", () => {
+    expect(buildPrivateMessageParticipantFilter("profile-1")).toBe(
+      "sender_id.eq.profile-1,recipient_id.eq.profile-1",
+    );
   });
 });
