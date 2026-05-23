@@ -2395,8 +2395,8 @@ export function WorkerShell({
                 already (HoursPage), so they were removed here so the
                 Clock page is not dominated by status chrome on mobile.
                 Header scrolls with page (no `sticky`). */}
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex min-w-[11rem] flex-1 items-center gap-2">
                 <div className="min-w-0">
                   <h1 className="truncate text-base font-bold text-[var(--text-primary)]">
                     {shell.profile.name}
@@ -2420,11 +2420,11 @@ export function WorkerShell({
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                 <button
                   type="button"
                   onClick={toggleMute}
-                  className="inline-flex items-center justify-center rounded-[var(--radius-sm)] border px-2 py-1.5 text-sm"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[var(--radius-sm)] border text-sm"
                   style={{
                     borderColor: "var(--border-default)",
                     background: "transparent",
@@ -2446,7 +2446,7 @@ export function WorkerShell({
                   type="button"
                   onClick={handleSignOut}
                   disabled={busyAction === "sign-out"}
-                  className="button-base button-secondary px-3 py-2 text-xs"
+                  className="button-base button-secondary min-h-9 px-2.5 py-2 text-xs"
                 >
                   {busyAction === "sign-out" ? t("common.signingOut") : t("common.signOut")}
                 </button>

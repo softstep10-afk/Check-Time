@@ -106,7 +106,7 @@ function addDays(date: Date, days: number): Date {
 }
 
 export function isManagerRole(role: UserRole): boolean {
-  return role === "owner" || role === "admin" || role === "manager" || role === "supervisor";
+  return role === "owner" || role === "admin" || role === "manager";
 }
 
 /**

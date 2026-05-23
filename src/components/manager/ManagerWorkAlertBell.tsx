@@ -50,7 +50,7 @@ function inferPriority(row: {
 }
 
 function isManagerRole(role: string) {
-  return role === "owner" || role === "admin" || role === "manager" || role === "supervisor";
+  return role === "owner" || role === "admin" || role === "manager";
 }
 
 function taskKindLabel(task: AlertTask) {

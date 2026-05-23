@@ -1351,10 +1351,10 @@ describe("groupPayrollRowsByDay", () => {
 
 describe("isManagerRole / isOwnerRole role gates", () => {
   it("classifies the manager-tier roles", () => {
-    for (const role of ["owner", "admin", "manager", "supervisor"] as const) {
+    for (const role of ["owner", "admin", "manager"] as const) {
       expect(isManagerRole(role)).toBe(true);
     }
-    for (const role of ["worker", "driver", "subcontractor"] as const) {
+    for (const role of ["worker", "supervisor", "driver", "subcontractor"] as const) {
       expect(isManagerRole(role)).toBe(false);
     }
   });

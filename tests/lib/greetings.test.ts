@@ -19,4 +19,8 @@ describe("role-appropriate greetings", () => {
     expect(manager).not.toContain("Manager");
     expect(owner).not.toContain("Owner");
   });
+
+  it("project navigation exposes a clear Russian go action", () => {
+    expect(translations["projects.goNow"].ru).toBe("В путь");
+  });
 });

@@ -252,8 +252,12 @@ export default function ManagerLayout({
   }, [pathname, supabase, router, startTransition]);
 
   const isOwnerUser = userRole === "owner" || userRole === "admin";
-  const isManagerUser = isOwnerUser || userRole === "manager" || userRole === "supervisor";
-  const scheduleOnlyUser = userRole === "worker" || userRole === "driver" || userRole === "subcontractor";
+  const isManagerUser = isOwnerUser || userRole === "manager";
+  const scheduleOnlyUser =
+    userRole === "worker" ||
+    userRole === "supervisor" ||
+    userRole === "driver" ||
+    userRole === "subcontractor";
 
   const visibleSidebar = sidebarItems.filter((item) => {
     if ("href" in item && userRole === "sales" && item.href !== "/schedule" && item.href !== "/settings") return false;

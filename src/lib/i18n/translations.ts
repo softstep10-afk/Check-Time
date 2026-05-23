@@ -346,6 +346,7 @@ export const translations = {
   "projects.fixCoordinatesHint": { en: "Use Fix GPS to add latitude and longitude before crews rely on this project for location truth.", ru: "Используйте «Исправить GPS», чтобы добавить широту и долготу до того, как бригада начнёт полагаться на этот проект для проверки местоположения." },
   "projects.openDetail": { en: "Open detail", ru: "Подробности" },
   "projects.navigationActions": { en: "Project navigation actions", ru: "Навигация к объекту" },
+  "projects.goNow": { en: "Go", ru: "В путь" },
   "projects.appleMaps": { en: "Apple", ru: "Apple" },
   "projects.googleMaps": { en: "Google", ru: "Google" },
   "projects.teslaShare": { en: "Tesla/share", ru: "Tesla/share" },

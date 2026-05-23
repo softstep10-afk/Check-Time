@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, MapPin, Share2 } from "lucide-react";
+import { Check, Copy, MapPin, Navigation, Share2 } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import {
   buildAppleMapsDirectionsUrl,
@@ -77,6 +77,20 @@ export function ProjectNavigationActions({
       aria-label={t("projects.navigationActions")}
     >
       <a
+        href={googleUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={linkClass}
+        style={{
+          borderColor: "rgba(191, 162, 52, 0.55)",
+          background: "rgba(191, 162, 52, 0.16)",
+          color: "var(--brand-yellow)",
+        }}
+      >
+        <Navigation size={12} />
+        {t("projects.goNow")}
+      </a>
+      <a
         href={appleUrl}
         target="_blank"
         rel="noopener noreferrer"
@@ -91,7 +105,7 @@ export function ProjectNavigationActions({
         target="_blank"
         rel="noopener noreferrer"
         className={linkClass}
-        style={{ borderColor: "rgba(191, 162, 52, 0.4)", color: "var(--brand-yellow)" }}
+        style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
       >
         <MapPin size={12} />
         {t("projects.googleMaps")}

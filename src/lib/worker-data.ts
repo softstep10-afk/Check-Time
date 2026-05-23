@@ -123,7 +123,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     redirect("/login");
   }
 
-  if (profile.role === "manager" || profile.role === "admin" || profile.role === "owner" || profile.role === "supervisor") {
+  if (profile.role === "manager" || profile.role === "admin" || profile.role === "owner") {
     if (AUTH_BYPASS_ENABLED) {
       return buildPreviewWorkerShellData();
     }
