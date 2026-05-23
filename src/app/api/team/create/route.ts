@@ -3,24 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
-import { canCreateTeamRole } from "@/lib/role-permissions";
+import { canCreateTeamRole, isTeamAssignableRole } from "@/lib/role-permissions";
 import { createClient } from "@/lib/supabase/server";
 import { buildTeamMemberEmail, isValidTeamPasscode } from "@/lib/team-member-provisioning";
-import type { UserRole } from "@/types/database";
-
-const allowedRoles: UserRole[] = [
-  "worker",
-  "supervisor",
-  "driver",
-  "sales",
-  "subcontractor",
-  "manager",
-  "admin",
-];
-
-function isUserRole(value: unknown): value is UserRole {
-  return typeof value === "string" && allowedRoles.includes(value as UserRole);
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,14 +24,19 @@ export async function POST(request: NextRequest) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const pin = typeof body.pin === "string" ? body.pin.trim() : "";
-    const role = isUserRole(body.role) ? body.role : "worker";
+    const role = isTeamAssignableRole(body.role) ? body.role : "worker";
     const requireVideo = Boolean(body.requireVideo);
     const hourlyRateRaw =
       typeof body.hourlyRate === "string" ? body.hourlyRate.trim() : "";
 
     if (!canCreateTeamRole(profile.role, role)) {
       return NextResponse.json(
-        { error: "Only owner/admin can create admin team members." },
+        {
+          error:
+            role === "driver"
+              ? "Only owner/admin can create driver team members."
+              : "Only owner/admin can create admin team members.",
+        },
         { status: 403 },
       );
     }

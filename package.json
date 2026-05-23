@@ -13,6 +13,15 @@
     "inventory:service-role": "node scripts/inventory-service-role-routes.mjs",
     "smoke:public": "node scripts/smoke-public-routes.mjs",
     "alpha7:predeploy": "node scripts/alpha7-predeploy-check.mjs",
+    "alpha7:invariant-gate": "node scripts/alpha7-invariant-gate.mjs",
+    "alpha7:route-mutation-map": "node scripts/alpha7-route-mutation-map.mjs",
+    "alpha7:danger-zone-diff": "node scripts/alpha7-danger-zone-diff.mjs",
+    "alpha7:danger-zone-diff:strict": "node scripts/alpha7-danger-zone-diff.mjs --strict",
+    "alpha7:danger-zones": "node scripts/alpha7-dangerous-zone-diff.mjs",
+    "alpha7:danger-zones:strict": "node scripts/alpha7-dangerous-zone-diff.mjs --strict",
+    "alpha7:route-guards": "node scripts/alpha7-route-mutation-guard-map.mjs",
+    "alpha7:coverage-map": "node scripts/alpha7-coverage-map.mjs",
+    "alpha7:rc-safety-gate": "node scripts/alpha7-rc-safety-gate.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

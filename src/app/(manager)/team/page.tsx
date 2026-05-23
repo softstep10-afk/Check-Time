@@ -36,6 +36,7 @@ export default async function TeamRoutePage() {
       hasFinanceAccess={managerHasFinanceAccess}
       canManageFinanceAccess={ALWAYS_FINANCE_ROLES.has(data.manager.role)}
       managerId={data.manager.id}
+      managerRole={data.manager.role}
     />
   );
 }

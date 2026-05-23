@@ -29,7 +29,13 @@ describe("material driver permissions", () => {
   });
 
   it("does not rely on a hardcoded display name", () => {
-    expect(isMaterialDriverProfile({ id: "sanya", role: "worker" })).toBe(false);
+    const sanyaWorker = { id: "sanya", name: "Sanya", role: "worker" as const };
+    const sanyaRuWorker = { id: "sanya-ru", name: "Саня", role: "worker" as const };
+    const sanyaDriver = { id: "driver-sanya", name: "Sanya", role: "driver" as const };
+
+    expect(isMaterialDriverProfile(sanyaWorker)).toBe(false);
+    expect(isMaterialDriverProfile(sanyaRuWorker)).toBe(false);
+    expect(isMaterialDriverProfile(sanyaDriver)).toBe(true);
   });
 
   it("filters material assignment choices down to drivers only", () => {

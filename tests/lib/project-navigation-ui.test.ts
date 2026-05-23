@@ -14,7 +14,10 @@ describe("project navigation mobile action", () => {
     expect(source).toContain('handleMobileChoice("apple")');
     expect(source).toContain('handleMobileChoice("google")');
     expect(source).toContain('handleMobileChoice("tesla")');
+    expect(source).toContain("window.localStorage.setItem(PROJECT_NAVIGATION_PREFERENCE_KEY, app)");
+    expect(source).toContain("window.localStorage.removeItem(PROJECT_NAVIGATION_PREFERENCE_KEY)");
     expect(source).toContain('t("projects.changeNavigationApp")');
+    expect(source).toContain('t("projects.copyDestination")');
   });
 
   it("keeps desktop map actions hidden from mobile-only preference buttons", () => {

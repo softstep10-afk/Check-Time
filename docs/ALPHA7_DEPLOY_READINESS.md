@@ -64,6 +64,7 @@ Do not substitute PostgREST output for the blocked Direct SQL audit.
 - Owner reviewed `docs/OWNER_MANUAL_QA_CHECKLIST.md`.
 - Owner accepts that authenticated production QA still needs to happen after deploy.
 - Owner accepts that Direct SQL Step 0 is still blocked.
+- Owner confirms Sanya has role `driver` before testing driver-only material dropdowns, or plans to set it through `Команда` -> profile -> `Роль` -> `Водитель`.
 - Owner explicitly says deploy.
 
 ## Post-Deploy Smoke Checklist
@@ -71,6 +72,7 @@ Do not substitute PostgREST output for the blocked Direct SQL audit.
 - Production `/` redirects or responds as expected.
 - Production `/login` returns 200.
 - PIN login works for owner/manager/worker.
+- Driver login works for a profile with role `driver`; driver remains worker-like and sees material-focused queue.
 - Top quick nav row appears on mobile.
 - Project navigation actions work.
 - Task status updates realtime without manual browser refresh.

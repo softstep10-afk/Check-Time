@@ -49,6 +49,13 @@ Run this after deploys that touch application code or user workflows.
 
 ## Materials / Driver Workflow
 
+- Driver setup note: Sanya appears in material driver dropdown only after his profile role is set to `driver`.
+- Owner/admin can set this through `Команда` -> Sanya profile -> `Роль` -> `Водитель` -> `Сохранить профиль`.
+- No hardcoded Sanya rule is used.
+- Driver remains worker-like and sees the material-focused workflow.
+- Normal workers still see normal tasks.
+- No SQL/manual DB mutation is required when the owner/admin UI is available.
+- Direct SQL Supabase Step 0 and production RLS/Storage verification remain separate blocked items.
 - Open "Добавить материал".
 - Confirm the assignee dropdown shows only users with role `driver`.
 - Confirm Sanya appears only if his production profile has role `driver`.
@@ -382,3 +389,42 @@ Run this immediately after any owner-approved Alpha-7 deployment:
 - Worker PIN login works.
 - Perform the Alpha-7 deploy candidate must-check section above.
 - Record deployment ID, deployment URL, commit hash, and any failed manual QA item.
+
+## Final Alpha-7 QA Section
+
+A. Driver setup
+
+- Confirm Sanya has role `driver`.
+- Confirm Sanya appears in material dropdown.
+- Confirm non-drivers do not appear.
+- Confirm driver-only filtering.
+
+B. Material workflow
+
+- Create urgent material task.
+- Create non-urgent material task.
+- Confirm notification/banner.
+- Confirm schedule date.
+- Confirm project material badge.
+- Confirm seen/taken/done realtime.
+
+C. Messages
+
+- Confirm sender history.
+- Confirm recipient history.
+- Confirm read status.
+- Confirm notification clear does not remove message.
+
+D. Actions
+
+- Confirm save indicator.
+- Confirm delete indicator.
+- Confirm take/done indicator.
+- Confirm no duplicate writes.
+
+E. Navigation
+
+- Confirm `Поехать` first choice.
+- Confirm stored preference.
+- Confirm Apple/Google/Tesla-share.
+- Confirm copy address.

@@ -255,6 +255,8 @@ Completed scope:
 
 - Added material task classification using existing `tasks.metadata`, `assigned_to`, `due_date`, `priority`, and task status fields.
 - Used the existing `driver` role for focused driver material views; no display-name/Sanya hardcode was added.
+- Added owner/admin-safe setup path for assigning the existing `driver` role through team profile editing.
+- Kept manager/supervisor/worker from assigning the `driver` role.
 - Kept material requests as normal tasks with material/delivery metadata.
 - Preserved normal task creation, message/task separation, notifications-as-signals, and read/taken/done lifecycle.
 - Added project card/detail indicators for open material requests, urgent material requests, assigned material tasks, and driver seen state.
@@ -269,6 +271,9 @@ Not changed:
 - Supabase RLS, Storage policies, database schema, or migrations.
 - Media delete privilege for Andrey and Sergey.
 - Normal worker task visibility for non-driver workers.
+- No SQL/manual production data mutation is required when owner/admin uses the UI.
+- Direct SQL Supabase Step 0 remains separate/blocked.
+- Production RLS/Storage verification remains separate/blocked.
 
 Deferred until separate owner approval:
 

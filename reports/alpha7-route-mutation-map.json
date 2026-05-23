@@ -1,0 +1,1805 @@
+{
+  "generatedAt": "2026-05-23T08:11:17.428Z",
+  "rows": [
+    {
+      "path": "src/app/api/ai/actions/create-project/route.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/ai/actions/create-task/route.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/ai/assistant/route.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/app/api/ai/daily-report/route.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".insert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/app/api/ai/memory/route.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "dangerous unknown"
+    },
+    {
+      "path": "src/app/api/ai/photo-analysis/route.ts",
+      "classification": "elevated mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/ai/realtime/connect/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/ai/realtime/token/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/ai/settings/route.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/app/api/ai/voice-command/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/ai/voice/route.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/app/api/auth/pin-login/route.ts",
+      "classification": "team/auth sensitive",
+      "mutationEvidence": [
+        "auth.admin"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "auth.admin"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/app/api/manager/message-tasks/route.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/manager/projects/[id]/archive/route.ts",
+      "classification": "payroll/archive/GPS sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/manager/projects/[id]/planning/route.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/manager/projects/[id]/route.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/manager/projects/geocode/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/manager/projects/route.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/manager/tasks/route.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/media/[id]/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/media/mux-webhook/route.ts",
+      "classification": "storage/media mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "service role"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/media/transcode/route.ts",
+      "classification": "storage/media mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/payroll/export/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/payroll/run/route.ts",
+      "classification": "payroll/archive/GPS sensitive",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/schedule/route.ts",
+      "classification": "elevated mutation",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/team/create/route.ts",
+      "classification": "team/auth sensitive",
+      "mutationEvidence": [
+        "auth.admin",
+        ".insert("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "auth.admin"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/team/delete/route.ts",
+      "classification": "team/auth sensitive",
+      "mutationEvidence": [
+        "auth.admin",
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "auth.admin"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/team/pay-worker/route.ts",
+      "classification": "team/auth sensitive",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/team/reset-pin/route.ts",
+      "classification": "team/auth sensitive",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/claim-task/route.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "service role"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/clock-out/route.ts",
+      "classification": "payroll/archive/GPS sensitive",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/jarvis/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/link-checkin-video/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "service role"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/link-checkout-video/route.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "service role"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/project-tasks/route.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/tasks/seen/route.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/action-endpoints.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/api-auth.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/data.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/google-tts.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/jarvis-config.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/jarvis-diagnostics.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/jarvis-memory.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/jarvis-voice.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/prepared-action-audit.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/provider-routing.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/service.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/types.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/ai/washington-code-knowledge.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/annual-report-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/archive-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/audit-server.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".insert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/lib/audit.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".insert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/lib/auth-bypass.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/brand.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/capabilities.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".upsert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "dangerous unknown"
+    },
+    {
+      "path": "src/lib/checkout-link-server.ts",
+      "classification": "elevated mutation",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "service role"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/checkout-link.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [
+        "service role"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/client-interaction.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/client-notification-sound.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/command-center.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/coordinate-paste.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/finance-access.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/geofence.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/gps-consent.ts",
+      "classification": "payroll/archive/GPS sensitive",
+      "mutationEvidence": [
+        ".insert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/lib/gps-freshness.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/gps-status.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/hooks/useGpsTracking.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/hooks/useVoice.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/i18n/context.tsx",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/i18n/index.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/i18n/server.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/i18n/translations.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [
+        "service role"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/list-stability.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/live-map-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/manager-data.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/manager-task-row-audit.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/manager-types.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/manager-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/map-constants.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/material-driver-permissions.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/material-tasks.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/media-delete-permissions.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/media-extension.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/media-flags.ts",
+      "classification": "storage/media mutation",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "dangerous unknown"
+    },
+    {
+      "path": "src/lib/media-gallery.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/media-playback.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/message-state.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/message-types.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/mux-webhook.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "dangerous unknown"
+    },
+    {
+      "path": "src/lib/offline-time-events.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/offline-uploads.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/payroll-audit-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/payroll-export-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/payroll-period-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/pin-login-rate-limit.ts",
+      "classification": "team/auth sensitive",
+      "mutationEvidence": [
+        ".update(",
+        ".upsert(",
+        ".delete("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "dangerous unknown"
+    },
+    {
+      "path": "src/lib/preview-data.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/profile-skills.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/project-geocoding.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/project-navigation.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/project-planning-attachments.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        ".insert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/lib/project-planning.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/project-save.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "likely guarded"
+    },
+    {
+      "path": "src/lib/project-schedule.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/role-permissions.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/roles.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/safe-log.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/safety-acknowledgements.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".insert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/lib/server/file-attachment-guard.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/server/id-guards.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/server/media-delete-permissions.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/server/media-delete.ts",
+      "classification": "storage/media mutation",
+      "mutationEvidence": [
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/server/task-dispatch.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        ".insert("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/shift-review.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/store-types.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/store-visits.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".update(",
+        ".delete("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "dangerous unknown"
+    },
+    {
+      "path": "src/lib/supabase/admin.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/supabase/client.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/supabase/server.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/task-attachments.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        ".insert(",
+        ".update("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "likely guarded"
+    },
+    {
+      "path": "src/lib/task-media-hydration.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/task-notifications.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/task-realtime.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/task-status.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/team-member-provisioning.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/upload-limits.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/voice-transcript.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/worker-clock-metadata.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/worker-data.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".delete("
+      ],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "needs manual review"
+    },
+    {
+      "path": "src/lib/worker-hour-summary.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/worker-receipt-visibility.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/worker-task-ui.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/worker-types.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/worker-utils.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "supabase/functions/detect-store-visit/index.ts",
+      "classification": "mutation",
+      "mutationEvidence": [
+        ".insert(",
+        ".update(",
+        ".delete("
+      ],
+      "elevatedClientEvidence": [
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "authProfileGuardEvidence": [
+        "profile lookup"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    }
+  ]
+}

@@ -36,7 +36,9 @@ The app uses the existing `driver` role for the focused material queue and for m
 
 If Sanya is the assigned driver, the UI shows his profile display name from normal profile data.
 
-If Sanya should appear in the material assignee dropdown in production, his profile must be configured with role `driver`.
+If Sanya should appear in the material assignee dropdown in production, his profile must be configured with role `driver`. Owner/admin can do this through the normal team UI: `Команда` -> Sanya profile -> `Роль` -> `Водитель` -> `Сохранить профиль`.
+
+No hardcoded Sanya rule is used. No SQL/manual database mutation is required when the owner/admin UI is available.
 
 ## Driver View
 
@@ -110,6 +112,17 @@ Existing task realtime is reused:
 - Normal worker tasks still work.
 - Normal messages still work.
 - Notifications do not delete or hide source tasks.
+
+## Driver Role Setup
+
+- Confirm Sanya has role `driver` before testing driver-only dropdowns.
+- If not, owner/admin sets it in team profile settings.
+- Manager/supervisor/worker cannot assign the driver role.
+- Driver remains worker-like and does not become manager-tier.
+- Driver sees the material-focused workflow.
+- Normal workers still see normal tasks.
+- Direct SQL Supabase Step 0 remains separate/blocked.
+- Production RLS/Storage verification remains separate/blocked.
 
 ## Deferred
 

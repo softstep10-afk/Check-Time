@@ -1,0 +1,181 @@
+{
+  "generatedAt": "2026-05-23T08:11:17.475Z",
+  "passed": true,
+  "checks": [
+    {
+      "ok": true,
+      "label": "material tasks use metadata/category/taskKind/materialRequest",
+      "evidence": "src/lib/material-tasks.ts"
+    },
+    {
+      "ok": true,
+      "label": "driver detection uses role driver or approved helper",
+      "evidence": "src"
+    },
+    {
+      "ok": true,
+      "label": "src business logic does not hardcode Sanya/Саня",
+      "evidence": "src"
+    },
+    {
+      "ok": true,
+      "label": "material dropdown does not fall back to whole team",
+      "evidence": "ProjectDetailPage"
+    },
+    {
+      "ok": true,
+      "label": "material task creation route validates driver assignee",
+      "evidence": "src/app/api/manager/tasks/route.ts"
+    },
+    {
+      "ok": true,
+      "label": "normal tasks/messages remain separate",
+      "evidence": "task routes"
+    },
+    {
+      "ok": true,
+      "label": "direct/private message history includes sender OR recipient",
+      "evidence": "message-state"
+    },
+    {
+      "ok": true,
+      "label": "message read status is handled separately from removal",
+      "evidence": "message read path"
+    },
+    {
+      "ok": true,
+      "label": "notification dismissal is signal-only around source records",
+      "evidence": "notifications"
+    },
+    {
+      "ok": true,
+      "label": "messages do not become tasks automatically in worker message history",
+      "evidence": "worker messages"
+    },
+    {
+      "ok": true,
+      "label": "read/taken/done lifecycle remains present",
+      "evidence": "task lifecycle"
+    },
+    {
+      "ok": true,
+      "label": "task visibility/realtime helpers remain present",
+      "evidence": "tasks"
+    },
+    {
+      "ok": true,
+      "label": "realtime merge/dedupe helper exists",
+      "evidence": "src/lib/task-realtime.ts"
+    },
+    {
+      "ok": true,
+      "label": "mobile Поехать / В путь action exists",
+      "evidence": "project navigation UI"
+    },
+    {
+      "ok": true,
+      "label": "Apple Maps helper exists",
+      "evidence": "src/lib/project-navigation.ts"
+    },
+    {
+      "ok": true,
+      "label": "Google Maps helper exists",
+      "evidence": "src/lib/project-navigation.ts"
+    },
+    {
+      "ok": true,
+      "label": "Tesla option remains share/copy only",
+      "evidence": "ProjectNavigationActions"
+    },
+    {
+      "ok": true,
+      "label": "no Tesla API/OAuth/token integration",
+      "evidence": "project navigation"
+    },
+    {
+      "ok": true,
+      "label": "copy address/location remains available",
+      "evidence": "project navigation"
+    },
+    {
+      "ok": true,
+      "label": "desktop top quick nav is hidden and mobile quick nav remains",
+      "evidence": "manager layout"
+    },
+    {
+      "ok": true,
+      "label": "desktop sidebar remains",
+      "evidence": "manager layout"
+    },
+    {
+      "ok": true,
+      "label": "high precision coordinates are accepted",
+      "evidence": "coordinate inputs/tests"
+    },
+    {
+      "ok": true,
+      "label": "coordinate inputs do not force step=0.000001",
+      "evidence": "src"
+    },
+    {
+      "ok": true,
+      "label": "deadline edit flow includes start/end date fields",
+      "evidence": "ProjectDetailPage"
+    },
+    {
+      "ok": true,
+      "label": "PDF/Word/Excel/CSV/photo/video support remains",
+      "evidence": "upload limits"
+    },
+    {
+      "ok": true,
+      "label": "iPhone MOV/quicktime support remains",
+      "evidence": "upload limits"
+    },
+    {
+      "ok": true,
+      "label": "upload/open/download helpers exist",
+      "evidence": "media helpers"
+    },
+    {
+      "ok": true,
+      "label": "media delete permission helper exists",
+      "evidence": "media delete permissions"
+    },
+    {
+      "ok": true,
+      "label": "media delete stays restricted to Andrey/Sergey helper/config logic",
+      "evidence": "media delete permissions"
+    },
+    {
+      "ok": true,
+      "label": "upload/open/download is not blocked by media delete permission",
+      "evidence": "src"
+    },
+    {
+      "ok": true,
+      "label": "no new migration files created in this task",
+      "evidence": "git diff"
+    },
+    {
+      "ok": true,
+      "label": "no Storage policy files changed",
+      "evidence": "git diff"
+    },
+    {
+      "ok": true,
+      "label": "no RLS policy files changed",
+      "evidence": "git diff"
+    },
+    {
+      "ok": true,
+      "label": "00099_wash_and_reset.sql remains detectable as local danger",
+      "evidence": "supabase/migrations/00099_wash_and_reset.sql"
+    },
+    {
+      "ok": true,
+      "label": "build/predeploy scripts do not run migrations or SQL",
+      "evidence": "package.json"
+    }
+  ]
+}

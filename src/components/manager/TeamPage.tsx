@@ -12,6 +12,7 @@ import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { toggleUserCapability } from "@/app/(manager)/admin/users/[id]/permissions/actions";
 import { ALWAYS_FINANCE_ROLES } from "@/lib/finance-access";
+import { canCreateTeamRole } from "@/lib/role-permissions";
 import { generateTeamMemberPin, isValidTeamPasscode } from "@/lib/team-member-provisioning";
 
 const currencyFmt = new Intl.NumberFormat("en-US", {
@@ -70,12 +71,14 @@ export function TeamPage({
   hasFinanceAccess,
   canManageFinanceAccess,
   managerId,
+  managerRole,
 }: {
   initialProfiles: ManagerProfileSummary[];
   hasAdminProvisioning: boolean;
   hasFinanceAccess: boolean;
   canManageFinanceAccess: boolean;
   managerId: string;
+  managerRole: UserRole;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -183,6 +186,19 @@ export function TeamPage({
   const inactiveCount = useMemo(
     () => initialProfiles.filter((p) => !p.is_active).length,
     [initialProfiles],
+  );
+  const creatableRoleGroups = useMemo(
+    () =>
+      ROLE_GROUPS.map((group) => ({
+        ...group,
+        roles: group.roles.filter(
+          (role) =>
+            roleOptions.includes(role) &&
+            role !== "owner" &&
+            canCreateTeamRole(managerRole, role),
+        ),
+      })).filter((group) => group.roles.length > 0),
+    [managerRole],
   );
 
   function validateName(value: string) {
@@ -810,14 +826,12 @@ export function TeamPage({
                       defaultValue="worker"
                       className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                     >
-                      {ROLE_GROUPS.map((group) => {
-                        const roles = group.roles.filter((role) => roleOptions.includes(role) && role !== "owner");
-                        if (roles.length === 0) return null;
+                      {creatableRoleGroups.map((group) => {
                         return (
                           <optgroup key={group.key} label={t(group.labelKey)}>
-                            {roles.map((role) => (
+                            {group.roles.map((role) => (
                               <option key={role} value={role}>
-                                {role}
+                                {t(`roles.${role}` as TranslationKey)}
                               </option>
                             ))}
                           </optgroup>

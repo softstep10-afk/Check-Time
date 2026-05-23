@@ -1,0 +1,652 @@
+{
+  "generatedAt": "2026-05-23T08:11:17.508Z",
+  "rows": [
+    {
+      "category": "material driver-only dropdown",
+      "testsFound": [
+        "tests/lib/material-driver-permissions.test.ts",
+        "tests/lib/material-driver-ui.test.ts",
+        "tests/lib/material-task-route-guard.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/api/manager/tasks/route.ts",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/lib/material-driver-permissions.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "material task server validation",
+      "testsFound": [
+        "tests/lib/material-driver-permissions.test.ts",
+        "tests/lib/material-task-route-guard.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/api/manager/tasks/route.ts",
+        "src/components/manager/ManagerTasksPage.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/lib/material-driver-permissions.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/MUTATION_SURFACE_MAP.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "driver role filtering",
+      "testsFound": [
+        "tests/lib/material-driver-permissions.test.ts",
+        "tests/lib/material-task-route-guard.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/layout.tsx",
+        "src/app/api/manager/tasks/route.ts",
+        "src/app/api/team/create/route.ts",
+        "src/components/manager/PayrollCalculator.tsx",
+        "src/components/maps/ProjectsStatusMap.tsx",
+        "src/components/worker/ClockPage.tsx",
+        "src/lib/material-driver-permissions.ts",
+        "src/lib/profile-skills.ts",
+        "src/lib/role-permissions.ts",
+        "src/lib/task-notifications.ts",
+        "src/lib/worker-data.ts"
+      ],
+      "docsFound": [],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "private message sender/recipient persistence",
+      "testsFound": [
+        "tests/lib/message-state.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/api/manager/message-tasks/route.ts",
+        "src/app/api/worker/tasks/seen/route.ts",
+        "src/components/manager/BulkMessageComposer.tsx",
+        "src/components/manager/ForceCheckoutButton.tsx",
+        "src/components/manager/ManagerWorkAlertBell.tsx",
+        "src/components/manager/SendMessageForm.tsx",
+        "src/components/worker/NotificationBell.tsx",
+        "src/components/worker/WorkerMessagesPage.tsx",
+        "src/lib/message-state.ts"
+      ],
+      "docsFound": [
+        "docs/STAGING_DEPLOYMENT.md",
+        "docs/audit/PHASE1_SCHEMA_GAP.md",
+        "docs/audit/PHASE3_CONSENT_OWNER_RLS.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "task read/taken/done visibility",
+      "testsFound": [
+        "tests/lib/task-completion-flow.test.ts",
+        "tests/lib/task-notifications.test.ts",
+        "tests/lib/task-realtime.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/archive/projects/[id]/page.tsx",
+        "src/app/(manager)/command-center/page.tsx",
+        "src/app/(manager)/projects/[id]/page.tsx",
+        "src/app/(manager)/tasks/page.tsx",
+        "src/app/(worker)/project/[id]/page.tsx",
+        "src/components/manager/ManagerTasksPage.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/components/worker/TasksPage.tsx",
+        "src/components/worker/WorkerProjectView.tsx",
+        "src/components/worker/WorkerShell.tsx",
+        "src/components/worker/WorkerTaskDetailModal.tsx",
+        "src/lib/manager-task-row-audit.ts",
+        "src/lib/task-media-hydration.ts",
+        "src/lib/task-notifications.ts",
+        "src/lib/task-realtime.ts",
+        "src/lib/worker-data.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
+        "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
+        "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "notification-as-signal",
+      "testsFound": [
+        "tests/lib/material-tasks.test.ts",
+        "tests/lib/task-completion-flow.test.ts",
+        "tests/lib/task-notifications.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/archive/projects/[id]/page.tsx",
+        "src/app/(manager)/command-center/page.tsx",
+        "src/app/(manager)/layout.tsx",
+        "src/app/(manager)/projects/[id]/page.tsx",
+        "src/app/(manager)/tasks/page.tsx",
+        "src/app/(worker)/project/[id]/page.tsx",
+        "src/components/manager/AiWorkspacePage.tsx",
+        "src/components/manager/ForceCheckoutButton.tsx",
+        "src/components/manager/ManagerTasksPage.tsx",
+        "src/components/manager/ManagerWorkAlertBell.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/components/shared/JarvisOrb.tsx",
+        "src/components/worker/NotificationBell.tsx",
+        "src/components/worker/TasksPage.tsx",
+        "src/components/worker/WorkerProjectView.tsx",
+        "src/components/worker/WorkerShell.tsx",
+        "src/components/worker/WorkerTaskDetailModal.tsx",
+        "src/lib/client-notification-sound.ts",
+        "src/lib/i18n/translations.ts",
+        "src/lib/manager-task-row-audit.ts",
+        "src/lib/material-tasks.ts",
+        "src/lib/task-media-hydration.ts",
+        "src/lib/task-notifications.ts",
+        "src/lib/worker-data.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_NEXT_ACTIONS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/ALPHA7_STABILIZATION_PLAN.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
+        "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
+        "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PERFORMANCE_BASELINE_ALPHA7.md",
+        "docs/REFRESH_REALTIME_INVENTORY_ALPHA7.md",
+        "docs/ROLLBACK_CHECKLIST.md",
+        "docs/STAGING_DEPLOYMENT.md",
+        "docs/audit/PHASE3_CONSENT_OWNER_RLS.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "mobile Поехать preference",
+      "testsFound": [
+        "tests/lib/project-navigation-ui.test.ts",
+        "tests/lib/project-navigation.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/components/shared/ProjectNavigationActions.tsx",
+        "src/lib/i18n/translations.ts",
+        "src/lib/project-navigation.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "project navigation Apple/Google/Tesla/copy",
+      "testsFound": [
+        "tests/lib/project-navigation-ui.test.ts",
+        "tests/lib/project-navigation.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/schedule/SchedulePageClient.tsx",
+        "src/components/maps/GoogleMaps.tsx",
+        "src/components/shared/ProjectNavigationActions.tsx",
+        "src/lib/i18n/translations.ts",
+        "src/lib/project-navigation.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/STAGING_DEPLOYMENT.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "deadline editing",
+      "testsFound": [
+        "tests/lib/ai-assistant-skills.test.ts",
+        "tests/lib/archive-utils.test.ts",
+        "tests/lib/finance-visibility.test.ts",
+        "tests/lib/manager-utils.test.ts",
+        "tests/lib/project-deadline-edit.test.ts",
+        "tests/lib/project-save.test.ts",
+        "tests/lib/project-schedule.test.ts",
+        "tests/lib/worker-jarvis.test.ts",
+        "tests/lib/worker-utils.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/payroll/history/page.tsx",
+        "src/app/(manager)/reports/annual/AnnualReportClient.tsx",
+        "src/app/(manager)/schedule/SchedulePageClient.tsx",
+        "src/app/api/ai/actions/create-project/route.ts",
+        "src/app/api/manager/projects/[id]/route.ts",
+        "src/app/api/schedule/route.ts",
+        "src/components/manager/PayrollCalculator.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/components/manager/ProjectsPage.tsx",
+        "src/lib/ai/service.ts",
+        "src/lib/archive-utils.ts",
+        "src/lib/i18n/translations.ts",
+        "src/lib/manager-data.ts",
+        "src/lib/payroll-audit-utils.ts",
+        "src/lib/preview-data.ts",
+        "src/lib/project-save.ts",
+        "src/lib/project-schedule.ts",
+        "src/types/database.ts"
+      ],
+      "docsFound": [
+        "docs/audit/PHASE1_SCHEMA_GAP.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "high precision coordinates",
+      "testsFound": [
+        "tests/lib/coordinate-paste.test.ts",
+        "tests/lib/project-coordinate-inputs.test.ts",
+        "tests/lib/project-navigation.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/stores/page.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/components/manager/ProjectsPage.tsx",
+        "src/components/worker/WorkerProjectView.tsx"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "quick nav mobile-only",
+      "testsFound": [
+        "tests/lib/manager-layout-navigation.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/layout.tsx",
+        "src/components/manager/TeamMemberPage.tsx",
+        "src/components/manager/TeamPage.tsx",
+        "src/components/worker/WorkerShell.tsx",
+        "src/lib/i18n/translations.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "supervisor worker-like access",
+      "testsFound": [
+        "tests/lib/manager-layout-navigation.test.ts",
+        "tests/lib/manager-utils.test.ts",
+        "tests/lib/map-constants.test.ts",
+        "tests/lib/material-driver-permissions.test.ts",
+        "tests/lib/role-permissions.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/admin/users/[id]/permissions/actions.ts",
+        "src/app/(manager)/admin/users/[id]/permissions/page.tsx",
+        "src/app/(manager)/projects/[id]/page.tsx",
+        "src/app/(manager)/reports/annual/page.tsx",
+        "src/app/page.tsx",
+        "src/components/manager/ManagerWorkAlertBell.tsx",
+        "src/components/manager/PayrollCalculator.tsx",
+        "src/components/shared/MediaFlagModal.tsx",
+        "src/lib/i18n/translations.ts",
+        "src/lib/manager-data.ts",
+        "src/lib/manager-utils.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/JARVIS_ACTION_AUDIT_ALPHA7.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/OVERNIGHT_FIX_PACK_1.md",
+        "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/SMOKE_TEST_WAVE_AUDIT.md",
+        "docs/audit/AUDIT_REPORT.md",
+        "docs/audit/PHASE1_SCHEMA_GAP.md",
+        "docs/permissions.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "media delete only Andrey/Sergey",
+      "testsFound": [
+        "tests/lib/media-delete-permissions.test.ts",
+        "tests/lib/media-delete-route-ui.test.ts",
+        "tests/lib/media-delete-server.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/projects/[id]/page.tsx",
+        "src/app/api/manager/projects/[id]/planning/route.ts",
+        "src/app/api/media/[id]/route.ts",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/lib/media-delete-permissions.ts",
+        "src/lib/server/media-delete-permissions.ts",
+        "src/lib/server/media-delete.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "file upload/open/download",
+      "testsFound": [
+        "tests/lib/media-extension.test.ts",
+        "tests/lib/media-playback.test.ts",
+        "tests/lib/task-attachments-upload.test.ts",
+        "tests/lib/upload-limits.test.ts",
+        "tests/lib/worker-utils-media-type.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/api/media/transcode/route.ts",
+        "src/components/manager/DayDetailModal.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/components/manager/ProjectPlanningSections.tsx",
+        "src/components/manager/ProjectsPage.tsx",
+        "src/components/manager/SendMessageForm.tsx",
+        "src/components/manager/TeamMemberPage.tsx",
+        "src/components/shared/MediaGalleryDrawer.tsx",
+        "src/components/shared/MediaViewerModal.tsx",
+        "src/components/shared/MessageAttachmentView.tsx",
+        "src/components/shared/TaskAttachmentList.tsx",
+        "src/components/worker/JournalPage.tsx",
+        "src/components/worker/WorkerProjectView.tsx",
+        "src/components/worker/WorkerShell.tsx",
+        "src/components/worker/WorkerTaskDetailModal.tsx",
+        "src/lib/i18n/translations.ts",
+        "src/lib/media-extension.ts",
+        "src/lib/media-playback.ts",
+        "src/lib/project-planning-attachments.ts",
+        "src/lib/task-attachments.ts",
+        "src/lib/upload-limits.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/B2_MIGRATION_PLAN.md",
+        "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
+        "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
+        "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PERFORMANCE_BASELINE_ALPHA7.md",
+        "docs/REFRESH_REALTIME_INVENTORY_ALPHA7.md",
+        "docs/audit/MEDIA_HYGIENE_AUDIT.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "Jarvis confirmation and real id success",
+      "testsFound": [
+        "tests/lib/ai-action-endpoints.test.ts",
+        "tests/lib/ai-assistant-skills.test.ts",
+        "tests/lib/finance-visibility.test.ts",
+        "tests/lib/jarvis-diagnostics.test.ts",
+        "tests/lib/manager-utils.test.ts",
+        "tests/lib/role-permissions.test.ts",
+        "tests/lib/task-realtime.test.ts",
+        "tests/lib/worker-utils.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/api/ai/actions/create-task/route.ts",
+        "src/app/api/ai/assistant/route.ts",
+        "src/app/api/ai/memory/route.ts",
+        "src/app/api/ai/voice/route.ts",
+        "src/components/manager/AiWorkspacePage.tsx",
+        "src/components/manager/PayrollCalculator.tsx",
+        "src/components/worker/TasksPage.tsx",
+        "src/components/worker/WorkerShell.tsx",
+        "src/lib/ai/action-endpoints.ts",
+        "src/lib/ai/prepared-action-audit.ts",
+        "src/lib/ai/service.ts",
+        "src/lib/ai/types.ts",
+        "src/lib/checkout-link.ts",
+        "src/lib/i18n/translations.ts",
+        "src/lib/server/task-dispatch.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_NEXT_ACTIONS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/JARVIS_ACTION_AUDIT_ALPHA7.md",
+        "docs/OVERNIGHT_FIX_PACK_1.md",
+        "docs/OVERNIGHT_FIX_PACK_LOGGING_REDACTION.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/ROLLBACK_CHECKLIST.md",
+        "docs/audit/PHASE1_SCHEMA_GAP.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "archive/trash separation",
+      "testsFound": [
+        "tests/lib/ai-assistant-skills.test.ts",
+        "tests/lib/annual-report-utils.test.ts",
+        "tests/lib/archive-utils.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(manager)/archive/page.tsx",
+        "src/app/(manager)/archive/projects/[id]/page.tsx",
+        "src/app/(manager)/command-center/page.tsx",
+        "src/app/(manager)/overview/page.tsx",
+        "src/app/(manager)/projects/page.tsx",
+        "src/app/(manager)/reports/annual/AnnualReportClient.tsx",
+        "src/app/(manager)/reports/annual/page.tsx",
+        "src/app/(manager)/tasks/page.tsx",
+        "src/app/(manager)/team/[id]/page.tsx",
+        "src/components/manager/ArchivePage.tsx",
+        "src/lib/ai/service.ts",
+        "src/lib/annual-report-utils.ts",
+        "src/lib/archive-utils.ts",
+        "src/lib/manager-data.ts",
+        "src/lib/manager-utils.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_NEXT_ACTIONS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/ALPHA7_STABILIZATION_PLAN.md",
+        "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/MUTATION_SURFACE_MAP.md",
+        "docs/OVERNIGHT_FIX_PACK_1.md",
+        "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
+        "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
+        "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
+        "docs/OVERNIGHT_FIX_PACK_LOGGING_REDACTION.md",
+        "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
+        "docs/OVERNIGHT_FIX_PACK_PROJECT_ROUTE_GUARDS.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md",
+        "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/ROLLBACK_CHECKLIST.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "payroll untouched",
+      "testsFound": [
+        "tests/lib/payroll-audit-utils.test.ts",
+        "tests/lib/payroll-export-utils.test.ts",
+        "tests/lib/payroll-period-utils.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/api/team/pay-worker/route.ts",
+        "src/components/manager/PayrollCalculator.tsx",
+        "src/lib/payroll-audit-utils.ts",
+        "src/lib/payroll-export-utils.ts",
+        "src/lib/payroll-period-utils.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
+        "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md",
+        "docs/audit/PHASE1_SCHEMA_GAP.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    },
+    {
+      "category": "GPS/shift untouched",
+      "testsFound": [
+        "tests/lib/ai-assistant-skills.test.ts",
+        "tests/lib/annual-report-utils.test.ts",
+        "tests/lib/archive-utils.test.ts",
+        "tests/lib/checkout-link-server.test.ts",
+        "tests/lib/checkout-link.test.ts",
+        "tests/lib/finance-visibility.test.ts",
+        "tests/lib/geofence.test.ts",
+        "tests/lib/gps-freshness.test.ts",
+        "tests/lib/jarvis-memory.test.ts",
+        "tests/lib/live-map-utils.test.ts",
+        "tests/lib/manager-utils.test.ts",
+        "tests/lib/project-save.test.ts",
+        "tests/lib/shift-review.test.ts",
+        "tests/lib/worker-clock-metadata.test.ts",
+        "tests/lib/worker-utils.test.ts"
+      ],
+      "sourceFilesFound": [
+        "src/app/(auth)/login/page.tsx",
+        "src/app/(manager)/command-center/page.tsx",
+        "src/app/(manager)/location-data/page.tsx",
+        "src/app/(manager)/overview/page.tsx",
+        "src/app/(manager)/payroll/page.tsx",
+        "src/app/(manager)/projects/[id]/page.tsx",
+        "src/app/(manager)/reports/annual/AnnualReportClient.tsx",
+        "src/app/(manager)/team/[id]/page.tsx",
+        "src/app/(manager)/team/page.tsx",
+        "src/app/(manager)/timeline/page.tsx",
+        "src/app/api/manager/projects/[id]/route.ts",
+        "src/app/api/manager/projects/geocode/route.ts",
+        "src/app/api/payroll/run/route.ts",
+        "src/app/api/team/pay-worker/route.ts",
+        "src/app/api/worker/clock-out/route.ts",
+        "src/app/api/worker/link-checkin-video/route.ts",
+        "src/app/api/worker/link-checkout-video/route.ts",
+        "src/components/manager/AdminSettingsPage.tsx",
+        "src/components/manager/ArchivePage.tsx",
+        "src/components/manager/ForceCheckoutButton.tsx",
+        "src/components/manager/GpsRadiusSlider.tsx",
+        "src/components/manager/OverviewLiveIndicator.tsx",
+        "src/components/manager/PayrollCalculator.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
+        "src/components/manager/ProjectsPage.tsx",
+        "src/components/manager/ShiftPlayback.tsx",
+        "src/components/manager/ShiftReviewAckButton.tsx",
+        "src/components/manager/TeamMemberPage.tsx",
+        "src/components/manager/TeamPage.tsx",
+        "src/components/maps/FullscreenMapWrapper.tsx",
+        "src/components/maps/LiveWorkerMarkers.tsx",
+        "src/components/maps/ProjectsStatusMap.tsx",
+        "src/components/maps/WorkerGpsCheckMap.tsx",
+        "src/components/shared/MediaGalleryDrawer.tsx",
+        "src/components/worker/CheckoutModal.tsx",
+        "src/components/worker/ClockPage.tsx",
+        "src/components/worker/GpsConsentModal.tsx",
+        "src/components/worker/JournalPage.tsx",
+        "src/components/worker/SafetyBriefModal.tsx",
+        "src/components/worker/TasksPage.tsx",
+        "src/components/worker/WorkerJarvisTextDock.tsx",
+        "src/components/worker/WorkerProjectView.tsx",
+        "src/components/worker/WorkerShell.tsx",
+        "src/lib/ai/service.ts",
+        "src/lib/ai/types.ts",
+        "src/lib/archive-utils.ts",
+        "src/lib/checkout-link-server.ts",
+        "src/lib/checkout-link.ts",
+        "src/lib/geofence.ts",
+        "src/lib/gps-consent.ts",
+        "src/lib/gps-freshness.ts",
+        "src/lib/gps-status.ts",
+        "src/lib/hooks/useGpsTracking.ts",
+        "src/lib/i18n/translations.ts",
+        "src/lib/manager-data.ts",
+        "src/lib/manager-types.ts",
+        "src/lib/manager-utils.ts",
+        "src/lib/map-constants.ts",
+        "src/lib/offline-time-events.ts",
+        "src/lib/preview-data.ts",
+        "src/lib/project-save.ts",
+        "src/lib/safety-acknowledgements.ts",
+        "src/lib/shift-review.ts",
+        "src/lib/store-types.ts",
+        "src/lib/store-visits.ts",
+        "src/lib/worker-clock-metadata.ts",
+        "src/lib/worker-hour-summary.ts",
+        "src/lib/worker-types.ts",
+        "src/lib/worker-utils.ts",
+        "src/types/database.ts"
+      ],
+      "docsFound": [
+        "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_NEXT_ACTIONS.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/ALPHA7_STABILIZATION_PLAN.md",
+        "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/MUTATION_SURFACE_MAP.md",
+        "docs/OVERNIGHT_FIX_PACK_1.md",
+        "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
+        "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
+        "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
+        "docs/OVERNIGHT_FIX_PACK_LOGGING_REDACTION.md",
+        "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
+        "docs/OVERNIGHT_FIX_PACK_PROJECT_ROUTE_GUARDS.md",
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md",
+        "docs/PERFORMANCE_BASELINE_ALPHA7.md",
+        "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/ROLLBACK_CHECKLIST.md",
+        "docs/SMOKE_TEST_WAVE_AUDIT.md",
+        "docs/STAGING_DEPLOYMENT.md",
+        "docs/audit/AUDIT_REPORT.md",
+        "docs/audit/PHASE1_SCHEMA_GAP.md",
+        "docs/audit/PHASE3_CONSENT_OWNER_RLS.md",
+        "docs/permissions.md"
+      ],
+      "coverageLevel": "covered",
+      "recommendedFutureTest": ""
+    }
+  ]
+}

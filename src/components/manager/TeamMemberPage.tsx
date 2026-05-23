@@ -23,7 +23,8 @@ import { getEffectiveTaskStatus, isEffectiveOpenTask } from "@/lib/task-status";
 import type { Media, ProjectAssignment, Task, UserRole } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
 import { ArrowRight, Camera, Store } from "lucide-react";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, type TranslationKey } from "@/lib/i18n";
+import { canUpdateTeamRole } from "@/lib/role-permissions";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
 import { DayDetailModal } from "@/components/manager/DayDetailModal";
@@ -446,6 +447,15 @@ export function TeamMemberPage({
   const activeProjects = projects.filter((project) => !project.deleted_at && project.status !== "archived");
   const isOwnerAdminProfile = OWNER_ADMIN_ROLES.has(profile.role);
   const ownerProjectRows = activeProjects.slice(0, 8);
+  const editableRoleOptions = useMemo(
+    () =>
+      roleOptions.filter(
+        (role) =>
+          role === profile.role ||
+          canUpdateTeamRole(managerRole, profile.role, role),
+      ),
+    [managerRole, profile.role],
+  );
 
   // Migration 00018 — per-worker visibility mode. Default to 'list' for
   // legacy / unmigrated rows so behavior matches today.
@@ -466,7 +476,6 @@ export function TeamMemberPage({
     const hourlyRateRaw = hasFinanceAccess && !roleIsOwnerAdmin
       ? formData.get("hourly_rate")?.toString().trim() ?? ""
       : "";
-    const hourlyRate = hourlyRateRaw ? Number.parseFloat(hourlyRateRaw) : null;
     const requireVideo = roleIsOwnerAdmin ? false : formData.get("require_video") === "on";
     const isActive = formData.get("is_active") === "on";
     const workerSkillsText = formData.get("worker_skills_text")?.toString() ?? "";
@@ -481,40 +490,23 @@ export function TeamMemberPage({
     setBusyKey("profile");
     setMessage("");
 
-    // .select(...).single() so we can detect a silent RLS denial: if the
-    // policy filter excludes this row from the manager's UPDATE, supabase
-    // returns no error AND no row, and the prior code surfaced "saved!"
-    // while the DB never changed. Reading back the persisted values lets
-    // us assert the toggles really moved before declaring success.
-    const { data: updated, error } = await supabase
-      .from("profiles")
-      .update({
+    const response = await fetch("/api/team/update-profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profileId: profile.id,
         name,
         role,
-        require_video: requireVideo,
-        is_active: isActive,
+        hourlyRate: hasFinanceAccess && !roleIsOwnerAdmin ? hourlyRateRaw : "",
+        requireVideo,
+        isActive,
         settings: nextSettings,
-        ...(hasFinanceAccess && !roleIsOwnerAdmin
-          ? {
-              hourly_rate:
-                typeof hourlyRate === "number" && Number.isFinite(hourlyRate)
-                  ? hourlyRate
-                  : null,
-            }
-          : {}),
-      })
-      .eq("id", profile.id)
-      .select("require_video, is_active")
-      .single();
+      }),
+    });
+    const result = (await response.json()) as { error?: string };
 
-    if (error) {
-      setMessage(error.message);
-      setBusyKey(null);
-      return;
-    }
-
-    if (!updated) {
-      setMessage(t("permissions.saveFailed"));
+    if (!response.ok) {
+      setMessage(result.error ?? t("permissions.saveFailed"));
       setBusyKey(null);
       return;
     }
@@ -994,9 +986,9 @@ export function TeamMemberPage({
                     defaultValue={profile.role}
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                   >
-                    {roleOptions.map((role) => (
+                    {editableRoleOptions.map((role) => (
                       <option key={role} value={role}>
-                        {role}
+                        {t(`roles.${role}` as TranslationKey)}
                       </option>
                     ))}
                   </select>
@@ -1295,9 +1287,9 @@ export function TeamMemberPage({
                 defaultValue={profile.role}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               >
-                {roleOptions.map((role) => (
+                {editableRoleOptions.map((role) => (
                   <option key={role} value={role}>
-                    {role}
+                    {t(`roles.${role}` as TranslationKey)}
                   </option>
                 ))}
               </select>

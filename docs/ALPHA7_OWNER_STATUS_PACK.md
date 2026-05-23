@@ -37,6 +37,8 @@ Current deploy status: not deployed by this pack.
 - Materials/Driver workflow uses normal tasks with material metadata.
 - Production QA hotfix tightened material assignment to driver-role users only.
 - Production QA hotfix added clearer action pending states, preserved private/direct message history, and added mobile "Поехать" navigation preference.
+- Overnight hardening adds an owner/admin-safe path to set an existing profile role to `driver` through Team profile settings.
+- Sanya appears in material dropdown only if his profile role is `driver`; no hardcoded Sanya logic is used.
 
 ## What Was Not Changed
 
@@ -76,6 +78,7 @@ Minimum owner decision checks:
 - Payroll archive visible and salary calculation unchanged.
 - Worker flow, manager flow, owner/admin Jarvis diagnostics.
 - Materials: "Добавить материал" must list only drivers; Sanya appears only if his profile role is `driver`.
+- Driver setup: owner/admin can use `Команда` -> profile -> `Роль` -> `Водитель`; no SQL/manual DB mutation is required through the UI path.
 - Action feedback: material save, media delete, task take, and task done show pending/error states.
 - Private messages remain visible for sender and recipient after read/notification clear.
 - Mobile project "Поехать" asks for Apple Maps / Google Maps / Tesla-share preference once and then reuses it.

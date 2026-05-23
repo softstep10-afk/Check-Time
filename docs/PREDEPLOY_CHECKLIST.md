@@ -21,6 +21,10 @@ Use this before any production deploy.
 - Run `npm test`.
 - Run `npm run build`.
 - Run `npm run smoke:public` when network access is available.
+- Run `npm run alpha7:danger-zones`.
+- Run `npm run alpha7:route-guards`.
+- Run `npm run alpha7:coverage-map`.
+- Run `npm run alpha7:rc-safety-gate` for local Alpha-7 regression gates.
 - Run `npm run alpha7:predeploy` before owner-approved deploys.
 - Confirm `git status --short` is still clean after checks.
 
