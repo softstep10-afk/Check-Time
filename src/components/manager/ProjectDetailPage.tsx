@@ -352,6 +352,7 @@ export function ProjectDetailPage({
   shiftReviewByProfileId,
   safetyAcksToday,
   hasFinanceAccess,
+  canDeleteMedia,
 }: {
   orgId: string;
   managerId: string;
@@ -370,6 +371,7 @@ export function ProjectDetailPage({
   shiftReviewByProfileId: Record<string, ShiftReview>;
   safetyAcksToday: number;
   hasFinanceAccess: boolean;
+  canDeleteMedia: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -2744,6 +2746,7 @@ export function ProjectDetailPage({
         managerId={managerId}
         projectSettings={project.settings}
         hasFinanceAccess={hasFinanceAccess}
+        canDeleteMedia={canDeleteMedia}
       />
       {/* ── Materials & Deliveries ── */}
       <MaterialsSection
@@ -2760,6 +2763,7 @@ export function ProjectDetailPage({
         managerName={managerName}
         managerRole={managerRole}
         hasFinanceAccess={hasFinanceAccess}
+        canDeleteMedia={canDeleteMedia}
       />
       {/* ── Store Visits ── */}
       <StoreVisitsSection projectId={project.id} />
@@ -4031,6 +4035,7 @@ function ReceiptsSection({
   managerName,
   managerRole,
   hasFinanceAccess,
+  canDeleteMedia,
 }: {
   orgId: string;
   projectId: string;
@@ -4038,6 +4043,7 @@ function ReceiptsSection({
   managerName: string;
   managerRole: UserRole;
   hasFinanceAccess: boolean;
+  canDeleteMedia: boolean;
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -4286,15 +4292,21 @@ function ReceiptsSection({
   }
 
   async function handleDelete(receipt: ReceiptItem) {
-    const deletedAt = new Date().toISOString();
-    const { error } = await supabase
-      .from("media")
-      .update({ deleted_at: deletedAt })
-      .eq("id", receipt.id);
-    if (error) {
-      setMessage(error.message);
+    if (!canDeleteMedia) {
+      setMessage("Only Andrey and Sergey can delete media.");
       return;
     }
+
+    const response = await fetch(`/api/media/${receipt.id}`, { method: "DELETE" });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      deletedAt?: string;
+    };
+    if (!response.ok) {
+      setMessage(payload.error ?? `Request failed (${response.status})`);
+      return;
+    }
+    const deletedAt = payload.deletedAt ?? new Date().toISOString();
     setReceipts((prev) => prev.filter((r) => r.id !== receipt.id));
     setMessage(t("receipts.deleted"));
     void logAudit({
@@ -4544,14 +4556,16 @@ function ReceiptsSection({
                     <div className="text-sm font-semibold text-[var(--text-primary)]">{r.storeName}</div>
                     <div className="text-lg font-bold text-[var(--brand-yellow)]">{currency.format(r.amount)}</div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(r)}
-                    className="shrink-0 text-[10px] text-[var(--text-muted)] hover:text-[var(--red)]"
-                    title="Delete"
-                  >
-                    ✕
-                  </button>
+                  {canDeleteMedia ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(r)}
+                      className="shrink-0 text-[10px] text-[var(--text-muted)] hover:text-[var(--red)]"
+                      title="Delete"
+                    >
+                      ✕
+                    </button>
+                  ) : null}
                 </div>
                 <div className="mt-1 text-[10px] text-[var(--text-muted)]">
                   {r.purchaseDate} • {r.uploaderName}

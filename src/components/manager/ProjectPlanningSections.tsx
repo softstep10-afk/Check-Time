@@ -27,6 +27,7 @@ type ProjectPlanningSectionsProps = {
   managerId: string;
   projectSettings: Record<string, unknown> | null;
   hasFinanceAccess: boolean;
+  canDeleteMedia: boolean;
 };
 
 type EstimateDraft = {
@@ -96,6 +97,14 @@ function buildDraftAttachment(draft: EstimateDraft): ProjectPlanningAttachment[]
   ];
 }
 
+function isMediaPlanningAttachment(attachment: ProjectPlanningAttachment): boolean {
+  return Boolean(attachment.mediaId || attachment.storagePath);
+}
+
+function estimateHasMediaAttachments(estimate: ProjectEstimate): boolean {
+  return estimate.attachments.some(isMediaPlanningAttachment);
+}
+
 function estimateTypeKey(type: ProjectEstimateDocumentType): TranslationKey {
   return `projectEstimates.type.${type}` as TranslationKey;
 }
@@ -110,6 +119,7 @@ export function ProjectPlanningSections({
   managerId,
   projectSettings,
   hasFinanceAccess,
+  canDeleteMedia,
 }: ProjectPlanningSectionsProps) {
   return (
     <div className="grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
@@ -120,6 +130,7 @@ export function ProjectPlanningSections({
         managerId={managerId}
         projectSettings={projectSettings}
         hasFinanceAccess={hasFinanceAccess}
+        canDeleteMedia={canDeleteMedia}
       />
     </div>
   );
@@ -409,12 +420,14 @@ function ProjectEstimatesSection({
   managerId,
   projectSettings,
   hasFinanceAccess,
+  canDeleteMedia,
 }: {
   orgId: string;
   projectId: string;
   managerId: string;
   projectSettings: Record<string, unknown> | null;
   hasFinanceAccess: boolean;
+  canDeleteMedia: boolean;
 }) {
   const router = useRouter();
   const { t } = useTranslation();
@@ -750,14 +763,16 @@ function ProjectEstimatesSection({
                       >
                         {t("projectEstimates.openAttachment")}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => removeDraftAttachment(attachment.id)}
-                        className="text-[var(--red)]"
-                        aria-label={t("projectEstimates.removeAttachment")}
-                      >
-                        <X size={13} />
-                      </button>
+                      {!isMediaPlanningAttachment(attachment) || canDeleteMedia ? (
+                        <button
+                          type="button"
+                          onClick={() => removeDraftAttachment(attachment.id)}
+                          className="text-[var(--red)]"
+                          aria-label={t("projectEstimates.removeAttachment")}
+                        >
+                          <X size={13} />
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -830,15 +845,17 @@ function ProjectEstimatesSection({
                                 {t("projectEstimates.convertToInvoice")}
                               </button>
                             ) : null}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setEstimations((current) => current.filter((item) => item.id !== estimate.id))
-                              }
-                              className="button-base button-danger-ghost min-h-0 px-3 py-2 text-xs"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {!estimateHasMediaAttachments(estimate) || canDeleteMedia ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEstimations((current) => current.filter((item) => item.id !== estimate.id))
+                                }
+                                className="button-base button-danger-ghost min-h-0 px-3 py-2 text-xs"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                         {estimate.attachments.length > 0 ? (

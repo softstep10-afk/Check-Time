@@ -3,7 +3,9 @@ import { getDisplayOrgName } from "@/lib/brand";
 import {
   PROJECT_ESTIMATES_KEY,
   PROJECT_MATERIAL_SPEC_KEY,
+  collectProjectPlanningMediaIds,
   estimateMargin,
+  getRemovedProjectPlanningMediaIds,
   mergeProjectPlanningSettings,
   normalizeProjectEstimations,
   parseMaterialSpecText,
@@ -88,5 +90,30 @@ describe("project planning", () => {
     expect(settings[PROJECT_MATERIAL_SPEC_KEY]).toHaveLength(1);
     expect(settings[PROJECT_ESTIMATES_KEY]).toHaveLength(1);
     expect(estimateMargin(readProjectEstimations(settings)[0]!)).toBe(810);
+  });
+
+  it("detects media attachment ids removed from saved planning documents", () => {
+    const before = normalizeProjectEstimations([
+      {
+        title: "Estimate with media",
+        attachments: [
+          { name: "scope.pdf", mediaId: "media-a", storagePath: "org/project/planning/scope.pdf" },
+          { name: "external link", url: "https://example.com", kind: "link" },
+        ],
+      },
+      {
+        title: "Invoice with media",
+        attachments: [{ name: "invoice.xlsx", mediaId: "media-b" }],
+      },
+    ]);
+    const after = normalizeProjectEstimations([
+      {
+        title: "Estimate with media",
+        attachments: [{ name: "scope.pdf", mediaId: "media-a", storagePath: "org/project/planning/scope.pdf" }],
+      },
+    ]);
+
+    expect(collectProjectPlanningMediaIds(before)).toEqual(["media-a", "media-b"]);
+    expect(getRemovedProjectPlanningMediaIds(before, after)).toEqual(["media-b"]);
   });
 });

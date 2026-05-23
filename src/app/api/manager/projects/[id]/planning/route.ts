@@ -4,10 +4,13 @@ import { requireManagerContext } from "@/lib/manager-data";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { readRequiredUuid } from "@/lib/server/id-guards";
 import {
+  getRemovedProjectPlanningMediaIds,
   mergeProjectPlanningSettings,
   normalizeMaterialSpecItems,
   normalizeProjectEstimations,
+  readProjectEstimations,
 } from "@/lib/project-planning";
+import { canDeleteMediaEverywhereServer } from "@/lib/server/media-delete-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -87,6 +90,18 @@ export async function PUT(
     const estimations = hasEstimations
       ? normalizeProjectEstimations(body.estimations)
       : undefined;
+    if (estimations) {
+      const removedMediaIds = getRemovedProjectPlanningMediaIds(
+        readProjectEstimations(project.settings),
+        estimations,
+      );
+      if (removedMediaIds.length > 0 && !canDeleteMediaEverywhereServer(profile)) {
+        return NextResponse.json(
+          { error: "Only Andrey and Sergey can remove saved media attachments." },
+          { status: 403 },
+        );
+      }
+    }
     const settings = mergeProjectPlanningSettings(project.settings, {
       materialSpecItems,
       estimations,

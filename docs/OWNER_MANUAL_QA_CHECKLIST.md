@@ -293,6 +293,20 @@ Manual checks:
 - Confirm unsupported write requests do not silently mutate messages, documents, payroll, projects, or tasks.
 - Confirm provider/model diagnostics are visible only to owner/admin.
 
+## Media Delete Privilege Hotfix
+
+Run this after deploying `fix(alpha7): restrict media deletion to Andrey and Sergey`.
+
+Manual checks:
+
+- Log in as Andrey and confirm saved photo/media delete actions are visible and work.
+- Log in as Sergey and confirm saved photo/media delete actions are visible and work.
+- Log in as a manager who is not Andrey or Sergey and confirm saved photo/media delete actions are hidden or blocked.
+- Log in as supervisor and confirm saved photo/media delete actions are hidden or blocked.
+- Log in as worker and confirm saved photo/media delete actions are hidden or blocked.
+- If manually testable, direct API delete attempts by a non-privileged user return 403.
+- Confirm upload/open/download still work for existing allowed project files, receipts, task attachments, message attachments, photos, and videos.
+
 ## Deploy Readiness Smoke
 
 Run this immediately after any owner-approved Alpha-7 deployment:

@@ -221,3 +221,30 @@ Deferred until separate owner approval:
 - Direct SQL production verification.
 - Full authenticated production Jarvis QA.
 - Model routing or prompt architecture redesign.
+
+## Media Delete Privilege Hotfix
+
+Completed scope:
+
+- Restricted saved photo/media delete actions to Andrey and Sergey.
+- Added server-side enforcement for the app media delete route.
+- Kept same-org media validation before soft-delete.
+- Hid saved media delete UI from non-privileged users.
+- Protected project-planning saved media attachment removal through the planning save route.
+
+Not changed:
+
+- Upload, open, or download behavior.
+- File allowed types or upload size logic.
+- Private bucket/signed URL behavior.
+- Storage policies, Supabase RLS, schema, migrations, or bucket config.
+- Archive/trash business meaning.
+- Payroll, salary archive, GPS, shifts, messages, tasks, project lifecycle, or role redesign.
+
+Deferred until separate owner approval:
+
+- Direct SQL verification of database-level media delete policies.
+- RLS/Storage policy hardening for media deletes.
+- Permanent storage object cleanup or orphan cleanup jobs.
+- Broader file/media access redesign.
+- Stable production profile-ID configuration if owner wants to remove the name fallback.

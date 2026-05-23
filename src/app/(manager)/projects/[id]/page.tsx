@@ -17,6 +17,7 @@ import {
 } from "@/lib/task-media-hydration";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { hasFinanceAccess } from "@/lib/finance-access";
+import { canDeleteMediaEverywhereServer } from "@/lib/server/media-delete-permissions";
 import type { Media } from "@/types/database";
 
 export default async function ProjectDetailRoutePage({
@@ -230,6 +231,7 @@ export default async function ProjectDetailRoutePage({
       shiftReviewByProfileId={shiftReviewByProfileId}
       safetyAcksToday={safetyAcksToday}
       hasFinanceAccess={managerHasFinanceAccess}
+      canDeleteMedia={canDeleteMediaEverywhereServer(data.manager)}
     />
   );
 }

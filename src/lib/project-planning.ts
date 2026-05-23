@@ -219,6 +219,26 @@ export function normalizeProjectEstimations(value: unknown): ProjectEstimate[] {
     .slice(0, 80);
 }
 
+export function collectProjectPlanningMediaIds(estimations: ProjectEstimate[]): string[] {
+  const ids = new Set<string>();
+  for (const estimate of estimations) {
+    for (const attachment of estimate.attachments) {
+      if (attachment.mediaId) {
+        ids.add(attachment.mediaId);
+      }
+    }
+  }
+  return Array.from(ids);
+}
+
+export function getRemovedProjectPlanningMediaIds(
+  before: ProjectEstimate[],
+  after: ProjectEstimate[],
+): string[] {
+  const nextIds = new Set(collectProjectPlanningMediaIds(after));
+  return collectProjectPlanningMediaIds(before).filter((id) => !nextIds.has(id));
+}
+
 export function readProjectMaterialSpec(settings: unknown): ProjectMaterialSpecItem[] {
   if (!isRecord(settings)) return [];
   return normalizeMaterialSpecItems(settings[PROJECT_MATERIAL_SPEC_KEY]);
