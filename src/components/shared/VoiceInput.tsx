@@ -67,14 +67,12 @@ export function VoiceInput({
   const toggle = useCallback(() => {
     // Stop if already listening
     if (listening) {
-      console.log("[VoiceInput] User stopped recognition");
       stopRecognition();
       return;
     }
 
     const recognition = createRecognition();
     if (!recognition) {
-      console.error("[VoiceInput] SpeechRecognition not available");
       return;
     }
 
@@ -85,8 +83,6 @@ export function VoiceInput({
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-
-    console.log("[VoiceInput] Configuring recognition, lang:", lang);
 
     recognition.onresult = (event: any) => {
       try {
@@ -108,24 +104,17 @@ export function VoiceInput({
         }
         if (finalChunks.length > 0) {
           const finalText = finalChunks.join(" ").trim();
-          console.log("[VoiceInput] Final transcript:", finalText);
           onTranscriptRef.current(finalText);
         }
       } catch (err) {
-        console.error("[VoiceInput] Error extracting transcript:", err);
+        console.warn(
+          "[VoiceInput] transcript extraction failed:",
+          err instanceof Error ? err.name : "unknown",
+        );
       }
     };
 
-    recognition.onaudiostart = () => {
-      console.log("[VoiceInput] Audio capture started");
-    };
-
-    recognition.onspeechstart = () => {
-      console.log("[VoiceInput] Speech detected");
-    };
-
     recognition.onend = () => {
-      console.log("[VoiceInput] Recognition ended");
       // With continuous=true the browser may fire onend on its own
       // (e.g. network hiccup). Clean up state so the button resets.
       recognitionRef.current = null;
@@ -138,7 +127,6 @@ export function VoiceInput({
 
     recognition.onerror = (event: any) => {
       const errorType = event?.error ?? "unknown";
-      console.error("[VoiceInput] Error:", errorType);
       // "no-speech" is normal — user just didn't say anything yet, not a real error
       if (errorType === "no-speech") return;
       if (errorType === "not-allowed" || errorType === "service-not-allowed") {
@@ -155,15 +143,16 @@ export function VoiceInput({
     try {
       recognition.start();
       setListening(true);
-      console.log("[VoiceInput] recognition.start() called");
 
       // Safety timeout: auto-stop after 30 seconds
       timeoutRef.current = setTimeout(() => {
-        console.log("[VoiceInput] Safety timeout reached, stopping");
         stopRecognition();
       }, SAFETY_TIMEOUT_MS);
     } catch (err) {
-      console.error("[VoiceInput] Failed to start:", err);
+      console.warn(
+        "[VoiceInput] start failed:",
+        err instanceof Error ? err.name : "unknown",
+      );
       recognitionRef.current = null;
     }
   }, [listening, locale, stopRecognition]);

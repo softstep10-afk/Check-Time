@@ -168,3 +168,30 @@ Deferred until separate owner approval:
 - RLS/Storage hardening.
 - Project access model changes.
 - GPS/clock/shift route behavior changes.
+
+## Logging / Error / Secret Redaction Fix Pack
+
+Completed scope:
+
+- Added reusable safe-log helpers for redacting sensitive keys and text.
+- Removed stack traces from Jarvis provider console errors.
+- Redacted audit fallback logs and task attachment diagnostic logs.
+- Redacted Mux transcode provider details before storing/returning them.
+- Removed final voice transcript console logging.
+- Removed full URL from mobile GPS diagnostic logs while preserving non-sensitive diagnostic context.
+- Replaced user-facing service-role environment variable names with neutral temporary-unavailable errors.
+
+Not changed:
+
+- Business success/failure behavior.
+- Route permissions or role model.
+- PIN login session token delivery to the browser after successful login.
+- Payroll, archive/trash, GPS/clock-in/clock-out, shifts, messages, tasks, file allowed types, RLS, Storage policies, schema, or migrations.
+
+Deferred until separate owner approval:
+
+- Full error response standardization across every API route.
+- Centralized production logger.
+- Production Vercel/Supabase log review.
+- Auth/session behavior changes.
+- Any change to the owner-approved team/PIN provisioning workflow.

@@ -30,10 +30,7 @@ export async function POST(request: NextRequest) {
 
     if (!adminClient) {
       return NextResponse.json(
-        {
-          error:
-            "Creating team members needs SUPABASE_SERVICE_ROLE_KEY on the server.",
-        },
+        { error: "Creating team members is temporarily unavailable." },
         { status: 503 },
       );
     }

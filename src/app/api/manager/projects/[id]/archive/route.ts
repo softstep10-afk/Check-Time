@@ -23,8 +23,7 @@ async function archiveProject(args: {
     return {
       data: null,
       error: {
-        message:
-          "Project archive needs SUPABASE_SERVICE_ROLE_KEY on the server before manager mutations can run safely.",
+        message: "Project archive is temporarily unavailable.",
       },
     };
   }

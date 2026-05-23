@@ -40,7 +40,7 @@ export async function PUT(
 
     if (!adminClient) {
       return NextResponse.json(
-        { error: "Project planning saves need SUPABASE_SERVICE_ROLE_KEY on the server." },
+        { error: "Project planning saves are temporarily unavailable." },
         { status: 503 },
       );
     }

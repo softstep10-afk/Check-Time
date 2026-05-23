@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
+import { redactSensitive, safeErrorForLog } from "@/lib/safe-log";
 
 export async function logAudit({
   orgId,
@@ -23,7 +24,7 @@ export async function logAudit({
   afterData?: Record<string, unknown> | null;
 }) {
   if (AUTH_BYPASS_ENABLED) {
-    console.log("[Audit]", action, targetType, targetId, { beforeData, afterData });
+    console.log("[Audit]", action, targetType, targetId, redactSensitive({ beforeData, afterData }));
     return;
   }
 
@@ -43,8 +44,8 @@ export async function logAudit({
       before_data: beforeData ?? null,
       after_data: afterData ?? null,
     });
-    if (error) console.warn("[Audit] insert failed:", error.message);
+    if (error) console.warn("[Audit] insert failed:", safeErrorForLog(error));
   } catch (err) {
-    console.warn("[Audit] insert threw:", err);
+    console.warn("[Audit] insert threw:", safeErrorForLog(err));
   }
 }

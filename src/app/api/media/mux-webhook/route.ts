@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   });
   if (!verified.ok) {
     return NextResponse.json(
-      { error: "Unauthorized", reason: verified.error },
+      { error: "Unauthorized" },
       { status: 401 },
     );
   }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   if (!admin) {
     return NextResponse.json(
-      { error: "service_role_not_configured" },
+      { error: "webhook_temporarily_unavailable" },
       { status: 503 },
     );
   }

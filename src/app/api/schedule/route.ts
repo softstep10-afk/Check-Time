@@ -114,7 +114,7 @@ export async function POST(request: Request) {
   const admin = createAdminClient();
   if (!admin) {
     return NextResponse.json(
-      { error: "Server admin client is not configured for calendar writes." },
+      { error: "Calendar writes are temporarily unavailable." },
       { status: 500 },
     );
   }

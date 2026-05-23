@@ -660,7 +660,7 @@ export const translations = {
   "team.profilePaused": { en: "Profile paused.", ru: "Профиль приостановлен." },
   "team.profileReactivated": { en: "Profile reactivated.", ru: "Профиль возобновлён." },
   "team.newMember": { en: "New team member", ru: "Новый участник" },
-  "team.serviceKeyNote": { en: "Add `SUPABASE_SERVICE_ROLE_KEY` to enable manager-created auth users from this screen.", ru: "Добавьте `SUPABASE_SERVICE_ROLE_KEY` для создания пользователей менеджером с этого экрана." },
+  "team.serviceKeyNote": { en: "Ask the owner to enable server-side team provisioning for manager-created auth users from this screen.", ru: "Попросите владельца включить серверное создание пользователей для этой страницы." },
   "team.fullName": { en: "Full name", ru: "Полное имя" },
   "team.pinLabel": { en: "Login code", ru: "Код входа" },
   "team.pinPlaceholder": { en: "4-12 letters or digits", ru: "4-12 букв или цифр" },

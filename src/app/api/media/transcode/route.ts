@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readRequiredUuid } from "@/lib/server/id-guards";
+import { redactText, safeClientErrorMessage } from "@/lib/safe-log";
 import { normalizeStoragePath } from "@/lib/task-attachments";
 import type { Media } from "@/types/database";
 
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     if (mediaResult.error) {
       return NextResponse.json(
-        { error: mediaResult.error.message },
+        { error: "Media lookup failed." },
         { status: 500 },
       );
     }
@@ -119,7 +120,7 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
     if (!admin) {
       return NextResponse.json(
-        { error: "Service role not configured." },
+        { error: "Video processing is temporarily unavailable." },
         { status: 503 },
       );
     }
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest) {
     if (signError || !signedData?.signedUrl) {
       return NextResponse.json(
         {
-          error: signError?.message ?? "Could not sign source URL.",
+          error: "Could not sign source URL.",
         },
         { status: 500 },
       );
@@ -160,6 +161,7 @@ export async function POST(request: NextRequest) {
 
     if (!muxResp.ok) {
       const errorText = await muxResp.text();
+      const safeMuxError = redactText(errorText).slice(0, 500);
       // Persist the failure so the manager UI can show "Preview unavailable".
       await admin
         .from("media")
@@ -167,13 +169,13 @@ export async function POST(request: NextRequest) {
           metadata: {
             ...existingMetadata,
             transcoding_status: "failed",
-            transcoding_error: errorText.slice(0, 500),
+            transcoding_error: safeMuxError,
           },
         })
         .eq("id", mediaId.value)
         .eq("org_id", media.org_id);
       return NextResponse.json(
-        { error: "Mux create asset failed", detail: errorText },
+        { error: "Mux create asset failed", detail: safeMuxError },
         { status: muxResp.status },
       );
     }
@@ -208,7 +210,7 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       return NextResponse.json(
-        { error: updateError.message },
+        { error: "Could not update transcoding status." },
         { status: 500 },
       );
     }
@@ -220,7 +222,9 @@ export async function POST(request: NextRequest) {
       status: "pending",
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: safeClientErrorMessage(err) },
+      { status: 500 },
+    );
   }
 }

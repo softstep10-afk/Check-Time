@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
 import { buildSafeUploadName } from "@/lib/media-extension";
 import { guessMediaType } from "@/lib/worker-utils";
+import { redactSensitive, redactText, safeErrorForLog } from "@/lib/safe-log";
 
 export type UploadAttachmentParams = {
   orgId: string;
@@ -33,9 +34,9 @@ export async function uploadTaskAttachment(
       reason: validation.error.reason,
       // For unsupported_type, .mime holds whatever validateUploadFile
       // tried (file.type if non-empty, else file.name as fallback).
-      attempted: "mime" in validation.error ? validation.error.mime : null,
-      fileNameSeen: file.name,
-      fileTypeSeen: file.type,
+      attempted: "mime" in validation.error ? redactText(validation.error.mime) : null,
+      fileNameSeen: redactText(file.name),
+      fileTypeSeen: redactText(file.type),
     });
     return { ok: false, error: `validation: ${validation.error.reason}` };
   }
@@ -53,13 +54,13 @@ export async function uploadTaskAttachment(
       contentType: resolvedContentType,
     });
   if (uploadErr) {
-    console.error("[task-attach] storage upload FAIL", uploadErr);
+    console.error("[task-attach] storage upload FAIL", safeErrorForLog(uploadErr));
     return { ok: false, error: `storage: ${uploadErr.message}` };
   }
 
   const metadata = { kind: "task_attachment" as const };
   if (metadata.kind !== "task_attachment") {
-    console.warn("[upload-guard] expected metadata.kind=task_attachment, got:", metadata);
+    console.warn("[upload-guard] expected metadata.kind=task_attachment, got:", redactSensitive(metadata));
   }
   const { data, error: insertErr } = await supabase
     .from("media")
@@ -81,7 +82,7 @@ export async function uploadTaskAttachment(
     .single<{ id: string }>();
 
   if (insertErr || !data) {
-    console.error("[task-attach] media insert FAIL", insertErr);
+    console.error("[task-attach] media insert FAIL", safeErrorForLog(insertErr));
     return { ok: false, error: `media-insert: ${insertErr?.message ?? "no data"}` };
   }
   return { ok: true, mediaId: data.id };
@@ -105,7 +106,7 @@ export async function linkMediaToTask(
     .select("id, metadata")
     .in("id", mediaIds);
   if (selErr) {
-    console.error("[task-attach] linkMediaToTask select FAIL", selErr);
+    console.error("[task-attach] linkMediaToTask select FAIL", safeErrorForLog(selErr));
     return;
   }
   for (const row of (rows ?? []) as Array<{ id: string; metadata: Record<string, unknown> | null }>) {
@@ -114,7 +115,12 @@ export async function linkMediaToTask(
       .from("media")
       .update({ metadata: { ...meta, task_id: taskId } })
       .eq("id", row.id);
-    if (updErr) console.error("[task-attach] linkMediaToTask update FAIL", { id: row.id, err: updErr });
+    if (updErr) {
+      console.error("[task-attach] linkMediaToTask update FAIL", {
+        id: row.id,
+        err: safeErrorForLog(updErr),
+      });
+    }
   }
 }
 

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { safeErrorForLog } from "@/lib/safe-log";
 
 export async function logAuditServer(
   supabase: SupabaseClient,
@@ -36,8 +37,8 @@ export async function logAuditServer(
       before_data: beforeData ?? null,
       after_data: afterData ?? null,
     });
-    if (error) console.warn("[Audit] server insert failed:", error.message);
+    if (error) console.warn("[Audit] server insert failed:", safeErrorForLog(error));
   } catch (error) {
-    console.warn("[Audit] server insert threw:", error);
+    console.warn("[Audit] server insert threw:", safeErrorForLog(error));
   }
 }

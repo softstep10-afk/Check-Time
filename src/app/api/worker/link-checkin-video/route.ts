@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
     if (!admin) {
       return NextResponse.json(
-        { error: "Service role not configured" },
+        { error: "Video linking is temporarily unavailable." },
         { status: 503 },
       );
     }

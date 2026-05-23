@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     if (!adminClient) {
       return NextResponse.json(
-        { error: "Removing team members needs SUPABASE_SERVICE_ROLE_KEY on the server." },
+        { error: "Removing team members is temporarily unavailable." },
         { status: 503 },
       );
     }

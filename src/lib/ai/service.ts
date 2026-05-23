@@ -49,6 +49,7 @@ import {
   type JarvisResolvedRoute,
   type JarvisRouteCategory,
 } from "@/lib/ai/provider-routing";
+import { safeErrorForLog } from "@/lib/safe-log";
 
 export const ORG_TIME_ZONE = "America/Los_Angeles";
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
@@ -901,9 +902,7 @@ function extractJsonObject(text: string): Record<string, unknown> | null {
     console.error("[Jarvis Gemini]", {
       location: "extractJsonObject.JSON.parse",
       model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
-      error: err instanceof Error
-        ? { name: err.name, message: err.message, stack: err.stack }
-        : String(err),
+      error: safeErrorForLog(err),
     });
     return null;
   }
@@ -1002,9 +1001,7 @@ async function tryGeminiProviderObject(
     console.error("[Jarvis Gemini]", {
       location: "tryGeminiObject.generateContent",
       model: process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL,
-      error: err instanceof Error
-        ? { name: err.name, message: err.message, stack: err.stack }
-        : String(err),
+      error: safeErrorForLog(err),
     });
     return null;
   }
@@ -1050,9 +1047,7 @@ async function tryOpenAiObject(
     console.error("[Jarvis provider]", {
       location: "tryOpenAiObject",
       model,
-      error: err instanceof Error
-        ? { name: err.name, message: err.message, stack: err.stack }
-        : String(err),
+      error: safeErrorForLog(err),
     });
     return null;
   }
@@ -1105,9 +1100,7 @@ async function tryAnthropicObject(
     console.error("[Jarvis provider]", {
       location: "tryAnthropicObject",
       model,
-      error: err instanceof Error
-        ? { name: err.name, message: err.message, stack: err.stack }
-        : String(err),
+      error: safeErrorForLog(err),
     });
     return null;
   }

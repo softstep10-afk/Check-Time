@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
     if (!admin) {
       return NextResponse.json(
-        { error: "Server admin client is not configured." },
+        { error: "Task updates are temporarily unavailable." },
         { status: 500 },
       );
     }

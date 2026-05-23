@@ -69,6 +69,7 @@ import { uploadTaskAttachment } from "@/lib/task-attachments";
 import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { mergeRealtimeTaskRow } from "@/lib/task-realtime";
+import { redactText } from "@/lib/safe-log";
 
 const navItems = [
   { href: "/clock", icon: Timer, label: "Clock", labelKey: "worker.navClock" as TranslationKey },
@@ -224,11 +225,10 @@ function logGpsFailure(label: string, err?: GeolocationPositionError) {
     isSecureContext: window.isSecureContext,
     protocol: window.location.protocol,
     hostname: window.location.hostname,
-    href: window.location.href,
     errorCode: err?.code,
-    errorMessage: err?.message,
+    errorMessage: err?.message ? redactText(err.message) : undefined,
   };
-  console.error("[GPS diagnostic]", ctx);
+  console.warn("[GPS diagnostic]", ctx);
 }
 
 async function getCurrentPosition(): Promise<WorkerGeoPoint & { accuracy: number }> {

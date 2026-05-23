@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
     if (!adminClient) {
       return NextResponse.json(
-        { error: "Resetting PINs needs SUPABASE_SERVICE_ROLE_KEY on the server." },
+        { error: "Resetting PINs is temporarily unavailable." },
         { status: 503 },
       );
     }

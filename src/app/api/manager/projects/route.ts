@@ -17,10 +17,7 @@ export async function POST(request: NextRequest) {
 
     if (!adminClient) {
       return NextResponse.json(
-        {
-          error:
-            "Project saves need SUPABASE_SERVICE_ROLE_KEY on the server before manager mutations can run safely.",
-        },
+        { error: "Project saves are temporarily unavailable." },
         { status: 503 },
       );
     }

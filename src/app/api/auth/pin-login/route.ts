@@ -7,6 +7,7 @@ import {
   recordPinLoginFailure,
 } from "@/lib/pin-login-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import { isValidTeamPasscode } from "@/lib/team-member-provisioning";
 import type { UserRole } from "@/types/database";
 
@@ -43,10 +44,7 @@ export async function POST(request: NextRequest) {
     const adminClient = createAdminClient();
     if (!adminClient) {
       return NextResponse.json(
-        {
-          error:
-            "PIN login needs SUPABASE_SERVICE_ROLE_KEY on the server before sessions can be issued.",
-        },
+        { error: "PIN login is temporarily unavailable." },
         { status: 503 },
       );
     }
@@ -80,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     if (profilesError) {
       return NextResponse.json(
-        { error: profilesError.message },
+        { error: "PIN login is temporarily unavailable." },
         { status: 500 },
       );
     }
@@ -114,7 +112,7 @@ export async function POST(request: NextRequest) {
 
     if (authUserError || !authUserResult.user?.email) {
       return NextResponse.json(
-        { error: authUserError?.message ?? "Account email is missing." },
+        { error: "PIN login is temporarily unavailable." },
         { status: 500 },
       );
     }
@@ -127,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     if (linkError || !linkData.properties.email_otp) {
       return NextResponse.json(
-        { error: linkError?.message ?? "Could not generate a login token." },
+        { error: "Could not generate a login token." },
         { status: 500 },
       );
     }
@@ -141,7 +139,7 @@ export async function POST(request: NextRequest) {
 
     if (sessionError || !sessionData.session) {
       return NextResponse.json(
-        { error: sessionError?.message ?? "Could not start a session." },
+        { error: "Could not start a session." },
         { status: 500 },
       );
     }
@@ -153,9 +151,9 @@ export async function POST(request: NextRequest) {
       role: matchedProfile.role,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: safeClientErrorMessage(error) },
+      { status: 500 },
+    );
   }
 }
