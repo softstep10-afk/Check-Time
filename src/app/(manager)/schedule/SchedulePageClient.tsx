@@ -23,6 +23,11 @@ import {
   formatProjectCountdown,
   projectScheduleToneStyle,
 } from "@/lib/project-schedule";
+import {
+  getMaterialTaskMaterialName,
+  getMaterialTaskUrgency,
+  isMaterialTask,
+} from "@/lib/material-tasks";
 import type { Profile, Project, Task, UserRole } from "@/types/database";
 
 type ScheduleKind =
@@ -167,6 +172,10 @@ const TEXT = {
     task: "Task",
     note: "Note",
     delivery: "Delivery",
+    materialPrefix: "Material",
+    materialUrgentPrefix: "Urgent material",
+    urgent: "Urgent",
+    notUrgent: "Not urgent",
     deliveryStatus: "Delivery status",
     deliveryOpen: "Open to team",
     deliveryAssigned: "Assigned",
@@ -248,6 +257,10 @@ const TEXT = {
     task: "Задача",
     note: "Заметка",
     delivery: "Доставка",
+    materialPrefix: "Материал",
+    materialUrgentPrefix: "Срочно материал",
+    urgent: "Срочно",
+    notUrgent: "Не срочно",
     deliveryStatus: "Статус доставки",
     deliveryOpen: "Свободно для команды",
     deliveryAssigned: "Назначено",
@@ -736,19 +749,31 @@ export default function SchedulePageClient() {
         const dayIso = Number.isNaN(startDate.getTime()) ? task.due_date : isoDay(startDate);
         const kind = scheduleKindFromMetadata(metadata);
         const deliveryStatus = deliveryStatusFromTask(task, metadata);
+        const materialTask = isMaterialTask(task);
+        const materialUrgency = getMaterialTaskUrgency(task);
+        const materialName = getMaterialTaskMaterialName(task);
+        const title = materialTask
+          ? materialUrgency === "urgent"
+            ? `${text.materialUrgentPrefix}: ${materialName ?? task.title}`
+            : `${text.materialPrefix}: ${materialName ?? task.title}`
+          : task.title;
 
         return {
           id: task.id,
           source: "task",
           type: kind,
           dayIso,
-          title: task.title,
+          title,
           startsAt,
           endsAt,
           projectName: task.project_id ? projectsById.get(task.project_id)?.name ?? null : null,
           assigneeName: task.assigned_to ? profilesById.get(task.assigned_to)?.name ?? null : null,
           assigneeId: task.assigned_to,
-          description: task.description,
+          description: materialTask
+            ? [task.description, materialUrgency === "urgent" ? text.urgent : text.notUrgent]
+                .filter(Boolean)
+                .join(" · ")
+            : task.description,
           tone:
             deliveryStatus
               ? deliveryStatusTone(deliveryStatus)

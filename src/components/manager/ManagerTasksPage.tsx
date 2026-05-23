@@ -23,6 +23,12 @@ import {
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { formatDateTime } from "@/lib/worker-utils";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
+import {
+  getMaterialTaskNeededDate,
+  getMaterialTaskUrgency,
+  hasDriverSeenMaterialTask,
+  isMaterialTask,
+} from "@/lib/material-tasks";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
@@ -639,6 +645,10 @@ export function ManagerTasksPage({
                 const accent = PRIORITY_COLORS[task.priority];
                 const statusColor = STATUS_COLORS[effectiveStatus];
                 const updating = busyKey === `status-${task.id}` || busyKey === `delete-${task.id}`;
+                const materialTask = isMaterialTask(task);
+                const materialUrgency = getMaterialTaskUrgency(task);
+                const materialNeededDate = getMaterialTaskNeededDate(task);
+                const materialDriverSeen = hasDriverSeenMaterialTask(task);
                 const rowAudit = getManagerTaskRowAuditText(task, workerNameById, {
                   unassigned: t("tasks.unassigned"),
                   unknown: t("tasks.unknown"),
@@ -661,6 +671,25 @@ export function ManagerTasksPage({
                           >
                             {priorityLabel(task.priority)}
                           </span>
+                          {materialTask ? (
+                            <span
+                              className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase"
+                              style={{
+                                background:
+                                  materialUrgency === "urgent"
+                                    ? "rgba(239, 68, 68, 0.14)"
+                                    : "rgba(191, 162, 52, 0.14)",
+                                color:
+                                  materialUrgency === "urgent"
+                                    ? "var(--red)"
+                                    : "var(--brand-yellow)",
+                              }}
+                            >
+                              {materialUrgency === "urgent"
+                                ? t("materials.projectBadgeUrgent")
+                                : t("materials.materialTask")}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
                           {task.project_id ? (
@@ -695,6 +724,20 @@ export function ManagerTasksPage({
                                 {t("tasks.rowSeenByLabel")}: {rowAudit.seenByText}
                                 {rowAudit.seenAtText ? ` · ${rowAudit.seenAtText}` : ""}
                               </span>
+                            </>
+                          ) : null}
+                          {materialTask && materialNeededDate ? (
+                            <>
+                              <span>·</span>
+                              <span>
+                                {t("materials.neededDate")}: {materialNeededDate}
+                              </span>
+                            </>
+                          ) : null}
+                          {materialTask && materialDriverSeen ? (
+                            <>
+                              <span>·</span>
+                              <span>{t("materials.driverSeen")}</span>
                             </>
                           ) : null}
                           {rowAudit.startedByText ? (

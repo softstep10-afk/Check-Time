@@ -248,3 +248,32 @@ Deferred until separate owner approval:
 - Permanent storage object cleanup or orphan cleanup jobs.
 - Broader file/media access redesign.
 - Stable production profile-ID configuration if owner wants to remove the name fallback.
+
+## Materials / Driver Workflow
+
+Completed scope:
+
+- Added material task classification using existing `tasks.metadata`, `assigned_to`, `due_date`, `priority`, and task status fields.
+- Used the existing `driver` role for focused driver material views; no display-name/Sanya hardcode was added.
+- Kept material requests as normal tasks with material/delivery metadata.
+- Preserved normal task creation, message/task separation, notifications-as-signals, and read/taken/done lifecycle.
+- Added project card/detail indicators for open material requests, urgent material requests, assigned material tasks, and driver seen state.
+- Reused existing task realtime subscriptions and schedule task/delivery entries.
+
+Not changed:
+
+- Payroll or salary archive.
+- Archive/Trash business meaning.
+- GPS, geofence, clock-in, clock-out, and shifts.
+- Message/task lifecycle names or meaning.
+- Supabase RLS, Storage policies, database schema, or migrations.
+- Media delete privilege for Andrey and Sergey.
+- Normal worker task visibility for non-driver workers.
+
+Deferred until separate owner approval:
+
+- Config-based driver profile IDs if owner wants a named person to get driver filtering without the existing `driver` role.
+- New database columns/indexes for material tasks.
+- Dedicated Materials/Driver dashboard redesign.
+- Route planning, Tesla API/OAuth, or dispatch optimization.
+- Direct SQL verification of task/material RLS behavior.

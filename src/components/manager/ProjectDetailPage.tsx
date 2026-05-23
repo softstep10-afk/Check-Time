@@ -57,6 +57,15 @@ import {
   type ViewerMediaItem,
 } from "@/components/shared/MediaViewerModal";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
+import {
+  buildMaterialTaskMetadata,
+  getMaterialIndicatorState,
+  getMaterialTaskNeededDate,
+  getMaterialTaskUrgency,
+  hasDriverSeenMaterialTask,
+  isMaterialTask,
+  type MaterialTaskUrgency,
+} from "@/lib/material-tasks";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
@@ -192,6 +201,8 @@ type MaterialOrderDraftRow = {
   unit: MaterialUnitValue;
   customUnit: string;
 };
+
+type MaterialAssigneeOption = Pick<ManagerProfileSummary, "id" | "name" | "role">;
 
 const MATERIAL_OTHER_UNIT_VALUE = "другое";
 
@@ -689,6 +700,10 @@ export function ProjectDetailPage({
 
     return { active, completed };
   }, [taskList]);
+  const materialIndicator = useMemo(
+    () => getMaterialIndicatorState(taskList),
+    [taskList],
+  );
   const tasksFolderSummary = formatSectionCountSummary(t("common.tasks"), [
     { count: taskCounts.active, label: t("projectDetail.tasksSummaryActive") },
     {
@@ -1446,6 +1461,17 @@ export function ProjectDetailPage({
     router.refresh();
   }
 
+  const materialBadgeLabel =
+    materialIndicator.primaryLabel === "urgent"
+      ? t("materials.projectBadgeUrgent")
+      : materialIndicator.primaryLabel === "seen"
+        ? t("materials.projectBadgeSeen")
+        : materialIndicator.primaryLabel === "assigned"
+          ? t("materials.projectBadgeAssigned")
+          : materialIndicator.primaryLabel === "needed"
+            ? t("materials.projectBadgeNeeded")
+            : null;
+
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
       <section className="space-y-2">
@@ -1485,6 +1511,23 @@ export function ProjectDetailPage({
               <span className="text-xs text-[var(--text-secondary)]">
                 {site ? t("projects.gpsOkHint") : t("projects.noSiteCoords")}
               </span>
+              {materialBadgeLabel ? (
+                <span
+                  className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                  style={{
+                    background:
+                      materialIndicator.primaryLabel === "urgent"
+                        ? "rgba(239, 68, 68, 0.14)"
+                        : "rgba(191, 162, 52, 0.14)",
+                    color:
+                      materialIndicator.primaryLabel === "urgent"
+                        ? "var(--red)"
+                        : "var(--brand-yellow)",
+                  }}
+                >
+                  {materialBadgeLabel}
+                </span>
+              ) : null}
             </div>
           </div>
           <button
@@ -2042,6 +2085,10 @@ export function ProjectDetailPage({
               const isPendingDelete = pendingDeleteTaskId === task.id;
               const isBusy =
                 busyKey === `task-${task.id}` || busyKey === `task-delete-${task.id}`;
+              const materialTask = isMaterialTask(task);
+              const materialUrgency = getMaterialTaskUrgency(task);
+              const materialNeededDate = getMaterialTaskNeededDate(task);
+              const materialDriverSeen = hasDriverSeenMaterialTask(task);
               const rowAudit = getManagerTaskRowAuditText(
                 {
                   ...task,
@@ -2091,6 +2138,25 @@ export function ProjectDetailPage({
                     >
                       {task.priority}
                     </span>
+                    {materialTask ? (
+                      <span
+                        className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
+                        style={{
+                          background:
+                            materialUrgency === "urgent"
+                              ? "rgba(239, 68, 68, 0.14)"
+                              : "rgba(191, 162, 52, 0.14)",
+                          color:
+                            materialUrgency === "urgent"
+                              ? "var(--red)"
+                              : "var(--brand-yellow)",
+                        }}
+                      >
+                        {materialUrgency === "urgent"
+                          ? t("materials.projectBadgeUrgent")
+                          : t("materials.materialTask")}
+                      </span>
+                    ) : null}
                     <span
                       className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em]"
                       style={{
@@ -2104,6 +2170,16 @@ export function ProjectDetailPage({
                 </div>
                 {task.description ? (
                   <p className="mt-3 text-sm text-[var(--text-secondary)]">{task.description}</p>
+                ) : null}
+                {materialTask ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-[var(--text-muted)]">
+                    {materialNeededDate ? (
+                      <span>
+                        {t("materials.neededDate")}: {materialNeededDate}
+                      </span>
+                    ) : null}
+                    {materialDriverSeen ? <span>{t("materials.driverSeen")}</span> : null}
+                  </div>
                 ) : null}
                 {effectiveStatus === "done" ? (
                   <div
@@ -2754,6 +2830,7 @@ export function ProjectDetailPage({
         projectId={project.id}
         managerId={managerId}
         knownProfileNames={profileNameById}
+        assigneeProfiles={[...taskAssigneeProjectProfiles, ...taskAssigneeOtherProfiles]}
       />
       {/* ── Receipts ── */}
       <ReceiptsSection
@@ -3202,6 +3279,11 @@ type MaterialItem = {
   metadata: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
+  assignedToId: string | null;
+  driverName: string | null;
+  neededDate: string | null;
+  urgency: MaterialTaskUrgency;
+  driverSeen: boolean;
   assignedById: string | null;
   authorName: string;
   deliveredById: string | null;
@@ -3228,11 +3310,13 @@ function MaterialsSection({
   projectId,
   managerId,
   knownProfileNames,
+  assigneeProfiles,
 }: {
   orgId: string;
   projectId: string;
   managerId: string;
   knownProfileNames: Map<string, string>;
+  assigneeProfiles: MaterialAssigneeOption[];
 }) {
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
@@ -3242,6 +3326,8 @@ function MaterialsSection({
   const [orderRows, setOrderRows] = useState<MaterialOrderDraftRow[]>(() => [
     createMaterialOrderRow(),
   ]);
+  const [orderAssignedTo, setOrderAssignedTo] = useState("");
+  const [orderNeededDate, setOrderNeededDate] = useState("");
   const [orderPriority, setOrderPriority] = useState<TaskPriority>("medium");
   const [orderNote, setOrderNote] = useState("");
   const [orderError, setOrderError] = useState("");
@@ -3255,7 +3341,7 @@ function MaterialsSection({
   const readMaterialItems = useCallback(async (): Promise<MaterialItem[]> => {
     const { data } = await supabase
       .from("tasks")
-      .select("id, title, priority, status, metadata, created_at, updated_at, assigned_by")
+      .select("id, title, priority, status, due_date, assigned_to, metadata, created_at, updated_at, assigned_by")
       .eq("project_id", projectId)
       .eq("metadata->>category", "material")
       .is("deleted_at", null)
@@ -3266,6 +3352,8 @@ function MaterialsSection({
       title: string;
       priority: TaskPriority;
       status: TaskStatus;
+      due_date: string | null;
+      assigned_to: string | null;
       metadata: Record<string, unknown> | null;
       created_at: string;
       updated_at: string;
@@ -3276,6 +3364,7 @@ function MaterialsSection({
     const receiptIds = new Set<string>();
     for (const row of rows) {
       if (isProfileId(row.assigned_by)) profileIds.add(row.assigned_by);
+      if (isProfileId(row.assigned_to)) profileIds.add(row.assigned_to);
       const meta = row.metadata ?? {};
       if (isProfileId(meta.delivered_by)) profileIds.add(meta.delivered_by);
       if (isProfileId(meta.receipt_attached_by)) profileIds.add(meta.receipt_attached_by);
@@ -3334,6 +3423,11 @@ function MaterialsSection({
       metadata: row.metadata ?? {},
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      assignedToId: row.assigned_to,
+      driverName: isProfileId(row.assigned_to) ? resolveProfileName(row.assigned_to) : null,
+      neededDate: getMaterialTaskNeededDate(row),
+      urgency: getMaterialTaskUrgency(row),
+      driverSeen: hasDriverSeenMaterialTask(row),
       assignedById: row.assigned_by,
       authorName: isProfileId(row.assigned_by) ? resolveProfileName(row.assigned_by) : fallbackUserName,
       deliveredById:
@@ -3384,6 +3478,8 @@ function MaterialsSection({
 
   function resetOrderDraft() {
     setOrderRows([createMaterialOrderRow()]);
+    setOrderAssignedTo("");
+    setOrderNeededDate("");
     setOrderPriority("medium");
     setOrderNote("");
     setOrderError("");
@@ -3438,26 +3534,35 @@ function MaterialsSection({
     setOrderError("");
     const orderId = createClientUuid();
     const trimmedOrderNote = orderNote.trim();
+    const driverUserId = orderAssignedTo || null;
+    const neededDate = orderNeededDate || null;
+    const urgency: MaterialTaskUrgency =
+      orderPriority === "urgent" || orderPriority === "high" ? "urgent" : "normal";
     const { error } = await supabase
       .from("tasks")
       .insert(materialRows.map((row) => ({
         org_id: orgId,
         project_id: projectId,
-        assigned_to: null,
+        assigned_to: driverUserId,
         assigned_by: managerId,
         title: row.name,
         description: null,
         priority: orderPriority,
         status: "pending",
-        due_date: null,
-        metadata: {
-          category: "material",
+        due_date: neededDate,
+        metadata: buildMaterialTaskMetadata({
+          materialName: row.name,
+          urgency,
+          neededDate,
+          requestedBy: managerId,
+          driverUserId,
+          projectId,
           quantity: row.quantity,
           unit: row.unit,
-          order_id: orderId,
-          order_note: trimmedOrderNote || null,
-          order_size: materialRows.length,
-        },
+          orderId,
+          orderNote: trimmedOrderNote || null,
+          orderSize: materialRows.length,
+        }),
       })));
     setSavingOrder(false);
 
@@ -3745,11 +3850,29 @@ function MaterialsSection({
                               >
                                 {item.name}
                               </span>
-                              {quantityLabel ? (
+                            {quantityLabel ? (
                                 <span className="ml-2 text-xs text-[var(--text-muted)]">
                                   — {quantityLabel}
                                 </span>
                               ) : null}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-muted)]">
+                              <span>
+                                {item.urgency === "urgent"
+                                  ? t("materials.urgent")
+                                  : t("materials.notUrgent")}
+                              </span>
+                              {item.neededDate ? (
+                                <span>
+                                  {t("materials.neededDate")}: {item.neededDate}
+                                </span>
+                              ) : null}
+                              {item.driverName ? (
+                                <span>
+                                  {t("materials.assignedTo")}: {item.driverName}
+                                </span>
+                              ) : null}
+                              {item.driverSeen ? <span>{t("materials.driverSeen")}</span> : null}
                             </div>
                             {item.delivered ? (
                               <div className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
@@ -3818,7 +3941,7 @@ function MaterialsSection({
             </div>
           ) : null}
           <form className="mt-4 grid gap-4" onSubmit={handleAddOrder}>
-            <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
+            <div className="grid gap-3 sm:grid-cols-[180px_minmax(220px,0.8fr)_minmax(180px,0.7fr)_minmax(0,1fr)]">
               <select
                 value={orderPriority}
                 onChange={(event) => setOrderPriority(event.target.value as TaskPriority)}
@@ -3829,6 +3952,25 @@ function MaterialsSection({
                 <option value="medium">{t("materials.soon")}</option>
                 <option value="low">{t("materials.notUrgent")}</option>
               </select>
+              <select
+                value={orderAssignedTo}
+                onChange={(event) => setOrderAssignedTo(event.target.value)}
+                aria-label={t("materials.assignDriver")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="">{t("materials.noDriver")}</option>
+                {assigneeProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <DateField
+                value={orderNeededDate}
+                onChange={(event) => setOrderNeededDate(event.target.value)}
+                label={t("materials.neededDate")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              />
               <TextInputWithVoice
                 multiline
                 rows={2}

@@ -7,6 +7,11 @@ import {
   isEffectiveCompletedTask,
   isEffectiveOpenTask,
 } from "@/lib/task-status";
+import {
+  getMaterialIndicatorState,
+  isMaterialTask,
+  type MaterialTaskLike,
+} from "@/lib/material-tasks";
 import { parseGeoPoint } from "@/lib/worker-utils";
 import {
   EXTREME_SHIFT_MINUTES,
@@ -629,6 +634,7 @@ export function buildProjectSummaries(
   const weekEnd = addDays(weekStart, 7);
   const assignmentsByProject = new Map<string, Set<string>>();
   const openTasksByProject = new Map<string, number>();
+  const materialTasksByProject = new Map<string, MaterialTaskLike[]>();
   const onSiteByProject = new Map<string, Set<string>>();
   const weekMinutesByProject = new Map<string, number>();
   const longShiftCountByProject = new Map<string, number>();
@@ -676,6 +682,11 @@ export function buildProjectSummaries(
       task.project_id,
       (openTasksByProject.get(task.project_id) ?? 0) + 1,
     );
+    if (isMaterialTask(task)) {
+      const materialTasks = materialTasksByProject.get(task.project_id) ?? [];
+      materialTasks.push(task);
+      materialTasksByProject.set(task.project_id, materialTasks);
+    }
   }
 
   for (const session of sessions) {
@@ -761,12 +772,20 @@ export function buildProjectSummaries(
   return data.projects
     .map((project) => {
       const siteCoordinates = parseGeoPoint(project.site_point);
+      const materialIndicator = getMaterialIndicatorState(
+        materialTasksByProject.get(project.id) ?? [],
+      );
 
       return {
         ...project,
         assignedWorkerCount: assignmentsByProject.get(project.id)?.size ?? 0,
         onSiteWorkerCount: onSiteByProject.get(project.id)?.size ?? 0,
         openTaskCount: openTasksByProject.get(project.id) ?? 0,
+        materialOpenTaskCount: materialIndicator.openCount,
+        materialUrgentTaskCount: materialIndicator.urgentCount,
+        materialAssignedTaskCount: materialIndicator.assignedCount,
+        materialSeenTaskCount: materialIndicator.seenCount,
+        materialIndicator: materialIndicator.primaryLabel,
         weekMinutes: weekMinutesByProject.get(project.id) ?? 0,
         receiptTotal: includeFinancials ? receiptTotalByProject.get(project.id) ?? 0 : 0,
         lastActivityTime: lastActivityByProject.get(project.id) ?? null,

@@ -64,6 +64,7 @@ import {
   saveTaskLastSeen,
   shouldBlockCompletionFileUpload,
 } from "@/lib/task-notifications";
+import { buildMaterialTaskNotificationText, isMaterialTask } from "@/lib/material-tasks";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import { uploadTaskAttachment } from "@/lib/task-attachments";
 import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
@@ -853,18 +854,20 @@ export function WorkerShell({
     const result = countUnseenTasks(shell.tasks, null, {
       profileId: shell.profile.id,
       visibleProjectIds,
+      profileRole: shell.profile.role,
     });
     if (!result.latestCreatedAt) return;
     saveTaskLastSeen(shell.profile.id, result.latestCreatedAt);
     setTaskLastSeenAt(result.latestCreatedAt);
-  }, [taskLastSeenAt, shell.tasks, shell.profile.id, visibleProjectIds]);
+  }, [taskLastSeenAt, shell.tasks, shell.profile.id, shell.profile.role, visibleProjectIds]);
 
   const unseenTaskCount = useMemo(() => {
     return countUnseenTasks(shell.tasks, taskLastSeenAt, {
       profileId: shell.profile.id,
       visibleProjectIds,
+      profileRole: shell.profile.role,
     }).count;
-  }, [shell.tasks, taskLastSeenAt, shell.profile.id, visibleProjectIds]);
+  }, [shell.tasks, taskLastSeenAt, shell.profile.id, shell.profile.role, visibleProjectIds]);
 
   const taskSeenSnapshotRef = useRef({
     profileId: shell.profile.id,
@@ -928,6 +931,8 @@ export function WorkerShell({
             isTaskVisibleToWorker(task, {
               profileId: current.profile.id,
               visibleProjectIds: new Set(current.projects.map((project) => project.id)),
+              profileRole: current.profile.role,
+              includeClosed: true,
             }),
           decorate: buildWorkerTaskItem,
         }),
@@ -942,6 +947,7 @@ export function WorkerShell({
         !isTaskVisibleToWorker(row, {
           profileId: shell.profile.id,
           visibleProjectIds,
+          profileRole: shell.profile.role,
         })
       ) {
         return false;
@@ -952,10 +958,17 @@ export function WorkerShell({
       const projectName = row.project_id
         ? shell.projects.find((p) => p.id === row.project_id)?.name ?? null
         : null;
+      const isMaterial = isMaterialTask(row);
       const isDelivery = row.metadata?.schedule_kind === "delivery";
-      const bannerText = isDelivery ? t("tasks.newDeliveryBanner") : t("tasks.newTaskBanner");
+      const bannerText = isMaterial
+        ? buildMaterialTaskNotificationText(row, projectName)
+        : isDelivery
+          ? t("tasks.newDeliveryBanner")
+          : t("tasks.newTaskBanner");
       const detail = projectName
-        ? `${bannerText} · ${projectName}`
+        ? isMaterial
+          ? bannerText
+          : `${bannerText} · ${projectName}`
         : bannerText;
       setBanner({ tone: "info", text: detail });
       if (!muted) {
@@ -966,7 +979,7 @@ export function WorkerShell({
       }
       return true;
     },
-    [muted, shell.profile.id, shell.projects, t, visibleProjectIds],
+    [muted, shell.profile.id, shell.profile.role, shell.projects, t, visibleProjectIds],
   );
 
   // ── Tasks realtime subscription ─────────────────────────────────────

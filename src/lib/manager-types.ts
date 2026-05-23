@@ -55,6 +55,11 @@ export interface ManagerProjectSummary extends Project {
   assignedWorkerCount: number;
   onSiteWorkerCount: number;
   openTaskCount: number;
+  materialOpenTaskCount: number;
+  materialUrgentTaskCount: number;
+  materialAssignedTaskCount: number;
+  materialSeenTaskCount: number;
+  materialIndicator: "urgent" | "seen" | "assigned" | "needed" | null;
   weekMinutes: number;
   receiptTotal: number;
   lastActivityTime: string | null;

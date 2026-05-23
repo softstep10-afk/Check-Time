@@ -27,7 +27,16 @@ import {
   writeSafetyAck,
 } from "@/lib/safety-acknowledgements";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
+import { canUseDriverMaterialView } from "@/lib/material-driver-permissions";
 import { splitWorkerProjectTasks } from "@/lib/task-notifications";
+import {
+  buildMaterialTaskMetadata,
+  getMaterialTaskNeededDate,
+  getMaterialTaskUrgency,
+  hasDriverSeenMaterialTask,
+  isMaterialTask,
+  type MaterialTaskUrgency,
+} from "@/lib/material-tasks";
 import { getEffectiveTaskStatus, isEffectiveOpenTask } from "@/lib/task-status";
 import {
   openWorkerProjectTaskDetails,
@@ -227,6 +236,9 @@ type MaterialRow = {
   taskStatus: TaskStatus;
   status: MaterialStatus;
   metadata: Record<string, unknown>;
+  neededDate: string | null;
+  urgency: MaterialTaskUrgency;
+  driverSeen: boolean;
   createdAt: string;
   updatedAt: string;
   assignedById: string | null;
@@ -352,8 +364,15 @@ export function WorkerProjectView({
   // Split tasks into "mine" (assigned to this worker) vs "project-level"
   // (assigned_to IS NULL — visible to the whole crew). Both lists were
   // already loaded by the server route, just split here for display.
+  const visibleProjectTaskList = useMemo(
+    () =>
+      canUseDriverMaterialView(workerShell.shell.profile)
+        ? taskList.filter(isMaterialTask)
+        : taskList,
+    [taskList, workerShell.shell.profile],
+  );
   const { mineTasks, projectLevelTasks, completedTasks } = splitWorkerProjectTasks(
-    taskList,
+    visibleProjectTaskList,
     profileId,
   );
   const activeProjectQueue = useMemo(
@@ -1108,6 +1127,9 @@ function WorkerTaskCard({
         : effectiveStatus === "cancelled"
           ? t("tasks.statusCancelled")
           : t("tasks.statusPending");
+  const materialTask = isMaterialTask(task);
+  const materialUrgency = getMaterialTaskUrgency(task);
+  const materialNeededDate = getMaterialTaskNeededDate(task);
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -1147,7 +1169,29 @@ function WorkerTaskCard({
         >
           {statusLabelText}
         </span>
+        {materialTask ? (
+          <span
+            className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            style={{
+              background:
+                materialUrgency === "urgent"
+                  ? "rgba(239, 68, 68, 0.14)"
+                  : "rgba(191, 162, 52, 0.14)",
+              color:
+                materialUrgency === "urgent" ? "var(--red)" : "var(--brand-yellow)",
+            }}
+          >
+            {materialUrgency === "urgent"
+              ? t("materials.projectBadgeUrgent")
+              : t("materials.materialTask")}
+          </span>
+        ) : null}
       </div>
+      {materialTask && materialNeededDate ? (
+        <div className="mt-1 text-[11px] text-[var(--text-muted)]">
+          {t("materials.neededDate")}: {materialNeededDate}
+        </div>
+      ) : null}
       {task.description ? (
         <p className="mt-2 text-sm text-[var(--text-secondary)]">{task.description}</p>
       ) : null}
@@ -1500,7 +1544,7 @@ function WorkerMaterialsList({
   const readMaterialItems = useCallback(async (): Promise<MaterialRow[]> => {
     const { data } = await supabase
       .from("tasks")
-      .select("id, title, priority, status, metadata, created_at, updated_at, assigned_by")
+      .select("id, title, priority, status, due_date, assigned_to, metadata, created_at, updated_at, assigned_by")
       .eq("project_id", projectId)
       .eq("metadata->>category", "material")
       .is("deleted_at", null)
@@ -1511,6 +1555,8 @@ function WorkerMaterialsList({
       title: string;
       priority: TaskPriority;
       status: string;
+      due_date: string | null;
+      assigned_to: string | null;
       metadata: Record<string, unknown> | null;
       created_at: string;
       updated_at: string;
@@ -1521,6 +1567,7 @@ function WorkerMaterialsList({
     const receiptIds = new Set<string>();
     for (const row of rows) {
       if (isProfileId(row.assigned_by)) profileIds.add(row.assigned_by);
+      if (isProfileId(row.assigned_to)) profileIds.add(row.assigned_to);
       const meta = row.metadata ?? {};
       if (isProfileId(meta.delivered_by)) profileIds.add(meta.delivered_by);
       if (isProfileId(meta.receipt_attached_by)) profileIds.add(meta.receipt_attached_by);
@@ -1574,6 +1621,9 @@ function WorkerMaterialsList({
       taskStatus: r.status as TaskStatus,
       status: mapTaskStatusToMaterialStatus(r.status),
       metadata: r.metadata ?? {},
+      neededDate: getMaterialTaskNeededDate(r),
+      urgency: getMaterialTaskUrgency(r),
+      driverSeen: hasDriverSeenMaterialTask(r),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       assignedById: r.assigned_by,
@@ -1680,6 +1730,8 @@ function WorkerMaterialsList({
     setOrderError("");
     const orderId = createClientUuid();
     const trimmedOrderNote = orderNote.trim();
+    const urgency: MaterialTaskUrgency =
+      orderPriority === "urgent" || orderPriority === "high" ? "urgent" : "normal";
     const { error } = await supabase
       .from("tasks")
       .insert(materialRows.map((row) => ({
@@ -1692,14 +1744,19 @@ function WorkerMaterialsList({
         priority: orderPriority,
         status: "pending",
         due_date: null,
-        metadata: {
-          category: "material",
+        metadata: buildMaterialTaskMetadata({
+          materialName: row.name,
+          urgency,
+          neededDate: null,
+          requestedBy: profileId,
+          driverUserId: null,
+          projectId,
           quantity: row.quantity,
           unit: row.unit,
-          order_id: orderId,
-          order_note: trimmedOrderNote || null,
-          order_size: materialRows.length,
-        },
+          orderId,
+          orderNote: trimmedOrderNote || null,
+          orderSize: materialRows.length,
+        }),
       })));
     setSavingOrder(false);
 
@@ -2011,6 +2068,19 @@ function WorkerMaterialsList({
                                   — {quantityLabel}
                                 </span>
                               ) : null}
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-muted)]">
+                                <span>
+                                  {item.urgency === "urgent"
+                                    ? t("materials.urgent")
+                                    : t("materials.notUrgent")}
+                                </span>
+                                {item.neededDate ? (
+                                  <span>
+                                    {t("materials.neededDate")}: {item.neededDate}
+                                  </span>
+                                ) : null}
+                                {item.driverSeen ? <span>{t("materials.driverSeen")}</span> : null}
+                              </div>
                               {delivered ? (
                                 <div className="mt-2 space-y-1 text-xs text-[var(--text-muted)]">
                                   <div>

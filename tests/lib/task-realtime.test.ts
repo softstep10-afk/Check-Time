@@ -55,6 +55,31 @@ describe("task realtime merge helpers", () => {
     expect(next[0]?.projectName).toBe("Garage");
   });
 
+  it("merges material task metadata on realtime updates", () => {
+    const existing = [
+      task({
+        id: "material-1",
+        metadata: { category: "material", materialName: "screws", urgency: "normal" },
+      }),
+    ];
+    const next = mergeRealtimeTaskRow(
+      existing,
+      task({
+        id: "material-1",
+        status: "in_progress",
+        metadata: { category: "material", materialName: "screws", urgency: "urgent" },
+      }),
+    );
+
+    expect(next).toHaveLength(1);
+    expect(next[0]?.status).toBe("in_progress");
+    expect(next[0]?.metadata).toMatchObject({
+      category: "material",
+      materialName: "screws",
+      urgency: "urgent",
+    });
+  });
+
   it("removes soft-deleted or filtered-out tasks from the visible list", () => {
     const existing = [task({ id: "task-1" }), task({ id: "task-2" })];
 

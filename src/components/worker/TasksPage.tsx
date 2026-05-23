@@ -13,6 +13,13 @@ import {
   classifyTaskForWorker,
   groupWorkerTasksByProject,
 } from "@/lib/task-notifications";
+import { canUseDriverMaterialView } from "@/lib/material-driver-permissions";
+import {
+  getMaterialTaskMaterialName,
+  getMaterialTaskNeededDate,
+  getMaterialTaskUrgency,
+  isMaterialTask,
+} from "@/lib/material-tasks";
 import {
   getEffectiveTaskStatus,
   isEffectiveCompletedTask,
@@ -64,6 +71,7 @@ export function TasksPage() {
 
   const todayIsoRef = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const currentProjectId = shell.clockState.currentProjectId;
+  const driverMaterialView = canUseDriverMaterialView(shell.profile);
 
   // Visiting /my-tasks acknowledges all currently-pending task
   // notifications. Stored in localStorage by markTasksSeen so future
@@ -309,6 +317,10 @@ export function TasksPage() {
     const effectiveStatus = getEffectiveTaskStatus(task);
     const isMine = task.assigned_to === shell.profile.id;
     const isClaimable = task.assigned_to === null;
+    const materialTask = isMaterialTask(task);
+    const materialUrgency = getMaterialTaskUrgency(task);
+    const materialNeededDate = getMaterialTaskNeededDate(task);
+    const materialName = getMaterialTaskMaterialName(task);
 
     return (
       <div
@@ -351,6 +363,25 @@ export function TasksPage() {
                   {t("tasks.labelProjectTask")}
                 </span>
               ) : null}
+              {materialTask ? (
+                <span
+                  className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                  style={{
+                    background:
+                      materialUrgency === "urgent"
+                        ? "rgba(239, 68, 68, 0.14)"
+                        : "rgba(191, 162, 52, 0.14)",
+                    color:
+                      materialUrgency === "urgent"
+                        ? "var(--red)"
+                        : "var(--brand-yellow)",
+                  }}
+                >
+                  {materialUrgency === "urgent"
+                    ? t("materials.projectBadgeUrgent")
+                    : t("materials.materialTask")}
+                </span>
+              ) : null}
               <span>{task.projectName ?? t("common.general")} • {effectiveStatus.replace("_", " ")}</span>
               {task.due_date ? (() => {
                 const dueIso = task.due_date.slice(0, 10);
@@ -390,6 +421,28 @@ export function TasksPage() {
 
         {task.description ? (
           <p className="mt-3 text-sm text-[var(--text-secondary)]">{task.description}</p>
+        ) : null}
+        {materialTask ? (
+          <div className="mt-3 rounded-[var(--radius-md)] border border-[rgba(191,162,52,0.28)] bg-[rgba(191,162,52,0.08)] p-2 text-xs text-[var(--text-secondary)]">
+            <div className="font-semibold text-[var(--text-primary)]">
+              {t("materials.materialTask")}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+              {materialName ? (
+                <span>
+                  {t("materials.name")}: {materialName}
+                </span>
+              ) : null}
+              <span>
+                {materialUrgency === "urgent" ? t("materials.urgent") : t("materials.notUrgent")}
+              </span>
+              {materialNeededDate ? (
+                <span>
+                  {t("materials.neededDate")}: {materialNeededDate}
+                </span>
+              ) : null}
+            </div>
+          </div>
         ) : null}
 
         {task.attachments && task.attachments.length > 0 ? (
@@ -461,6 +514,8 @@ export function TasksPage() {
   }
 
   function renderDoneCard(task: WorkerTaskItem) {
+    const materialTask = isMaterialTask(task);
+    const materialNeededDate = getMaterialTaskNeededDate(task);
     return (
       <button
         type="button"
@@ -476,6 +531,8 @@ export function TasksPage() {
         </div>
         <div className="mt-1 text-xs text-[var(--text-secondary)]">
           {task.projectName ?? t("common.general")} • {t("tasks.done")}
+          {materialTask ? ` • ${t("materials.materialTask")}` : ""}
+          {materialTask && materialNeededDate ? ` • ${materialNeededDate}` : ""}
         </div>
       </button>
     );
@@ -493,10 +550,12 @@ export function TasksPage() {
           </span>
         </div>
         <h2 className="mt-1 text-xl font-bold text-[var(--text-primary)]">
-          {t("tasks.assignedTasks")}
+          {driverMaterialView ? t("tasks.driverMaterialQueueTitle") : t("tasks.assignedTasks")}
         </h2>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          {t("tasks.allYourTasksAcrossProjects")}
+          {driverMaterialView
+            ? t("tasks.driverMaterialQueueDescription")
+            : t("tasks.allYourTasksAcrossProjects")}
         </p>
       </section>
 

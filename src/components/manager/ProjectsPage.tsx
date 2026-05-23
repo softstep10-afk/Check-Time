@@ -1732,6 +1732,40 @@ export function ProjectsPage({
                   </button>
                 </div>
 
+                {project.materialIndicator ? (
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        router.push(`/projects/${project.id}#materials`);
+                      }}
+                      className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                      style={{
+                        background:
+                          project.materialIndicator === "urgent"
+                            ? "rgba(239, 68, 68, 0.14)"
+                            : "rgba(191, 162, 52, 0.14)",
+                        color:
+                          project.materialIndicator === "urgent"
+                            ? "var(--red)"
+                            : "var(--brand-yellow)",
+                      }}
+                    >
+                      {project.materialIndicator === "urgent"
+                        ? t("materials.projectBadgeUrgent")
+                        : project.materialIndicator === "seen"
+                          ? t("materials.projectBadgeSeen")
+                          : project.materialIndicator === "assigned"
+                            ? t("materials.projectBadgeAssigned")
+                            : t("materials.projectBadgeNeeded")}
+                      <span className="font-mono opacity-80">
+                        {project.materialOpenTaskCount}
+                      </span>
+                    </button>
+                  </div>
+                ) : null}
+
                 <InlineNotesEditor
                   projectId={project.id}
                   initialNotes={project.notes}

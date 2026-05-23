@@ -127,6 +127,49 @@ describe("isTaskVisibleToWorker", () => {
       ),
     ).toBe(false);
   });
+
+  it("filters the focused driver queue to material tasks only", () => {
+    const driverArgs = { ...args, profileRole: "driver" };
+
+    expect(
+      isTaskVisibleToWorker(
+        makeTask({
+          id: "material",
+          assigned_to: "w1",
+          project_id: "p1",
+          metadata: { category: "material" },
+        }),
+        driverArgs,
+      ),
+    ).toBe(true);
+    expect(
+      isTaskVisibleToWorker(
+        makeTask({ id: "normal", assigned_to: "w1", project_id: "p1" }),
+        driverArgs,
+      ),
+    ).toBe(false);
+    expect(
+      isTaskVisibleToWorker(
+        makeTask({ id: "normal-worker", assigned_to: "w1", project_id: "p1" }),
+        args,
+      ),
+    ).toBe(true);
+  });
+
+  it("can keep completed rows visible for realtime status merges", () => {
+    expect(
+      isTaskVisibleToWorker(
+        makeTask({
+          id: "done-material",
+          assigned_to: "w1",
+          project_id: "p1",
+          status: "done",
+          metadata: { category: "material" },
+        }),
+        { ...args, profileRole: "driver", includeClosed: true },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("countUnseenTasks", () => {

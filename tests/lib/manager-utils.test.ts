@@ -386,6 +386,43 @@ describe("buildProjectSummaries", () => {
     expect(stats.openTaskCount).toBe(1);
   });
 
+  it("summarizes open material requests for project badges", () => {
+    const data = makeWorkspace({
+      projects: [makeProject({ id: "p1", name: "Project 1" })],
+      tasks: [
+        makeTask({
+          id: "material-urgent",
+          title: "Screws",
+          project_id: "p1",
+          assigned_to: "driver-1",
+          priority: "urgent",
+          status: "pending",
+          metadata: {
+            category: "material",
+            driverUserId: "driver-1",
+            seen_by: { "driver-1": "2026-05-22T10:00:00Z" },
+          },
+        }),
+        makeTask({
+          id: "normal-task",
+          title: "Paint wall",
+          project_id: "p1",
+          status: "pending",
+          metadata: {},
+        }),
+      ],
+    });
+
+    const summary = buildProjectSummaries(data, []).find((project) => project.id === "p1");
+
+    expect(summary?.openTaskCount).toBe(2);
+    expect(summary?.materialOpenTaskCount).toBe(1);
+    expect(summary?.materialUrgentTaskCount).toBe(1);
+    expect(summary?.materialAssignedTaskCount).toBe(1);
+    expect(summary?.materialSeenTaskCount).toBe(1);
+    expect(summary?.materialIndicator).toBe("urgent");
+  });
+
   it("keeps archived project names out of active profile summaries", () => {
     const activeProject = makeProject({ id: "active", name: "Active" });
     const archivedProject = makeProject({

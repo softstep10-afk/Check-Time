@@ -10,6 +10,8 @@ import {
   fetchTaskAttachments,
   getAttachmentMediaIds,
 } from "@/lib/task-attachments";
+import { isMaterialTask } from "@/lib/material-tasks";
+import { shouldFilterWorkerTasksToMaterials } from "@/lib/material-driver-permissions";
 import { getCompletionMediaIds } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import type { WorkerMediaItem, WorkerShellData, WorkerTaskItem } from "@/lib/worker-types";
@@ -324,6 +326,9 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
       visibleProjectIds.has(task.project_id) ||
       isUnclaimedDeliveryTask(task),
   );
+  if (shouldFilterWorkerTasksToMaterials(profile)) {
+    tasks = tasks.filter(isMaterialTask);
+  }
   media = media.filter((entry) => !entry.project_id || visibleProjectIds.has(entry.project_id));
 
   // Eager-fetch attachment media rows referenced by any task.metadata.

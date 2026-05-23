@@ -21,6 +21,7 @@ import {
   isEffectiveCompletedTask,
   isEffectiveOpenTask,
 } from "@/lib/task-status";
+import { isMaterialTask } from "@/lib/material-tasks";
 
 const TASK_LAST_SEEN_KEY_PREFIX = "check-time-tasks-last-seen-";
 
@@ -29,6 +30,14 @@ export interface TaskVisibilityArgs {
   profileId: string;
   /** Project ids visible to this worker (their access set). */
   visibleProjectIds: Set<string>;
+  /** Existing profile role; driver gets the focused material queue. */
+  profileRole?: string | null;
+  /**
+   * Realtime status merges need to keep a row visible when it changes
+   * from pending -> in_progress -> done. Badges keep the default false
+   * so completed rows do not wake notifications.
+   */
+  includeClosed?: boolean;
 }
 
 export interface TaskLike {
@@ -57,26 +66,28 @@ function hasWorkerSeenTask(task: TaskLike, profileId: string): boolean {
  * are always visible; project-level tasks (assigned_to=null) are visible
  * when the worker has access to the project.
  *
- * Soft-deleted, done, and cancelled tasks are excluded — those should
- * never wake the badge or banner.
+ * Soft-deleted rows are excluded. Done/cancelled tasks are excluded by
+ * default so they never wake the badge or banner; realtime list merges
+ * can opt in to includeClosed so a visible row is not removed just
+ * because its status changed.
  */
 export function isTaskVisibleToWorker(
   task: TaskLike,
   args: TaskVisibilityArgs,
 ): boolean {
-  if (!isEffectiveOpenTask(task)) return false;
-  if (task.assigned_to === args.profileId) return true;
-  if (task.assigned_to === null && task.metadata?.schedule_kind === "delivery") {
-    return true;
-  }
-  if (
-    task.assigned_to === null &&
-    task.project_id &&
-    args.visibleProjectIds.has(task.project_id)
-  ) {
-    return true;
-  }
-  return false;
+  if (task.deleted_at) return false;
+  if (!args.includeClosed && !isEffectiveOpenTask(task)) return false;
+
+  const visible =
+    task.assigned_to === args.profileId ||
+    (task.assigned_to === null && task.metadata?.schedule_kind === "delivery") ||
+    (task.assigned_to === null &&
+      task.project_id &&
+      args.visibleProjectIds.has(task.project_id));
+
+  if (!visible) return false;
+  if (args.profileRole === "driver") return isMaterialTask(task);
+  return true;
 }
 
 export interface UnseenTasksResult {

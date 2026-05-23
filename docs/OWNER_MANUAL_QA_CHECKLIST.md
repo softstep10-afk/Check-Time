@@ -47,6 +47,20 @@ Run this after deploys that touch application code or user workflows.
 - Task does not disappear after read.
 - Read, seen, claimed, and completed states still make sense.
 
+## Materials / Driver Workflow
+
+- Manager creates an urgent material task for a driver.
+- Manager creates a non-urgent material task for a driver.
+- Driver sees the material task immediately in the worker task area.
+- Driver sees project name, material name, urgency, and needed date.
+- Driver schedule shows the material task on the selected needed date.
+- Owner/manager sees a material-needed badge on project card/detail.
+- Owner/manager sees when the assigned driver read, took, or completed the task.
+- Normal worker task flow still works for non-driver workers.
+- Normal tasks do not disappear after read/taken/done.
+- Messages remain messages; material request remains a task.
+- Notifications can clear without deleting or hiding source tasks.
+
 ## Files
 
 - Project PDF upload works.
