@@ -170,6 +170,37 @@ describe("validateProjectSaveBody", () => {
       },
     });
   });
+
+  it("uses changed project dates when an edit form submits them", () => {
+    const result = validateProjectSaveBody(
+      {
+        name: "Warehouse",
+        address: "123 Main",
+        notes: "New deadline",
+        rate: "42.50",
+        radius_m: "180",
+        status: "active",
+        lat: null,
+        lng: null,
+        coordinatesConfirmed: true,
+        start_date: "2026-05-22",
+        end_date: "2026-06-05",
+      },
+      {
+        allowBlankCoordinates: true,
+        fallbackStartDate: "2026-04-01",
+        fallbackEndDate: "2026-04-30",
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      payload: {
+        start_date: "2026-05-22",
+        end_date: "2026-06-05",
+      },
+    });
+  });
 });
 
 describe("getMissingOptionalProjectColumn", () => {

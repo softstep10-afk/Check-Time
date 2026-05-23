@@ -943,6 +943,8 @@ export function ProjectDetailPage({
       : null;
     const radius = Number.parseInt(formData.get("radius_m")?.toString() ?? `${project.radius_m}`, 10);
     const status = (formData.get("status")?.toString() ?? project.status) as ProjectStatus;
+    const startDate = formData.get("start_date")?.toString() ?? "";
+    const endDate = formData.get("end_date")?.toString() ?? "";
     const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"), {
       allowBlank: project.hasValidSiteCoordinates,
     });
@@ -981,6 +983,8 @@ export function ProjectDetailPage({
           : {}),
         radius_m: Number.isFinite(radius) ? radius : project.radius_m,
         status,
+        start_date: startDate || null,
+        end_date: endDate || null,
         lat: coordinates.point?.lat ?? null,
         lng: coordinates.point?.lng ?? null,
         coordinatesConfirmed,
@@ -3127,6 +3131,20 @@ export function ProjectDetailPage({
                   </span>
                 </span>
               </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DateField
+                  name="start_date"
+                  label={t("projects.startDate")}
+                  defaultValue={project.start_date ?? ""}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+                <DateField
+                  name="end_date"
+                  label={t("projects.endDate")}
+                  defaultValue={project.end_date ?? ""}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                />
+              </div>
               <TextInputWithVoice
                 multiline
                 name="notes"
