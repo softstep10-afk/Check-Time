@@ -2,6 +2,19 @@
 
 Run this after deploys that touch application code or user workflows.
 
+## Regression Impact Rule
+
+Before manual QA for any new change:
+
+- Confirm the task has an Impact Map from `docs/REGRESSION_IMPACT_RULES_ALPHA7.md`.
+- Test only the affected flows listed in that map unless the owner asks for a wider pass.
+- If a shared component changed, confirm every known screen using it is listed.
+- If worker mobile UI changed, include check-in, active project, checkout, tasks, messages, project media, project navigation, and offline banner as applicable.
+- If project cards changed, include open project, `Поехать`, copy address, active project badge, project notes, and media/document access.
+- If media/upload changed, include photo, video, PDF, Word/Excel/CSV, worker upload, manager upload, task attachment, message attachment, and open/download/delete.
+- If tasks changed, include create/open/take/complete, material task, normal task, status realtime, and notification behavior.
+- If messages changed, include sender history, recipient history, read status, notification clear, second message without reload, and message does not become task.
+
 ## Alpha-7 Deploy Candidate Must-Check
 
 - Top quick nav row appears near the top on mobile.

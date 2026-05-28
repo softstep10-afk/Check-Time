@@ -4,12 +4,28 @@ Use this before any production deploy.
 
 ## Git State
 
+- Confirm the task has an Impact Map from `docs/REGRESSION_IMPACT_RULES_ALPHA7.md`.
 - Confirm branch: `git branch --show-current`.
 - Confirm HEAD: `git rev-parse HEAD`.
 - Confirm clean tree: `git status --short`.
 - Confirm changed files are intended.
 - Do not deploy with unrelated dirty files.
 - Do not use `git add -A`.
+
+## Regression Impact Gate
+
+- Impact Map lists changed files/components/routes.
+- Impact Map lists all known screens that use changed shared components.
+- Impact Map lists affected business flows.
+- Impact Map says what must not change.
+- Targeted regression tests were run for affected flows.
+- Manual QA scope is limited to affected flows and is written down.
+- If a shared component changed, every known use has a test/source guard or manual QA line.
+- If worker mobile UI changed, QA covers check-in, active project, checkout, tasks, messages, project media, project navigation, and offline banner as applicable.
+- If project cards changed, QA covers open project, `Поехать`, copy address, active project badge, project notes, and media/document access.
+- If media/upload changed, QA covers photo, video, PDF, Word/Excel/CSV, worker upload, manager upload, task attachment, message attachment, and open/download/delete.
+- If tasks changed, QA covers create/open/take/complete, material task, normal task, status realtime, and notification behavior.
+- If messages changed, QA covers sender history, recipient history, read status, notification clear, second message without reload, and message does not become task.
 
 ## Local Checks
 
@@ -26,6 +42,7 @@ Use this before any production deploy.
 - Run `npm run alpha7:coverage-map`.
 - Run `npm run alpha7:rc-safety-gate` for local Alpha-7 regression gates.
 - Run `npm run alpha7:release-audit --if-present` and compare local HEAD with the intended production commit.
+- Run `npm run alpha7:impact-template --if-present` when preparing a new task or release report.
 - Run `npm run alpha7:predeploy` before owner-approved deploys.
 - Confirm `git status --short` is still clean after checks.
 
