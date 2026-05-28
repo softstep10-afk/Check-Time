@@ -154,6 +154,35 @@ function MediaViewerModalBody({
   const supabase = useMemo(() => createClient(), []);
   const [signedUrl, setSignedUrl] = useState<string | null>(() => item.directUrl ?? null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const pushedHistoryRef = useRef(false);
+  const closingRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    pushedHistoryRef.current = true;
+    window.history.pushState(
+      {
+        ...(window.history.state && typeof window.history.state === "object"
+          ? window.history.state
+          : {}),
+        mediaViewerItemId: item.id,
+      },
+      "",
+      window.location.href,
+    );
+
+    function handlePopState() {
+      if (!pushedHistoryRef.current) return;
+      pushedHistoryRef.current = false;
+      onClose();
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [item.id, onClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,14 +213,24 @@ function MediaViewerModalBody({
     };
   }, [supabase, item.storage_path, item.mime_type, item.metadata, item.directUrl]);
 
+  const requestClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    if (typeof window !== "undefined" && pushedHistoryRef.current) {
+      window.history.back();
+      return;
+    }
+    onClose();
+  }, [onClose]);
+
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") requestClose();
     }
 
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [requestClose]);
 
   async function handleDownload() {
     if (typeof window === "undefined") return;
@@ -231,7 +270,7 @@ function MediaViewerModalBody({
   ) {
     event.preventDefault();
     event.stopPropagation();
-    onClose();
+    requestClose();
   }
 
   return (

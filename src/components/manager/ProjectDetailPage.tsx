@@ -68,6 +68,10 @@ import {
 import { parseMaterialSpecPaste, type MaterialSpecItem } from "@/lib/material-spec-parser";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { filterMaterialTakerProfiles } from "@/lib/material-driver-permissions";
+import {
+  formatProjectPublicNoteTime,
+  readProjectPublicNotes,
+} from "@/lib/project-public-notes";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
@@ -589,6 +593,10 @@ export function ProjectDetailPage({
     }
     return { photo, video, pdf, all: projectMediaItems.length };
   }, [projectMediaItems]);
+  const projectPublicNotes = useMemo(
+    () => readProjectPublicNotes(project.settings),
+    [project.settings],
+  );
   const [projectMediaTileUrls, setProjectMediaTileUrls] = useState<Map<string, string>>(new Map());
   const [projectMediaTileFailedIds, setProjectMediaTileFailedIds] = useState<Set<string>>(new Set());
 
@@ -1648,6 +1656,52 @@ export function ProjectDetailPage({
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="surface-card p-4" data-testid="manager-project-public-notes">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("projectNotes.title")}
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              {t("projectNotes.subtitle")}
+            </p>
+          </div>
+          <span
+            className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            style={{ background: "rgba(191, 162, 52, 0.14)", color: "var(--brand-yellow)" }}
+          >
+            {t("projectNotes.newBadge")} · {projectPublicNotes.length}
+          </span>
+        </div>
+        {projectPublicNotes.length === 0 ? (
+          <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
+            {t("projectNotes.empty")}
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            {projectPublicNotes.slice(0, 8).map((note) => (
+              <article
+                key={note.id}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.35)] p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-muted)]">
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {note.authorName}
+                  </span>
+                  <span>{formatProjectPublicNoteTime(note.createdAt, locale)}</span>
+                  <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.12)] px-1.5 py-0.5 font-semibold text-[var(--brand-yellow)]">
+                    {t("projectNotes.publicBadge")}
+                  </span>
+                </div>
+                <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
+                  {note.text}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* ── Project Timer ── */}

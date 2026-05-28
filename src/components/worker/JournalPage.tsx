@@ -14,9 +14,7 @@ import { normalizeStoragePath } from "@/lib/task-attachments";
 import { MediaViewerModal } from "@/components/shared/MediaViewerModal";
 import {
   ACCEPT_ALL_UPLOADS,
-  ACCEPT_DOCUMENT_UPLOADS,
   ACCEPT_IMAGE_UPLOADS,
-  ACCEPT_PDF_UPLOADS,
   ACCEPT_VIDEO_UPLOADS,
 } from "@/lib/upload-limits";
 import type { WorkerMediaItem } from "@/lib/worker-types";
@@ -449,7 +447,7 @@ export function JournalPage() {
         <input
           ref={journalPdfRef}
           type="file"
-          accept={`${ACCEPT_PDF_UPLOADS},${ACCEPT_DOCUMENT_UPLOADS}`}
+          accept={ACCEPT_ALL_UPLOADS}
           multiple
           onChange={(event) => replaceJournalFiles(event.target.files)}
           disabled={!shell.clockState.isClockedIn}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAppleMapsDirectionsUrl,
   clearProjectNavigationPreference,
+  buildProjectAddressCopyText,
   buildGoogleMapsDirectionsUrl,
   buildProjectNavigationShareText,
   getProjectNavigationDestination,
@@ -81,6 +82,41 @@ describe("project navigation actions", () => {
         destination: destination!,
       }),
     ).toBe("Kitchen Remodel\n47.799137872580424,-122.24154212345678\n123 Main St");
+  });
+
+  it("copies the full stored address even when navigation prefers coordinates", () => {
+    const destination = getProjectNavigationDestination({
+      address: "123 Main St, Auburn, WA 98001",
+      siteCoordinates: { lat: 47.307322, lng: -122.228453 },
+    });
+
+    expect(buildProjectAddressCopyText({
+      address: "123 Main St, Auburn, WA 98001",
+      destination: destination!,
+    })).toBe("123 Main St, Auburn, WA 98001");
+  });
+
+  it("preserves ZIP+4, commas, and line breaks when copying an address", () => {
+    const destination = getProjectNavigationDestination({
+      address: "123 Main St\nSuite 4, Auburn, WA 98001-1234",
+      siteCoordinates: null,
+    });
+
+    expect(buildProjectAddressCopyText({
+      address: "123 Main St\nSuite 4, Auburn, WA 98001-1234",
+      destination: destination!,
+    })).toBe("123 Main St Suite 4, Auburn, WA 98001-1234");
+  });
+
+  it("falls back to coordinates for copy text only when no address exists", () => {
+    const destination = getProjectNavigationDestination({
+      address: null,
+      siteCoordinates: { lat: 47.307322, lng: -122.228453 },
+    });
+
+    expect(buildProjectAddressCopyText({ address: null, destination: destination! })).toBe(
+      "47.307322,-122.228453",
+    );
   });
 
   it("defines a local mobile navigation preference without server storage", () => {

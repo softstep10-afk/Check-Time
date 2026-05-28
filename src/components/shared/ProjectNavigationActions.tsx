@@ -6,6 +6,7 @@ import { useTranslation } from "@/lib/i18n";
 import {
   buildAppleMapsDirectionsUrl,
   buildGoogleMapsDirectionsUrl,
+  buildProjectAddressCopyText,
   buildProjectNavigationShareText,
   clearProjectNavigationPreference,
   getProjectNavigationDestination,
@@ -45,10 +46,11 @@ export function ProjectNavigationActions({
     destination,
     address,
   });
+  const addressCopyText = buildProjectAddressCopyText({ address, destination });
 
   async function copyDestination(kind: "destination" | "tesla") {
     try {
-      await navigator.clipboard.writeText(shareText);
+      await navigator.clipboard.writeText(kind === "tesla" ? shareText : addressCopyText);
       setCopied(kind);
       window.setTimeout(() => {
         setCopied((current) => (current === kind ? null : current));

@@ -10,7 +10,7 @@ Static local scan of tests, source, and docs for critical Alpha-7 invariants.
 | private message sender/recipient persistence | covered | 3 | 11 | None |
 | task read/taken/done visibility | covered | 4 | 16 | None |
 | notification-as-signal | covered | 4 | 25 | None |
-| mobile Поехать preference | covered | 2 | 3 | None |
+| mobile Поехать preference | covered | 3 | 3 | None |
 | project navigation Apple/Google/Tesla/copy | covered | 2 | 5 | None |
 | deadline editing | covered | 9 | 18 | None |
 | high precision coordinates | covered | 3 | 4 | None |
@@ -21,4 +21,4 @@ Static local scan of tests, source, and docs for critical Alpha-7 invariants.
 | Jarvis confirmation and real id success | covered | 8 | 16 | None |
 | archive/trash separation | covered | 3 | 15 | None |
 | payroll untouched | covered | 3 | 5 | None |
-| GPS/shift untouched | covered | 20 | 75 | None |
+| GPS/shift untouched | covered | 21 | 75 | None |

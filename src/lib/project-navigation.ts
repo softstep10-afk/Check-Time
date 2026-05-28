@@ -72,6 +72,18 @@ export function getProjectNavigationDestination(input: {
   };
 }
 
+export function normalizeProjectAddressForCopy(address: string | null | undefined): string | null {
+  const normalized = address?.replace(/\s+/g, " ").trim();
+  return normalized ? normalized : null;
+}
+
+export function buildProjectAddressCopyText(input: {
+  address?: string | null;
+  destination: ProjectNavigationDestination;
+}): string {
+  return normalizeProjectAddressForCopy(input.address) ?? input.destination.displayText;
+}
+
 export function buildGoogleMapsDirectionsUrl(destination: ProjectNavigationDestination): string {
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination.query)}`;
 }
@@ -86,7 +98,7 @@ export function buildProjectNavigationShareText(input: {
   address?: string | null;
 }): string {
   const lines = [input.projectName, input.destination.displayText];
-  const address = input.address?.trim();
+  const address = normalizeProjectAddressForCopy(input.address);
   if (address && address !== input.destination.displayText) {
     lines.push(address);
   }

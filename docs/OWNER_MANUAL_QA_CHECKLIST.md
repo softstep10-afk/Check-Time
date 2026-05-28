@@ -58,18 +58,39 @@ Run this after deploys that touch application code or user workflows.
 
 - Tap the manager project card body once; it opens the project on the first tap.
 - Tap the worker project card body once; it opens the project on the first tap.
+- On a phone, tap project title, empty card space, and lower card body once; each body tap opens immediately.
+- Confirm there are no dead zones on the project card body.
 - Confirm the visible `Поехать` button appears on project cards when address or coordinates exist.
 - Tap `Поехать` on a project card; it opens navigation and does not open the project detail accidentally.
 - Open a project detail page and confirm `Поехать` is visible near the title/address without scrolling.
 - Open a project-related schedule entry and confirm `Поехать` appears when that project has an address or coordinates.
 - Tap address/navigation/copy controls; they do not accidentally open the project.
 - Tap copy address/location; copy still works and does not open the project.
+- Copy address from a project card and verify the full street, city, state, and ZIP are copied.
+- Copy address from project detail and verify the full ZIP/ZIP+4 is not truncated.
 - Mobile task buttons fit inside the screen after taking a task.
 - `Открыть детали`, `Взять` / `Начать`, and `Готово` stack cleanly on mobile.
 - Jarvis floating button does not cover task action buttons.
 - Mark a normal task done without entering a description.
 - Mark a material task done without entering a description.
 - Completion files/notes still save when provided.
+
+## Journal / Active Project / Project Notes
+
+- Open `Журнал`, tap a photo or document, then press browser/device Back.
+- Confirm Back closes the media viewer and returns to `Журнал`, not `Задачи`.
+- Confirm Journal scroll/filter context is still usable after closing media.
+- Start a shift on one project and open `Проекты`.
+- Confirm only the active project card shows `На смене здесь` / `Текущая смена`.
+- Open that project and confirm the active shift badge is visible near the top.
+- Add a public project note as a worker.
+- Confirm the note stays in project history, shows author and timestamp, and is not a task/private message.
+- Confirm owner/manager can see the note on the project detail/card indicator.
+- Confirm a worker without project access cannot add/view that project note.
+- In Journal/material/project/task/message upload flows, open the file picker from Downloads/Files.
+- Confirm PDF, Word, Excel, CSV, photo, and video files are selectable where the button is for files/documents.
+- Confirm photo-only/video-only capture buttons remain photo/video focused where intentionally separate.
+- Confirm unsupported file types still show a clear error.
 
 ## Driver Time Projects / No-GPS Driver Time
 

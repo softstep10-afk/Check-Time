@@ -48,6 +48,11 @@ import {
   type OfflineFieldSnapshot,
 } from "@/lib/offline-field-cache";
 import {
+  formatProjectPublicNoteTime,
+  readProjectPublicNotes,
+  type ProjectPublicNote,
+} from "@/lib/project-public-notes";
+import {
   openWorkerProjectTaskDetails,
   submitWorkerTaskCompletion,
   type WorkerTaskModalMode,
@@ -299,7 +304,7 @@ export function WorkerProjectView({
   orgId: string;
   profileId: string;
 }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const router = useRouter();
   const workerShell = useWorkerShell();
   const { busyAction, updateTaskStatus, isOnline, queueTaskClaim } = workerShell;
@@ -309,6 +314,13 @@ export function WorkerProjectView({
   const driverTimeProject = isDriverTimeProject(project);
   const [taskList, setTaskList] = useState<TaskWithAttachments[]>(tasks);
   const [projectMediaList, setProjectMediaList] = useState<TaskAttachmentRef[]>(projectMedia);
+  const [projectPublicNotes, setProjectPublicNotes] = useState<ProjectPublicNote[]>(() =>
+    readProjectPublicNotes(project.settings),
+  );
+  const [projectNoteDraft, setProjectNoteDraft] = useState("");
+  const [projectNoteBusy, setProjectNoteBusy] = useState(false);
+  const [projectNoteMessage, setProjectNoteMessage] =
+    useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskWithAttachments | null>(null);
   const [selectedTaskMode, setSelectedTaskMode] = useState<WorkerTaskModalMode>("details");
   const [openError, setOpenError] = useState<string | null>(null);
@@ -329,6 +341,10 @@ export function WorkerProjectView({
   useEffect(() => {
     setProjectMediaList(projectMedia);
   }, [projectMedia]);
+
+  useEffect(() => {
+    setProjectPublicNotes(readProjectPublicNotes(project.settings));
+  }, [project.settings]);
 
   useEffect(() => {
     if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) return;
@@ -512,6 +528,9 @@ export function WorkerProjectView({
   const liveSelectedTask = selectedTask
     ? taskList.find((task) => task.id === selectedTask.id) ?? selectedTask
     : null;
+  const clockedInHere =
+    workerShell.shell.clockState.isClockedIn &&
+    workerShell.shell.clockState.currentProjectId === project.id;
 
   function openDetails(
     task: TaskWithAttachments | null | undefined,
@@ -576,6 +595,46 @@ export function WorkerProjectView({
     setTaskList((current) => [{ ...createdTask, attachments: undefined }, ...current]);
     form.reset();
     setTaskCreateMessage({ kind: "ok", text: t("tasks.workerTaskCreated") });
+  }
+
+  async function handleAddProjectPublicNote(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = projectNoteDraft.trim();
+    if (!text) {
+      setProjectNoteMessage({ kind: "err", text: t("projectNotes.required") });
+      return;
+    }
+
+    setProjectNoteBusy(true);
+    setProjectNoteMessage(null);
+    const response = await fetch("/api/worker/project-notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectId: project.id, text }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      note?: ProjectPublicNote;
+      notes?: ProjectPublicNote[];
+    };
+    setProjectNoteBusy(false);
+
+    if (!response.ok) {
+      setProjectNoteMessage({
+        kind: "err",
+        text: payload.error ?? t("projectNotes.saveFailed"),
+      });
+      return;
+    }
+
+    if (Array.isArray(payload.notes)) {
+      setProjectPublicNotes(payload.notes);
+    } else if (payload.note) {
+      setProjectPublicNotes((current) => [payload.note as ProjectPublicNote, ...current]);
+    }
+    setProjectNoteDraft("");
+    setProjectNoteMessage({ kind: "ok", text: t("projectNotes.added") });
+    router.refresh();
   }
 
   async function handleWorkerProjectMediaUpload(files: FileList | null) {
@@ -682,6 +741,15 @@ export function WorkerProjectView({
         {project.address ? (
           <p className="mt-1 text-xs text-[var(--text-muted)]">{project.address}</p>
         ) : null}
+        {clockedInHere ? (
+          <p
+            className="mt-3 inline-flex rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            style={{ background: "rgba(191, 162, 52, 0.16)", color: "var(--brand-yellow)" }}
+            data-testid="active-shift-project-badge"
+          >
+            {t("workerProject.activeShiftHere")}
+          </p>
+        ) : null}
         <div className="mt-3">
           <ProjectNavigationActions
             projectName={project.name}
@@ -776,6 +844,84 @@ export function WorkerProjectView({
         ) : (
           <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
             {t("workerProject.notesEmpty")}
+          </div>
+        )}
+      </section>
+
+      <section className="surface-card p-4" data-testid="worker-project-public-notes">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">
+              {t("projectNotes.title")}
+            </h2>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">
+              {t("projectNotes.subtitle")}
+            </p>
+          </div>
+          <span
+            className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            style={{ background: "rgba(191, 162, 52, 0.14)", color: "var(--brand-yellow)" }}
+          >
+            {projectPublicNotes.length}
+          </span>
+        </div>
+        <form className="mt-3 space-y-2" onSubmit={(event) => void handleAddProjectPublicNote(event)}>
+          <textarea
+            value={projectNoteDraft}
+            onChange={(event) => setProjectNoteDraft(event.target.value)}
+            placeholder={t("projectNotes.placeholder")}
+            maxLength={2000}
+            className="min-h-[86px] w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="submit"
+              disabled={projectNoteBusy || !projectNoteDraft.trim()}
+              className="button-base button-primary px-3 py-2 text-xs disabled:opacity-60"
+            >
+              {projectNoteBusy ? t("common.saving") : t("projectNotes.add")}
+            </button>
+            {projectNoteMessage ? (
+              <span
+                role={projectNoteMessage.kind === "err" ? "alert" : "status"}
+                className="text-xs font-semibold"
+                style={{
+                  color:
+                    projectNoteMessage.kind === "ok" ? "var(--green)" : "var(--red)",
+                }}
+              >
+                {projectNoteMessage.text}
+              </span>
+            ) : null}
+          </div>
+        </form>
+        {projectPublicNotes.length === 0 ? (
+          <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
+            {t("projectNotes.empty")}
+          </div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {projectPublicNotes.map((note) => (
+              <article
+                key={note.id}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.35)] p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-muted)]">
+                  <span className="font-semibold text-[var(--text-primary)]">
+                    {note.authorName}
+                  </span>
+                  <span>
+                    {formatProjectPublicNoteTime(note.createdAt, locale)}
+                  </span>
+                  <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.12)] px-1.5 py-0.5 font-semibold text-[var(--brand-yellow)]">
+                    {t("projectNotes.publicBadge")}
+                  </span>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--text-secondary)]">
+                  {note.text}
+                </p>
+              </article>
+            ))}
           </div>
         )}
       </section>

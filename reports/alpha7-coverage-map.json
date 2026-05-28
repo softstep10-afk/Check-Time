@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T07:29:35.657Z",
+  "generatedAt": "2026-05-28T08:15:09.887Z",
   "rows": [
     {
       "category": "material driver-only dropdown",
@@ -187,6 +187,7 @@
     {
       "category": "mobile Поехать preference",
       "testsFound": [
+        "tests/lib/mobile-project-task-interactions.test.ts",
         "tests/lib/project-navigation-ui.test.ts",
         "tests/lib/project-navigation.test.ts"
       ],
@@ -564,6 +565,7 @@
         "tests/lib/gps-consent.test.ts",
         "tests/lib/gps-freshness.test.ts",
         "tests/lib/jarvis-memory.test.ts",
+        "tests/lib/journal-active-project-notes-source.test.ts",
         "tests/lib/live-map-utils.test.ts",
         "tests/lib/manager-utils.test.ts",
         "tests/lib/offline-visibility.test.ts",

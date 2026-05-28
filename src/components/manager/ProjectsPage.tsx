@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type PointerEvent as ReactPointerEvent,
+  type SetStateAction,
+} from "react";
 import { Copy, Check, Plus, Pencil, Trash2, X, FileText, Play } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
@@ -14,6 +22,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { parsePastedCoordinatePair } from "@/lib/coordinate-paste";
+import { normalizeProjectAddressForCopy } from "@/lib/project-navigation";
 import {
   assessDeviceLocationAccuracy,
   type DeviceLocationAssessment,
@@ -30,6 +39,7 @@ import {
   projectScheduleToneStyle,
 } from "@/lib/project-schedule";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
+import { readProjectPublicNotes } from "@/lib/project-public-notes";
 import type {
   ProjectBudgetStatus,
   ProjectStatus,
@@ -59,6 +69,15 @@ type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
 
 const PROJECT_CARD_INTERACTIVE_SELECTOR =
   "button,a,input,textarea,select,label,[role='button'],[data-project-card-action]";
+const PROJECT_CARD_TAP_MOVE_TOLERANCE_PX = 10;
+const PROJECT_CARD_CLICK_SUPPRESSION_MS = 600;
+
+type ProjectCardPointerState = {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  target: EventTarget | null;
+};
 
 function shouldIgnoreProjectCardActivation(
   target: EventTarget | null,
@@ -67,6 +86,24 @@ function shouldIgnoreProjectCardActivation(
   if (!(target instanceof HTMLElement)) return false;
   const interactiveTarget = target.closest(PROJECT_CARD_INTERACTIVE_SELECTOR);
   return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
+}
+
+function shouldActivateProjectCardPointer(
+  event: ReactPointerEvent<HTMLElement>,
+  pointerState: ProjectCardPointerState | null,
+): boolean {
+  if (event.pointerType === "mouse") return false;
+  if (!pointerState || pointerState.pointerId !== event.pointerId) return false;
+  if (
+    Math.abs(event.clientX - pointerState.clientX) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX ||
+    Math.abs(event.clientY - pointerState.clientY) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX
+  ) {
+    return false;
+  }
+  return (
+    !shouldIgnoreProjectCardActivation(pointerState.target, event.currentTarget) &&
+    !shouldIgnoreProjectCardActivation(event.target, event.currentTarget)
+  );
 }
 
 type AddressLookupState = ProjectAddressGeocodeResult & {
@@ -473,6 +510,7 @@ function InlineNotesEditor({
 function CopyAddressButton({ address }: { address: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const copyText = normalizeProjectAddressForCopy(address) ?? address;
 
   return (
     <button
@@ -480,7 +518,7 @@ function CopyAddressButton({ address }: { address: string }) {
       onClick={(event) => {
         event.stopPropagation();
         navigator.clipboard
-          .writeText(address)
+          .writeText(copyText)
           .then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
@@ -593,6 +631,8 @@ export function ProjectsPage({
   const [sortBy, setSortBy] = useState<"activity" | "name" | "week" | "cost">("activity");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const projectCardPointerRef = useRef<ProjectCardPointerState | null>(null);
+  const projectCardTouchActivatedAtRef = useRef(0);
 
   // Debounce the live search 300ms so typing doesn't thrash the filter.
   useEffect(() => {
@@ -1628,13 +1668,44 @@ export function ProjectsPage({
           const cardShadow = `0 0 0 1px ${effectiveScheduleStyle.borderColor}, 0 0 18px ${effectiveScheduleStyle.background}`;
           const statusPanelTitle = `${projectStatusLabel(t, project.status)} · ${scheduleLabel} · ${deadlineCountdown}`;
           const openProjectDetail = () => router.push(`/projects/${project.id}`);
+          const publicNotesCount = readProjectPublicNotes(project.settings).length;
 
           return (
             <article
               key={project.id}
               role="button"
               tabIndex={0}
+              onPointerDown={(event) => {
+                if (event.pointerType === "mouse") return;
+                projectCardPointerRef.current = {
+                  pointerId: event.pointerId,
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                  target: event.target,
+                };
+              }}
+              onPointerCancel={() => {
+                projectCardPointerRef.current = null;
+              }}
+              onPointerUp={(event) => {
+                const shouldActivate = shouldActivateProjectCardPointer(
+                  event,
+                  projectCardPointerRef.current,
+                );
+                projectCardPointerRef.current = null;
+                if (!shouldActivate) return;
+                projectCardTouchActivatedAtRef.current = Date.now();
+                event.preventDefault();
+                openProjectDetail();
+              }}
               onClick={(event) => {
+                if (
+                  Date.now() - projectCardTouchActivatedAtRef.current <
+                  PROJECT_CARD_CLICK_SUPPRESSION_MS
+                ) {
+                  event.preventDefault();
+                  return;
+                }
                 if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
                 openProjectDetail();
               }}
@@ -1836,6 +1907,24 @@ export function ProjectsPage({
                       </span>
                     </button>
                   </div>
+                ) : null}
+
+                {publicNotesCount > 0 ? (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      router.push(`/projects/${project.id}`);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                    style={{
+                      background: "rgba(191, 162, 52, 0.12)",
+                      color: "var(--brand-yellow)",
+                    }}
+                  >
+                    {t("projectNotes.newBadge")}
+                    <span className="font-mono opacity-80">{publicNotesCount}</span>
+                  </button>
                 ) : null}
 
                 <InlineNotesEditor

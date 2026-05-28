@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
@@ -13,6 +13,7 @@ import {
   loadOfflineSnapshot,
   type OfflineFieldSnapshot,
 } from "@/lib/offline-field-cache";
+import { readProjectPublicNotes } from "@/lib/project-public-notes";
 import type { WorkerProject } from "@/lib/worker-types";
 import type { Project, ProjectStatus, Task } from "@/types/database";
 
@@ -25,6 +26,15 @@ const STATUS_COLORS: Record<ProjectStatus, { bg: string; color: string }> = {
 
 const PROJECT_CARD_INTERACTIVE_SELECTOR =
   "button,a,input,textarea,select,label,[role='button'],[data-project-card-action]";
+const PROJECT_CARD_TAP_MOVE_TOLERANCE_PX = 10;
+const PROJECT_CARD_CLICK_SUPPRESSION_MS = 600;
+
+type ProjectCardPointerState = {
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  target: EventTarget | null;
+};
 
 function shouldIgnoreProjectCardActivation(
   target: EventTarget | null,
@@ -33,6 +43,24 @@ function shouldIgnoreProjectCardActivation(
   if (!(target instanceof HTMLElement)) return false;
   const interactiveTarget = target.closest(PROJECT_CARD_INTERACTIVE_SELECTOR);
   return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
+}
+
+function shouldActivateProjectCardPointer(
+  event: ReactPointerEvent<HTMLElement>,
+  pointerState: ProjectCardPointerState | null,
+): boolean {
+  if (event.pointerType === "mouse") return false;
+  if (!pointerState || pointerState.pointerId !== event.pointerId) return false;
+  if (
+    Math.abs(event.clientX - pointerState.clientX) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX ||
+    Math.abs(event.clientY - pointerState.clientY) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX
+  ) {
+    return false;
+  }
+  return (
+    !shouldIgnoreProjectCardActivation(pointerState.target, event.currentTarget) &&
+    !shouldIgnoreProjectCardActivation(event.target, event.currentTarget)
+  );
 }
 
 export function WorkerProjectsList() {
@@ -54,6 +82,8 @@ export function WorkerProjectsList() {
       projectReceipts: unknown[];
     }> | null>(null);
   const [offlineOpenMessage, setOfflineOpenMessage] = useState<string | null>(null);
+  const projectCardPointerRef = useRef<ProjectCardPointerState | null>(null);
+  const projectCardTouchActivatedAtRef = useRef(0);
 
   const projects =
     !isOnline && shell.projects.length === 0 && cachedProjectsSnapshot?.payload.projects
@@ -96,6 +126,10 @@ export function WorkerProjectsList() {
             const driverTimeProject = isDriverTimeProject(project);
             const hasFence = project.site !== null;
             const taskCount = tasksByProject.get(project.id) ?? 0;
+            const publicNotesCount = readProjectPublicNotes(project.settings).length;
+            const clockedInHere =
+              shell.clockState.isClockedIn &&
+              shell.clockState.currentProjectId === project.id;
             function openProject() {
               if (!isOnline) {
                 const cached = loadOfflineSnapshot<{
@@ -120,7 +154,37 @@ export function WorkerProjectsList() {
                 key={project.id}
                 role="button"
                 tabIndex={0}
+                onPointerDown={(event) => {
+                  if (event.pointerType === "mouse") return;
+                  projectCardPointerRef.current = {
+                    pointerId: event.pointerId,
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    target: event.target,
+                  };
+                }}
+                onPointerCancel={() => {
+                  projectCardPointerRef.current = null;
+                }}
+                onPointerUp={(event) => {
+                  const shouldActivate = shouldActivateProjectCardPointer(
+                    event,
+                    projectCardPointerRef.current,
+                  );
+                  projectCardPointerRef.current = null;
+                  if (!shouldActivate) return;
+                  projectCardTouchActivatedAtRef.current = Date.now();
+                  event.preventDefault();
+                  openProject();
+                }}
                 onClick={(event) => {
+                  if (
+                    Date.now() - projectCardTouchActivatedAtRef.current <
+                    PROJECT_CARD_CLICK_SUPPRESSION_MS
+                  ) {
+                    event.preventDefault();
+                    return;
+                  }
                   if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
                   openProject();
                 }}
@@ -145,6 +209,17 @@ export function WorkerProjectsList() {
                       >
                         {project.status}
                       </span>
+                      {clockedInHere ? (
+                        <span
+                          className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                          style={{
+                            background: "rgba(191, 162, 52, 0.16)",
+                            color: "var(--brand-yellow)",
+                          }}
+                        >
+                          {t("workerProject.activeShiftHere")}
+                        </span>
+                      ) : null}
                       <span
                         className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
                         style={{
@@ -191,6 +266,11 @@ export function WorkerProjectsList() {
                         {taskCount} {t("worker.projectTasks")}
                       </span>
                     </div>
+                    {publicNotesCount > 0 ? (
+                      <div className="mt-1.5 text-[11px] font-semibold text-[var(--brand-yellow)]">
+                        {t("projectNotes.newBadge")} · {publicNotesCount}
+                      </div>
+                    ) : null}
                   </div>
                   <span
                     className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-semibold"

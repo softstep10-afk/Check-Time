@@ -39,6 +39,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/app/api/worker/jarvis/route.ts` | read-only | yes | confirmed guarded | none |
 | `src/app/api/worker/link-checkin-video/route.ts` | read-only | no | confirmed guarded | createAdminClient, service role, role checks, profile lookup, same-org guard helper |
 | `src/app/api/worker/link-checkout-video/route.ts` | read-only | no | confirmed guarded | createAdminClient, service role, role checks, profile lookup, same-org guard helper |
+| `src/app/api/worker/project-notes/route.ts` | project sensitive | no | confirmed guarded | .update(, revalidatePath, createAdminClient, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/worker/project-tasks/route.ts` | project sensitive | no | confirmed guarded | revalidatePath, createAdminClient, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/worker/tasks/seen/route.ts` | task/message sensitive | no | confirmed guarded | .update(, revalidatePath, createAdminClient, role checks, profile lookup, org/company guard |
 | `src/lib/ai/action-endpoints.ts` | read-only | no | confirmed guarded | none |
@@ -113,6 +114,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/project-navigation.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/project-planning-attachments.ts` | project sensitive | no | needs manual review | .insert(, org/company guard |
 | `src/lib/project-planning.ts` | read-only | no | confirmed guarded | none |
+| `src/lib/project-public-notes.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/project-save.ts` | project sensitive | no | likely guarded | .insert(, .update(, same-org guard helper, org/company guard |
 | `src/lib/project-schedule.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/role-permissions.ts` | read-only | yes | confirmed guarded | role checks |

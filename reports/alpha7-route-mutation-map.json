@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T07:29:31.891Z",
+  "generatedAt": "2026-05-28T08:15:09.500Z",
   "rows": [
     {
       "path": "src/app/api/ai/actions/create-project/route.ts",
@@ -610,6 +610,27 @@
         "same-org guard helper"
       ],
       "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/worker/project-notes/route.ts",
+      "classification": "project sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
       "dangerousZone": false,
       "risk": "confirmed guarded"
     },
@@ -1472,6 +1493,16 @@
     },
     {
       "path": "src/lib/project-planning.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/project-public-notes.ts",
       "classification": "read-only",
       "mutationEvidence": [],
       "elevatedClientEvidence": [],

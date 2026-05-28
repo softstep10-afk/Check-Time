@@ -21,6 +21,8 @@ describe("project navigation mobile action", () => {
     expect(source).toContain('t("projects.useNavigationByDefault")');
     expect(source).toContain('t("projects.openOtherNavigationApp")');
     expect(source).toContain('t("projects.copyDestination")');
+    expect(source).toContain("buildProjectAddressCopyText");
+    expect(source).toContain('kind === "tesla" ? shareText : addressCopyText');
   });
 
   it("keeps desktop map actions hidden from mobile-only preference buttons", () => {
