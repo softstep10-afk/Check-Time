@@ -25,6 +25,7 @@ Use this before any production deploy.
 - Run `npm run alpha7:route-guards`.
 - Run `npm run alpha7:coverage-map`.
 - Run `npm run alpha7:rc-safety-gate` for local Alpha-7 regression gates.
+- Run `npm run alpha7:release-audit --if-present` and compare local HEAD with the intended production commit.
 - Run `npm run alpha7:predeploy` before owner-approved deploys.
 - Confirm `git status --short` is still clean after checks.
 
@@ -49,6 +50,7 @@ Use this before any production deploy.
 - No production data mutation.
 - No business logic changes unless explicitly owner-approved.
 - If file/media code changed, confirm the owner manual QA file section is scheduled after deploy.
+- If release diagnostics changed, confirm `/admin/diagnostics` is owner/admin-only and exposes only version/build metadata.
 
 ## Forbidden Without Owner Approval
 
@@ -62,3 +64,10 @@ Use this before any production deploy.
 - Jarvis action behavior.
 - File upload behavior.
 - Supabase RLS, Storage policies, and schema.
+
+## Release Diagnostics
+
+- Before deploy, record intended commit SHA.
+- After deploy, owner/admin opens `/admin/diagnostics`.
+- Confirm app version, commit SHA, build time, deployment environment, and deployment URL are visible.
+- Confirm no service-role key, database URL, token, PIN, or private production data is visible.

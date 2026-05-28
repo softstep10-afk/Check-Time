@@ -13,6 +13,7 @@ Alpha-7 reminder: app rollback is separate from database rollback. None of the A
 - Latest commit summary: `git log -1 --stat`.
 - Vercel deployment list or inspect output.
 - Current production alias target.
+- Owner/admin `/admin/diagnostics` commit/build metadata if the app is reachable.
 
 ## Identify Last Good State
 
@@ -60,6 +61,7 @@ Alpha-7 reminder: app rollback is separate from database rollback. None of the A
 ## After Rollback
 
 - Confirm production URL points to the intended deployment.
+- Confirm `/admin/diagnostics` points to the rollback commit/build metadata for owner/admin.
 - Confirm `git status --short` is clean locally.
 - Record what changed and what did not change.
 - Create a separate follow-up task for the root cause.

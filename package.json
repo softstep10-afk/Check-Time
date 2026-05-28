@@ -22,6 +22,7 @@
     "alpha7:route-guards": "node scripts/alpha7-route-mutation-guard-map.mjs",
     "alpha7:coverage-map": "node scripts/alpha7-coverage-map.mjs",
     "alpha7:rc-safety-gate": "node scripts/alpha7-rc-safety-gate.mjs",
+    "alpha7:release-audit": "node scripts/alpha7-release-audit.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

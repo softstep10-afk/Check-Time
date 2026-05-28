@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T08:15:09.887Z",
+  "generatedAt": "2026-05-28T09:24:07.200Z",
   "rows": [
     {
       "category": "material driver-only dropdown",
@@ -417,6 +417,7 @@
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
         "docs/ALPHA7_DEPLOY_READINESS.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
+        "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/B2_MIGRATION_PLAN.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
@@ -571,6 +572,7 @@
         "tests/lib/offline-visibility.test.ts",
         "tests/lib/project-save.test.ts",
         "tests/lib/shift-review.test.ts",
+        "tests/lib/worker-checkout-action-source.test.ts",
         "tests/lib/worker-clock-metadata.test.ts",
         "tests/lib/worker-utils.test.ts"
       ],

@@ -567,3 +567,30 @@ E. Navigation
 - Confirm stored preference.
 - Confirm Apple/Google/Tesla-share.
 - Confirm copy address.
+
+## Project Media Library QA
+
+- Open a project that has photos, videos, and document files.
+- Confirm media tabs show `Все`, `Фото`, `Видео`, and `Документы / PDF`.
+- Confirm each tab count matches the visible files.
+- Confirm photos open in the viewer.
+- Confirm videos still open/play/download as before.
+- Confirm PDF/Word/Excel/CSV files remain available for open/download.
+- Confirm delete buttons still follow the approved Andrey/Sergey permission helper and are not broadened.
+
+## Realtime Sync QA
+
+- Open the same project as worker and owner/manager.
+- Add a public project note as a worker and confirm owner/manager sees it without leaving the page.
+- Take a task and confirm manager sees the status update without leaving the page.
+- Complete a task and confirm manager sees done status without leaving the page.
+- Read a private/direct message and confirm sender sees read status while the message remains in normal history.
+- Clear a notification and confirm the source task/message remains visible.
+
+## Production Diagnostics QA
+
+- Log in as owner/admin and open `/admin/diagnostics`.
+- Confirm app version, commit SHA, build time, deployment environment, and deployment URL are visible.
+- Confirm normal manager/worker users cannot open the diagnostics page.
+- Confirm no service-role key, database URL, private token, PIN, payroll/private record, or session secret is visible.
+- Compare the displayed commit SHA to the deployed commit recorded for this release.

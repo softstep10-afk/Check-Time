@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  env: {
+    APP_BUILD_TIME: process.env.APP_BUILD_TIME ?? new Date().toISOString(),
+  },
   experimental: {
     viewTransition: true,
   },

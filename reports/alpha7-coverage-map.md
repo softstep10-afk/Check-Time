@@ -21,4 +21,4 @@ Static local scan of tests, source, and docs for critical Alpha-7 invariants.
 | Jarvis confirmation and real id success | covered | 8 | 16 | None |
 | archive/trash separation | covered | 3 | 15 | None |
 | payroll untouched | covered | 3 | 5 | None |
-| GPS/shift untouched | covered | 21 | 75 | None |
+| GPS/shift untouched | covered | 22 | 75 | None |

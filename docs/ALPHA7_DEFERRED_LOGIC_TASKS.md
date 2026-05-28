@@ -378,3 +378,27 @@ Deferred until separate owner approval:
 - Cross-device pending-action visibility; current queue is local to the worker's browser/device.
 - Push/background sync service worker.
 - Full offline navigation/app shell prefetching for pages that were never opened online.
+
+## Release Readiness / Performance Follow-Ups
+
+Completed scope:
+
+- Added owner/admin-only production diagnostics for version, commit SHA, build time, deploy environment, and deployment URL.
+- Added local release audit command for clean-tree and local-vs-production verification.
+- Added project media categories for `Все`, `Фото`, `Видео`, and `Документы / PDF`.
+- Added safe stable-list hydration in project task/media views to reduce unnecessary redraws.
+- Added project public note realtime merge in manager and worker project views.
+
+Not changed:
+
+- No SQL, migrations, schema, RLS, Storage, payroll, archive/trash, GPS, shifts, or production data mutation.
+- No broad realtime architecture rewrite.
+- No media delete permission changes.
+- No task/message/material lifecycle redesign.
+
+Deferred until separate owner approval:
+
+- Browser performance instrumentation around project open latency and mobile scroll timings.
+- List virtualization for very large project/task/media dashboards.
+- Deeper route-by-route security remediation beyond the read-only mutation map and audit report.
+- Service-worker or push-based background sync.

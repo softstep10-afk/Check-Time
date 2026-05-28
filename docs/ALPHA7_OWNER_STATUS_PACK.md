@@ -38,7 +38,10 @@ Current deploy status: not deployed by this pack.
 - Production QA hotfix tightened material assignment to driver-role users only.
 - Production QA hotfix added clearer action pending states, preserved private/direct message history, and added mobile "Поехать" navigation preference.
 - Overnight hardening adds an owner/admin-safe path to set an existing profile role to `driver` through Team profile settings.
-- Sanya appears in material dropdown only if his profile role is `driver`; no hardcoded Sanya logic is used.
+- Sanya appears in material dropdown only if his profile role is `driver` or his stable profile id is in the approved `MATERIAL_DRIVER_PROFILE_IDS` capability config; no hardcoded Sanya logic is used.
+- Latest release-readiness pass adds owner/admin-only `/admin/diagnostics` with app version, commit SHA, build time, deployment environment, and deployment URL.
+- Project media is organized into `Все`, `Фото`, `Видео`, and `Документы / PDF` without changing upload/open/download/delete permissions.
+- Project public notes and project task/media lists use safer realtime/stable-list merging to reduce redraws and stale state.
 
 ## What Was Not Changed
 
@@ -52,6 +55,7 @@ Current deploy status: not deployed by this pack.
 - No file allowed business-access redesign.
 - No production data mutation.
 - No deployment.
+- No secret, service-role key, database URL, PIN, payroll/private record, or token is exposed in release diagnostics.
 
 ## Known Blocked Items
 
@@ -77,11 +81,13 @@ Minimum owner decision checks:
 - Archive/Trash separation.
 - Payroll archive visible and salary calculation unchanged.
 - Worker flow, manager flow, owner/admin Jarvis diagnostics.
-- Materials: "Добавить материал" must list only drivers; Sanya appears only if his profile role is `driver`.
+- Materials: "Добавить материал" must list only eligible material takers; Sanya appears only through role/capability, never by hardcoded name.
 - Driver setup: owner/admin can use `Команда` -> profile -> `Роль` -> `Водитель`; no SQL/manual DB mutation is required through the UI path.
 - Action feedback: material save, media delete, task take, and task done show pending/error states.
 - Private messages remain visible for sender and recipient after read/notification clear.
 - Mobile project "Поехать" asks for Apple Maps / Google Maps / Tesla-share preference once and then reuses it.
+- Project media tabs show correct counts and preserve open/download/delete behavior.
+- Owner/admin `/admin/diagnostics` matches the intended deployed commit and remains hidden from normal users.
 
 ## Deploy Readiness
 
