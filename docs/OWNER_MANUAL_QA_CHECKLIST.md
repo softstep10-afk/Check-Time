@@ -14,6 +14,8 @@ Before manual QA for any new change:
 - If media/upload changed, include photo, video, PDF, Word/Excel/CSV, worker upload, manager upload, task attachment, message attachment, and open/download/delete.
 - If tasks changed, include create/open/take/complete, material task, normal task, status realtime, and notification behavior.
 - If messages changed, include sender history, recipient history, read status, notification clear, second message without reload, and message does not become task.
+- If the change is broad/shared, use the relevant sections of `docs/CRITICAL_PATH_SMOKE_ALPHA7.md`.
+- If any dangerous zone from `docs/DANGEROUS_ZONES_ALPHA7.md` is touched, require exact owner-approved scope before manual QA.
 
 ## Alpha-7 Deploy Candidate Must-Check
 

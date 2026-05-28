@@ -12,6 +12,8 @@ Use this checklist before any owner-approved production deploy. This is release 
 - Do not deploy hidden local files or unrelated work.
 - Do not change environment variables during deploy unless the owner approved the exact variable.
 - Do not run SQL, migrations, reset scripts, or wash scripts as part of app release.
+- Require an Impact Map and dangerous-zone declaration for the release candidate.
+- Define targeted smoke from `docs/CRITICAL_PATH_SMOKE_ALPHA7.md` before deploy.
 
 ## Required Local Snapshot
 
@@ -23,6 +25,8 @@ git rev-parse HEAD
 git status --short
 git log -5 --oneline
 npm run alpha7:release-audit --if-present
+npm run alpha7:impact-template --if-present
+npm run alpha7:critical-smoke --if-present
 ```
 
 Expected:
@@ -31,6 +35,7 @@ Expected:
 - `git status --short` is empty.
 - `HEAD` matches the commit approved for release.
 - Release audit does not show a dirty tree or unexplained local/production mismatch.
+- Dangerous-zone review is complete and unexpected dangerous files are not present.
 
 ## Required Checks
 
@@ -49,6 +54,8 @@ npx tsc --noEmit
 npm test
 npm run build
 npm run alpha7:predeploy
+npm run alpha7:release-audit --if-present
+npm run alpha7:critical-smoke --if-present
 ```
 
 Known local warning area: `00099_wash_and_reset.sql` should continue to be reported as dangerous local SQL and must not be executed.

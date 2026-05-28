@@ -17,9 +17,11 @@ Use this before any production deploy.
 - Impact Map lists changed files/components/routes.
 - Impact Map lists all known screens that use changed shared components.
 - Impact Map lists affected business flows.
+- Impact Map declares dangerous zones touched: `none` or exact list from `docs/DANGEROUS_ZONES_ALPHA7.md`.
 - Impact Map says what must not change.
 - Targeted regression tests were run for affected flows.
 - Manual QA scope is limited to affected flows and is written down.
+- Critical-path smoke sections from `docs/CRITICAL_PATH_SMOKE_ALPHA7.md` are selected for broad/shared changes.
 - If a shared component changed, every known use has a test/source guard or manual QA line.
 - If worker mobile UI changed, QA covers check-in, active project, checkout, tasks, messages, project media, project navigation, and offline banner as applicable.
 - If project cards changed, QA covers open project, `Поехать`, copy address, active project badge, project notes, and media/document access.
@@ -43,6 +45,7 @@ Use this before any production deploy.
 - Run `npm run alpha7:rc-safety-gate` for local Alpha-7 regression gates.
 - Run `npm run alpha7:release-audit --if-present` and compare local HEAD with the intended production commit.
 - Run `npm run alpha7:impact-template --if-present` when preparing a new task or release report.
+- Run `npm run alpha7:critical-smoke --if-present` to verify the critical smoke checklist remains available.
 - Run `npm run alpha7:predeploy` before owner-approved deploys.
 - Confirm `git status --short` is still clean after checks.
 
@@ -68,6 +71,7 @@ Use this before any production deploy.
 - No business logic changes unless explicitly owner-approved.
 - If file/media code changed, confirm the owner manual QA file section is scheduled after deploy.
 - If release diagnostics changed, confirm `/admin/diagnostics` is owner/admin-only and exposes only version/build metadata.
+- If any dangerous zone from `docs/DANGEROUS_ZONES_ALPHA7.md` was touched unexpectedly, stop and report before deploy.
 
 ## Forbidden Without Owner Approval
 
@@ -81,6 +85,12 @@ Use this before any production deploy.
 - Jarvis action behavior.
 - File upload behavior.
 - Supabase RLS, Storage policies, and schema.
+
+## Dangerous-Zone Declaration
+
+- Every task must state `Dangerous zones touched: none` or list the exact dangerous zones.
+- Unexpected dangerous-zone diffs require stop-and-report.
+- Do not hide payroll, shift, GPS, archive/trash, auth/session, service-role, Storage, RLS, schema, material queue core, or task/message lifecycle changes inside unrelated work.
 
 ## Release Diagnostics
 

@@ -11,18 +11,24 @@ const template = String.raw`Alpha-7 Impact Map
 3. Business flows that could be affected
 - 
 
-4. What must not change
+4. Dangerous zones touched
+- none / exact list from docs/DANGEROUS_ZONES_ALPHA7.md
+
+5. What must not change
 - No deploy unless owner approves.
 - No SQL, migrations, schema, RLS, or Storage changes unless explicitly approved.
 - No production data mutation.
 - No payroll, archive/trash, GPS/clock-in/out, or shift behavior change unless explicitly approved.
 - No media delete permission, task/message lifecycle, material queue, or role redesign unless explicitly approved.
 
-5. Targeted regression tests to run
+6. Targeted regression tests to run
 - 
 
-6. Manual QA limited to affected flows
+7. Manual QA limited to affected flows
 - 
+
+Critical path smoke, if broad/shared
+- Use docs/CRITICAL_PATH_SMOKE_ALPHA7.md and list only sections required for this change.
 
 Shared component checklist, if applicable
 - Known screens listed.

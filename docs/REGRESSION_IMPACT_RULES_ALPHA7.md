@@ -13,15 +13,20 @@ The Impact Map must include:
 1. Files, components, routes, scripts, or docs likely to change.
 2. All known screens using those components.
 3. Business flows that could be affected.
-4. What must not change.
-5. Targeted regression tests to run.
-6. Manual QA limited to the affected flows only.
+4. Dangerous zones touched, or `none`.
+5. What must not change.
+6. Targeted regression tests to run.
+7. Manual QA limited to the affected flows only.
 
 Use:
 
 ```bash
 npm run alpha7:impact-template
 ```
+
+If the change is broad or touches a shared component, also use `docs/CRITICAL_PATH_SMOKE_ALPHA7.md`.
+
+Dangerous-zone definitions live in `docs/DANGEROUS_ZONES_ALPHA7.md`.
 
 ## Shared Component Rule
 
@@ -107,6 +112,7 @@ Every future final report should include:
 - Impact Map completed: yes/no.
 - Shared components changed: yes/no.
 - Affected screens.
+- Dangerous zones touched: none/list.
 - Regression tests run.
 - Manual QA scope.
 - Explicit list of forbidden zones not touched.
