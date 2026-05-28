@@ -15,6 +15,13 @@ export interface MaterialTaskLike {
   metadata?: unknown;
 }
 
+export interface MaterialTaskItem {
+  name: string;
+  quantity?: string | number | null;
+  unit?: string | null;
+  notes?: string | null;
+}
+
 export interface MaterialTaskMetadataInput {
   base?: Record<string, unknown> | null;
   materialName: string;
@@ -29,6 +36,7 @@ export interface MaterialTaskMetadataInput {
   orderId?: string | null;
   orderNote?: string | null;
   orderSize?: number | null;
+  materialItems?: MaterialTaskItem[] | null;
 }
 
 export interface MaterialIndicatorState {
@@ -48,6 +56,11 @@ function readMetadata(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readStringOrNumber(value: unknown): string | number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  return readString(value);
 }
 
 function normalizeDate(value: unknown): string | null {
@@ -111,6 +124,12 @@ export function getMaterialTaskMaterialName(task: MaterialTaskLike): string | nu
     readString(metadata.material) ??
     readString(task.title)
   );
+}
+
+export function getMaterialTaskItems(task: MaterialTaskLike): MaterialTaskItem[] {
+  const metadata = readMetadata(task.metadata);
+  if (!Array.isArray(metadata.materialItems)) return [];
+  return normalizeMaterialTaskItems(metadata.materialItems);
 }
 
 export function hasDriverSeenMaterialTask(task: MaterialTaskLike): boolean {
@@ -200,6 +219,7 @@ export function buildMaterialTaskMetadata(input: MaterialTaskMetadataInput): Rec
   const materialName = input.materialName.trim();
   const neededDate = normalizeDate(input.neededDate);
   const driverUserId = readString(input.driverUserId);
+  const materialItems = normalizeMaterialTaskItems(input.materialItems);
   return {
     ...(input.base ?? {}),
     category: "material",
@@ -217,10 +237,30 @@ export function buildMaterialTaskMetadata(input: MaterialTaskMetadataInput): Rec
     order_id: input.orderId ?? null,
     order_note: input.orderNote ?? null,
     order_size: input.orderSize ?? null,
+    materialItems: materialItems.length > 0 ? materialItems : null,
     schedule_kind: "delivery",
     schedule_scope: "material",
     schedule_visible_to_workers: true,
     schedule_delivery_status: driverUserId ? "assigned" : "open",
     delivery_available_to: driverUserId ? null : "team",
   };
+}
+
+export function normalizeMaterialTaskItems(value: unknown): MaterialTaskItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): MaterialTaskItem | null => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const record = item as Record<string, unknown>;
+      const name = readString(record.name ?? record.material ?? record.title);
+      if (!name) return null;
+      return {
+        name,
+        quantity: readStringOrNumber(record.quantity ?? record.qty),
+        unit: readString(record.unit),
+        notes: readString(record.notes ?? record.note ?? record.comment),
+      };
+    })
+    .filter((item): item is MaterialTaskItem => Boolean(item))
+    .slice(0, 250);
 }

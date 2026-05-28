@@ -5,6 +5,7 @@ import {
   buildMaterialTaskTitle,
   getMaterialIndicatorState,
   getMaterialTaskDriverId,
+  getMaterialTaskItems,
   getMaterialTaskNeededDate,
   getMaterialTaskScheduleDate,
   getMaterialTaskUrgency,
@@ -77,6 +78,10 @@ describe("material task helpers", () => {
         projectId: "project-1",
         quantity: 12,
         unit: "шт",
+        materialItems: [
+          { name: "screws", quantity: 12, unit: "шт", notes: "deck screws" },
+          { name: "paint", quantity: "1,5", unit: "л", notes: "" },
+        ],
       }),
     ).toMatchObject({
       category: "material",
@@ -90,10 +95,34 @@ describe("material task helpers", () => {
       projectId: "project-1",
       quantity: 12,
       unit: "шт",
+      materialItems: [
+        { name: "screws", quantity: 12, unit: "шт", notes: "deck screws" },
+        { name: "paint", quantity: "1,5", unit: "л", notes: null },
+      ],
       schedule_kind: "delivery",
       schedule_scope: "material",
       schedule_delivery_status: "assigned",
     });
+  });
+
+  it("reads material line items from task metadata", () => {
+    expect(
+      getMaterialTaskItems(
+        task({
+          metadata: {
+            category: "material",
+            materialItems: [
+              { name: "Screws", quantity: "2 boxes", unit: "box", notes: "Deck" },
+              { name: "   ", quantity: "1" },
+              { material: "Paint", qty: 1.5, unit: "gal", comment: "White" },
+            ],
+          },
+        }),
+      ),
+    ).toEqual([
+      { name: "Screws", quantity: "2 boxes", unit: "box", notes: "Deck" },
+      { name: "Paint", quantity: 1.5, unit: "gal", notes: "White" },
+    ]);
   });
 
   it("builds open queue material metadata when no assignee is selected", () => {

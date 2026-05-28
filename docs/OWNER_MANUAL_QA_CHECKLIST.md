@@ -88,6 +88,11 @@ Run this after deploys that touch application code or user workflows.
 - Direct SQL Supabase Step 0 and production RLS/Storage verification remain separate blocked items.
 - Open "Добавить материал".
 - Confirm the default assignee option is `Любой водитель или рабочий`.
+- Paste 5 rows from Excel/Google Sheets into `Вставить спецификацию из Excel`.
+- Confirm `Найдено X позиций` appears and the pasted positions become editable.
+- Edit one position, remove one position, and add one manually with `Добавить позицию`.
+- Attach an Excel/CSV specification file.
+- Attach a PDF/photo specification file.
 - Confirm saving with no selected person creates an open shared material task.
 - Confirm the optional assignee dropdown shows eligible field users only: workers, drivers, and configured supervisor-drivers.
 - Confirm Sanya can remain supervisor-driver through `MATERIAL_DRIVER_PROFILE_IDS` when focused driver behavior is needed.
@@ -102,6 +107,7 @@ Run this after deploys that touch application code or user workflows.
 - A second user trying to take the same open material task sees `Задачу уже взял другой человек`.
 - Eligible field users receive the existing task notification/banner for the material task where realtime/RLS allows it.
 - Driver/worker sees project name, material name, urgency, and needed date.
+- Driver/worker can open/download attached material request files through the existing task attachment controls.
 - Schedule shows the material task on the selected needed date.
 - Owner/manager sees a material-needed badge on project card/detail.
 - Owner/manager sees who took/read/completed the task.

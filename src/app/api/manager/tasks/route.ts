@@ -10,7 +10,9 @@ import { readOptionalUuid, readUuidArray } from "@/lib/server/id-guards";
 import {
   buildMaterialTaskMetadata,
   buildMaterialTaskTitle,
+  normalizeMaterialTaskItems,
   normalizeMaterialTaskUrgency,
+  type MaterialTaskItem,
 } from "@/lib/material-tasks";
 import { isEligibleMaterialTaker } from "@/lib/material-driver-permissions";
 import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
@@ -39,6 +41,7 @@ function readMaterialPayload(value: unknown): {
   orderId: string;
   orderNote: string;
   orderSize: number | null;
+  materialItems: MaterialTaskItem[];
 } {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {
@@ -52,6 +55,7 @@ function readMaterialPayload(value: unknown): {
       orderId: "",
       orderNote: "",
       orderSize: null,
+      materialItems: [],
     };
   }
   const input = value as Record<string, unknown>;
@@ -70,6 +74,7 @@ function readMaterialPayload(value: unknown): {
     orderId: readText(input.orderId),
     orderNote: readText(input.orderNote),
     orderSize,
+    materialItems: normalizeMaterialTaskItems(input.materialItems),
   };
 }
 
@@ -192,6 +197,7 @@ export async function POST(request: NextRequest) {
               orderId: material.orderId || null,
               orderNote: material.orderNote || material.notes || null,
               orderSize: material.orderSize,
+              materialItems: material.materialItems,
             })
           : {}),
       },

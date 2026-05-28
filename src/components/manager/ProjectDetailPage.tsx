@@ -65,6 +65,7 @@ import {
   isMaterialTask,
   type MaterialTaskUrgency,
 } from "@/lib/material-tasks";
+import { parseMaterialSpecPaste, type MaterialSpecItem } from "@/lib/material-spec-parser";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { filterMaterialTakerProfiles } from "@/lib/material-driver-permissions";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
@@ -201,6 +202,7 @@ type MaterialOrderDraftRow = {
   quantity: string;
   unit: MaterialUnitValue;
   customUnit: string;
+  notes: string;
 };
 
 type MaterialAssigneeOption = Pick<ManagerProfileSummary, "id" | "name" | "role">;
@@ -262,6 +264,7 @@ function createMaterialOrderRow(): MaterialOrderDraftRow {
     quantity: "",
     unit: "шт",
     customUnit: "",
+    notes: "",
   };
 }
 
@@ -273,9 +276,29 @@ function createClientUuid() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function parseMaterialQuantity(value: string) {
-  const parsed = Number.parseFloat(value.replace(",", "."));
-  return Number.isFinite(parsed) ? parsed : 0;
+function parseMaterialQuantity(value: string): number | string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const numericQuantity = /^[-+]?\d+(?:[,.]\d+)?$/.test(trimmed);
+  if (!numericQuantity) return trimmed;
+  const parsed = Number.parseFloat(trimmed.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : trimmed;
+}
+
+function draftRowFromSpecItem(item: MaterialSpecItem): MaterialOrderDraftRow {
+  const unitText = item.unit?.trim() ?? "";
+  const matchedUnit = MATERIAL_UNIT_OPTIONS.find(
+    (option) => option.value !== "other" && option.value.toLowerCase() === unitText.toLowerCase(),
+  );
+
+  return {
+    id: createClientUuid(),
+    name: item.name,
+    quantity: item.quantity ?? "",
+    unit: matchedUnit?.value ?? (unitText ? "other" : "шт"),
+    customUnit: matchedUnit ? "" : unitText,
+    notes: item.notes ?? "",
+  };
 }
 
 function formatMaterialQuantity(value: unknown) {
@@ -3398,6 +3421,9 @@ function MaterialsSection({
   const [orderNeededDate, setOrderNeededDate] = useState("");
   const [orderPriority, setOrderPriority] = useState<TaskPriority>("medium");
   const [orderNote, setOrderNote] = useState("");
+  const [orderSpecPasteText, setOrderSpecPasteText] = useState("");
+  const [orderSpecFeedback, setOrderSpecFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [orderFiles, setOrderFiles] = useState<File[]>([]);
   const [orderError, setOrderError] = useState("");
   const [savingOrder, setSavingOrder] = useState(false);
   const [deliveryTarget, setDeliveryTarget] = useState<MaterialItem | null>(null);
@@ -3550,6 +3576,9 @@ function MaterialsSection({
     setOrderNeededDate("");
     setOrderPriority("medium");
     setOrderNote("");
+    setOrderSpecPasteText("");
+    setOrderSpecFeedback(null);
+    setOrderFiles([]);
     setOrderError("");
   }
 
@@ -3583,6 +3612,30 @@ function MaterialsSection({
     });
   }
 
+  function handleImportMaterialSpec() {
+    const parsed = parseMaterialSpecPaste(orderSpecPasteText);
+    if (parsed.items.length === 0) {
+      setOrderSpecFeedback({ type: "error", text: t("materials.specParseEmpty") });
+      return;
+    }
+
+    const parsedRows = parsed.items.map(draftRowFromSpecItem);
+    setOrderRows((current) => {
+      const onlyEmptyRow =
+        current.length === 1 &&
+        !current[0]?.name.trim() &&
+        !current[0]?.quantity.trim() &&
+        !current[0]?.customUnit.trim() &&
+        !current[0]?.notes.trim();
+      return onlyEmptyRow ? parsedRows : [...current, ...parsedRows];
+    });
+    setOrderSpecPasteText("");
+    setOrderSpecFeedback({
+      type: "success",
+      text: t("materials.specParsedCount").replace("{count}", String(parsedRows.length)),
+    });
+  }
+
   async function handleAddOrder(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (savingOrder) return;
@@ -3594,6 +3647,7 @@ function MaterialsSection({
           row.unit === "other"
             ? row.customUnit.trim() || MATERIAL_OTHER_UNIT_VALUE
             : row.unit,
+        notes: row.notes.trim(),
       }))
       .filter((row) => row.name.length > 0);
 
@@ -3601,45 +3655,88 @@ function MaterialsSection({
 
     setSavingOrder(true);
     setOrderError("");
+    const uploadedMediaIds: string[] = [];
+    for (const file of orderFiles) {
+      if (!file || file.size === 0) {
+        setSavingOrder(false);
+        setOrderError(t("tasks.attachmentCloudFallback"));
+        return;
+      }
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        setSavingOrder(false);
+        setOrderError(t("tasks.attachmentCloudFallback"));
+        return;
+      }
+      const uploadResult = await uploadTaskAttachment(supabase, {
+        orgId,
+        projectId,
+        uploadedBy: managerId,
+        file,
+      });
+      if (!uploadResult.ok) {
+        setSavingOrder(false);
+        setOrderError(t("tasks.attachmentCloudFallback"));
+        return;
+      }
+      uploadedMediaIds.push(uploadResult.mediaId);
+    }
     const orderId = createClientUuid();
     const trimmedOrderNote = orderNote.trim();
     const driverUserId = orderAssignedTo || null;
     const neededDate = orderNeededDate || null;
     const urgency: MaterialTaskUrgency =
       orderPriority === "urgent" || orderPriority === "high" ? "urgent" : "normal";
+    const materialItems = materialRows.map((row) => ({
+      name: row.name,
+      quantity: row.quantity,
+      unit: row.unit,
+      notes: row.notes || null,
+    }));
+    const createdTaskIds: string[] = [];
     for (const row of materialRows) {
       const response = await fetch("/api/manager/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: row.name,
-          description: trimmedOrderNote || null,
+          description: row.notes || trimmedOrderNote || null,
           projectId,
           assignedTo: driverUserId,
           priority: orderPriority,
           dueDate: neededDate,
           source: "project_material_order",
+          attachmentMediaIds: uploadedMediaIds,
           material: {
             enabled: true,
             materialName: row.name,
             urgency,
             neededDate,
-            notes: trimmedOrderNote,
+            notes: row.notes || trimmedOrderNote,
             quantity: row.quantity,
             unit: row.unit,
             orderId,
             orderNote: trimmedOrderNote,
             orderSize: materialRows.length,
+            materialItems,
           },
         }),
       });
-      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      const payload = (await response.json().catch(() => null)) as
+        | { task?: { id?: string }; error?: string }
+        | null;
       if (!response.ok) {
         setSavingOrder(false);
         setOrderError(payload?.error ?? `Request failed (${response.status})`);
         await refreshMaterials();
         return;
       }
+      if (payload?.task?.id) {
+        createdTaskIds.push(payload.task.id);
+      }
+    }
+    if (uploadedMediaIds.length > 0 && createdTaskIds[0]) {
+      void linkMediaToTask(supabase, createdTaskIds[0], uploadedMediaIds);
     }
     setSavingOrder(false);
 
@@ -4059,11 +4156,55 @@ function MaterialsSection({
                 className="min-h-[82px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
               />
             </div>
+            <div className="grid gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    {t("materials.pasteSpecTitle")}
+                  </div>
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {t("materials.pasteSpecHint")}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleImportMaterialSpec}
+                  disabled={savingOrder || orderSpecPasteText.trim().length === 0}
+                  className="rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-semibold disabled:opacity-50"
+                  style={{
+                    borderColor: "rgba(191, 162, 52, 0.4)",
+                    color: "var(--brand-yellow)",
+                  }}
+                >
+                  {t("materials.importSpecRows")}
+                </button>
+              </div>
+              <textarea
+                value={orderSpecPasteText}
+                onChange={(event) => {
+                  setOrderSpecPasteText(event.target.value);
+                  setOrderSpecFeedback(null);
+                }}
+                placeholder={t("materials.pasteSpecPlaceholder")}
+                className="min-h-[120px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+              />
+              {orderSpecFeedback ? (
+                <div
+                  className={
+                    orderSpecFeedback.type === "success"
+                      ? "text-xs font-semibold text-emerald-400"
+                      : "text-xs font-semibold text-[var(--red)]"
+                  }
+                >
+                  {orderSpecFeedback.text}
+                </div>
+              ) : null}
+            </div>
             <div className="space-y-2">
               {orderRows.map((row) => (
                 <div
                   key={row.id}
-                  className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 sm:grid-cols-[minmax(0,1fr)_120px_minmax(180px,260px)_36px]"
+                  className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 sm:grid-cols-[minmax(0,1fr)_120px] lg:grid-cols-[minmax(0,1fr)_120px_minmax(180px,240px)_minmax(0,1fr)_36px]"
                 >
                   <TextInputWithVoice
                     value={row.name}
@@ -4072,9 +4213,7 @@ function MaterialsSection({
                     className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
                   />
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
                     inputMode="decimal"
                     value={row.quantity}
                     onChange={(event) => updateOrderRow(row.id, { quantity: event.target.value })}
@@ -4109,6 +4248,13 @@ function MaterialsSection({
                       />
                     ) : null}
                   </div>
+                  <input
+                    value={row.notes}
+                    onChange={(event) => updateOrderRow(row.id, { notes: event.target.value })}
+                    placeholder={t("materials.itemNotes")}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                    style={MATERIAL_INPUT_STYLE}
+                  />
                   <button
                     type="button"
                     onClick={() => removeOrderRow(row.id)}
@@ -4120,6 +4266,21 @@ function MaterialsSection({
                 </div>
               ))}
             </div>
+            <label className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-primary)]">
+              <span className="font-semibold">{t("materials.addFile")}</span>
+              <input
+                type="file"
+                multiple
+                accept={ACCEPT_ALL_UPLOADS}
+                onChange={(event) => setOrderFiles(event.target.files ? Array.from(event.target.files) : [])}
+                className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+              />
+              <span className="text-xs text-[var(--text-muted)]">
+                {orderFiles.length > 0
+                  ? t("materials.filesSelected").replace("{count}", String(orderFiles.length))
+                  : t("materials.addFileHint")}
+              </span>
+            </label>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"

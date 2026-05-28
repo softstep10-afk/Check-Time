@@ -26,10 +26,15 @@ Material requests are still normal task rows. The material-specific meaning is s
   - `driverUserId` when a person is selected, otherwise `null`
   - `schedule_kind: "delivery"`
   - `schedule_scope: "material"`
+  - `materialItems` when the request was pasted/imported as a specification list
+  - `attachment_media_ids` when Excel/CSV/PDF/photo/spec files are attached to the request
 - The selected assignee is stored in `assigned_to`; open queue material tasks keep `assigned_to = null` until a field user presses `Взять`.
 - The needed day is stored in existing `due_date`.
 - Urgent material requests use existing urgent priority.
 - The UI shows a saving state while the material task is being created and does not show success before the server responds.
+- In `Добавить материал`, manager/owner can paste rows from Excel/Google Sheets into `Вставить спецификацию из Excel`.
+- Parsed rows become editable material positions. The user can edit, remove, or manually add positions before saving.
+- Manager/owner can attach Excel, CSV, PDF, photo, or another already-supported file type to the material request. Files use the existing task attachment upload/open/download path.
 
 Normal task creation remains available and unchanged.
 
@@ -115,6 +120,12 @@ Existing task realtime is reused:
 - Confirm a worker can press `Взять` on an open material task.
 - Confirm a second worker sees a clear already-taken error if they try after someone else took it.
 - Confirm saving material shows "Сохраняем..." / "Сохраняем материал..." and duplicate save does not duplicate a task.
+- Copy 5 rows from Excel/Google Sheets and paste into `Вставить спецификацию из Excel`.
+- Confirm the UI says how many positions were found.
+- Edit one pasted position, remove one position, and add one manually.
+- Attach an Excel/CSV file and a PDF/photo specification document.
+- Save the material request and confirm the created material task(s) keep the line items in `metadata.materialItems`.
+- Open the task as driver/worker and confirm the material name/list context and files are still available through normal task attachments.
 - Driver sees material tasks without manual refresh.
 - Driver receives the material task notification/banner.
 - Driver sees project name, material name, urgency, and needed date.

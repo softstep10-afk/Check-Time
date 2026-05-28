@@ -14,6 +14,7 @@ import {
   getEffectiveTaskStatus,
   isEffectiveCompletedTask,
 } from "@/lib/task-status";
+import { getMaterialTaskItems, isMaterialTask } from "@/lib/material-tasks";
 import { ACCEPT_ALL_UPLOADS } from "@/lib/upload-limits";
 import type { TaskStatus } from "@/types/database";
 import type { TaskAttachmentRef } from "@/lib/task-attachments";
@@ -293,6 +294,7 @@ function WorkerTaskDetailModalBody({
   const isMine = task.assigned_to === profileId;
   const isUnassigned = task.assigned_to === null;
   const isDeliveryTask = task.metadata?.schedule_kind === "delivery";
+  const materialItems = isMaterialTask(task) ? getMaterialTaskItems(task) : [];
   const isCommonClaimable = isUnassigned && (Boolean(task.project_id) || isDeliveryTask) && Boolean(onClaim);
   const effectiveStatus = getEffectiveTaskStatus(task);
   // Status-driven buttons only render for tasks the worker already
@@ -373,6 +375,33 @@ function WorkerTaskDetailModalBody({
             {t("tasks.noDescription")}
           </div>
         )}
+
+        {materialItems.length > 0 ? (
+          <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+              {t("materials.materialTask")}
+            </div>
+            <div className="grid gap-2">
+              {materialItems.map((item, index) => (
+                <div
+                  key={`${item.name}-${index}`}
+                  className="rounded-[var(--radius-sm)] bg-[var(--bg-card)] px-3 py-2 text-xs text-[var(--text-secondary)]"
+                >
+                  <div className="font-semibold text-[var(--text-primary)]">{item.name}</div>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {item.quantity ? (
+                      <span>
+                        {t("materials.quantity")}: {item.quantity}
+                      </span>
+                    ) : null}
+                    {item.unit ? <span>{item.unit}</span> : null}
+                    {item.notes ? <span>{item.notes}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         {task.attachments && task.attachments.length > 0 ? (
           <div className="mt-4">
