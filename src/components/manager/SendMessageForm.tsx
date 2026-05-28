@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Paperclip, Send, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
@@ -19,6 +19,15 @@ import {
   inferUploadContentType,
   validateUploadFile,
 } from "@/lib/upload-limits";
+import {
+  OFFLINE_FIELD_ACTIONS_CHANGED_EVENT,
+  createOfflineFieldActionId,
+  isNetworkLikeFieldError,
+  loadOfflineFieldActionQueue,
+  markOfflineFieldActionStatus,
+  queueOfflineFieldAction,
+  removeOfflineFieldAction,
+} from "@/lib/offline-field-actions";
 
 const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
 type ProjectOption = { id: string; name: string; status?: string | null };
@@ -55,6 +64,7 @@ export function SendMessageForm({
   const color = PRIORITY_COLOR[priority];
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [queued, setQueued] = useState(false);
   const [error, setError] = useState("");
   const [taskProjectId, setTaskProjectId] = useState("");
 
@@ -133,10 +143,142 @@ export function SendMessageForm({
     };
   }
 
-  function buildTaskTitle(body: string, attachmentName?: string): string {
+  const buildTaskTitle = useCallback((body: string, attachmentName?: string): string => {
     const source = body || attachmentName || t("messages.priorityTask");
     return source.length > 140 ? `${source.slice(0, 137)}...` : source;
-  }
+  }, [t]);
+
+  const syncQueuedMessages = useCallback(async () => {
+    if (!senderId) return;
+    const items = loadOfflineFieldActionQueue().filter(
+      (item) => item.kind === "message_send" && item.actorId === senderId && item.status !== "failed",
+    );
+    if (items.length === 0) return;
+    setQueued(true);
+
+    for (const item of items) {
+      if (item.kind !== "message_send") continue;
+      markOfflineFieldActionStatus(item.id, {
+        status: "syncing",
+        lastAttemptAt: new Date().toISOString(),
+      });
+      try {
+        const { data: existingMessages } = await supabase
+          .from("messages")
+          .select("id, recipient_id")
+          .eq("sender_id", senderId)
+          .filter("metadata->>client_action_id", "eq", item.clientActionId);
+        let syncedMessages = (existingMessages ?? []) as Array<{ id: string; recipient_id: string }>;
+        if (syncedMessages.length < item.payload.rows.length) {
+          let result = await supabase
+            .from("messages")
+            .insert(item.payload.rows)
+            .select("id, recipient_id");
+          let insertErr = result.error;
+          if (insertErr && /column .* priority/i.test(insertErr.message)) {
+            const fallbackRows = item.payload.rows.map((row) => ({
+              org_id: row.org_id,
+              sender_id: row.sender_id,
+              recipient_id: row.recipient_id,
+              text: row.text,
+              color: row.color,
+              attachment: row.attachment,
+              metadata: row.metadata,
+            }));
+            result = await supabase
+              .from("messages")
+              .insert(fallbackRows)
+              .select("id, recipient_id");
+            insertErr = result.error;
+          }
+          if (insertErr) throw new Error(insertErr.message);
+          syncedMessages = (result.data ?? []) as Array<{ id: string; recipient_id: string }>;
+        }
+
+        if (item.payload.taskSource === "direct_task" && syncedMessages[0]) {
+          const row = item.payload.rows[0];
+          const taskTitle = buildTaskTitle(row?.text ?? "");
+          const response = await fetch("/api/manager/message-tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              priority: item.payload.priority,
+              items: [
+                {
+                  messageId: syncedMessages[0].id,
+                  recipientId,
+                  title: taskTitle,
+                  description: row?.text || null,
+                  projectId: item.payload.taskProjectId || null,
+                  attachmentFilename: null,
+                  source: "message_task",
+                },
+              ],
+            }),
+          });
+          if (!response.ok) {
+            const body = (await response.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error ?? t("messages.taskCreateFailed"));
+          }
+        }
+
+        if (item.payload.taskSource === "broadcast_task" && syncedMessages.length > 0) {
+          const row = item.payload.rows[0];
+          const taskTitle = buildTaskTitle(row?.text ?? "");
+          const response = await fetch("/api/manager/message-tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              priority: item.payload.priority,
+              items: syncedMessages.map((message) => ({
+                messageId: message.id,
+                recipientId: message.recipient_id,
+                title: taskTitle,
+                description: row?.text || null,
+                projectId: item.payload.taskProjectId || null,
+                source: "broadcast_task",
+              })),
+            }),
+          });
+          if (!response.ok) {
+            const body = (await response.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error ?? t("messages.taskCreateFailed"));
+          }
+        }
+
+        removeOfflineFieldAction(item.id);
+        setQueued(false);
+        setSent(true);
+        onSent?.();
+        setTimeout(() => setSent(false), 2000);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t("messages.sendFailed");
+        markOfflineFieldActionStatus(item.id, {
+          status: isNetworkLikeFieldError(error) ? "pending" : "failed",
+          retryCount: item.retryCount + 1,
+          lastErrorMessage: message,
+        });
+        if (!isNetworkLikeFieldError(error)) {
+          setError(message);
+          setQueued(false);
+        }
+      }
+    }
+  }, [buildTaskTitle, onSent, recipientId, senderId, supabase, t]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function drainIfOnline() {
+      if (window.navigator.onLine) void syncQueuedMessages();
+    }
+    drainIfOnline();
+    window.addEventListener("online", drainIfOnline);
+    window.addEventListener(OFFLINE_FIELD_ACTIONS_CHANGED_EVENT, drainIfOnline);
+    return () => {
+      window.removeEventListener("online", drainIfOnline);
+      window.removeEventListener(OFFLINE_FIELD_ACTIONS_CHANGED_EVENT, drainIfOnline);
+    };
+  }, [syncQueuedMessages]);
 
   async function handleSend(event: React.FormEvent) {
     event.preventDefault();
@@ -144,8 +286,52 @@ export function SendMessageForm({
 
     setSending(true);
     setError("");
+    setQueued(false);
 
     let attachment: MessageAttachment | null = null;
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      if (pendingFile) {
+        setError(t("messages.attachmentNeedsConnection"));
+        setSending(false);
+        return;
+      }
+      if (!orgId || !senderId) {
+        setError(t("messages.sendFailed"));
+        setSending(false);
+        return;
+      }
+      const clientActionId = createOfflineFieldActionId("message-send");
+      const basePayload = {
+        org_id: orgId,
+        sender_id: senderId,
+        recipient_id: recipientId,
+        text: text.trim(),
+        color,
+        priority,
+        attachment: null,
+        metadata: { priority, client_action_id: clientActionId, queued_offline: true },
+      };
+      queueOfflineFieldAction({
+        clientActionId,
+        dedupeKey: `message_send:${senderId}:${recipientId}:${clientActionId}`,
+        kind: "message_send",
+        actorId: senderId,
+        orgId,
+        payload: {
+          rows: [basePayload],
+          priority,
+          taskProjectId: taskProjectId || null,
+          taskSource: isTaskMessagePriority(priority) ? "direct_task" : null,
+        },
+      });
+      setSending(false);
+      setQueued(true);
+      setText("");
+      setTaskProjectId("");
+      clearAttachment();
+      return;
+    }
 
     if (pendingFile) {
       setUploading(true);
@@ -194,6 +380,38 @@ export function SendMessageForm({
       messageId = insertResult.data.id;
     }
     if (insertErr) {
+      if (isNetworkLikeFieldError(insertErr) && !pendingFile && orgId && senderId) {
+        const clientActionId = createOfflineFieldActionId("message-send");
+        queueOfflineFieldAction({
+          clientActionId,
+          dedupeKey: `message_send:${senderId}:${recipientId}:${clientActionId}`,
+          kind: "message_send",
+          actorId: senderId,
+          orgId,
+          payload: {
+            rows: [
+              {
+                ...basePayload,
+                priority,
+                metadata: {
+                  ...basePayload.metadata,
+                  client_action_id: clientActionId,
+                  queued_offline: true,
+                },
+              },
+            ],
+            priority,
+            taskProjectId: taskProjectId || null,
+            taskSource: isTaskMessagePriority(priority) ? "direct_task" : null,
+          },
+        });
+        setQueued(true);
+        setText("");
+        setTaskProjectId("");
+        clearAttachment();
+        setSending(false);
+        return;
+      }
       setError(insertErr.message);
       setSending(false);
       return;
@@ -415,6 +633,12 @@ export function SendMessageForm({
       {sent ? (
         <div className="text-xs font-semibold" style={{ color: "var(--green)" }}>
           {t("messages.sent")}
+        </div>
+      ) : null}
+
+      {queued ? (
+        <div className="text-xs font-semibold" style={{ color: "#f59e0b" }}>
+          {t("messages.queued")}
         </div>
       ) : null}
     </div>

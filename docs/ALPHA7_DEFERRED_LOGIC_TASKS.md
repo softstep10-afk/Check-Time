@@ -346,3 +346,27 @@ Deferred until separate owner approval:
 - Direct SQL Supabase Step 0.
 - RLS/Storage verification for consent/audit tables.
 - Adding extra `signed_name`, `user_agent`, or `ip_address` columns to `safety_acknowledgements`; current Safety Brief audit uses existing worker/project/version/timestamp fields.
+
+## Offline / Weak-Network Field Mode
+
+Completed scope:
+
+- Added a local field-action queue for task claim, task status, and private message send actions.
+- Queued actions are stored in browser `localStorage` with stable client action ids and dedupe keys.
+- Worker shell shows offline, pending, syncing, sent, and sync-failed states.
+- Open material task claim still reconciles through `/api/worker/claim-task`, so the first successful server claim wins.
+- Private message queue stores `metadata.client_action_id` so reconnect/retry does not duplicate messages.
+- Existing upload and shift queues remain the path for media and clock-in/out weak-network sync.
+- No fake task success is shown before the server confirms the status update.
+
+Not changed:
+
+- No payroll, salary archive, GPS, geofence, shift, archive/trash, RLS, Storage, schema, migration, or production data changes.
+- No material business-rule redesign.
+- No automatic conversion between messages and tasks beyond the existing explicit task-priority message flow.
+
+Deferred until separate owner approval:
+
+- IndexedDB-backed durable file queue for large task-completion evidence.
+- Cross-device pending-action visibility; current queue is local to the worker's browser/device.
+- Push/background sync service worker.

@@ -11,6 +11,15 @@ import {
   type MessagePriority,
 } from "@/lib/message-types";
 import { isTaskMessagePriority, mergeMessagesById } from "@/lib/message-state";
+import {
+  OFFLINE_FIELD_ACTIONS_CHANGED_EVENT,
+  createOfflineFieldActionId,
+  isNetworkLikeFieldError,
+  loadOfflineFieldActionQueue,
+  markOfflineFieldActionStatus,
+  queueOfflineFieldAction,
+  removeOfflineFieldAction,
+} from "@/lib/offline-field-actions";
 
 type CrewMember = { id: string; name: string; role: string };
 type ProjectOption = { id: string; name: string; status?: string | null };
@@ -104,7 +113,7 @@ export function BulkMessageComposer({
   const [priority, setPriority] = useState<MessagePriority>("info");
   const [taskProjectId, setTaskProjectId] = useState("");
   const [sending, setSending] = useState(false);
-  const [message, setMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const historyReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -140,6 +149,126 @@ export function BulkMessageComposer({
     }, 250);
   }, [loadHistory]);
 
+  const syncQueuedMessages = useCallback(async () => {
+    const items = loadOfflineFieldActionQueue().filter(
+      (item) => item.kind === "message_send" && item.actorId === senderId && item.status !== "failed",
+    );
+    if (items.length === 0) return;
+    setMessage({ kind: "info", text: t("messages.queuedSyncing") });
+
+    for (const item of items) {
+      if (item.kind !== "message_send") continue;
+      markOfflineFieldActionStatus(item.id, {
+        status: "syncing",
+        lastAttemptAt: new Date().toISOString(),
+      });
+      try {
+        const { data: existingMessages } = await supabase
+          .from("messages")
+          .select("id, recipient_id")
+          .eq("sender_id", senderId)
+          .filter("metadata->>client_action_id", "eq", item.clientActionId);
+        const insertedMessages =
+          (existingMessages?.length ?? 0) >= item.payload.rows.length
+            ? (existingMessages ?? [])
+            : [];
+
+        let syncedMessages = insertedMessages as InsertedMessage[];
+        if (syncedMessages.length === 0) {
+          let result = await supabase
+            .from("messages")
+            .insert(item.payload.rows)
+            .select("id, recipient_id");
+          let error = result.error;
+          if (error && /column .* priority/i.test(error.message)) {
+            const fallbackRows = item.payload.rows.map((row) => ({
+              org_id: row.org_id,
+              sender_id: row.sender_id,
+              recipient_id: row.recipient_id,
+              text: row.text,
+              color: row.color,
+              metadata: row.metadata,
+            }));
+            result = await supabase
+              .from("messages")
+              .insert(fallbackRows)
+              .select("id, recipient_id");
+            error = result.error;
+          }
+          if (error) throw new Error(error.message);
+          syncedMessages = (result.data ?? []) as InsertedMessage[];
+        }
+
+        if (item.payload.taskSource === "direct_task" && syncedMessages[0]) {
+          const taskTitle = item.payload.rows[0]?.text.length && item.payload.rows[0].text.length > 140
+            ? `${item.payload.rows[0].text.slice(0, 137)}...`
+            : item.payload.rows[0]?.text ?? t("messages.priorityTask");
+          const response = await fetch("/api/manager/message-tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              priority: item.payload.priority,
+              items: [
+                {
+                  messageId: syncedMessages[0].id,
+                  recipientId: syncedMessages[0].recipient_id,
+                  title: taskTitle,
+                  description: item.payload.rows[0]?.text || null,
+                  projectId: item.payload.taskProjectId || null,
+                  attachmentFilename: null,
+                  source: "message_task",
+                },
+              ],
+            }),
+          });
+          if (!response.ok) {
+            const body = (await response.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error ?? t("messages.taskCreateFailed"));
+          }
+        }
+
+        if (item.payload.taskSource === "broadcast_task" && syncedMessages.length > 0) {
+          const taskTitle = item.payload.rows[0]?.text.length && item.payload.rows[0].text.length > 140
+            ? `${item.payload.rows[0].text.slice(0, 137)}...`
+            : item.payload.rows[0]?.text ?? t("messages.priorityTask");
+          const response = await fetch("/api/manager/message-tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              priority: item.payload.priority,
+              items: syncedMessages.map((row) => ({
+                messageId: row.id,
+                recipientId: row.recipient_id,
+                title: taskTitle,
+                description: item.payload.rows[0]?.text ?? null,
+                projectId: item.payload.taskProjectId || null,
+                source: "broadcast_task",
+              })),
+            }),
+          });
+          if (!response.ok) {
+            const body = (await response.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error ?? t("messages.taskCreateFailed"));
+          }
+        }
+
+        removeOfflineFieldAction(item.id);
+        setMessage({ kind: "ok", text: t("worker.fieldActionSynced") });
+        scheduleHistoryLoad();
+      } catch (error) {
+        const messageText = error instanceof Error ? error.message : t("messages.sendFailed");
+        markOfflineFieldActionStatus(item.id, {
+          status: isNetworkLikeFieldError(error) ? "pending" : "failed",
+          retryCount: item.retryCount + 1,
+          lastErrorMessage: messageText,
+        });
+        if (!isNetworkLikeFieldError(error)) {
+          setMessage({ kind: "err", text: messageText });
+        }
+      }
+    }
+  }, [scheduleHistoryLoad, senderId, supabase, t]);
+
   useEffect(() => {
     // Defer to microtask so the initial load's setState doesn't fire
     // inside the render/effect body synchronously.
@@ -157,6 +286,20 @@ export function BulkMessageComposer({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function drainIfOnline() {
+      if (window.navigator.onLine) void syncQueuedMessages();
+    }
+    drainIfOnline();
+    window.addEventListener("online", drainIfOnline);
+    window.addEventListener(OFFLINE_FIELD_ACTIONS_CHANGED_EVENT, drainIfOnline);
+    return () => {
+      window.removeEventListener("online", drainIfOnline);
+      window.removeEventListener(OFFLINE_FIELD_ACTIONS_CHANGED_EVENT, drainIfOnline);
+    };
+  }, [syncQueuedMessages]);
 
   useEffect(() => {
     function mergeHistoryPayload(row: unknown) {
@@ -239,6 +382,7 @@ export function BulkMessageComposer({
     setMessage(null);
 
     const color = PRIORITY_COLOR[priority];
+    const clientActionId = createOfflineFieldActionId("message-send");
     const rows = recipients.map((recipientId) => ({
       org_id: orgId,
       sender_id: senderId,
@@ -246,8 +390,35 @@ export function BulkMessageComposer({
       text: text.trim(),
       color,
       priority,
-      metadata: { priority, broadcast: sendToAll },
+      attachment: null,
+      metadata: { priority, broadcast: sendToAll, client_action_id: clientActionId, queued_offline: false },
     }));
+
+    if (typeof window !== "undefined" && !window.navigator.onLine) {
+      queueOfflineFieldAction({
+        clientActionId,
+        dedupeKey: `message_send:${senderId}:${clientActionId}`,
+        kind: "message_send",
+        actorId: senderId,
+        orgId,
+        payload: {
+          rows: rows.map((row) => ({
+            ...row,
+            metadata: { ...row.metadata, queued_offline: true },
+          })),
+          priority,
+          taskProjectId: taskProjectId || null,
+          taskSource: isTaskMessagePriority(priority) ? "broadcast_task" : null,
+        },
+      });
+      setSending(false);
+      setMessage({ kind: "info", text: t("messages.queued") });
+      setText("");
+      setTaskProjectId("");
+      setSelectedIds(new Set());
+      setSendToAll(false);
+      return;
+    }
 
     // Chunk to 50 per insert to keep under request size on bigger orgs.
     let failures = 0;
@@ -273,6 +444,31 @@ export function BulkMessageComposer({
           .insert(fallbackChunk)
           .select("id, recipient_id");
         error = result.error;
+      }
+      if (error && isNetworkLikeFieldError(error)) {
+        queueOfflineFieldAction({
+          clientActionId,
+          dedupeKey: `message_send:${senderId}:${clientActionId}`,
+          kind: "message_send",
+          actorId: senderId,
+          orgId,
+          payload: {
+            rows: rows.map((row) => ({
+              ...row,
+              metadata: { ...row.metadata, queued_offline: true },
+            })),
+            priority,
+            taskProjectId: taskProjectId || null,
+            taskSource: isTaskMessagePriority(priority) ? "broadcast_task" : null,
+          },
+        });
+        setSending(false);
+        setMessage({ kind: "info", text: t("messages.queued") });
+        setText("");
+        setTaskProjectId("");
+        setSelectedIds(new Set());
+        setSendToAll(false);
+        return;
       }
       if (error) failures += error ? 1 : 0;
       else insertedMessages.push(...((result.data ?? []) as InsertedMessage[]));
@@ -480,7 +676,14 @@ export function BulkMessageComposer({
           {message ? (
             <div
               className="text-xs font-semibold"
-              style={{ color: message.kind === "ok" ? "var(--green)" : "var(--red)" }}
+              style={{
+                color:
+                  message.kind === "ok"
+                    ? "var(--green)"
+                    : message.kind === "info"
+                      ? "#f59e0b"
+                      : "var(--red)",
+              }}
             >
               {message.text}
             </div>

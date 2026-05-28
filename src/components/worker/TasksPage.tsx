@@ -25,6 +25,7 @@ import {
   isEffectiveCompletedTask,
   isEffectiveOpenTask,
 } from "@/lib/task-status";
+import { isNetworkLikeFieldError } from "@/lib/offline-field-actions";
 import {
   openWorkerTaskCompletion,
   submitWorkerTaskCompletion,
@@ -40,7 +41,7 @@ type TaskFilter = "all" | "mine" | "urgent" | "today";
 type ProjectFilter = string;
 
 export function TasksPage() {
-  const { shell, busyAction, updateTaskStatus, markTasksSeen } = useWorkerShell();
+  const { shell, busyAction, updateTaskStatus, markTasksSeen, isOnline, queueTaskClaim } = useWorkerShell();
   const { t } = useTranslation();
   const [bumpedTaskId, setBumpedTaskId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("all");
@@ -67,7 +68,7 @@ export function TasksPage() {
   );
   const [openError, setOpenError] = useState<string | null>(null);
   const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
-  const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
 
   const todayIsoRef = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const currentProjectId = shell.clockState.currentProjectId;
@@ -117,6 +118,12 @@ export function TasksPage() {
   async function handleClaimTask(taskId: string) {
     setClaimBusyTaskId(taskId);
     setClaimMessage(null);
+    if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      queueTaskClaim(taskId);
+      setClaimMessage({ kind: "info", text: t("worker.fieldActionQueued") });
+      setClaimBusyTaskId(null);
+      return;
+    }
     try {
       const response = await fetch("/api/worker/claim-task", {
         method: "POST",
@@ -168,8 +175,13 @@ export function TasksPage() {
         return next;
       });
       setClaimMessage({ kind: "ok", text: t("tasks.claimed") });
-    } catch {
-      setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+    } catch (error) {
+      if (isNetworkLikeFieldError(error)) {
+        queueTaskClaim(taskId);
+        setClaimMessage({ kind: "info", text: t("worker.fieldActionQueued") });
+      } else {
+        setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+      }
     } finally {
       setClaimBusyTaskId(null);
     }
@@ -699,8 +711,15 @@ export function TasksPage() {
             background:
               claimMessage.kind === "ok"
                 ? "rgba(15, 168, 120, 0.16)"
+                : claimMessage.kind === "info"
+                  ? "rgba(245, 158, 11, 0.14)"
                 : "rgba(212, 81, 94, 0.12)",
-            color: claimMessage.kind === "ok" ? "var(--green)" : "var(--red)",
+            color:
+              claimMessage.kind === "ok"
+                ? "var(--green)"
+                : claimMessage.kind === "info"
+                  ? "#f59e0b"
+                  : "var(--red)",
           }}
         >
           {claimMessage.text}

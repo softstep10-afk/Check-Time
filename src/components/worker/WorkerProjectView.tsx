@@ -40,6 +40,7 @@ import {
   type MaterialTaskUrgency,
 } from "@/lib/material-tasks";
 import { getEffectiveTaskStatus, isEffectiveOpenTask } from "@/lib/task-status";
+import { isNetworkLikeFieldError } from "@/lib/offline-field-actions";
 import {
   openWorkerProjectTaskDetails,
   submitWorkerTaskCompletion,
@@ -288,7 +289,7 @@ export function WorkerProjectView({
   const { t } = useTranslation();
   const router = useRouter();
   const workerShell = useWorkerShell();
-  const { busyAction, updateTaskStatus } = workerShell;
+  const { busyAction, updateTaskStatus, isOnline, queueTaskClaim } = workerShell;
   const supabase = useMemo(() => createClient(), []);
   const projectSite = useMemo(() => parseGeoPoint(project.site_point), [project.site_point]);
   const driverTimeProject = isDriverTimeProject(project);
@@ -302,7 +303,7 @@ export function WorkerProjectView({
   const [receiptUploadOpen, setReceiptUploadOpen] = useState(false);
   const [taskCreateMessage, setTaskCreateMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
-  const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
   const projectMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -316,6 +317,12 @@ export function WorkerProjectView({
   async function handleClaimTask(taskId: string) {
     setClaimBusyTaskId(taskId);
     setClaimMessage(null);
+    if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+      queueTaskClaim(taskId);
+      setClaimMessage({ kind: "info", text: t("worker.fieldActionQueued") });
+      setClaimBusyTaskId(null);
+      return;
+    }
     try {
       const response = await fetch("/api/worker/claim-task", {
         method: "POST",
@@ -357,8 +364,13 @@ export function WorkerProjectView({
         ),
       );
       setClaimMessage({ kind: "ok", text: t("tasks.claimed") });
-    } catch {
-      setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+    } catch (error) {
+      if (isNetworkLikeFieldError(error)) {
+        queueTaskClaim(taskId);
+        setClaimMessage({ kind: "info", text: t("worker.fieldActionQueued") });
+      } else {
+        setClaimMessage({ kind: "err", text: t("tasks.claimFailed") });
+      }
     } finally {
       setClaimBusyTaskId(null);
     }
@@ -1036,8 +1048,15 @@ export function WorkerProjectView({
             background:
               claimMessage.kind === "ok"
                 ? "rgba(15, 168, 120, 0.16)"
+                : claimMessage.kind === "info"
+                  ? "rgba(245, 158, 11, 0.14)"
                 : "rgba(212, 81, 94, 0.12)",
-            color: claimMessage.kind === "ok" ? "var(--green)" : "var(--red)",
+            color:
+              claimMessage.kind === "ok"
+                ? "var(--green)"
+                : claimMessage.kind === "info"
+                  ? "#f59e0b"
+                  : "var(--red)",
           }}
         >
           {claimMessage.text}

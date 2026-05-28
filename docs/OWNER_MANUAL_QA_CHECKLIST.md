@@ -452,6 +452,23 @@ Manual checks:
 - If manually testable, direct API delete attempts by a non-privileged user return 403.
 - Confirm upload/open/download still work for existing allowed project files, receipts, task attachments, message attachments, photos, and videos.
 
+## Offline / Weak-Network Field Mode
+
+Run this after deploying `fix(alpha7): stabilize offline field workflows`.
+
+Manual checks:
+
+- Turn on airplane mode and confirm the worker shell shows `Нет соединения — работаем офлайн`.
+- In airplane mode, tap `Взять` on an open normal/material task and confirm `Ожидает соединения`.
+- Turn the connection back on and confirm the action syncs without creating a duplicate claim.
+- If another person already took the material task, confirm the second user sees a clear already-taken error.
+- In airplane mode, send a private/direct message without a file and confirm it is queued, not shown as a confirmed send.
+- Reconnect and confirm the message appears in sender and recipient history.
+- Confirm notification clear still does not remove the source message/task.
+- Start/finish a task on weak network and confirm no green success appears before server confirmation.
+- Try upload on weak connection and confirm upload success appears only after Storage + metadata succeeds.
+- Check-in/check-out weak-signal queue still syncs after reconnect and does not duplicate shifts.
+
 ## Deploy Readiness Smoke
 
 Run this immediately after any owner-approved Alpha-7 deployment:

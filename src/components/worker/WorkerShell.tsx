@@ -61,6 +61,16 @@ import {
   type QueuedTimeEvent,
   type QueuedTimeEventPayload,
 } from "@/lib/offline-time-events";
+import {
+  OFFLINE_FIELD_ACTIONS_CHANGED_EVENT,
+  countPendingOfflineFieldActions,
+  isNetworkLikeFieldError,
+  loadOfflineFieldActionQueue,
+  markOfflineFieldActionStatus,
+  queueOfflineFieldAction,
+  removeOfflineFieldAction,
+  type OfflineFieldAction,
+} from "@/lib/offline-field-actions";
 import type { AppMessage } from "@/lib/message-types";
 import {
   buildTaskCompletionMetadata,
@@ -177,12 +187,14 @@ type WorkerShellContextValue = {
   lastGpsCheck: WorkerGpsCheck | null;
   muted: boolean;
   offlineQueueLength: number;
+  offlineActionQueueLength: number;
   isOnline: boolean;
   draining: boolean;
   dismissBanner: () => void;
   clockIn: (projectId: string, options?: ClockOptions) => Promise<void>;
   clockOut: (options?: ClockOptions) => Promise<boolean>;
   uploadMedia: (files: FileList | File[], caption: string, mode: UploadMode) => Promise<void>;
+  queueTaskClaim: (taskId: string) => void;
   updateTaskStatus: (
     taskId: string,
     nextStatus: TaskStatus,
@@ -562,6 +574,8 @@ export function WorkerShell({
   const [offlineQueue, setOfflineQueue] = useState<OfflineUpload[]>([]);
   // Phase-1 offline queue for clock-in / clock-out events.
   const [offlineEventQueue, setOfflineEventQueue] = useState<QueuedTimeEvent[]>([]);
+  // Field action queue for task claims/statuses and private messages.
+  const [offlineActionQueue, setOfflineActionQueue] = useState<OfflineFieldAction[]>([]);
   // Optimistic default `true`; effect below syncs from navigator.onLine
   // after mount so SSR and hydration agree on the same starting value.
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -570,6 +584,7 @@ export function WorkerShell({
   // Hydrate queue once on mount.
   useEffect(() => {
     setOfflineQueue(loadOfflineQueue());
+    setOfflineActionQueue(loadOfflineFieldActionQueue());
     // Time-events queue: hydrate state, then re-apply optimistic shell
     // state (clocked-in / clocked-out) from any queued events that
     // haven't synced yet. Server-rendered initialData doesn't see
@@ -580,6 +595,17 @@ export function WorkerShell({
     setOfflineEventQueue(eventQueue);
     if (eventQueue.length === 0) return;
     setShell((current) => applyQueuedEventsToShell(current, eventQueue));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function refreshQueuedActions() {
+      setOfflineActionQueue(loadOfflineFieldActionQueue());
+    }
+    window.addEventListener(OFFLINE_FIELD_ACTIONS_CHANGED_EVENT, refreshQueuedActions);
+    return () => {
+      window.removeEventListener(OFFLINE_FIELD_ACTIONS_CHANGED_EVENT, refreshQueuedActions);
+    };
   }, []);
 
   // ── Online/offline listeners ─────────────────────────────────────────
@@ -2114,6 +2140,42 @@ export function WorkerShell({
     }
   }
 
+  function queueTaskClaim(taskId: string) {
+    const clientActionId = `task-claim:${shell.profile.id}:${taskId}`;
+    const { queue } = queueOfflineFieldAction({
+      clientActionId,
+      dedupeKey: clientActionId,
+      kind: "task_claim",
+      actorId: shell.profile.id,
+      orgId: shell.profile.org_id,
+      payload: { taskId },
+    });
+    setOfflineActionQueue(queue);
+    setBanner({ tone: "info", text: t("worker.fieldActionQueued") });
+  }
+
+  function queueTaskStatusAction(
+    taskId: string,
+    nextStatus: TaskStatus,
+    updatePayload: Record<string, unknown>,
+  ) {
+    const clientActionId = `task-status:${shell.profile.id}:${taskId}:${nextStatus}`;
+    const { queue } = queueOfflineFieldAction({
+      clientActionId,
+      dedupeKey: clientActionId,
+      kind: "task_status",
+      actorId: shell.profile.id,
+      orgId: shell.profile.org_id,
+      payload: {
+        taskId,
+        nextStatus,
+        updatePayload,
+      },
+    });
+    setOfflineActionQueue(queue);
+    setBanner({ tone: "info", text: t("worker.fieldActionQueued") });
+  }
+
   async function updateTaskStatus(
     taskId: string,
     nextStatus: TaskStatus,
@@ -2129,10 +2191,21 @@ export function WorkerShell({
   ) {
     setBusyAction(`task-${taskId}-${nextStatus}`);
     setBanner(null);
+    let queuedStatusPayload: Record<string, unknown> | null = null;
 
     try {
       if (nextStatus === "done" && !options?.submittedFromCompletionModal) {
         throw new Error(t("tasks.completionModalRequired"));
+      }
+      const offlineFromStart =
+        typeof window !== "undefined" && !window.navigator.onLine;
+      if (
+        offlineFromStart &&
+        nextStatus === "done" &&
+        options?.files &&
+        options.files.length > 0
+      ) {
+        throw new Error(t("worker.offlineFilesNeedConnection"));
       }
 
       const statusChangedAt = new Date().toISOString();
@@ -2233,6 +2306,12 @@ export function WorkerShell({
       if (nextMetadata !== null) {
         updatePayload.metadata = nextMetadata;
       }
+      queuedStatusPayload = updatePayload;
+
+      if (offlineFromStart) {
+        queueTaskStatusAction(taskId, nextStatus, updatePayload);
+        return false;
+      }
 
       const { error } = await supabase
         .from("tasks")
@@ -2300,6 +2379,14 @@ export function WorkerShell({
       scheduleShellRefresh(1800);
       return true;
     } catch (error) {
+      if (
+        queuedStatusPayload &&
+        isNetworkLikeFieldError(error) &&
+        !(nextStatus === "done" && options?.files && options.files.length > 0)
+      ) {
+        queueTaskStatusAction(taskId, nextStatus, queuedStatusPayload);
+        return false;
+      }
       const message = error instanceof Error ? error.message : "Task update failed.";
       setBanner({ tone: "error", text: message });
       return false;
@@ -2320,7 +2407,10 @@ export function WorkerShell({
   const drainOfflineQueue = useCallback(async () => {
     const mediaItems = loadOfflineQueue();
     const eventItems = sortQueueByEventTimeAsc(loadOfflineEventQueue());
-    if (mediaItems.length === 0 && eventItems.length === 0) return;
+    const actionItems = loadOfflineFieldActionQueue().filter(
+      (item) => item.status !== "failed" && item.actorId === shell.profile.id,
+    );
+    if (mediaItems.length === 0 && eventItems.length === 0 && actionItems.length === 0) return;
     setDraining(true);
     try {
       // ── Phase 1: time events ────────────────────────────────────────
@@ -2361,7 +2451,123 @@ export function WorkerShell({
         setOfflineEventQueue(removeOfflineEvent(item.client_event_id));
       }
 
-      // ── Phase 2: media ─────────────────────────────────────────────
+      // ── Phase 2: field actions ────────────────────────────────────
+      for (const item of actionItems) {
+        markOfflineFieldActionStatus(item.id, {
+          status: "syncing",
+          lastAttemptAt: new Date().toISOString(),
+        });
+        setOfflineActionQueue(loadOfflineFieldActionQueue());
+
+        try {
+          if (item.kind === "task_claim") {
+            const response = await fetch("/api/worker/claim-task", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ taskId: item.payload.taskId }),
+            });
+            if (!response.ok) {
+              const payload = (await response.json().catch(() => ({}))) as { error?: string };
+              if (response.status === 409) {
+                setBanner({ tone: "error", text: t("tasks.claimAlreadyAssigned") });
+                setOfflineActionQueue(removeOfflineFieldAction(item.id));
+                continue;
+              }
+              throw new Error(payload.error ?? t("tasks.claimFailed"));
+            }
+            const payload = (await response.json().catch(() => ({}))) as { task?: Task };
+            if (payload.task) {
+              mergeVisibleRealtimeTask(payload.task);
+            }
+            setOfflineActionQueue(removeOfflineFieldAction(item.id));
+            setBanner({ tone: "success", text: t("worker.fieldActionSynced") });
+            continue;
+          }
+
+          if (item.kind === "task_status") {
+            const { data: existing } = await supabase
+              .from("tasks")
+              .select("id, status, completed_at")
+              .eq("id", item.payload.taskId)
+              .maybeSingle<{ id: string; status: TaskStatus; completed_at: string | null }>();
+            if (
+              existing &&
+              existing.status === item.payload.nextStatus &&
+              (item.payload.nextStatus !== "done" || Boolean(existing.completed_at))
+            ) {
+              setOfflineActionQueue(removeOfflineFieldAction(item.id));
+              continue;
+            }
+
+            const { data: updated, error } = await supabase
+              .from("tasks")
+              .update(item.payload.updatePayload)
+              .eq("id", item.payload.taskId)
+              .select("*")
+              .maybeSingle<Task>();
+            if (error) throw new Error(error.message);
+            if (updated) {
+              mergeVisibleRealtimeTask(updated);
+            }
+            setOfflineActionQueue(removeOfflineFieldAction(item.id));
+            setBanner({ tone: "success", text: t("worker.fieldActionSynced") });
+            continue;
+          }
+
+          if (item.kind === "message_send") {
+            const { data: existingMessages } = await supabase
+              .from("messages")
+              .select("id, recipient_id")
+              .eq("sender_id", item.actorId)
+              .filter("metadata->>client_action_id", "eq", item.clientActionId);
+            if ((existingMessages?.length ?? 0) >= item.payload.rows.length) {
+              setOfflineActionQueue(removeOfflineFieldAction(item.id));
+              continue;
+            }
+
+            let result = await supabase
+              .from("messages")
+              .insert(item.payload.rows)
+              .select("id, recipient_id");
+            let error = result.error;
+            if (error && /column .* priority/i.test(error.message)) {
+              const fallbackRows = item.payload.rows.map((row) => ({
+                org_id: row.org_id,
+                sender_id: row.sender_id,
+                recipient_id: row.recipient_id,
+                text: row.text,
+                color: row.color,
+                attachment: row.attachment,
+                metadata: row.metadata,
+              }));
+              result = await supabase
+                .from("messages")
+                .insert(fallbackRows)
+                .select("id, recipient_id");
+              error = result.error;
+            }
+            if (error) throw new Error(error.message);
+            setOfflineActionQueue(removeOfflineFieldAction(item.id));
+            setBanner({ tone: "success", text: t("worker.fieldActionSynced") });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Sync failed.";
+          markOfflineFieldActionStatus(item.id, {
+            status: isNetworkLikeFieldError(error) ? "pending" : "failed",
+            retryCount: item.retryCount + 1,
+            lastErrorMessage: message,
+          });
+          setOfflineActionQueue(loadOfflineFieldActionQueue());
+          if (!isNetworkLikeFieldError(error)) {
+            setBanner({
+              tone: "error",
+              text: t("worker.fieldActionSyncFailed").replace("{count}", "1"),
+            });
+          }
+        }
+      }
+
+      // ── Phase 3: media ─────────────────────────────────────────────
       for (const item of mediaItems) {
         const file = offlineUploadToFile(item);
         if (!file) continue; // thumb-only, needs re-pick
@@ -2423,14 +2629,20 @@ export function WorkerShell({
     } finally {
       setDraining(false);
     }
-  }, [router, supabase]);
+  }, [mergeVisibleRealtimeTask, router, shell.profile.id, supabase, t]);
+
+  const offlineActionPendingCount = countPendingOfflineFieldActions(offlineActionQueue);
 
   // Auto-drain when the browser flips back online.
   useEffect(() => {
     if (!isOnline) return;
-    if (offlineQueue.length === 0 && offlineEventQueue.length === 0) return;
+    if (
+      offlineQueue.length === 0 &&
+      offlineEventQueue.length === 0 &&
+      offlineActionPendingCount === 0
+    ) return;
     void drainOfflineQueue();
-  }, [isOnline, offlineQueue.length, offlineEventQueue.length, drainOfflineQueue]);
+  }, [isOnline, offlineQueue.length, offlineEventQueue.length, offlineActionPendingCount, drainOfflineQueue]);
 
   const value: WorkerShellContextValue = {
     shell,
@@ -2440,12 +2652,14 @@ export function WorkerShell({
     lastGpsCheck,
     muted,
     offlineQueueLength: offlineQueue.length,
+    offlineActionQueueLength: offlineActionPendingCount,
     isOnline,
     draining,
     dismissBanner,
     clockIn,
     clockOut,
     uploadMedia,
+    queueTaskClaim,
     updateTaskStatus,
     toggleMute,
     drainOfflineQueue,
@@ -2528,6 +2742,37 @@ export function WorkerShell({
             <div className="-mx-4 mt-3">
               <WorkerQuickNav pathname={pathname} />
             </div>
+
+            {!isOnline ? (
+              <div
+                className="mt-3 inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1.5 text-[11px] font-semibold"
+                style={{
+                  background: "rgba(245, 158, 11, 0.14)",
+                  color: "#f59e0b",
+                }}
+              >
+                <span aria-hidden>⚠</span>
+                {t("worker.offlineMode")}
+              </div>
+            ) : null}
+
+            {offlineActionPendingCount > 0 ? (
+              <div
+                className="mt-2 inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1.5 text-[11px] font-semibold"
+                style={{
+                  background: isOnline
+                    ? "rgba(15, 168, 120, 0.14)"
+                    : "rgba(245, 158, 11, 0.14)",
+                  color: isOnline ? "var(--green)" : "#f59e0b",
+                }}
+              >
+                <span aria-hidden>{isOnline && draining ? "↻" : "⏳"}</span>
+                {(isOnline && draining
+                  ? t("worker.syncingFieldActions")
+                  : t("worker.pendingFieldActions")
+                ).replace("{count}", String(offlineActionPendingCount))}
+              </div>
+            ) : null}
 
             {offlineQueue.length > 0 ? (
               <div
