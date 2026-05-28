@@ -59,10 +59,15 @@ describe("stable offline field mode source wiring", () => {
 
   it("shows offline and syncing banners without blocking the mobile shell", () => {
     expect(workerShellSource).toContain('t("worker.offlineMode")');
+    expect(workerShellSource).toContain('data-testid="worker-offline-status-bar"');
+    expect(workerShellSource).toContain("buildOfflineVisibilityState");
     expect(workerShellSource).toContain('t("worker.pendingFieldActions")');
     expect(workerShellSource).toContain('t("worker.syncingFieldActions")');
     expect(workerShellSource).toContain('window.addEventListener("online", handleOnline)');
-    expect(workerShellSource).toContain("setIsOnline(true)");
+    expect(workerShellSource).toContain('window.addEventListener("focus", syncOnlineState)');
+    expect(workerShellSource).toContain('document.addEventListener("visibilitychange", syncOnlineState)');
+    expect(workerShellSource).toContain("window.setInterval(syncOnlineState, 1500)");
+    expect(workerShellSource).toContain("setIsOnline(false)");
   });
 
   it("keeps upload retry behavior pending until storage and metadata both succeed", () => {

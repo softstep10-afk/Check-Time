@@ -88,6 +88,7 @@ import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { mergeRealtimeTaskRow } from "@/lib/task-realtime";
 import { redactText } from "@/lib/safe-log";
+import { buildOfflineVisibilityState } from "@/lib/offline-visibility";
 
 const navItems = [
   { href: "/clock", icon: Timer, label: "Clock", labelKey: "worker.navClock" as TranslationKey },
@@ -611,18 +612,27 @@ export function WorkerShell({
   // ── Online/offline listeners ─────────────────────────────────────────
   useEffect(() => {
     if (typeof window === "undefined") return;
-    setIsOnline(window.navigator.onLine);
+    function syncOnlineState() {
+      setIsOnline(window.navigator.onLine);
+    }
     function handleOnline() {
-      setIsOnline(true);
+      syncOnlineState();
     }
     function handleOffline() {
       setIsOnline(false);
     }
+    syncOnlineState();
+    const pollId = window.setInterval(syncOnlineState, 1500);
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener("focus", syncOnlineState);
+    document.addEventListener("visibilitychange", syncOnlineState);
     return () => {
+      window.clearInterval(pollId);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("focus", syncOnlineState);
+      document.removeEventListener("visibilitychange", syncOnlineState);
     };
   }, []);
 
@@ -1411,6 +1421,7 @@ export function WorkerShell({
       }
 
       if (!insertedEvent && networkFailed) {
+        setIsOnline(false);
         // ── Offline path: queue locally, optimistic shell state, banner.
         // Stamp gps_status=offline_pending_sync so the manager review
         // surface can distinguish "no fix yet" from "couldn't reach the
@@ -1670,6 +1681,7 @@ export function WorkerShell({
       }
 
       if (!insertedEvent && networkFailed) {
+        setIsOnline(false);
         // ── Offline path: queue locally, optimistic shell state, banner.
         const offlineMarkers = buildNoGpsMetadata({
           skippedGps: !gps,
@@ -1896,6 +1908,7 @@ export function WorkerShell({
     // serialize the files into localStorage instead of hitting Storage.
     // The window 'online' listener below will drain the queue.
     if (typeof window !== "undefined" && !window.navigator.onLine) {
+      setIsOnline(false);
       let degradedAny = false;
       for (const file of selectedFiles) {
         const result = await queueOfflineUpload({
@@ -2141,6 +2154,7 @@ export function WorkerShell({
   }
 
   function queueTaskClaim(taskId: string) {
+    setIsOnline(false);
     const clientActionId = `task-claim:${shell.profile.id}:${taskId}`;
     const { queue } = queueOfflineFieldAction({
       clientActionId,
@@ -2159,6 +2173,7 @@ export function WorkerShell({
     nextStatus: TaskStatus,
     updatePayload: Record<string, unknown>,
   ) {
+    setIsOnline(false);
     const clientActionId = `task-status:${shell.profile.id}:${taskId}:${nextStatus}`;
     const { queue } = queueOfflineFieldAction({
       clientActionId,
@@ -2644,6 +2659,17 @@ export function WorkerShell({
     void drainOfflineQueue();
   }, [isOnline, offlineQueue.length, offlineEventQueue.length, offlineActionPendingCount, drainOfflineQueue]);
 
+  const offlineVisibility = buildOfflineVisibilityState({
+    isOnline,
+    draining,
+    offlineActionCount: offlineActionPendingCount,
+    offlineUploadCount: offlineQueue.length,
+    offlineShiftCount: offlineEventQueue.length,
+  });
+  const offlineVisibilityText = offlineVisibility
+    ? t(offlineVisibility.labelKey).replace("{count}", String(offlineVisibility.count))
+    : "";
+
   const value: WorkerShellContextValue = {
     shell,
     activeSeconds,
@@ -2669,8 +2695,46 @@ export function WorkerShell({
 
   return (
     <WorkerShellContext.Provider value={value}>
+      {offlineVisibility ? (
+        <div
+          data-testid="worker-offline-status-bar"
+          className="fixed inset-x-0 top-0 z-[75] px-3"
+          style={{ paddingTop: "max(0.5rem, env(safe-area-inset-top))" }}
+          role="status"
+          aria-live="polite"
+        >
+          <div
+            className="mx-auto flex min-h-11 max-w-[500px] items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-2 text-xs font-bold shadow-lg"
+            style={{
+              background:
+                offlineVisibility.tone === "syncing"
+                  ? "rgba(15, 168, 120, 0.96)"
+                  : "rgba(146, 64, 14, 0.96)",
+              borderColor:
+                offlineVisibility.tone === "syncing"
+                  ? "rgba(187, 247, 208, 0.45)"
+                  : "rgba(254, 215, 170, 0.45)",
+              color: "#fff7ed",
+            }}
+          >
+            <span className="inline-flex min-w-0 items-center gap-2">
+              <span aria-hidden>{offlineVisibility.mode === "syncing" ? "↻" : "⚠"}</span>
+              <span className="truncate">{offlineVisibilityText}</span>
+            </span>
+            {offlineVisibility.mode === "offline" ? (
+              <span className="shrink-0 rounded-[var(--radius-pill)] bg-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.1em]">
+                {t("worker.offlineShort")}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <div className="min-h-screen bg-[var(--bg-primary)]">
-        <div className="mx-auto flex min-h-screen max-w-[500px] flex-col border-x border-[var(--border-subtle)]">
+        <div
+          className={`mx-auto flex min-h-screen max-w-[500px] flex-col border-x border-[var(--border-subtle)] ${
+            offlineVisibility ? "pt-14" : ""
+          }`}
+        >
           <header className="px-4 pb-3 pt-3">
             {/* Top worker block — intentionally minimal:
                 - Worker name only
