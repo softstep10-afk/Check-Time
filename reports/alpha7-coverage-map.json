@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T07:19:19.433Z",
+  "generatedAt": "2026-05-28T07:29:35.657Z",
   "rows": [
     {
       "category": "material driver-only dropdown",
@@ -65,7 +65,8 @@
       "category": "private message sender/recipient persistence",
       "testsFound": [
         "tests/lib/live-status-source.test.ts",
-        "tests/lib/message-state.test.ts"
+        "tests/lib/message-state.test.ts",
+        "tests/lib/offline-readable-cache-source.test.ts"
       ],
       "sourceFilesFound": [
         "src/app/api/manager/message-tasks/route.ts",
@@ -406,6 +407,7 @@
         "src/lib/i18n/translations.ts",
         "src/lib/media-extension.ts",
         "src/lib/media-playback.ts",
+        "src/lib/offline-field-cache.ts",
         "src/lib/project-planning-attachments.ts",
         "src/lib/task-attachments.ts",
         "src/lib/upload-limits.ts"

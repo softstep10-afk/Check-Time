@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T07:19:15.651Z",
+  "generatedAt": "2026-05-28T07:29:31.891Z",
   "rows": [
     {
       "path": "src/app/api/ai/actions/create-project/route.ts",
@@ -1320,6 +1320,16 @@
       "orgResourceGuardEvidence": [
         "org/company guard"
       ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/offline-field-cache.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
       "dangerousZone": false,
       "risk": "confirmed guarded"
     },

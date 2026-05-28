@@ -108,6 +108,10 @@ Run this after deploys that touch application code or user workflows.
 - Direct SQL Supabase Step 0 and production RLS/Storage verification remain separate blocked items.
 - Open "Добавить материал".
 - Confirm the default assignee option is `Любой водитель или рабочий`.
+- Dictate or paste `Гипс 5 листов 5/8` into `Вставить спецификацию из Excel`.
+- Confirm one editable row appears with material `Гипс`, quantity `5`, unit `листов`, and note/spec `5/8`.
+- Dictate or paste repeated text like `Гипс 5 листов 5/8 гипс гипс пять гипс пять листов 5/8`.
+- Confirm the parser cleans repeats and does not create duplicate spam rows.
 - Paste 5 rows from Excel/Google Sheets into `Вставить спецификацию из Excel`.
 - Confirm `Найдено X позиций` appears and the pasted positions become editable.
 - Edit one position, remove one position, and add one manually with `Добавить позицию`.

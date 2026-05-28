@@ -99,6 +99,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/message-types.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/mux-webhook.ts` | mutation | no | dangerous unknown | .update( |
 | `src/lib/offline-field-actions.ts` | read-only | no | confirmed guarded | org/company guard |
+| `src/lib/offline-field-cache.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/offline-time-events.ts` | read-only | no | confirmed guarded | org/company guard |
 | `src/lib/offline-uploads.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/offline-visibility.ts` | read-only | no | confirmed guarded | none |

@@ -20,4 +20,9 @@ describe("appendVoiceTranscript", () => {
       "Нужно купить материал.",
     );
   });
+
+  it("merges overlapping cumulative mobile dictation instead of repeating it", () => {
+    expect(appendVoiceTranscript("Гипс 5", "Гипс 5 листов")).toBe("Гипс 5 листов");
+    expect(appendVoiceTranscript("Гипс 5", "5 листов 5/8")).toBe("Гипс 5 листов 5/8");
+  });
 });

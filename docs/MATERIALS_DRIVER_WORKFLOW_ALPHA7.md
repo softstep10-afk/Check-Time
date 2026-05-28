@@ -33,6 +33,8 @@ Material requests are still normal task rows. The material-specific meaning is s
 - Urgent material requests use existing urgent priority.
 - The UI shows a saving state while the material task is being created and does not show success before the server responds.
 - In `Добавить материал`, manager/owner can paste rows from Excel/Google Sheets into `Вставить спецификацию из Excel`.
+- The same paste area also accepts simple dictated/plain text such as `Гипс 5 листов 5/8`.
+- Repeated voice/dictation fragments are cleaned conservatively before rows are created.
 - Parsed rows become editable material positions. The user can edit, remove, or manually add positions before saving.
 - Manager/owner can attach Excel, CSV, PDF, photo, or another already-supported file type to the material request. Files use the existing task attachment upload/open/download path.
 
@@ -120,6 +122,8 @@ Existing task realtime is reused:
 - Confirm a worker can press `Взять` on an open material task.
 - Confirm a second worker sees a clear already-taken error if they try after someone else took it.
 - Confirm saving material shows "Сохраняем..." / "Сохраняем материал..." and duplicate save does not duplicate a task.
+- Dictate or paste `Гипс 5 листов 5/8` into `Вставить спецификацию из Excel`, press import, and confirm one editable row appears: `Гипс`, `5`, `листов`, `5/8`.
+- Dictate or paste repeated text like `Гипс 5 листов 5/8 гипс гипс пять гипс пять листов 5/8` and confirm it does not create duplicate spam rows.
 - Copy 5 rows from Excel/Google Sheets and paste into `Вставить спецификацию из Excel`.
 - Confirm the UI says how many positions were found.
 - Edit one pasted position, remove one position, and add one manually.

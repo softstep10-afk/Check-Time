@@ -12,6 +12,8 @@ describe("manager material request UI source", () => {
     expect(projectDetailSource).toContain("parseMaterialSpecPaste");
     expect(projectDetailSource).toContain("handleImportMaterialSpec");
     expect(projectDetailSource).toContain("materials.pasteSpecTitle");
+    expect(projectDetailSource).toContain("materials.specDuplicatesCleaned");
+    expect(projectDetailSource).toContain("orderSpecPasteText");
     expect(projectDetailSource).toContain("setOrderRows((current) =>");
     expect(projectDetailSource).toContain("materials.addPosition");
   });
@@ -22,5 +24,11 @@ describe("manager material request UI source", () => {
     expect(projectDetailSource).toContain("materialItems,");
     expect(projectDetailSource).toContain("uploadTaskAttachment");
     expect(projectDetailSource).toContain("ACCEPT_ALL_UPLOADS");
+  });
+
+  it("keeps save enabled from name-only rows after parsing or manual add", () => {
+    expect(projectDetailSource).toContain("const hasNamedOrderRow = orderRows.some");
+    expect(projectDetailSource).toContain("disabled={!hasNamedOrderRow || savingOrder}");
+    expect(projectDetailSource).toContain("name: item.name");
   });
 });

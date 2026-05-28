@@ -2199,6 +2199,7 @@ export const translations = {
   },
   "materials.importSpecRows": { en: "Paste from Excel", ru: "Вставить из Excel" },
   "materials.specParsedCount": { en: "Found {count} item(s).", ru: "Найдено {count} позиций." },
+  "materials.specDuplicatesCleaned": { en: "Repeated text cleaned.", ru: "Повторы очищены." },
   "materials.specParseEmpty": { en: "No material rows found.", ru: "Не нашёл строк материалов." },
   "materials.addFile": { en: "Add file", ru: "Добавить файл" },
   "materials.addFileHint": {

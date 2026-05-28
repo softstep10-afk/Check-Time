@@ -3630,9 +3630,15 @@ function MaterialsSection({
       return onlyEmptyRow ? parsedRows : [...current, ...parsedRows];
     });
     setOrderSpecPasteText("");
+    const feedbackParts = [
+      t("materials.specParsedCount").replace("{count}", String(parsedRows.length)),
+    ];
+    if (parsed.deduped) {
+      feedbackParts.push(t("materials.specDuplicatesCleaned"));
+    }
     setOrderSpecFeedback({
       type: "success",
-      text: t("materials.specParsedCount").replace("{count}", String(parsedRows.length)),
+      text: feedbackParts.join(" "),
     });
   }
 
@@ -4179,7 +4185,9 @@ function MaterialsSection({
                   {t("materials.importSpecRows")}
                 </button>
               </div>
-              <textarea
+              <TextInputWithVoice
+                multiline
+                rows={5}
                 value={orderSpecPasteText}
                 onChange={(event) => {
                   setOrderSpecPasteText(event.target.value);
