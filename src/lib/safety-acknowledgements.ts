@@ -50,6 +50,32 @@ export interface WriteSafetyAckParams {
   safetyVersion: string;
 }
 
+export type SafetyAckState = "acknowledged" | "unknown";
+
+export async function readLatestSafetyAck(
+  supabase: SupabaseClient,
+  params: Pick<WriteSafetyAckParams, "workerId" | "safetyVersion">,
+): Promise<SafetyAckState> {
+  const { data, error } = await supabase
+    .from("safety_acknowledgements")
+    .select("id")
+    .eq("worker_id", params.workerId)
+    .eq("safety_version", params.safetyVersion)
+    .order("acknowledged_at", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return "unknown";
+  return "acknowledged";
+}
+
+export function buildSafetyAckInsert(params: WriteSafetyAckParams): Record<string, unknown> {
+  return {
+    org_id: params.orgId,
+    worker_id: params.workerId,
+    project_id: params.projectId,
+    safety_version: params.safetyVersion,
+  };
+}
+
 /**
  * Insert a single safety_acknowledgements row. Returns the new id on
  * success.
@@ -68,12 +94,7 @@ export async function writeSafetyAck(
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const { data, error } = await supabase
     .from("safety_acknowledgements")
-    .insert({
-      org_id: params.orgId,
-      worker_id: params.workerId,
-      project_id: params.projectId,
-      safety_version: params.safetyVersion,
-    })
+    .insert(buildSafetyAckInsert(params))
     .select("id")
     .single<{ id: string }>();
   if (error || !data) {

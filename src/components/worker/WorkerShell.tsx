@@ -34,7 +34,13 @@ import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { WorkerJarvisTextDock } from "@/components/worker/WorkerJarvisTextDock";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
-import { readLatestConsent, writeConsent } from "@/lib/gps-consent";
+import {
+  hasCachedGpsConsentDecision,
+  readCachedGpsConsent,
+  readLatestConsent,
+  writeCachedGpsConsent,
+  writeConsent,
+} from "@/lib/gps-consent";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { validateUploadFile } from "@/lib/upload-limits";
 import {
@@ -670,9 +676,9 @@ export function WorkerShell({
   // DB round-trip below resolves).
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const cached = localStorage.getItem("check-time-gps-consent");
-    if (cached === "true") setGpsConsented(true);
-    else if (cached === "false") setGpsConsented(false);
+    const cached = readCachedGpsConsent(window.localStorage);
+    if (cached === "granted") setGpsConsented(true);
+    else if (cached === "denied") setGpsConsented(false);
   }, []);
 
   // DB is source of truth, localStorage is cache. "unknown" leaves the
@@ -693,11 +699,11 @@ export function WorkerShell({
           const granted = state === "granted";
           setGpsConsented(granted);
           if (typeof window !== "undefined") {
-            localStorage.setItem("check-time-gps-consent", String(granted));
+            writeCachedGpsConsent(window.localStorage, granted);
           }
         } else if (
           typeof window !== "undefined" &&
-          localStorage.getItem("check-time-gps-consent") === "true"
+          readCachedGpsConsent(window.localStorage) === "granted"
         ) {
           const res = await writeConsent(supabase, {
             orgId: shell.profile.org_id,
@@ -715,6 +721,14 @@ export function WorkerShell({
     }
     void checkConsent();
   }, [supabase, shell.profile.id, shell.profile.org_id, shell.profile.name, consentChecked]);
+
+  useEffect(() => {
+    if (!consentChecked || gpsConsented || showConsentModal || !shell.clockState.isClockedIn) return;
+    if (typeof window === "undefined") return;
+    if (!hasCachedGpsConsentDecision(window.localStorage)) {
+      setShowConsentModal(true);
+    }
+  }, [consentChecked, gpsConsented, showConsentModal, shell.clockState.isClockedIn]);
 
   const gpsTrackingEnabled = gpsConsented && shell.clockState.isClockedIn;
 
@@ -758,32 +772,34 @@ export function WorkerShell({
     }
   }, [gpsTrackingEnabled, iosTipShown]);
 
-  function handleGpsConsent(signedName: string) {
-    void writeConsent(supabase, {
+  async function handleGpsConsent(signedName: string) {
+    const res = await writeConsent(supabase, {
       orgId: shell.profile.org_id,
       workerId: shell.profile.id,
       signedName,
       granted: true,
       userAgent: navigator.userAgent,
-    }).then((res) => {
-      if (!res.ok) console.warn("consent grant failed:", res.error);
     });
-    localStorage.setItem("check-time-gps-consent", "true");
+    if (!res.ok) {
+      throw new Error(res.error);
+    }
+    writeCachedGpsConsent(window.localStorage, true);
     setGpsConsented(true);
     setShowConsentModal(false);
   }
 
-  function handleGpsDecline() {
-    void writeConsent(supabase, {
+  async function handleGpsDecline() {
+    const res = await writeConsent(supabase, {
       orgId: shell.profile.org_id,
       workerId: shell.profile.id,
       signedName: shell.profile.name,
       granted: false,
       userAgent: navigator.userAgent,
-    }).then((res) => {
-      if (!res.ok) console.warn("consent decline failed:", res.error);
     });
-    localStorage.setItem("check-time-gps-consent", "false");
+    if (!res.ok) {
+      throw new Error(res.error);
+    }
+    writeCachedGpsConsent(window.localStorage, false);
     setGpsConsented(false);
     setShowConsentModal(false);
   }
@@ -1427,7 +1443,12 @@ export function WorkerShell({
         });
         playSound("clock-in");
 
-        if (gps && !localStorage.getItem("check-time-gps-consent")) {
+        if (
+          gps &&
+          consentChecked &&
+          !gpsConsented &&
+          !hasCachedGpsConsentDecision(window.localStorage)
+        ) {
           setShowConsentModal(true);
         }
         return;
@@ -1490,7 +1511,12 @@ export function WorkerShell({
       // Only seed the consent modal when a real fix was captured. On the
       // No-GPS path the device couldn't produce a fix anyway — there's
       // no point prompting for tracking consent.
-      if (gps && !localStorage.getItem("check-time-gps-consent")) {
+      if (
+        gps &&
+        consentChecked &&
+        !gpsConsented &&
+        !hasCachedGpsConsentDecision(window.localStorage)
+      ) {
         setShowConsentModal(true);
       }
 

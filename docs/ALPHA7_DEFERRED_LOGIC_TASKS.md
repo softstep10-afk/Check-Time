@@ -321,3 +321,28 @@ Deferred until separate owner approval:
 - Global toast/notification redesign.
 - Broader message history pagination or data-loading redesign.
 - Direct SQL verification of production message/material task RLS behavior.
+
+## GPS Consent / Safety Signature Audit
+
+Completed scope:
+
+- Fixed GPS consent confirmation so the button enables when the checkbox is checked and the signed name is non-empty after trim.
+- Kept GPS consent as an append-only audit record in `worker_location_consents`.
+- Added version-aware GPS consent cache so the same version is not asked repeatedly and a future version can ask again.
+- Recorded skip/no-GPS decisions as `consented = false`, not as accepted GPS consent.
+- Added Safety Brief same-version lookup before prompting so workers are not asked repeatedly for the same safety version.
+- Added owner/admin read-only `Подписи и согласия` review/export section in the existing audit page.
+
+Not changed:
+
+- No payroll calculation or salary archive.
+- No archive/trash business meaning.
+- No GPS tracking, geofence, clock-in, clock-out, or shift calculation.
+- No Supabase RLS, Storage policies, database schema, or migrations.
+- No production data mutation.
+
+Deferred until separate owner approval:
+
+- Direct SQL Supabase Step 0.
+- RLS/Storage verification for consent/audit tables.
+- Adding extra `signed_name`, `user_agent`, or `ip_address` columns to `safety_acknowledgements`; current Safety Brief audit uses existing worker/project/version/timestamp fields.

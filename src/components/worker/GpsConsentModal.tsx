@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MapPin } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
+import { canConfirmGpsConsent } from "@/lib/gps-consent-ui";
 
 export function GpsConsentModal({
   workerName,
@@ -10,14 +11,40 @@ export function GpsConsentModal({
   onDecline,
 }: {
   workerName: string;
-  onAccept: (signedName: string) => void;
-  onDecline: () => void;
+  onAccept: (signedName: string) => void | Promise<void>;
+  onDecline: () => void | Promise<void>;
 }) {
   const { t } = useTranslation();
   const [agreed, setAgreed] = useState(false);
   const [signedName, setSignedName] = useState("");
+  const [busyAction, setBusyAction] = useState<"accept" | "decline" | null>(null);
+  const [error, setError] = useState("");
 
-  const canConfirm = agreed && signedName.trim().length >= 2;
+  const canConfirm = canConfirmGpsConsent(agreed, signedName);
+
+  async function handleAccept() {
+    if (!canConfirm || busyAction) return;
+    setBusyAction("accept");
+    setError("");
+    try {
+      await onAccept(signedName.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("gps.consentSaveFailed"));
+      setBusyAction(null);
+    }
+  }
+
+  async function handleDecline() {
+    if (busyAction) return;
+    setBusyAction("decline");
+    setError("");
+    try {
+      await onDecline();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("gps.consentSaveFailed"));
+      setBusyAction(null);
+    }
+  }
 
   return (
     <div
@@ -49,6 +76,7 @@ export function GpsConsentModal({
             type="checkbox"
             checked={agreed}
             onChange={(e) => setAgreed(e.target.checked)}
+            disabled={Boolean(busyAction)}
             className="mt-0.5 h-4 w-4 shrink-0"
           />
           <span className="text-sm text-[var(--text-primary)]">
@@ -64,31 +92,40 @@ export function GpsConsentModal({
             type="text"
             value={signedName}
             onChange={(e) => setSignedName(e.target.value)}
+            onInput={(e) => setSignedName(e.currentTarget.value)}
             placeholder={workerName}
+            disabled={Boolean(busyAction)}
             className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
           />
         </div>
 
+        {error ? (
+          <div className="mt-3 rounded-[var(--radius-md)] border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-[var(--red)]">
+            {t("gps.consentSaveFailed")}: {error}
+          </div>
+        ) : null}
+
         <div className="mt-5 flex gap-2">
           <button
             type="button"
-            onClick={() => onAccept(signedName.trim())}
-            disabled={!canConfirm}
+            onClick={() => void handleAccept()}
+            disabled={!canConfirm || Boolean(busyAction)}
             className="flex-1 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold"
             style={{
-              background: canConfirm ? "var(--brand-yellow)" : "var(--border-default)",
-              color: canConfirm ? "var(--text-inverse)" : "var(--text-muted)",
+              background: canConfirm && !busyAction ? "var(--brand-yellow)" : "var(--border-default)",
+              color: canConfirm && !busyAction ? "var(--text-inverse)" : "var(--text-muted)",
             }}
           >
-            {t("gps.consentConfirm")}
+            {busyAction === "accept" ? t("common.saving") : t("gps.consentConfirm")}
           </button>
           <button
             type="button"
-            onClick={onDecline}
+            onClick={() => void handleDecline()}
+            disabled={Boolean(busyAction)}
             className="flex-1 rounded-[var(--radius-md)] border px-4 py-3 text-sm font-semibold"
             style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
           >
-            {t("gps.consentDecline")}
+            {busyAction === "decline" ? t("common.saving") : t("gps.consentDecline")}
           </button>
         </div>
       </div>

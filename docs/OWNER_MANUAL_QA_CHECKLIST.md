@@ -74,6 +74,22 @@ Run this after deploys that touch application code or user workflows.
 - A normal construction project without GPS still shows the existing GPS warning.
 - Payroll, shifts, archive/trash, and GPS behavior for normal projects remain unchanged.
 
+## GPS Consent / Safety Signatures
+
+- Mobile worker starts a normal shift and sees `Передача геолокации`.
+- With checkbox unchecked and name entered, `Подтвердить и продолжить` stays disabled.
+- With checkbox checked and empty/spaces-only name, the button stays disabled.
+- With checkbox checked and any non-empty signed name, the button enables immediately.
+- Confirm GPS consent and verify the modal closes only after save succeeds.
+- Reopen/reload same worker for the same consent version; GPS consent is not asked again.
+- Use `Пропустить — начать без передачи` and verify it is recorded as skipped/no-GPS, not accepted GPS consent.
+- Confirm Safety Brief once.
+- Start another shift with the same Safety Brief version and verify Safety Brief is not asked repeatedly.
+- Owner/admin opens `Admin -> Audit -> Подписи и согласия`.
+- GPS consent record shows worker, signed name, version, accepted/skipped status, and timestamp.
+- Safety Brief acknowledgement shows worker, version, project/context, and timestamp.
+- CSV export from `Подписи и согласия` works.
+
 ## Materials / Driver Workflow
 
 - Driver setup note: Sanya gets the focused driver material queue only when his profile role is `driver` or his stable profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.

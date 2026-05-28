@@ -24,6 +24,7 @@ import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
 import { buildSafeUploadName } from "@/lib/media-extension";
 import {
   DEFAULT_SAFETY_VERSION,
+  readLatestSafetyAck,
   writeSafetyAck,
 } from "@/lib/safety-acknowledgements";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
@@ -1390,11 +1391,32 @@ function ProjectClockControls({
   const currentProjectName = shell.clockState.currentProjectName;
   const clockedInHere = isClockedIn && currentProjectId === projectId;
   const clockedInElsewhere = isClockedIn && currentProjectId !== projectId;
-  const startingShift = busyAction === "clock-in";
+  const startingShift = busyAction === "clock-in" || savingAck;
 
-  function handleStart(noGps = false) {
+  async function handleStart(noGps = false) {
     setAckError(null);
-    setPendingNoGpsStart(gpsNotRequired || noGps);
+    const shouldSkipGps = gpsNotRequired || noGps;
+    setPendingNoGpsStart(shouldSkipGps);
+    setSavingAck(true);
+    let ackState: Awaited<ReturnType<typeof readLatestSafetyAck>> = "unknown";
+    try {
+      ackState = await readLatestSafetyAck(supabase, {
+        workerId: shell.profile.id,
+        safetyVersion: DEFAULT_SAFETY_VERSION,
+      });
+    } catch (err) {
+      console.warn("safety acknowledgement check failed", err);
+    } finally {
+      setSavingAck(false);
+    }
+    if (ackState === "acknowledged") {
+      void clockIn(
+        projectId,
+        shouldSkipGps ? { skipGps: true, gpsErrorKind: "unavailable" } : undefined,
+      );
+      setPendingNoGpsStart(false);
+      return;
+    }
     setSafetyOpen(true);
   }
 
@@ -1501,7 +1523,7 @@ function ProjectClockControls({
           ) : null}
           <button
             type="button"
-            onClick={() => handleStart(gpsNotRequired)}
+            onClick={() => void handleStart(gpsNotRequired)}
             disabled={startingShift}
             className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
             style={{ background: "#f59e0b", color: "var(--text-inverse)" }}
@@ -1512,7 +1534,7 @@ function ProjectClockControls({
           {gpsNotRequired ? null : (
             <button
               type="button"
-              onClick={() => handleStart(true)}
+              onClick={() => void handleStart(true)}
               disabled={startingShift}
               className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border px-4 py-3 text-sm font-semibold disabled:opacity-50"
               style={{ borderColor: "rgba(245,158,11,0.45)", color: "#f59e0b" }}

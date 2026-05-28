@@ -19,6 +19,18 @@ type AuditEntry = {
   after: Record<string, unknown> | null;
 };
 
+type SignatureEntry = {
+  id: string;
+  type: "gps" | "safety";
+  workerName: string;
+  signedName: string;
+  version: string;
+  status: string;
+  timestamp: string;
+  context: string;
+  userAgent: string;
+};
+
 const PREVIEW_ENTRIES: AuditEntry[] = [
   {
     id: "aud-001",
@@ -65,6 +77,32 @@ const PREVIEW_ENTRIES: AuditEntry[] = [
     after: { ot_threshold: 44 },
   },
 ];
+
+const PREVIEW_SIGNATURES: SignatureEntry[] = [
+  {
+    id: "sig-gps-preview",
+    type: "gps",
+    workerName: "Preview Worker",
+    signedName: "Preview Worker",
+    version: "1",
+    status: "accepted",
+    timestamp: new Date(Date.now() - 3600_000).toISOString(),
+    context: "GPS sharing",
+    userAgent: "Preview browser",
+  },
+  {
+    id: "sig-safety-preview",
+    type: "safety",
+    workerName: "Preview Worker",
+    signedName: "Preview Worker",
+    version: "v2-wa-2026-04",
+    status: "acknowledged",
+    timestamp: new Date(Date.now() - 1800_000).toISOString(),
+    context: "Preview Project",
+    userAgent: "",
+  },
+];
+
 
 const ACTION_COLORS: Record<string, string> = {
   payroll_approved: "var(--green)",
@@ -134,6 +172,11 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(!AUTH_BYPASS_ENABLED);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterAction, setFilterAction] = useState("");
+  const [canViewSignatures, setCanViewSignatures] = useState(AUTH_BYPASS_ENABLED);
+  const [signatureEntries, setSignatureEntries] = useState<SignatureEntry[]>(
+    () => (AUTH_BYPASS_ENABLED ? PREVIEW_SIGNATURES : []),
+  );
+  const [loadingSignatures, setLoadingSignatures] = useState(!AUTH_BYPASS_ENABLED);
 
   useEffect(() => {
     if (AUTH_BYPASS_ENABLED) {
@@ -177,6 +220,126 @@ export default function AuditLogPage() {
     void load();
   }, [supabase]);
 
+  useEffect(() => {
+    if (AUTH_BYPASS_ENABLED) return;
+
+    async function loadSignatures() {
+      setLoadingSignatures(true);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setCanViewSignatures(false);
+        setLoadingSignatures(false);
+        return;
+      }
+
+      const { data: currentProfile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle<{ role: string }>();
+      const ownerAdmin = currentProfile?.role === "owner" || currentProfile?.role === "admin";
+      setCanViewSignatures(ownerAdmin);
+      if (!ownerAdmin) {
+        setSignatureEntries([]);
+        setLoadingSignatures(false);
+        return;
+      }
+
+      const [{ data: gpsRows }, { data: safetyRows }] = await Promise.all([
+        supabase
+          .from("worker_location_consents")
+          .select("id, worker_id, signed_name, consented, consent_version, user_agent, signed_at")
+          .order("signed_at", { ascending: false })
+          .limit(100),
+        supabase
+          .from("safety_acknowledgements")
+          .select("id, worker_id, project_id, safety_version, acknowledged_at, check_in_event_id")
+          .order("acknowledged_at", { ascending: false })
+          .limit(100),
+      ]);
+
+      const workerIds = new Set<string>();
+      const projectIds = new Set<string>();
+      for (const row of (gpsRows ?? []) as Array<{ worker_id: string }>) {
+        workerIds.add(row.worker_id);
+      }
+      for (const row of (safetyRows ?? []) as Array<{ worker_id: string; project_id: string | null }>) {
+        workerIds.add(row.worker_id);
+        if (row.project_id) projectIds.add(row.project_id);
+      }
+
+      const [{ data: profiles }, { data: projects }] = await Promise.all([
+        workerIds.size > 0
+          ? supabase.from("profiles").select("id, name").in("id", [...workerIds])
+          : Promise.resolve({ data: [] }),
+        projectIds.size > 0
+          ? supabase.from("projects").select("id, name").in("id", [...projectIds])
+          : Promise.resolve({ data: [] }),
+      ]);
+      const profileNameById = new Map(
+        ((profiles ?? []) as Array<{ id: string; name: string | null }>).map((profile) => [
+          profile.id,
+          profile.name ?? profile.id.slice(0, 8),
+        ]),
+      );
+      const projectNameById = new Map(
+        ((projects ?? []) as Array<{ id: string; name: string | null }>).map((project) => [
+          project.id,
+          project.name ?? project.id.slice(0, 8),
+        ]),
+      );
+
+      const gpsEntries = ((gpsRows ?? []) as Array<{
+        id: string;
+        worker_id: string;
+        signed_name: string;
+        consented: boolean;
+        consent_version: number;
+        user_agent: string | null;
+        signed_at: string;
+      }>).map((row): SignatureEntry => ({
+        id: row.id,
+        type: "gps",
+        workerName: profileNameById.get(row.worker_id) ?? row.worker_id.slice(0, 8),
+        signedName: row.signed_name,
+        version: String(row.consent_version),
+        status: row.consented ? "accepted" : "skipped",
+        timestamp: row.signed_at,
+        context: "GPS sharing",
+        userAgent: row.user_agent ?? "",
+      }));
+      const safetyEntries = ((safetyRows ?? []) as Array<{
+        id: string;
+        worker_id: string;
+        project_id: string | null;
+        safety_version: string;
+        acknowledged_at: string;
+        check_in_event_id: string | null;
+      }>).map((row): SignatureEntry => ({
+        id: row.id,
+        type: "safety",
+        workerName: profileNameById.get(row.worker_id) ?? row.worker_id.slice(0, 8),
+        signedName: profileNameById.get(row.worker_id) ?? row.worker_id.slice(0, 8),
+        version: row.safety_version,
+        status: "acknowledged",
+        timestamp: row.acknowledged_at,
+        context: row.project_id ? projectNameById.get(row.project_id) ?? row.project_id.slice(0, 8) : "Safety brief",
+        userAgent: row.check_in_event_id ? `check_in_event:${row.check_in_event_id.slice(0, 8)}` : "",
+      }));
+
+      setSignatureEntries(
+        [...gpsEntries, ...safetyEntries].sort(
+          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+        ),
+      );
+      setLoadingSignatures(false);
+    }
+
+    void loadSignatures();
+  }, [supabase]);
+
   const filtered = useMemo(() => {
     if (!filterAction) return entries;
     return entries.filter((e) => e.action === filterAction);
@@ -195,6 +358,34 @@ export default function AuditLogPage() {
     const a = document.createElement("a");
     a.href = url;
     a.download = "audit-log.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportSignatureCsv() {
+    const headers = "Timestamp,Type,Worker,Signed Name,Status,Version,Context,User Agent";
+    const rows = signatureEntries.map((entry) =>
+      [
+        entry.timestamp,
+        entry.type,
+        entry.workerName,
+        entry.signedName,
+        entry.status,
+        entry.version,
+        entry.context,
+        entry.userAgent,
+      ]
+        .map((cell) => `"${cell.replaceAll('"', '""')}"`)
+        .join(","),
+    );
+    const csv = [headers, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gps-safety-signatures.csv";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -242,6 +433,90 @@ export default function AuditLogPage() {
           {t("owner.only")}
         </span>
       </section>
+
+      {canViewSignatures ? (
+        <section className="surface-card space-y-3 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("audit.signaturesTitle")}
+              </h2>
+              <p className="mt-1 max-w-[70ch] text-sm leading-6 text-[var(--text-secondary)]">
+                {t("audit.signaturesDescription")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={exportSignatureCsv}
+              className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+              style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+            >
+              <Download size={13} />
+              {t("payroll.exportCsv")}
+            </button>
+          </div>
+          {loadingSignatures ? (
+            <div className="py-6 text-center text-sm text-[var(--text-secondary)]">{t("common.loading")}</div>
+          ) : signatureEntries.length === 0 ? (
+            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-3 py-4 text-sm text-[var(--text-secondary)]">
+              {t("audit.signaturesEmpty")}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr
+                    className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]"
+                    style={{ borderBottom: "1px solid var(--border-default)" }}
+                  >
+                    <th className="pb-3 pr-3 font-semibold">{t("audit.timestamp")}</th>
+                    <th className="pb-3 pr-3 font-semibold">{t("audit.signaturesType")}</th>
+                    <th className="pb-3 pr-3 font-semibold">{t("audit.worker")}</th>
+                    <th className="pb-3 pr-3 font-semibold">{t("audit.signedName")}</th>
+                    <th className="pb-3 pr-3 font-semibold">{t("audit.version")}</th>
+                    <th className="pb-3 pr-3 font-semibold">{t("audit.status")}</th>
+                    <th className="pb-3 font-semibold">{t("audit.context")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {signatureEntries.map((entry) => (
+                    <tr key={`${entry.type}-${entry.id}`} className="border-b border-[var(--border-subtle)]">
+                      <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
+                        {formatDateTime(entry.timestamp)}
+                      </td>
+                      <td className="py-3 pr-3 text-sm font-semibold text-[var(--text-primary)]">
+                        {entry.type === "gps" ? t("audit.gpsConsent") : t("audit.safetyAck")}
+                      </td>
+                      <td className="py-3 pr-3 text-[var(--text-primary)]">{entry.workerName}</td>
+                      <td className="py-3 pr-3 text-[var(--text-secondary)]">{entry.signedName}</td>
+                      <td className="py-3 pr-3 font-mono text-xs text-[var(--text-muted)]">{entry.version}</td>
+                      <td className="py-3 pr-3">
+                        <span
+                          className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em]"
+                          style={{
+                            background:
+                              entry.status === "skipped"
+                                ? "rgba(245, 158, 11, 0.14)"
+                                : "rgba(15, 168, 120, 0.14)",
+                            color: entry.status === "skipped" ? "#f59e0b" : "var(--green)",
+                          }}
+                        >
+                          {entry.status === "skipped"
+                            ? t("audit.skipped")
+                            : entry.status === "accepted"
+                              ? t("audit.accepted")
+                              : t("audit.acknowledged")}
+                        </span>
+                      </td>
+                      <td className="py-3 text-xs text-[var(--text-muted)]">{entry.context}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       <section className="surface-card overflow-x-auto p-4">
         {loading ? (
