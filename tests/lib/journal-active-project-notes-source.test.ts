@@ -12,6 +12,7 @@ const workerProjectViewSource = readSource("src/components/worker/WorkerProjectV
 const managerProjectDetailSource = readSource("src/components/manager/ProjectDetailPage.tsx");
 const managerProjectsSource = readSource("src/components/manager/ProjectsPage.tsx");
 const projectNotesRouteSource = readSource("src/app/api/worker/project-notes/route.ts");
+const projectMediaLibrarySource = readSource("src/components/shared/ProjectMediaLibrary.tsx");
 
 describe("journal media back, active project, notes, and picker source guards", () => {
   it("closes in-app media viewer through browser Back without leaving the current surface", () => {
@@ -53,5 +54,15 @@ describe("journal media back, active project, notes, and picker source guards", 
     expect(journalSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
     expect(workerProjectViewSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
     expect(managerProjectDetailSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
+  });
+
+  it("organizes project media into photo, video, document, and all categories", () => {
+    expect(managerProjectDetailSource).toContain("filterProjectMediaByCategory");
+    expect(managerProjectDetailSource).toContain("mediaFilterDocuments");
+    expect(workerProjectViewSource).toContain("<ProjectMediaLibrary");
+    expect(projectMediaLibrarySource).toContain("projectDetail.mediaFilterPhoto");
+    expect(projectMediaLibrarySource).toContain("projectDetail.mediaFilterVideo");
+    expect(projectMediaLibrarySource).toContain("projectDetail.mediaFilterDocuments");
+    expect(projectMediaLibrarySource).toContain("<TaskAttachmentList items={filteredItems} />");
   });
 });

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { logAudit } from "@/lib/audit";
 import { createClient } from "@/lib/supabase/client";
+import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { useTranslation } from "@/lib/i18n";
 import { DateField } from "@/components/shared/DateField";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
@@ -49,6 +50,20 @@ type TaskRow = Task & {
   assigneeName: string | null;
   completedByName?: string | null;
 };
+
+function taskRowFingerprint(task: TaskRow): string {
+  return [
+    task.id,
+    task.status,
+    task.assigned_to ?? "",
+    task.completed_at ?? "",
+    task.completed_by ?? "",
+    task.updated_at ?? "",
+    task.projectName ?? "",
+    task.assigneeName ?? "",
+    task.completedByName ?? "",
+  ].join("\u001f");
+}
 
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "done", "cancelled"];
 
@@ -102,7 +117,16 @@ export function ManagerTasksPage({
   const [filterStatus, setFilterStatus] = useState("");
 
   useEffect(() => {
-    setTasks(initialTasks);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setTasks((current) =>
+        keepStableListIfUnchanged(current, initialTasks, taskRowFingerprint),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [initialTasks]);
 
   const projectNameById = useMemo(

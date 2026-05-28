@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client";
 import { type TranslationKey, useTranslation } from "@/lib/i18n";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { ProjectMediaLibrary } from "@/components/shared/ProjectMediaLibrary";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
@@ -19,6 +20,7 @@ import {
   inferUploadContentType,
   validateUploadFile,
 } from "@/lib/upload-limits";
+import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
 import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
@@ -69,6 +71,30 @@ type TaskWithAttachments = Task & {
   attachments?: TaskAttachmentRef[];
   completionAttachments?: TaskAttachmentRef[];
 };
+
+function workerProjectTaskFingerprint(task: TaskWithAttachments): string {
+  return [
+    task.id,
+    task.status,
+    task.assigned_to ?? "",
+    task.completed_at ?? "",
+    task.completed_by ?? "",
+    task.updated_at ?? "",
+    JSON.stringify(task.metadata ?? {}),
+    task.attachments?.map((item) => item.id).join(",") ?? "",
+    task.completionAttachments?.map((item) => item.id).join(",") ?? "",
+  ].join("\u001f");
+}
+
+function projectMediaFingerprint(item: TaskAttachmentRef): string {
+  return [
+    item.id,
+    item.media_type,
+    item.storage_path,
+    item.filename ?? "",
+    item.mime_type ?? "",
+  ].join("\u001f");
+}
 
 type ReceiptItem = {
   id: string;
@@ -335,16 +361,44 @@ export function WorkerProjectView({
   const projectMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    setTaskList(tasks);
+    setTaskList((current) =>
+      keepStableListIfUnchanged(current, tasks, workerProjectTaskFingerprint),
+    );
   }, [tasks]);
 
   useEffect(() => {
-    setProjectMediaList(projectMedia);
+    setProjectMediaList((current) =>
+      keepStableListIfUnchanged(current, projectMedia, projectMediaFingerprint),
+    );
   }, [projectMedia]);
 
   useEffect(() => {
     setProjectPublicNotes(readProjectPublicNotes(project.settings));
   }, [project.settings]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`worker-project-notes-${project.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "projects",
+          filter: `id=eq.${project.id}`,
+        },
+        (payload) => {
+          const row = payload.new as { org_id?: string; settings?: Record<string, unknown> | null } | null;
+          if (!row || row.org_id !== orgId) return;
+          setProjectPublicNotes(readProjectPublicNotes(row.settings ?? {}));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [orgId, project.id, supabase]);
 
   useEffect(() => {
     if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) return;
@@ -970,15 +1024,10 @@ export function WorkerProjectView({
           </>
         }
       >
-        {projectMediaList.length === 0 ? (
-          <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
-            {t("workerProject.projectMediaEmpty")}
-          </div>
-        ) : (
-          <div className="mt-2">
-            <TaskAttachmentList items={projectMediaList} />
-          </div>
-        )}
+        <ProjectMediaLibrary
+          items={projectMediaList}
+          emptyText={t("workerProject.projectMediaEmpty")}
+        />
       </CollapsibleSection>
 
       <WorkerMaterialsList

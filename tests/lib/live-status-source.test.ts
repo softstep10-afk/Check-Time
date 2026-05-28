@@ -22,6 +22,10 @@ const workerMessagesSource = readFileSync(
   resolve(process.cwd(), "src/components/worker/WorkerMessagesPage.tsx"),
   "utf8",
 );
+const workerProjectViewSource = readFileSync(
+  resolve(process.cwd(), "src/components/worker/WorkerProjectView.tsx"),
+  "utf8",
+);
 
 describe("live task and message status source paths", () => {
   it("keeps manager task surfaces subscribed to task status updates", () => {
@@ -56,5 +60,14 @@ describe("live task and message status source paths", () => {
     expect(workerMessagesSource).toContain('event: "UPDATE"');
     expect(workerMessagesSource).toContain('filter: `sender_id=eq.${shell.profile.id}`');
     expect(workerMessagesSource).toContain('filter: `recipient_id=eq.${shell.profile.id}`');
+  });
+
+  it("keeps project notes and refreshed lists stable without broad redraws", () => {
+    expect(managerTasksSource).toContain("keepStableListIfUnchanged");
+    expect(projectDetailSource).toContain("keepStableListIfUnchanged");
+    expect(workerProjectViewSource).toContain("keepStableListIfUnchanged");
+    expect(projectDetailSource).toContain("setProjectNotesSettings(row.settings ?? {})");
+    expect(workerProjectViewSource).toContain("setProjectPublicNotes(readProjectPublicNotes(row.settings ?? {}))");
+    expect(workerProjectViewSource).toContain('table: "projects"');
   });
 });

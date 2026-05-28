@@ -24,6 +24,7 @@ import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
 import { logAudit } from "@/lib/audit";
+import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { buildSafeUploadName } from "@/lib/media-extension";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import {
@@ -72,6 +73,11 @@ import {
   formatProjectPublicNoteTime,
   readProjectPublicNotes,
 } from "@/lib/project-public-notes";
+import {
+  countProjectMediaCategories,
+  filterProjectMediaByCategory,
+  type ProjectMediaCategory,
+} from "@/lib/project-media-library";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
@@ -154,6 +160,18 @@ type AddressLookupState = ProjectAddressGeocodeResult & {
   requestedAddress: string;
 };
 
+function managerProjectTaskFingerprint(task: Task): string {
+  return [
+    task.id,
+    task.status,
+    task.assigned_to ?? "",
+    task.completed_at ?? "",
+    task.completed_by ?? "",
+    task.updated_at ?? "",
+    JSON.stringify(task.metadata ?? {}),
+  ].join("\u001f");
+}
+
 function formatSectionCountSummary(
   title: string,
   parts: Array<{ count: number; label: string; include?: boolean }>,
@@ -184,7 +202,7 @@ function projectMediaTypeLabel(mediaType: Media["media_type"]) {
   if (mediaType === "photo") return "Photo";
   if (mediaType === "video") return "Video";
   if (mediaType === "pdf") return "PDF";
-  if (mediaType === "document") return "Doc";
+  if (mediaType === "document") return "Document";
   return "File";
 }
 
@@ -434,9 +452,15 @@ export function ProjectDetailPage({
   // here immediately so the manager doesn't see a flash before
   // router.refresh repopulates from the server.
   const [taskList, setTaskList] = useState<Task[]>(tasks);
+  const [projectNotesSettings, setProjectNotesSettings] = useState(project.settings);
   useEffect(() => {
-    setTaskList(tasks);
+    setTaskList((current) =>
+      keepStableListIfUnchanged(current, tasks, managerProjectTaskFingerprint),
+    );
   }, [tasks]);
+  useEffect(() => {
+    setProjectNotesSettings(project.settings);
+  }, [project.settings]);
   useEffect(() => {
     const channel = supabase
       .channel(`manager-project-tasks-${project.id}`)
@@ -491,12 +515,26 @@ export function ProjectDetailPage({
           setTaskList((current) => removeTaskById(current, taskId));
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "projects",
+          filter: `id=eq.${project.id}`,
+        },
+        (payload) => {
+          const row = payload.new as { org_id?: string; settings?: Record<string, unknown> | null } | null;
+          if (!row || row.org_id !== project.org_id) return;
+          setProjectNotesSettings(row.settings ?? {});
+        },
+      )
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [project.id, supabase]);
+  }, [project.id, project.org_id, supabase]);
   const [mediaViewerItem, setMediaViewerItem] = useState<ViewerMediaItem | null>(null);
   const {
     canOpenViewerItem: canOpenMediaViewerItem,
@@ -504,7 +542,7 @@ export function ProjectDetailPage({
   } = useMediaViewerOpenGuard();
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
-  const [mediaFilter, setMediaFilter] = useState<"all" | "photo" | "video" | "pdf">("all");
+  const [mediaFilter, setMediaFilter] = useState<ProjectMediaCategory>("all");
   const [taskAttachmentFiles, setTaskAttachmentFiles] = useState<File[]>([]);
   const taskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const editFormRef = useRef<HTMLFormElement | null>(null);
@@ -570,32 +608,23 @@ export function ProjectDetailPage({
     [media],
   );
 
-  const filteredMedia = useMemo(() => {
-    if (mediaFilter === "all") return projectMediaItems;
-    if (mediaFilter === "pdf") {
-      // Bucket the legacy 'document' type with PDFs — they're the same UX
-      // category from the manager's POV.
-      return projectMediaItems.filter(
-        (m) => m.media_type === "pdf" || m.media_type === "document",
-      );
-    }
-    return projectMediaItems.filter((m) => m.media_type === mediaFilter);
-  }, [projectMediaItems, mediaFilter]);
+  const filteredMedia = useMemo(
+    () => filterProjectMediaByCategory(projectMediaItems, mediaFilter),
+    [projectMediaItems, mediaFilter],
+  );
 
   const mediaCounts = useMemo(() => {
-    let photo = 0;
-    let video = 0;
-    let pdf = 0;
-    for (const m of projectMediaItems) {
-      if (m.media_type === "photo") photo += 1;
-      else if (m.media_type === "video") video += 1;
-      else if (m.media_type === "pdf" || m.media_type === "document") pdf += 1;
-    }
-    return { photo, video, pdf, all: projectMediaItems.length };
+    const counts = countProjectMediaCategories(projectMediaItems);
+    return {
+      photo: counts.photo,
+      video: counts.video,
+      documents: counts.documents,
+      all: counts.all,
+    };
   }, [projectMediaItems]);
   const projectPublicNotes = useMemo(
-    () => readProjectPublicNotes(project.settings),
-    [project.settings],
+    () => readProjectPublicNotes(projectNotesSettings),
+    [projectNotesSettings],
   );
   const [projectMediaTileUrls, setProjectMediaTileUrls] = useState<Map<string, string>>(new Map());
   const [projectMediaTileFailedIds, setProjectMediaTileFailedIds] = useState<Set<string>>(new Set());
@@ -776,12 +805,12 @@ export function ProjectDetailPage({
         include: mediaCounts.video > 0,
       },
       {
-        count: mediaCounts.pdf,
+        count: mediaCounts.documents,
         label:
-          mediaCounts.pdf === 1
+          mediaCounts.documents === 1
             ? t("projectDetail.mediaSummaryPdfOne")
             : t("projectDetail.mediaSummaryPdfMany"),
-        include: mediaCounts.pdf > 0,
+        include: mediaCounts.documents > 0,
       },
     ],
     t("projectDetail.mediaSummaryEmpty"),
@@ -2660,7 +2689,7 @@ export function ProjectDetailPage({
                     { key: "all", label: t("projectDetail.mediaFilterAll"), icon: "", count: mediaCounts.all },
                     { key: "photo", label: t("projectDetail.mediaFilterPhoto"), icon: "📷", count: mediaCounts.photo },
                     { key: "video", label: t("projectDetail.mediaFilterVideo"), icon: "🎥", count: mediaCounts.video },
-                    { key: "pdf", label: t("projectDetail.mediaFilterPdf"), icon: "📄", count: mediaCounts.pdf },
+                    { key: "documents", label: t("projectDetail.mediaFilterDocuments"), icon: "📄", count: mediaCounts.documents },
                   ] as const
                 ).map((tab) => {
                   const selected = mediaFilter === tab.key;
