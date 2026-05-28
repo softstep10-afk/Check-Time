@@ -59,9 +59,11 @@ Run this after deploys that touch application code or user workflows.
 - Tap the manager project card body once; it opens the project on the first tap.
 - Tap the worker project card body once; it opens the project on the first tap.
 - On a phone, tap project title, empty card space, and lower card body once; each body tap opens immediately.
+- Do not double-tap during this check: one normal tap on the card body must be enough.
 - Confirm there are no dead zones on the project card body.
 - Confirm the visible `Поехать` button appears on project cards when address or coordinates exist.
 - Tap `Поехать` on a project card; it opens navigation and does not open the project detail accidentally.
+- Tap `Поехать`, copy address, edit/archive/delete, notes, and media controls; these action controls must not trigger the card open action.
 - Open a project detail page and confirm `Поехать` is visible near the title/address without scrolling.
 - Open a project-related schedule entry and confirm `Поехать` appears when that project has an address or coordinates.
 - Tap address/navigation/copy controls; they do not accidentally open the project.

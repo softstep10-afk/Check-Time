@@ -32,37 +32,38 @@ const workerModalSource = readFileSync(
 );
 
 describe("mobile project card and task action UX", () => {
-  it("makes worker project cards clickable without wrapping nested controls in a link", () => {
+  it("makes worker project cards use a native full-card link instead of touch gesture hacks", () => {
     expect(workerProjectsSource).toContain('data-testid="worker-project-card"');
-    expect(workerProjectsSource).toContain("router.push(`/project/${project.id}`)");
-    expect(workerProjectsSource).toContain("onPointerDown={(event) => {");
-    expect(workerProjectsSource).toContain("onPointerUp={(event) => {");
-    expect(workerProjectsSource).toContain("shouldActivateProjectCardPointer");
-    expect(workerProjectsSource).toContain("PROJECT_CARD_TAP_MOVE_TOLERANCE_PX");
-    expect(workerProjectsSource).toContain("onKeyDown={(event) => {");
-    expect(workerProjectsSource).toContain("touch-manipulation cursor-pointer");
-    expect(workerProjectsSource).toContain("shouldIgnoreProjectCardActivation(event.target, event.currentTarget)");
-    expect(workerProjectsSource).not.toContain("href={`/project/${project.id}`}");
+    expect(workerProjectsSource).toContain('data-testid="worker-project-card-main-link"');
+    expect(workerProjectsSource).toContain('import Link from "next/link"');
+    expect(workerProjectsSource).toContain("href={`/project/${project.id}`}");
+    expect(workerProjectsSource).toContain("absolute inset-0 z-[1]");
+    expect(workerProjectsSource).toContain("pointer-events-none relative z-[2]");
+    expect(workerProjectsSource).toContain("relative z-[3] mt-3");
+    expect(workerProjectsSource).toContain("openCachedProject()");
+    expect(workerProjectsSource).not.toContain("onPointerUp={(event) => {");
+    expect(workerProjectsSource).not.toContain("PROJECT_CARD_CLICK_SUPPRESSION_MS");
   });
 
-  it("makes manager project cards clickable as a full card hit area", () => {
+  it("makes manager project cards use a native full-card link instead of touch gesture hacks", () => {
     expect(managerProjectsSource).toContain('data-testid="manager-project-card"');
-    expect(managerProjectsSource).toContain("const openProjectDetail = () => router.push(`/projects/${project.id}`)");
-    expect(managerProjectsSource).toContain("onPointerDown={(event) => {");
-    expect(managerProjectsSource).toContain("onPointerUp={(event) => {");
-    expect(managerProjectsSource).toContain("shouldActivateProjectCardPointer");
-    expect(managerProjectsSource).toContain("PROJECT_CARD_TAP_MOVE_TOLERANCE_PX");
-    expect(managerProjectsSource).toContain("touch-manipulation cursor-pointer");
-    expect(managerProjectsSource).toContain("shouldIgnoreProjectCardActivation(event.target, event.currentTarget)");
+    expect(managerProjectsSource).toContain('data-testid="manager-project-card-main-link"');
+    expect(managerProjectsSource).toContain('import Link from "next/link"');
+    expect(managerProjectsSource).toContain("href={`/projects/${project.id}`}");
+    expect(managerProjectsSource).toContain("absolute inset-0 z-[1]");
+    expect(managerProjectsSource).toContain("pointer-events-none relative z-[2]");
+    expect(managerProjectsSource).toContain("pointer-events-auto relative z-[3]");
+    expect(managerProjectsSource).not.toContain("onPointerUp={(event) => {");
+    expect(managerProjectsSource).not.toContain("PROJECT_CARD_CLICK_SUPPRESSION_MS");
   });
 
-  it("suppresses the click-after-touch duplicate while keeping desktop click behavior", () => {
-    expect(managerProjectsSource).toContain("PROJECT_CARD_CLICK_SUPPRESSION_MS");
-    expect(workerProjectsSource).toContain("PROJECT_CARD_CLICK_SUPPRESSION_MS");
-    expect(managerProjectsSource).toContain('event.pointerType === "mouse"');
-    expect(workerProjectsSource).toContain('event.pointerType === "mouse"');
-    expect(managerProjectsSource).toContain("projectCardTouchActivatedAtRef.current = Date.now()");
-    expect(workerProjectsSource).toContain("projectCardTouchActivatedAtRef.current = Date.now()");
+  it("does not keep duplicate suppression or pointer-move tolerance that can swallow the first mobile tap", () => {
+    expect(managerProjectsSource).not.toContain("PROJECT_CARD_TAP_MOVE_TOLERANCE_PX");
+    expect(workerProjectsSource).not.toContain("PROJECT_CARD_TAP_MOVE_TOLERANCE_PX");
+    expect(managerProjectsSource).not.toContain("shouldActivateProjectCardPointer");
+    expect(workerProjectsSource).not.toContain("shouldActivateProjectCardPointer");
+    expect(managerProjectsSource).not.toContain("projectCardTouchActivatedAtRef");
+    expect(workerProjectsSource).not.toContain("projectCardTouchActivatedAtRef");
   });
 
   it("keeps address/copy rows from triggering the project card navigation", () => {
@@ -70,8 +71,7 @@ describe("mobile project card and task action UX", () => {
     expect(managerProjectsSource).toContain('data-project-card-action="address"');
     expect(managerProjectsSource).toContain("normalizeProjectAddressForCopy(address)");
     expect(managerProjectsSource).toContain("onClick={(event) => event.stopPropagation()}");
-    expect(workerProjectsSource).toContain('data-project-card-action="address"');
-    expect(workerProjectsSource).toContain("onClick={(event) => event.stopPropagation()}");
+    expect(managerProjectsSource).toContain("pointer-events-auto mt-1 flex items-center gap-2");
   });
 
   it("shows Поехать on project cards without routing through the card click", () => {

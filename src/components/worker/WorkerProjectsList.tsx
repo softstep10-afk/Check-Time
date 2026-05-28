@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
@@ -24,49 +24,9 @@ const STATUS_COLORS: Record<ProjectStatus, { bg: string; color: string }> = {
   archived: { bg: "rgba(107, 114, 128, 0.10)", color: "var(--text-muted)" },
 };
 
-const PROJECT_CARD_INTERACTIVE_SELECTOR =
-  "button,a,input,textarea,select,label,[role='button'],[data-project-card-action]";
-const PROJECT_CARD_TAP_MOVE_TOLERANCE_PX = 10;
-const PROJECT_CARD_CLICK_SUPPRESSION_MS = 600;
-
-type ProjectCardPointerState = {
-  pointerId: number;
-  clientX: number;
-  clientY: number;
-  target: EventTarget | null;
-};
-
-function shouldIgnoreProjectCardActivation(
-  target: EventTarget | null,
-  currentTarget: HTMLElement,
-): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const interactiveTarget = target.closest(PROJECT_CARD_INTERACTIVE_SELECTOR);
-  return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
-}
-
-function shouldActivateProjectCardPointer(
-  event: ReactPointerEvent<HTMLElement>,
-  pointerState: ProjectCardPointerState | null,
-): boolean {
-  if (event.pointerType === "mouse") return false;
-  if (!pointerState || pointerState.pointerId !== event.pointerId) return false;
-  if (
-    Math.abs(event.clientX - pointerState.clientX) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX ||
-    Math.abs(event.clientY - pointerState.clientY) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX
-  ) {
-    return false;
-  }
-  return (
-    !shouldIgnoreProjectCardActivation(pointerState.target, event.currentTarget) &&
-    !shouldIgnoreProjectCardActivation(event.target, event.currentTarget)
-  );
-}
-
 export function WorkerProjectsList() {
   const { shell, isOnline } = useWorkerShell();
   const { t } = useTranslation();
-  const router = useRouter();
   const cacheActor = useMemo(
     () => ({ actorId: shell.profile.id, orgId: shell.profile.org_id }),
     [shell.profile.id, shell.profile.org_id],
@@ -82,8 +42,6 @@ export function WorkerProjectsList() {
       projectReceipts: unknown[];
     }> | null>(null);
   const [offlineOpenMessage, setOfflineOpenMessage] = useState<string | null>(null);
-  const projectCardPointerRef = useRef<ProjectCardPointerState | null>(null);
-  const projectCardTouchActivatedAtRef = useRef(0);
 
   const projects =
     !isOnline && shell.projects.length === 0 && cachedProjectsSnapshot?.payload.projects
@@ -130,74 +88,41 @@ export function WorkerProjectsList() {
             const clockedInHere =
               shell.clockState.isClockedIn &&
               shell.clockState.currentProjectId === project.id;
-            function openProject() {
-              if (!isOnline) {
-                const cached = loadOfflineSnapshot<{
-                  project: Project;
-                  tasks: Array<Pick<Task, "id" | "title" | "status" | "priority" | "due_date">>;
-                  projectMedia: unknown[];
-                  projectReceipts: unknown[];
-                }>(cacheActor, "worker-project-detail", project.id);
-                if (cached) {
-                  setCachedProjectDetail(cached);
-                  setOfflineOpenMessage(null);
-                  return;
-                }
-                setCachedProjectDetail(null);
-                setOfflineOpenMessage(t("worker.offlineCacheEmpty"));
+            function openCachedProject() {
+              const cached = loadOfflineSnapshot<{
+                project: Project;
+                tasks: Array<Pick<Task, "id" | "title" | "status" | "priority" | "due_date">>;
+                projectMedia: unknown[];
+                projectReceipts: unknown[];
+              }>(cacheActor, "worker-project-detail", project.id);
+              if (cached) {
+                setCachedProjectDetail(cached);
+                setOfflineOpenMessage(null);
                 return;
               }
-              router.push(`/project/${project.id}`);
+              setCachedProjectDetail(null);
+              setOfflineOpenMessage(t("worker.offlineCacheEmpty"));
             }
             return (
               <article
                 key={project.id}
-                role="button"
-                tabIndex={0}
-                onPointerDown={(event) => {
-                  if (event.pointerType === "mouse") return;
-                  projectCardPointerRef.current = {
-                    pointerId: event.pointerId,
-                    clientX: event.clientX,
-                    clientY: event.clientY,
-                    target: event.target,
-                  };
-                }}
-                onPointerCancel={() => {
-                  projectCardPointerRef.current = null;
-                }}
-                onPointerUp={(event) => {
-                  const shouldActivate = shouldActivateProjectCardPointer(
-                    event,
-                    projectCardPointerRef.current,
-                  );
-                  projectCardPointerRef.current = null;
-                  if (!shouldActivate) return;
-                  projectCardTouchActivatedAtRef.current = Date.now();
-                  event.preventDefault();
-                  openProject();
-                }}
-                onClick={(event) => {
-                  if (
-                    Date.now() - projectCardTouchActivatedAtRef.current <
-                    PROJECT_CARD_CLICK_SUPPRESSION_MS
-                  ) {
-                    event.preventDefault();
-                    return;
-                  }
-                  if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
-                  openProject();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
-                  event.preventDefault();
-                  openProject();
-                }}
                 data-testid="worker-project-card"
-                className="block touch-manipulation cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 outline-none transition hover:border-[var(--brand-yellow)] focus:ring-2 focus:ring-[var(--brand-yellow)]"
+                className="relative block touch-manipulation rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 transition hover:border-[var(--brand-yellow)]"
               >
-                <div className="flex items-start justify-between gap-3">
+                <Link
+                  href={`/project/${project.id}`}
+                  data-testid="worker-project-card-main-link"
+                  aria-label={`${t("worker.openProject")}: ${project.name}`}
+                  className="absolute inset-0 z-[1] rounded-[var(--radius-md)] outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+                  onClick={(event) => {
+                    if (isOnline) return;
+                    event.preventDefault();
+                    openCachedProject();
+                  }}
+                >
+                  <span className="sr-only">{project.name}</span>
+                </Link>
+                <div className="pointer-events-none relative z-[2] flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-semibold text-[var(--text-primary)]">
@@ -253,8 +178,6 @@ export function WorkerProjectsList() {
                     {project.address ? (
                       <div
                         className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]"
-                        data-project-card-action="address"
-                        onClick={(event) => event.stopPropagation()}
                       >
                         <MapPin size={11} className="shrink-0" />
                         <span className="truncate">{project.address}</span>
@@ -283,7 +206,7 @@ export function WorkerProjectsList() {
                     <ArrowRight size={11} />
                   </span>
                 </div>
-                <div className="mt-3" data-project-card-action="navigation">
+                <div className="relative z-[3] mt-3" data-project-card-action="navigation">
                   <ProjectNavigationActions
                     projectName={project.name}
                     address={project.address}

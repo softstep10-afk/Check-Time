@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type Dispatch,
-  type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from "react";
 import { Copy, Check, Plus, Pencil, Trash2, X, FileText, Play } from "lucide-react";
@@ -19,6 +18,7 @@ import {
   clampRadius,
 } from "@/components/manager/GpsRadiusSlider";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { parsePastedCoordinatePair } from "@/lib/coordinate-paste";
@@ -66,45 +66,6 @@ const CLIENT_TONE_COLOR: Record<ClientTone, string> = {
 };
 
 type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
-
-const PROJECT_CARD_INTERACTIVE_SELECTOR =
-  "button,a,input,textarea,select,label,[role='button'],[data-project-card-action]";
-const PROJECT_CARD_TAP_MOVE_TOLERANCE_PX = 10;
-const PROJECT_CARD_CLICK_SUPPRESSION_MS = 600;
-
-type ProjectCardPointerState = {
-  pointerId: number;
-  clientX: number;
-  clientY: number;
-  target: EventTarget | null;
-};
-
-function shouldIgnoreProjectCardActivation(
-  target: EventTarget | null,
-  currentTarget: HTMLElement,
-): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const interactiveTarget = target.closest(PROJECT_CARD_INTERACTIVE_SELECTOR);
-  return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
-}
-
-function shouldActivateProjectCardPointer(
-  event: ReactPointerEvent<HTMLElement>,
-  pointerState: ProjectCardPointerState | null,
-): boolean {
-  if (event.pointerType === "mouse") return false;
-  if (!pointerState || pointerState.pointerId !== event.pointerId) return false;
-  if (
-    Math.abs(event.clientX - pointerState.clientX) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX ||
-    Math.abs(event.clientY - pointerState.clientY) > PROJECT_CARD_TAP_MOVE_TOLERANCE_PX
-  ) {
-    return false;
-  }
-  return (
-    !shouldIgnoreProjectCardActivation(pointerState.target, event.currentTarget) &&
-    !shouldIgnoreProjectCardActivation(event.target, event.currentTarget)
-  );
-}
 
 type AddressLookupState = ProjectAddressGeocodeResult & {
   requestedAddress: string;
@@ -631,8 +592,6 @@ export function ProjectsPage({
   const [sortBy, setSortBy] = useState<"activity" | "name" | "week" | "cost">("activity");
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const projectCardPointerRef = useRef<ProjectCardPointerState | null>(null);
-  const projectCardTouchActivatedAtRef = useRef(0);
 
   // Debounce the live search 300ms so typing doesn't thrash the filter.
   useEffect(() => {
@@ -1667,80 +1626,47 @@ export function ProjectsPage({
           const cardBorder = `2px solid ${effectiveScheduleStyle.color}`;
           const cardShadow = `0 0 0 1px ${effectiveScheduleStyle.borderColor}, 0 0 18px ${effectiveScheduleStyle.background}`;
           const statusPanelTitle = `${projectStatusLabel(t, project.status)} · ${scheduleLabel} · ${deadlineCountdown}`;
-          const openProjectDetail = () => router.push(`/projects/${project.id}`);
           const publicNotesCount = readProjectPublicNotes(project.settings).length;
 
           return (
             <article
               key={project.id}
-              role="button"
-              tabIndex={0}
-              onPointerDown={(event) => {
-                if (event.pointerType === "mouse") return;
-                projectCardPointerRef.current = {
-                  pointerId: event.pointerId,
-                  clientX: event.clientX,
-                  clientY: event.clientY,
-                  target: event.target,
-                };
-              }}
-              onPointerCancel={() => {
-                projectCardPointerRef.current = null;
-              }}
-              onPointerUp={(event) => {
-                const shouldActivate = shouldActivateProjectCardPointer(
-                  event,
-                  projectCardPointerRef.current,
-                );
-                projectCardPointerRef.current = null;
-                if (!shouldActivate) return;
-                projectCardTouchActivatedAtRef.current = Date.now();
-                event.preventDefault();
-                openProjectDetail();
-              }}
-              onClick={(event) => {
-                if (
-                  Date.now() - projectCardTouchActivatedAtRef.current <
-                  PROJECT_CARD_CLICK_SUPPRESSION_MS
-                ) {
-                  event.preventDefault();
-                  return;
-                }
-                if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
-                openProjectDetail();
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
-                event.preventDefault();
-                openProjectDetail();
-              }}
               data-testid="manager-project-card"
-              className="surface-card touch-manipulation cursor-pointer p-4 outline-none transition focus:ring-2 focus:ring-[var(--brand-yellow)]"
+              className="surface-card relative touch-manipulation p-4 transition"
               style={{ border: cardBorder, boxShadow: cardShadow }}
             >
-              <div className="w-full space-y-3 text-left">
+              <Link
+                href={`/projects/${project.id}`}
+                data-testid="manager-project-card-main-link"
+                aria-label={`${t("projects.openDetail")}: ${project.name}`}
+                className="absolute inset-0 z-[1] rounded-[var(--radius-md)] outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+              >
+                <span className="sr-only">{project.name}</span>
+              </Link>
+              <div className="pointer-events-none relative z-[2] w-full space-y-3 text-left">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <ClientTonePicker
-                        value={clientTone}
-                        locale={locale}
-                        onSelect={(tone) => void handleSetClientTone(project, tone)}
-                      />
+                      <div className="pointer-events-auto">
+                        <ClientTonePicker
+                          value={clientTone}
+                          locale={locale}
+                          onSelect={(tone) => void handleSetClientTone(project, tone)}
+                        />
+                      </div>
                       <div className="text-base font-semibold text-[var(--text-primary)]">
                         {project.name}
                       </div>
                     </div>
                     <div
-                      className="mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]"
+                      className="pointer-events-auto mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]"
                       data-project-card-action="address"
                       onClick={(event) => event.stopPropagation()}
                     >
                       <span className="truncate">{project.address ?? t("common.noAddressSet")}</span>
                       {project.address ? <CopyAddressButton address={project.address} /> : null}
                     </div>
-                    <div className="mt-2" data-project-card-action="navigation">
+                    <div className="pointer-events-auto mt-2" data-project-card-action="navigation">
                       <ProjectNavigationActions
                         projectName={project.name}
                         address={project.address}
@@ -1839,7 +1765,7 @@ export function ProjectsPage({
                       event.stopPropagation();
                       router.push(`/projects/${project.id}#materials`);
                     }}
-                    className="metric-panel rounded-[var(--radius-md)] p-2 text-left"
+                    className="metric-panel pointer-events-auto rounded-[var(--radius-md)] p-2 text-left"
                     aria-label={`${project.name} ${t("projects.materials")}`}
                   >
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
@@ -1863,7 +1789,7 @@ export function ProjectsPage({
                       event.stopPropagation();
                       router.push(`/projects/${project.id}#tasks`);
                     }}
-                    className="metric-panel rounded-[var(--radius-md)] p-2 text-left"
+                    className="metric-panel pointer-events-auto rounded-[var(--radius-md)] p-2 text-left"
                     aria-label={`${project.name} ${t("common.tasks")}`}
                   >
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">
@@ -1883,7 +1809,7 @@ export function ProjectsPage({
                         event.stopPropagation();
                         router.push(`/projects/${project.id}#materials`);
                       }}
-                      className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                      className="pointer-events-auto inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
                       style={{
                         background:
                           project.materialIndicator === "urgent"
@@ -1916,7 +1842,7 @@ export function ProjectsPage({
                       event.stopPropagation();
                       router.push(`/projects/${project.id}`);
                     }}
-                    className="inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                    className="pointer-events-auto inline-flex items-center gap-1 rounded-[var(--radius-pill)] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
                     style={{
                       background: "rgba(191, 162, 52, 0.12)",
                       color: "var(--brand-yellow)",
@@ -1927,22 +1853,26 @@ export function ProjectsPage({
                   </button>
                 ) : null}
 
-                <InlineNotesEditor
-                  projectId={project.id}
-                  initialNotes={project.notes}
-                  placeholder={t("projects.noNotesHint")}
-                />
+                <div className="pointer-events-auto">
+                  <InlineNotesEditor
+                    projectId={project.id}
+                    initialNotes={project.notes}
+                    placeholder={t("projects.noNotesHint")}
+                  />
+                </div>
 
                 {project.recentMedia.length > 0 ? (
-                  <ProjectThumbStrip
-                    projectId={project.id}
-                    items={project.recentMedia}
-                    total={project.recentMediaTotal}
-                  />
+                  <div className="pointer-events-auto">
+                    <ProjectThumbStrip
+                      projectId={project.id}
+                      items={project.recentMedia}
+                      total={project.recentMediaTotal}
+                    />
+                  </div>
                 ) : null}
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="pointer-events-auto relative z-[3] mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() => router.push(`/projects/${project.id}`)}
