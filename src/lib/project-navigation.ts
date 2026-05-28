@@ -8,7 +8,7 @@ export type ProjectNavigationDestination = {
 
 export const PROJECT_NAVIGATION_PREFERENCE_KEY = "projectNavigationPreferredApp";
 
-export const PROJECT_NAVIGATION_APPS = ["apple", "google", "tesla"] as const;
+export const PROJECT_NAVIGATION_APPS = ["apple", "google", "tesla", "copy"] as const;
 
 export type ProjectNavigationApp = (typeof PROJECT_NAVIGATION_APPS)[number];
 
@@ -17,6 +17,31 @@ export function isProjectNavigationApp(value: unknown): value is ProjectNavigati
     typeof value === "string" &&
     (PROJECT_NAVIGATION_APPS as readonly string[]).includes(value)
   );
+}
+
+type NavigationPreferenceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export function readProjectNavigationPreference(
+  storage: NavigationPreferenceStorage | null | undefined,
+): ProjectNavigationApp | null {
+  if (!storage) return null;
+  const stored = storage.getItem(PROJECT_NAVIGATION_PREFERENCE_KEY);
+  return isProjectNavigationApp(stored) ? stored : null;
+}
+
+export function writeProjectNavigationPreference(
+  storage: NavigationPreferenceStorage | null | undefined,
+  app: ProjectNavigationApp,
+): void {
+  if (!storage) return;
+  storage.setItem(PROJECT_NAVIGATION_PREFERENCE_KEY, app);
+}
+
+export function clearProjectNavigationPreference(
+  storage: NavigationPreferenceStorage | null | undefined,
+): void {
+  if (!storage) return;
+  storage.removeItem(PROJECT_NAVIGATION_PREFERENCE_KEY);
 }
 
 export function getProjectNavigationDestination(input: {

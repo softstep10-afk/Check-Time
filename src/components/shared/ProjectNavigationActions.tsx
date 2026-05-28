@@ -7,9 +7,10 @@ import {
   buildAppleMapsDirectionsUrl,
   buildGoogleMapsDirectionsUrl,
   buildProjectNavigationShareText,
+  clearProjectNavigationPreference,
   getProjectNavigationDestination,
-  isProjectNavigationApp,
-  PROJECT_NAVIGATION_PREFERENCE_KEY,
+  readProjectNavigationPreference,
+  writeProjectNavigationPreference,
   type ProjectNavigationApp,
 } from "@/lib/project-navigation";
 import type { WorkerGeoPoint } from "@/lib/worker-types";
@@ -27,17 +28,13 @@ export function ProjectNavigationActions({
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState<"destination" | "tesla" | null>(null);
-  const [preferredApp, setPreferredApp] = useState<ProjectNavigationApp | null>(null);
+  const [preferredApp, setPreferredApp] = useState<ProjectNavigationApp | null>(() => {
+    if (typeof window === "undefined") return null;
+    return readProjectNavigationPreference(window.localStorage);
+  });
   const [showMobileChoice, setShowMobileChoice] = useState(false);
+  const [saveChoiceAsDefault, setSaveChoiceAsDefault] = useState(true);
   const destination = getProjectNavigationDestination({ address, siteCoordinates });
-
-  function readStoredPreference() {
-    if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(PROJECT_NAVIGATION_PREFERENCE_KEY);
-    if (isProjectNavigationApp(stored)) {
-      return stored;
-    }
-  }
 
   if (!destination) return null;
 
@@ -80,21 +77,19 @@ export function ProjectNavigationActions({
 
   function savePreference(app: ProjectNavigationApp) {
     setPreferredApp(app);
-    setShowMobileChoice(false);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(PROJECT_NAVIGATION_PREFERENCE_KEY, app);
+      writeProjectNavigationPreference(window.localStorage, app);
     }
   }
 
-  function resetPreference() {
+  function clearPreference() {
     setPreferredApp(null);
-    setShowMobileChoice(true);
     if (typeof window !== "undefined") {
-      window.localStorage.removeItem(PROJECT_NAVIGATION_PREFERENCE_KEY);
+      clearProjectNavigationPreference(window.localStorage);
     }
   }
 
-  function openPreferred(app: ProjectNavigationApp) {
+  async function openPreferred(app: ProjectNavigationApp) {
     if (app === "apple") {
       window.open(appleUrl, "_blank", "noopener,noreferrer");
       return;
@@ -103,22 +98,39 @@ export function ProjectNavigationActions({
       window.open(googleUrl, "_blank", "noopener,noreferrer");
       return;
     }
-    void shareForTesla();
+    if (app === "tesla") {
+      await shareForTesla();
+      return;
+    }
+    await copyDestination("destination");
   }
 
   function handleMobileGo() {
-    const app = preferredApp ?? readStoredPreference();
+    const app =
+      preferredApp ??
+      (typeof window !== "undefined"
+        ? readProjectNavigationPreference(window.localStorage)
+        : null);
     if (!app) {
+      setSaveChoiceAsDefault(true);
       setShowMobileChoice(true);
       return;
     }
     setPreferredApp(app);
-    openPreferred(app);
+    void openPreferred(app);
+  }
+
+  function openAnotherWay() {
+    setSaveChoiceAsDefault(false);
+    setShowMobileChoice((value) => !value);
   }
 
   function handleMobileChoice(app: ProjectNavigationApp) {
-    savePreference(app);
-    openPreferred(app);
+    if (saveChoiceAsDefault) {
+      savePreference(app);
+    }
+    setShowMobileChoice(false);
+    void openPreferred(app);
   }
 
   const buttonClass =
@@ -148,11 +160,11 @@ export function ProjectNavigationActions({
         {preferredApp ? (
           <button
             type="button"
-            onClick={resetPreference}
+            onClick={openAnotherWay}
             className={buttonClass}
             style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
           >
-            {t("projects.changeNavigationApp")}
+            {t("projects.openOtherNavigationApp")}
           </button>
         ) : null}
         <button
@@ -170,6 +182,15 @@ export function ProjectNavigationActions({
         </button>
         {showMobileChoice ? (
           <div className="grid w-full grid-cols-1 gap-1.5 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-2">
+            <label className="flex items-center gap-2 rounded-[var(--radius-sm)] px-2 py-1 text-xs font-semibold text-[var(--text-secondary)]">
+              <input
+                type="checkbox"
+                checked={saveChoiceAsDefault}
+                onChange={(event) => setSaveChoiceAsDefault(event.target.checked)}
+                className="h-4 w-4"
+              />
+              {t("projects.useNavigationByDefault")}
+            </label>
             <button
               type="button"
               onClick={() => handleMobileChoice("apple")}
@@ -199,7 +220,7 @@ export function ProjectNavigationActions({
             </button>
             <button
               type="button"
-              onClick={() => void copyDestination("destination")}
+              onClick={() => handleMobileChoice("copy")}
               className={buttonClass}
               style={{
                 borderColor:
@@ -210,6 +231,16 @@ export function ProjectNavigationActions({
               {copied === "destination" ? <Check size={12} /> : <Copy size={12} />}
               {copied === "destination" ? t("projects.copied") : t("projects.copyDestination")}
             </button>
+            {preferredApp ? (
+              <button
+                type="button"
+                onClick={clearPreference}
+                className={buttonClass}
+                style={{ borderColor: "var(--border-default)", color: "var(--text-muted)" }}
+              >
+                {t("projects.clearNavigationDefault")}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>

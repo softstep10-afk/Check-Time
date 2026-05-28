@@ -10,7 +10,7 @@ import {
   PRIORITY_EMOJI,
   type MessagePriority,
 } from "@/lib/message-types";
-import { isTaskMessagePriority } from "@/lib/message-state";
+import { isTaskMessagePriority, mergeMessagesById } from "@/lib/message-state";
 
 type CrewMember = { id: string; name: string; role: string };
 type ProjectOption = { id: string; name: string; status?: string | null };
@@ -27,6 +27,24 @@ type HistoryRow = {
 
 const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
 
+function inferPriority(row: {
+  priority?: string | null;
+  color?: string | null;
+  metadata?: Record<string, unknown> | null;
+}): MessagePriority {
+  if (row.priority === "urgent" || row.priority === "info" || row.priority === "good" || row.priority === "task") {
+    return row.priority;
+  }
+  const fromMeta = row.metadata?.priority;
+  if (fromMeta === "urgent" || fromMeta === "info" || fromMeta === "good" || fromMeta === "task") {
+    return fromMeta;
+  }
+  if (row.color === "#ef4444") return "urgent";
+  if (row.color === "#22c55e") return "good";
+  if (row.color === "#3b82f6") return "task";
+  return "info";
+}
+
 function formatRelativeTime(iso: string, lang: "en" | "ru"): string {
   const nowMs = Date.now();
   const thenMs = new Date(iso).getTime();
@@ -38,6 +56,26 @@ function formatRelativeTime(iso: string, lang: "en" | "ru"): string {
   if (hr < 24) return lang === "ru" ? `${hr} ч назад` : `${hr} hr ago`;
   const day = Math.round(hr / 24);
   return lang === "ru" ? `${day} дн назад` : `${day} d ago`;
+}
+
+function mapHistoryRow(row: {
+  id: string;
+  recipient_id: string;
+  text: string;
+  priority?: string | null;
+  color?: string | null;
+  metadata?: Record<string, unknown> | null;
+  read: boolean;
+  created_at: string;
+}): HistoryRow {
+  return {
+    id: row.id,
+    recipient_id: row.recipient_id,
+    text: row.text,
+    priority: inferPriority(row),
+    read: row.read,
+    created_at: row.created_at,
+  };
 }
 
 export function BulkMessageComposer({
@@ -84,11 +122,13 @@ export function BulkMessageComposer({
   const loadHistory = useCallback(async () => {
     const { data } = await supabase
       .from("messages")
-      .select("id, recipient_id, text, priority, read, created_at")
+      .select("id, recipient_id, text, priority, color, metadata, read, created_at")
       .eq("sender_id", senderId)
       .order("created_at", { ascending: false })
       .limit(historyLimit);
-    setHistory((data ?? []) as HistoryRow[]);
+    setHistory(
+      ((data ?? []) as Array<Parameters<typeof mapHistoryRow>[0]>).map(mapHistoryRow),
+    );
     setHistoryLoading(false);
   }, [historyLimit, supabase, senderId]);
 
@@ -119,6 +159,15 @@ export function BulkMessageComposer({
   }, []);
 
   useEffect(() => {
+    function mergeHistoryPayload(row: unknown) {
+      const nextRow = row as (Parameters<typeof mapHistoryRow>[0] & { sender_id?: string | null }) | null;
+      if (!nextRow?.id || nextRow.sender_id !== senderId) return;
+      setHistory((current) =>
+        mergeMessagesById(current, mapHistoryRow(nextRow)).slice(0, historyLimit),
+      );
+      setHistoryLoading(false);
+    }
+
     const channel = supabase
       .channel(`manager-message-history-${senderId}`)
       .on(
@@ -129,7 +178,10 @@ export function BulkMessageComposer({
           table: "messages",
           filter: `sender_id=eq.${senderId}`,
         },
-        scheduleHistoryLoad,
+        (payload) => {
+          mergeHistoryPayload(payload.new);
+          scheduleHistoryLoad();
+        },
       )
       .on(
         "postgres_changes",
@@ -139,14 +191,26 @@ export function BulkMessageComposer({
           table: "messages",
           filter: `sender_id=eq.${senderId}`,
         },
-        scheduleHistoryLoad,
+        (payload) => {
+          mergeHistoryPayload(payload.new);
+        },
       )
       .subscribe();
 
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadHistory();
+    }, 30_000);
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") void loadHistory();
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       void supabase.removeChannel(channel);
     };
-  }, [scheduleHistoryLoad, senderId, supabase]);
+  }, [historyLimit, loadHistory, scheduleHistoryLoad, senderId, supabase]);
 
   function toggleSelected(id: string) {
     setSelectedIds((prev) => {

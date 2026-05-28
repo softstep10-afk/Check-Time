@@ -9,10 +9,14 @@ Run this after deploys that touch application code or user workflows.
 - Project navigation offers Google Maps.
 - Tesla-friendly share/copy option is available.
 - Copy address remains available.
+- First mobile `Поехать` asks for a navigation app and can save it as default.
+- Next mobile `Поехать` uses the saved default immediately.
+- `Открыть другим способом` lets the user choose a one-time alternative without changing the default unless requested.
 - Mobile flicker/blinking is not obvious during normal navigation.
 - Manager sees worker task status changes without manual browser refresh.
 - Worker task state updates without losing the task.
 - Messages send, read status appears, and history stays intact.
+- Sender sees message read status update live without leaving the page.
 - Notification bell count updates and clearing a notification does not hide the source message/task.
 - Project PDF, Word, Excel, CSV, photo, and video uploads/open/download work.
 - Task attachments open/download.
@@ -169,12 +173,24 @@ Mobile "Поехать":
 
 - Mobile project card/detail shows "Поехать".
 - First tap asks for Apple Maps, Google Maps, or Tesla/share/copy.
+- Confirm `Открывать так по умолчанию` stores the selected app locally.
+- Confirm next normal `Поехать` opens the saved default immediately.
+- Confirm `Открыть другим способом` opens Apple/Google/Tesla/share/copy for one time without resetting the stored default.
 - Apple Maps works.
 - Google Maps works.
 - Tesla/share/copy copies or shares a safe destination; no Tesla login/API is used.
 - Future tap opens the saved app directly.
-- User can change/reset navigation preference with "Сменить приложение".
+- User can choose another app with `Открыть другим способом` or clear the default with `Сбросить выбор`.
 - Copy address/location still works.
+
+Live task/message statuses:
+
+- Worker presses `Взять`; manager sees the task move to `В работе` without leaving the page.
+- Worker marks task done; manager sees `Готово` without leaving the page.
+- Worker sees his own task status update immediately after the server succeeds.
+- Sender sees private/direct message read status update without leaving the message page.
+- Recipient message remains in history after reading or pressing `Понял`.
+- Notification clear does not remove the source message/task.
 
 ## Files
 

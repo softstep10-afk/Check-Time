@@ -1,12 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAppleMapsDirectionsUrl,
+  clearProjectNavigationPreference,
   buildGoogleMapsDirectionsUrl,
   buildProjectNavigationShareText,
   getProjectNavigationDestination,
   isProjectNavigationApp,
   PROJECT_NAVIGATION_PREFERENCE_KEY,
+  readProjectNavigationPreference,
+  writeProjectNavigationPreference,
 } from "@/lib/project-navigation";
+
+function memoryStorage(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial));
+  return {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+    removeItem: (key: string) => {
+      values.delete(key);
+    },
+  };
+}
 
 describe("project navigation actions", () => {
   it("prefers high-precision coordinates over address text", () => {
@@ -72,6 +88,23 @@ describe("project navigation actions", () => {
     expect(isProjectNavigationApp("apple")).toBe(true);
     expect(isProjectNavigationApp("google")).toBe(true);
     expect(isProjectNavigationApp("tesla")).toBe(true);
+    expect(isProjectNavigationApp("copy")).toBe(true);
     expect(isProjectNavigationApp("sanya")).toBe(false);
+  });
+
+  it("stores and clears the chosen navigation default locally", () => {
+    const storage = memoryStorage();
+
+    expect(readProjectNavigationPreference(storage)).toBeNull();
+    writeProjectNavigationPreference(storage, "apple");
+    expect(readProjectNavigationPreference(storage)).toBe("apple");
+    writeProjectNavigationPreference(storage, "google");
+    expect(readProjectNavigationPreference(storage)).toBe("google");
+    writeProjectNavigationPreference(storage, "tesla");
+    expect(readProjectNavigationPreference(storage)).toBe("tesla");
+    writeProjectNavigationPreference(storage, "copy");
+    expect(readProjectNavigationPreference(storage)).toBe("copy");
+    clearProjectNavigationPreference(storage);
+    expect(readProjectNavigationPreference(storage)).toBeNull();
   });
 });

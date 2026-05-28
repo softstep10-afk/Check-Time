@@ -10,13 +10,16 @@ const source = readFileSync(
 describe("project navigation mobile action", () => {
   it("keeps a mobile Поехать choice flow with local preference storage", () => {
     expect(source).toContain('t("projects.goMobile")');
-    expect(source).toContain("PROJECT_NAVIGATION_PREFERENCE_KEY");
     expect(source).toContain('handleMobileChoice("apple")');
     expect(source).toContain('handleMobileChoice("google")');
     expect(source).toContain('handleMobileChoice("tesla")');
-    expect(source).toContain("window.localStorage.setItem(PROJECT_NAVIGATION_PREFERENCE_KEY, app)");
-    expect(source).toContain("window.localStorage.removeItem(PROJECT_NAVIGATION_PREFERENCE_KEY)");
-    expect(source).toContain('t("projects.changeNavigationApp")');
+    expect(source).toContain('handleMobileChoice("copy")');
+    expect(source).toContain("writeProjectNavigationPreference(window.localStorage, app)");
+    expect(source).toContain("readProjectNavigationPreference(window.localStorage)");
+    expect(source).toContain("clearProjectNavigationPreference(window.localStorage)");
+    expect(source).toContain("saveChoiceAsDefault");
+    expect(source).toContain('t("projects.useNavigationByDefault")');
+    expect(source).toContain('t("projects.openOtherNavigationApp")');
     expect(source).toContain('t("projects.copyDestination")');
   });
 
