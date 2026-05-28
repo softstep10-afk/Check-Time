@@ -87,18 +87,19 @@ function WorkerQuickNav({ pathname }: { pathname: string | null }) {
 
   return (
     <nav
-      className="shrink-0 overflow-x-auto border-b border-[var(--border-subtle)] bg-[rgba(15,17,23,0.92)] px-3 py-2"
+      data-testid="worker-mobile-top-nav"
+      className="shrink-0 overflow-x-auto border-y border-[var(--border-subtle)] bg-[rgba(15,17,23,0.96)] px-4 py-2"
       aria-label={t("nav.quick")}
       style={{ scrollbarWidth: "thin" }}
     >
-      <div className="flex min-w-max items-center gap-2">
+      <div className="flex min-w-max items-center gap-2.5">
         {navItems.map((item) => {
           const active = pathname === item.href;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold"
+              className="inline-flex min-h-10 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold"
               style={{
                 borderColor: active ? "rgba(191, 162, 52, 0.4)" : "var(--border-default)",
                 background: active ? "rgba(191, 162, 52, 0.14)" : "rgba(15, 17, 23, 0.35)",
@@ -2498,6 +2499,10 @@ export function WorkerShell({
               </div>
             </div>
 
+            <div className="-mx-4 mt-3">
+              <WorkerQuickNav pathname={pathname} />
+            </div>
+
             {offlineQueue.length > 0 ? (
               <div
                 className="mt-3 inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1.5 text-[11px] font-semibold"
@@ -2622,9 +2627,7 @@ export function WorkerShell({
             ) : null}
           </header>
 
-          <WorkerQuickNav pathname={pathname} />
-
-          <main className="flex-1 px-4 pb-24 pt-4">
+          <main className="flex-1 px-4 pb-20 pt-4">
             {children}
           </main>
 
@@ -2632,38 +2635,6 @@ export function WorkerShell({
             workerName={shell.profile.name}
             language={shell.profile.language}
           />
-
-          <nav
-            className="worker-nav fixed bottom-0 left-0 right-0 z-30"
-            style={{
-              background: "rgba(24, 28, 39, 0.98)",
-              backdropFilter: "blur(10px)",
-              borderTop: "1px solid var(--border-default)",
-            }}
-          >
-            <div className="mx-auto flex max-w-[500px] justify-around px-3 pb-3 pt-2">
-              {navItems.map((item) => {
-                const active = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    data-active={active}
-                    className="worker-nav-item flex min-w-[58px] flex-col items-center gap-1 rounded-[var(--radius-md)] px-2 py-2"
-                    style={{
-                      background: active ? "rgba(191, 162, 52, 0.12)" : "transparent",
-                      color: active ? "var(--brand-yellow)" : "var(--text-muted)",
-                    }}
-                  >
-                    <item.icon size={20} strokeWidth={1.8} />
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em]">
-                      {t(item.labelKey)}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </nav>
         </div>
       </div>
       {overlayMessage ? (
