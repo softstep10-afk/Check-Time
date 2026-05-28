@@ -85,6 +85,11 @@ Run this after deploys that touch application code or user workflows.
 - Start a shift on one project and open `Проекты`.
 - Confirm only the active project card shows `На смене здесь` / `Текущая смена`.
 - Open that project and confirm the active shift badge is visible near the top.
+- In the active project, confirm `Завершить смену` is directly visible and reachable on mobile.
+- Tap `Завершить смену`; the checkout modal opens and the final checkout action remains visible below the notes field.
+- Confirm checkout works with an empty note when video/GPS rules allow it.
+- If checkout video is required, confirm the video requirement still blocks checkout until video is captured/uploaded.
+- Confirm the worker does not need to leave the project page and return to `Смены` to finish the shift.
 - Add a public project note as a worker.
 - Confirm the note stays in project history, shows author and timestamp, and is not a task/private message.
 - Confirm owner/manager can see the note on the project detail/card indicator.

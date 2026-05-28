@@ -1708,7 +1708,8 @@ function ProjectClockControls({
           <button
             type="button"
             onClick={() => setCheckoutOpen(true)}
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold"
+            data-testid="active-project-checkout-button"
+            className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold"
             style={{ background: "var(--red)", color: "white" }}
           >
             <Square size={14} />

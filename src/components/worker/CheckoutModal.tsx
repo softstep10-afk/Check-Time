@@ -128,12 +128,13 @@ export function CheckoutModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center"
+      className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto p-3 sm:items-center sm:p-4"
       style={{ background: "rgba(0,0,0,0.55)" }}
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-[460px] rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 sm:rounded-[var(--radius-lg)]"
+        data-testid="checkout-modal-panel"
+        className="max-h-[calc(100dvh-1rem)] w-full max-w-[460px] overflow-y-auto rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 pb-0 sm:rounded-[var(--radius-lg)] sm:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -211,13 +212,16 @@ export function CheckoutModal({
           />
         </div>
 
-        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div
+          data-testid="checkout-action-row"
+          className="sticky bottom-0 -mx-5 mt-5 flex flex-col-reverse gap-2 border-t border-[var(--border-default)] bg-[var(--bg-card)] px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0"
+        >
           <button
             type="button"
             onClick={handleClose}
             disabled={checkingOut}
             data-testid="checkout-cancel"
-            className="rounded-[var(--radius-sm)] border px-4 py-2.5 text-sm font-semibold disabled:opacity-50"
+            className="min-h-12 w-full rounded-[var(--radius-sm)] border px-4 py-2.5 text-sm font-semibold disabled:opacity-50 sm:w-auto"
             style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
           >
             {t("clock.cancelStayCheckedIn")}
@@ -226,7 +230,8 @@ export function CheckoutModal({
             type="button"
             onClick={() => void handleCheckOut()}
             disabled={disabled}
-            className="rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold"
+            data-testid="checkout-confirm"
+            className="min-h-12 w-full rounded-[var(--radius-sm)] px-4 py-2.5 text-sm font-semibold disabled:opacity-70 sm:w-auto"
             style={{
               background: disabled ? "var(--border-default)" : "var(--red)",
               color: disabled ? "var(--text-muted)" : "white",
