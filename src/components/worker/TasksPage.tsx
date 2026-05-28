@@ -8,6 +8,7 @@ import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
+import { OfflineCacheEmptyState, OfflineCacheNotice } from "@/components/worker/OfflineCacheNotice";
 import {
   applyClaimedTaskAssignment,
   classifyTaskForWorker,
@@ -27,11 +28,16 @@ import {
 } from "@/lib/task-status";
 import { isNetworkLikeFieldError } from "@/lib/offline-field-actions";
 import {
+  loadOfflineSnapshot,
+  saveOfflineSnapshot,
+  type OfflineFieldSnapshot,
+} from "@/lib/offline-field-cache";
+import {
   openWorkerTaskCompletion,
   submitWorkerTaskCompletion,
   type WorkerTaskModalMode,
 } from "@/lib/worker-task-ui";
-import type { WorkerTaskItem } from "@/lib/worker-types";
+import type { WorkerProject, WorkerTaskItem } from "@/lib/worker-types";
 
 type TaskFilter = "all" | "mine" | "urgent" | "today";
 // "" = all projects, "__current__" = the project the worker is clocked in
@@ -69,6 +75,14 @@ export function TasksPage() {
   const [openError, setOpenError] = useState<string | null>(null);
   const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
   const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
+  const cacheActor = useMemo(
+    () => ({ actorId: shell.profile.id, orgId: shell.profile.org_id }),
+    [shell.profile.id, shell.profile.org_id],
+  );
+  const [cachedTasksSnapshot, setCachedTasksSnapshot] =
+    useState<OfflineFieldSnapshot<{ tasks: WorkerTaskItem[] }> | null>(null);
+  const [cachedProjectsSnapshot, setCachedProjectsSnapshot] =
+    useState<OfflineFieldSnapshot<{ projects: WorkerProject[] }> | null>(null);
 
   const todayIsoRef = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const currentProjectId = shell.clockState.currentProjectId;
@@ -83,6 +97,24 @@ export function TasksPage() {
     markTasksSeen();
   }, [markTasksSeen]);
 
+  useEffect(() => {
+    setCachedTasksSnapshot(loadOfflineSnapshot(cacheActor, "worker-tasks"));
+    setCachedProjectsSnapshot(loadOfflineSnapshot(cacheActor, "worker-projects"));
+  }, [cacheActor, isOnline]);
+
+  const sourceTasks =
+    !isOnline && shell.tasks.length === 0 && cachedTasksSnapshot?.payload.tasks
+      ? cachedTasksSnapshot.payload.tasks
+      : shell.tasks;
+  const sourceProjects =
+    !isOnline && shell.projects.length === 0 && cachedProjectsSnapshot?.payload.projects
+      ? cachedProjectsSnapshot.payload.projects
+      : shell.projects;
+  const offlineNoticeSavedAt =
+    !isOnline && (cachedTasksSnapshot?.savedAt ?? cachedProjectsSnapshot?.savedAt)
+      ? cachedTasksSnapshot?.savedAt ?? cachedProjectsSnapshot?.savedAt ?? null
+      : null;
+
   // Open the modal with the task object directly. Storing the object
   // (not just the id) means clicks always render a visible modal even
   // if the live task list churns mid-interaction.
@@ -95,6 +127,7 @@ export function TasksPage() {
       return;
     }
     setOpenError(null);
+    saveOfflineSnapshot(cacheActor, "worker-task-detail", { task }, task.id);
     setSelectedTaskMode(mode);
     setSelectedTask(task);
   }
@@ -214,9 +247,9 @@ export function TasksPage() {
       claimedTaskMetadata.size === 0 &&
       locallyCompletedTaskIds.size === 0
     ) {
-      return shell.tasks;
+      return sourceTasks;
     }
-    let next = shell.tasks;
+    let next = sourceTasks;
     for (const [taskId, assignedTo] of claimedTaskAssignees.entries()) {
       next = applyClaimedTaskAssignment(next, taskId, assignedTo);
     }
@@ -249,7 +282,7 @@ export function TasksPage() {
     }
     return next;
   }, [
-    shell.tasks,
+    sourceTasks,
     claimedTaskAssignees,
     claimedTaskMetadata,
     locallyCompletedTaskIds,
@@ -573,6 +606,12 @@ export function TasksPage() {
         </p>
       </section>
 
+      {offlineNoticeSavedAt ? (
+        <OfflineCacheNotice savedAt={offlineNoticeSavedAt} />
+      ) : !isOnline && sourceTasks.length === 0 ? (
+        <OfflineCacheEmptyState />
+      ) : null}
+
       <section className="surface-card p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="text-lg font-bold text-[var(--text-primary)]">{t("common.open")}</div>
@@ -620,7 +659,7 @@ export function TasksPage() {
             {currentProjectId ? (
               <option value="__current__">{t("tasks.projectFilterCurrent")}</option>
             ) : null}
-            {shell.projects.map((project) => (
+            {sourceProjects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
               </option>

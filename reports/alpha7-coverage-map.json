@@ -1,16 +1,13 @@
 {
-  "generatedAt": "2026-05-23T16:22:09.422Z",
+  "generatedAt": "2026-05-28T07:19:19.433Z",
   "rows": [
     {
       "category": "material driver-only dropdown",
       "testsFound": [
         "tests/lib/material-driver-permissions.test.ts",
-        "tests/lib/material-driver-ui.test.ts",
-        "tests/lib/material-task-route-guard.test.ts"
+        "tests/lib/material-driver-ui.test.ts"
       ],
       "sourceFilesFound": [
-        "src/app/api/manager/tasks/route.ts",
-        "src/components/manager/ProjectDetailPage.tsx",
         "src/lib/material-driver-permissions.ts"
       ],
       "docsFound": [
@@ -45,12 +42,10 @@
     {
       "category": "driver role filtering",
       "testsFound": [
-        "tests/lib/material-driver-permissions.test.ts",
-        "tests/lib/material-task-route-guard.test.ts"
+        "tests/lib/material-driver-permissions.test.ts"
       ],
       "sourceFilesFound": [
         "src/app/(manager)/layout.tsx",
-        "src/app/api/manager/tasks/route.ts",
         "src/app/api/team/create/route.ts",
         "src/app/api/team/update-profile/route.ts",
         "src/components/manager/PayrollCalculator.tsx",
@@ -69,6 +64,7 @@
     {
       "category": "private message sender/recipient persistence",
       "testsFound": [
+        "tests/lib/live-status-source.test.ts",
         "tests/lib/message-state.test.ts"
       ],
       "sourceFilesFound": [
@@ -80,7 +76,9 @@
         "src/components/manager/SendMessageForm.tsx",
         "src/components/worker/NotificationBell.tsx",
         "src/components/worker/WorkerMessagesPage.tsx",
-        "src/lib/message-state.ts"
+        "src/components/worker/WorkerShell.tsx",
+        "src/lib/message-state.ts",
+        "src/lib/offline-field-actions.ts"
       ],
       "docsFound": [
         "docs/STAGING_DEPLOYMENT.md",
@@ -93,6 +91,7 @@
     {
       "category": "task read/taken/done visibility",
       "testsFound": [
+        "tests/lib/live-status-source.test.ts",
         "tests/lib/task-completion-flow.test.ts",
         "tests/lib/task-notifications.test.ts",
         "tests/lib/task-realtime.test.ts"
@@ -132,6 +131,7 @@
       "category": "notification-as-signal",
       "testsFound": [
         "tests/lib/material-tasks.test.ts",
+        "tests/lib/message-state.test.ts",
         "tests/lib/task-completion-flow.test.ts",
         "tests/lib/task-notifications.test.ts"
       ],
@@ -157,6 +157,7 @@
         "src/lib/i18n/translations.ts",
         "src/lib/manager-task-row-audit.ts",
         "src/lib/material-tasks.ts",
+        "src/lib/message-state.ts",
         "src/lib/task-media-hydration.ts",
         "src/lib/task-notifications.ts",
         "src/lib/worker-data.ts"
@@ -414,6 +415,7 @@
         "docs/ALPHA7_DEPLOY_READINESS.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/B2_MIGRATION_PLAN.md",
+        "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
         "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
         "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
@@ -444,6 +446,7 @@
         "src/app/api/ai/voice/route.ts",
         "src/components/manager/AiWorkspacePage.tsx",
         "src/components/manager/PayrollCalculator.tsx",
+        "src/components/manager/ProjectDetailPage.tsx",
         "src/components/worker/TasksPage.tsx",
         "src/components/worker/WorkerShell.tsx",
         "src/lib/ai/action-endpoints.ts",
@@ -501,6 +504,7 @@
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/ALPHA7_STABILIZATION_PLAN.md",
         "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
+        "docs/DRIVER_TIME_PROJECTS_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/MUTATION_SURFACE_MAP.md",
         "docs/OVERNIGHT_FIX_PACK_1.md",
@@ -513,7 +517,8 @@
         "docs/OWNER_MANUAL_QA_CHECKLIST.md",
         "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md",
         "docs/PREDEPLOY_CHECKLIST.md",
-        "docs/ROLLBACK_CHECKLIST.md"
+        "docs/ROLLBACK_CHECKLIST.md",
+        "docs/SAFETY_GPS_CONSENT_ALPHA7.md"
       ],
       "coverageLevel": "covered",
       "recommendedFutureTest": ""
@@ -549,12 +554,17 @@
         "tests/lib/archive-utils.test.ts",
         "tests/lib/checkout-link-server.test.ts",
         "tests/lib/checkout-link.test.ts",
+        "tests/lib/consent-audit-ui-source.test.ts",
+        "tests/lib/driver-time-projects.test.ts",
         "tests/lib/finance-visibility.test.ts",
         "tests/lib/geofence.test.ts",
+        "tests/lib/gps-consent-ui.test.ts",
+        "tests/lib/gps-consent.test.ts",
         "tests/lib/gps-freshness.test.ts",
         "tests/lib/jarvis-memory.test.ts",
         "tests/lib/live-map-utils.test.ts",
         "tests/lib/manager-utils.test.ts",
+        "tests/lib/offline-visibility.test.ts",
         "tests/lib/project-save.test.ts",
         "tests/lib/shift-review.test.ts",
         "tests/lib/worker-clock-metadata.test.ts",
@@ -562,6 +572,7 @@
       ],
       "sourceFilesFound": [
         "src/app/(auth)/login/page.tsx",
+        "src/app/(manager)/admin/audit/page.tsx",
         "src/app/(manager)/command-center/page.tsx",
         "src/app/(manager)/location-data/page.tsx",
         "src/app/(manager)/overview/page.tsx",
@@ -603,13 +614,16 @@
         "src/components/worker/TasksPage.tsx",
         "src/components/worker/WorkerJarvisTextDock.tsx",
         "src/components/worker/WorkerProjectView.tsx",
+        "src/components/worker/WorkerProjectsList.tsx",
         "src/components/worker/WorkerShell.tsx",
         "src/lib/ai/service.ts",
         "src/lib/ai/types.ts",
         "src/lib/archive-utils.ts",
         "src/lib/checkout-link-server.ts",
         "src/lib/checkout-link.ts",
+        "src/lib/driver-time-projects.ts",
         "src/lib/geofence.ts",
+        "src/lib/gps-consent-ui.ts",
         "src/lib/gps-consent.ts",
         "src/lib/gps-freshness.ts",
         "src/lib/gps-status.ts",
@@ -620,6 +634,7 @@
         "src/lib/manager-utils.ts",
         "src/lib/map-constants.ts",
         "src/lib/offline-time-events.ts",
+        "src/lib/offline-visibility.ts",
         "src/lib/preview-data.ts",
         "src/lib/project-save.ts",
         "src/lib/safety-acknowledgements.ts",
@@ -641,8 +656,10 @@
         "docs/ALPHA7_PRODUCTION_HARDENING_REPORT.md",
         "docs/ALPHA7_STABILIZATION_PLAN.md",
         "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
+        "docs/DRIVER_TIME_PROJECTS_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/MUTATION_SURFACE_MAP.md",
+        "docs/OFFLINE_FIELD_MODE_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_1.md",
         "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
         "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
@@ -655,6 +672,7 @@
         "docs/PERFORMANCE_BASELINE_ALPHA7.md",
         "docs/PREDEPLOY_CHECKLIST.md",
         "docs/ROLLBACK_CHECKLIST.md",
+        "docs/SAFETY_GPS_CONSENT_ALPHA7.md",
         "docs/SMOKE_TEST_WAVE_AUDIT.md",
         "docs/STAGING_DEPLOYMENT.md",
         "docs/audit/AUDIT_REPORT.md",

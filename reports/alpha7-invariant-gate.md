@@ -8,7 +8,8 @@ Static local regression gate. It does not call production, require secrets, or m
 | pass | driver detection uses role driver or approved helper | src |
 | pass | src business logic does not hardcode Sanya/Саня | src |
 | pass | material dropdown does not fall back to whole team | ProjectDetailPage |
-| pass | material task creation route validates driver assignee | src/app/api/manager/tasks/route.ts |
+| pass | material task creation route validates selected field assignee | src/app/api/manager/tasks/route.ts |
+| pass | material task creation allows open shared queue | src/app/api/manager/tasks/route.ts |
 | pass | normal tasks/messages remain separate | task routes |
 | pass | direct/private message history includes sender OR recipient | message-state |
 | pass | message read status is handled separately from removal | message read path |

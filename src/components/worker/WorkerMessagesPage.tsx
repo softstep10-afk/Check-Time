@@ -17,6 +17,12 @@ import {
 } from "@/lib/message-types";
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
+import { OfflineCacheEmptyState, OfflineCacheNotice } from "@/components/worker/OfflineCacheNotice";
+import {
+  loadOfflineSnapshot,
+  saveOfflineSnapshot,
+  type OfflineFieldSnapshot,
+} from "@/lib/offline-field-cache";
 
 const PRIORITY_LABEL_KEYS: Record<MessagePriority, TranslationKey> = {
   urgent: "messages.priorityUrgent",
@@ -65,23 +71,55 @@ function relativeTime(iso: string, lang: "en" | "ru"): string {
 }
 
 export function WorkerMessagesPage() {
-  const { shell } = useWorkerShell();
+  const { shell, isOnline } = useWorkerShell();
   const { t, locale } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const cacheActor = useMemo(
+    () => ({ actorId: shell.profile.id, orgId: shell.profile.org_id }),
+    [shell.profile.id, shell.profile.org_id],
+  );
+  const [cachedMessagesSnapshot, setCachedMessagesSnapshot] =
+    useState<OfflineFieldSnapshot<{ messages: AppMessage[] }> | null>(null);
 
   useEffect(() => {
     let active = true;
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 
+    function loadCachedMessages() {
+      const cached = loadOfflineSnapshot<{ messages: AppMessage[] }>(
+        cacheActor,
+        "worker-messages",
+      );
+      setCachedMessagesSnapshot(cached);
+      if (cached) {
+        setMessages(cached.payload.messages);
+      }
+      setLoading(false);
+      return cached;
+    }
+
     async function loadMessages() {
-      const { data } = await supabase
+      if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) {
+        if (!active) return;
+        loadCachedMessages();
+        return;
+      }
+
+      const { data, error } = await supabase
         .from("messages")
         .select("*")
         .or(buildPrivateMessageParticipantFilter(shell.profile.id))
         .order("created_at", { ascending: false })
         .limit(100);
+
+      if (error) {
+        if (active) {
+          loadCachedMessages();
+        }
+        return;
+      }
 
       const rows = (data ?? []) as Array<{
         id: string;
@@ -120,8 +158,7 @@ export function WorkerMessagesPage() {
       const unreadIds = visibleRows
         .filter((row) => row.recipient_id === shell.profile.id && !row.read)
         .map((row) => row.id);
-      setMessages(
-        visibleRows.map((row) => {
+      const nextMessages = visibleRows.map((row) => {
           const sentByMe = row.sender_id === shell.profile.id;
           const recipientName = nameById.get(row.recipient_id) ?? "";
           return {
@@ -148,8 +185,10 @@ export function WorkerMessagesPage() {
                 }
               : null,
           };
-        }),
-      );
+        });
+      setMessages(nextMessages);
+      saveOfflineSnapshot(cacheActor, "worker-messages", { messages: nextMessages });
+      setCachedMessagesSnapshot(loadOfflineSnapshot(cacheActor, "worker-messages"));
       setLoading(false);
 
       if (unreadIds.length > 0) {
@@ -164,7 +203,12 @@ export function WorkerMessagesPage() {
               return;
             }
             if (active) {
-              setMessages((current) => markMessagesReadById(current, unreadIds));
+              setMessages((current) => {
+                const next = markMessagesReadById(current, unreadIds);
+                saveOfflineSnapshot(cacheActor, "worker-messages", { messages: next });
+                setCachedMessagesSnapshot(loadOfflineSnapshot(cacheActor, "worker-messages"));
+                return next;
+              });
             }
           });
       }
@@ -230,7 +274,7 @@ export function WorkerMessagesPage() {
       }
       void supabase.removeChannel(channel);
     };
-  }, [shell.profile.id, supabase, t]);
+  }, [cacheActor, isOnline, shell.profile.id, supabase, t]);
 
   return (
     <section className="mx-auto max-w-[760px] space-y-4">
@@ -253,11 +297,17 @@ export function WorkerMessagesPage() {
         </div>
       </div>
 
+      {!isOnline && cachedMessagesSnapshot ? (
+        <OfflineCacheNotice savedAt={cachedMessagesSnapshot.savedAt} />
+      ) : null}
+
       <div className="surface-card divide-y divide-[var(--border-subtle)] overflow-hidden">
         {loading ? (
           <div className="p-4 text-sm text-[var(--text-secondary)]">
             {t("common.loading")}
           </div>
+        ) : !isOnline && messages.length === 0 && !cachedMessagesSnapshot ? (
+          <OfflineCacheEmptyState />
         ) : messages.length === 0 ? (
           <div className="p-4 text-sm text-[var(--text-secondary)]">
             {t("messages.workerHistoryEmpty")}

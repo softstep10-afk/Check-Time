@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-23T16:22:09.376Z",
+  "generatedAt": "2026-05-28T07:19:11.978Z",
   "passed": true,
   "checks": [
     {
@@ -24,7 +24,12 @@
     },
     {
       "ok": true,
-      "label": "material task creation route validates driver assignee",
+      "label": "material task creation route validates selected field assignee",
+      "evidence": "src/app/api/manager/tasks/route.ts"
+    },
+    {
+      "ok": true,
+      "label": "material task creation allows open shared queue",
       "evidence": "src/app/api/manager/tasks/route.ts"
     },
     {

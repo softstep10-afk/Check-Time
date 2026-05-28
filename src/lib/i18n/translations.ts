@@ -1511,6 +1511,19 @@ export const translations = {
   "worker.offlineShort": { en: "Offline", ru: "Офлайн" },
   "worker.offlinePendingSummary": { en: "Waiting for connection: {count}", ru: "Ожидает соединения: {count}" },
   "worker.offlineSyncingSummary": { en: "Syncing… {count}", ru: "Синхронизация… {count}" },
+  "worker.offlineCachedData": {
+    en: "Offline — showing the last loaded data.",
+    ru: "Офлайн — показаны последние загруженные данные.",
+  },
+  "worker.offlineCacheUpdated": { en: "Updated: {time}", ru: "Обновлено: {time}" },
+  "worker.offlineCacheEmpty": {
+    en: "No saved data for offline mode. Connect to the internet.",
+    ru: "Нет сохранённых данных для офлайн-режима. Подключитесь к интернету.",
+  },
+  "worker.offlineCachedProjectTitle": {
+    en: "Cached project view",
+    ru: "Сохранённый вид проекта",
+  },
   "worker.pendingFieldActions": { en: "Waiting for connection: {count}", ru: "Ожидает соединения: {count}" },
   "worker.syncingFieldActions": { en: "Syncing actions: {count}", ru: "Синхронизация: {count}" },
   "worker.fieldActionQueued": { en: "Waiting for connection — action queued.", ru: "Ожидает соединения — действие в очереди." },

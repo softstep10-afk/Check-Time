@@ -12,6 +12,7 @@ import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
+import { OfflineCacheEmptyState, OfflineCacheNotice } from "@/components/worker/OfflineCacheNotice";
 import { WorkerMaterialSpecSection } from "@/components/worker/WorkerMaterialSpecSection";
 import {
   ACCEPT_ALL_UPLOADS,
@@ -42,6 +43,11 @@ import {
 import { getEffectiveTaskStatus, isEffectiveOpenTask } from "@/lib/task-status";
 import { isNetworkLikeFieldError } from "@/lib/offline-field-actions";
 import {
+  loadOfflineSnapshot,
+  saveOfflineSnapshot,
+  type OfflineFieldSnapshot,
+} from "@/lib/offline-field-cache";
+import {
   openWorkerProjectTaskDetails,
   submitWorkerTaskCompletion,
   type WorkerTaskModalMode,
@@ -68,6 +74,13 @@ type ReceiptItem = {
   created_at: string;
   store_name: string | null;
   amount: number | null;
+};
+
+type WorkerProjectDetailCachePayload = {
+  project: Project;
+  projectMedia: TaskAttachmentRef[];
+  projectReceipts: ReceiptItem[];
+  tasks: TaskWithAttachments[];
 };
 
 const STORES = [
@@ -291,6 +304,7 @@ export function WorkerProjectView({
   const workerShell = useWorkerShell();
   const { busyAction, updateTaskStatus, isOnline, queueTaskClaim } = workerShell;
   const supabase = useMemo(() => createClient(), []);
+  const cacheActor = useMemo(() => ({ actorId: profileId, orgId }), [orgId, profileId]);
   const projectSite = useMemo(() => parseGeoPoint(project.site_point), [project.site_point]);
   const driverTimeProject = isDriverTimeProject(project);
   const [taskList, setTaskList] = useState<TaskWithAttachments[]>(tasks);
@@ -304,6 +318,8 @@ export function WorkerProjectView({
   const [taskCreateMessage, setTaskCreateMessage] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
   const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
+  const [cachedProjectSnapshot, setCachedProjectSnapshot] =
+    useState<OfflineFieldSnapshot<WorkerProjectDetailCachePayload> | null>(null);
   const projectMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -313,6 +329,41 @@ export function WorkerProjectView({
   useEffect(() => {
     setProjectMediaList(projectMedia);
   }, [projectMedia]);
+
+  useEffect(() => {
+    if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) return;
+    saveOfflineSnapshot(
+      cacheActor,
+      "worker-project-detail",
+      {
+        project,
+        projectMedia: projectMediaList,
+        projectReceipts,
+        tasks: taskList,
+      },
+      project.id,
+    );
+  }, [cacheActor, isOnline, project, project.id, projectMediaList, projectReceipts, taskList]);
+
+  useEffect(() => {
+    if (isOnline) {
+      setCachedProjectSnapshot(null);
+      return;
+    }
+
+    const cached = loadOfflineSnapshot<WorkerProjectDetailCachePayload>(
+      cacheActor,
+      "worker-project-detail",
+      project.id,
+    );
+    setCachedProjectSnapshot(cached);
+    if (!cached) return;
+
+    setTaskList((current) => (current.length > 0 ? current : cached.payload.tasks));
+    setProjectMediaList((current) =>
+      current.length > 0 ? current : cached.payload.projectMedia,
+    );
+  }, [cacheActor, isOnline, project.id]);
 
   async function handleClaimTask(taskId: string) {
     setClaimBusyTaskId(taskId);
@@ -471,6 +522,7 @@ export function WorkerProjectView({
       return;
     }
     setOpenError(null);
+    saveOfflineSnapshot(cacheActor, "worker-task-detail", { task }, task.id);
     setSelectedTaskMode(mode);
     setSelectedTask(task);
   }
@@ -647,6 +699,12 @@ export function WorkerProjectView({
           </p>
         ) : null}
       </section>
+
+      {!isOnline && cachedProjectSnapshot ? (
+        <OfflineCacheNotice savedAt={cachedProjectSnapshot.savedAt} />
+      ) : !isOnline && taskList.length === 0 && projectMediaList.length === 0 ? (
+        <OfflineCacheEmptyState />
+      ) : null}
 
       {/* Clock In / Clock Out for THIS project. Reuses the shell's existing
           clockIn / clockOut from useWorkerShell — the GPS prompt, offline

@@ -4,12 +4,12 @@ Static local scan of tests, source, and docs for critical Alpha-7 invariants.
 
 | Category | Coverage | Tests | Source | Recommendation |
 | --- | --- | --- | --- | --- |
-| material driver-only dropdown | covered | 3 | 3 | None |
+| material driver-only dropdown | covered | 2 | 1 | None |
 | material task server validation | covered | 3 | 4 | None |
-| driver role filtering | covered | 2 | 12 | None |
-| private message sender/recipient persistence | covered | 1 | 9 | None |
-| task read/taken/done visibility | covered | 3 | 16 | None |
-| notification-as-signal | covered | 3 | 24 | None |
+| driver role filtering | covered | 1 | 11 | None |
+| private message sender/recipient persistence | covered | 2 | 11 | None |
+| task read/taken/done visibility | covered | 4 | 16 | None |
+| notification-as-signal | covered | 4 | 25 | None |
 | mobile Поехать preference | covered | 2 | 3 | None |
 | project navigation Apple/Google/Tesla/copy | covered | 2 | 5 | None |
 | deadline editing | covered | 9 | 18 | None |
@@ -18,7 +18,7 @@ Static local scan of tests, source, and docs for critical Alpha-7 invariants.
 | supervisor worker-like access | covered | 5 | 11 | None |
 | media delete only Andrey/Sergey | covered | 3 | 7 | None |
 | file upload/open/download | covered | 5 | 21 | None |
-| Jarvis confirmation and real id success | covered | 8 | 15 | None |
+| Jarvis confirmation and real id success | covered | 8 | 16 | None |
 | archive/trash separation | covered | 3 | 15 | None |
 | payroll untouched | covered | 3 | 5 | None |
-| GPS/shift untouched | covered | 15 | 70 | None |
+| GPS/shift untouched | covered | 20 | 75 | None |

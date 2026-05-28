@@ -358,15 +358,23 @@ Completed scope:
 - Private message queue stores `metadata.client_action_id` so reconnect/retry does not duplicate messages.
 - Existing upload and shift queues remain the path for media and clock-in/out weak-network sync.
 - No fake task success is shown before the server confirms the status update.
+- Added a lightweight offline readable cache for worker/driver field pages.
+- Last-loaded worker tasks, material queue, project list, project detail summary, task detail snapshot, and private/direct message history can be shown while offline.
+- Offline cached views show a stale-data banner and saved timestamp instead of pretending data is fresh.
+- Cache keys are scoped by profile id and org id; logout clears the current actor cache in the worker shell.
+- Cache scrubs PIN/token/secret/signed URL style fields and does not cache payroll/owner financial data.
 
 Not changed:
 
 - No payroll, salary archive, GPS, geofence, shift, archive/trash, RLS, Storage, schema, migration, or production data changes.
 - No material business-rule redesign.
 - No automatic conversion between messages and tasks beyond the existing explicit task-priority message flow.
+- No Service Worker/PWA rewrite.
+- No large file/video blob offline storage.
 
 Deferred until separate owner approval:
 
 - IndexedDB-backed durable file queue for large task-completion evidence.
 - Cross-device pending-action visibility; current queue is local to the worker's browser/device.
 - Push/background sync service worker.
+- Full offline navigation/app shell prefetching for pages that were never opened online.

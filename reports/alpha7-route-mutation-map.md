@@ -67,8 +67,10 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/client-notification-sound.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/command-center.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/coordinate-paste.ts` | read-only | no | confirmed guarded | none |
+| `src/lib/driver-time-projects.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/finance-access.ts` | read-only | no | confirmed guarded | role checks, profile lookup |
 | `src/lib/geofence.ts` | read-only | yes | confirmed guarded | none |
+| `src/lib/gps-consent-ui.ts` | read-only | yes | confirmed guarded | none |
 | `src/lib/gps-consent.ts` | payroll/archive/GPS sensitive | yes | needs manual review | .insert(, org/company guard |
 | `src/lib/gps-freshness.ts` | read-only | yes | confirmed guarded | none |
 | `src/lib/gps-status.ts` | read-only | yes | confirmed guarded | none |
@@ -86,6 +88,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/manager-utils.ts` | read-only | yes | confirmed guarded | role checks, profile lookup, same-org guard helper |
 | `src/lib/map-constants.ts` | read-only | no | confirmed guarded | role checks |
 | `src/lib/material-driver-permissions.ts` | read-only | no | confirmed guarded | role checks, profile lookup |
+| `src/lib/material-spec-parser.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/material-tasks.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/media-delete-permissions.ts` | read-only | yes | confirmed guarded | role checks, profile lookup |
 | `src/lib/media-extension.ts` | read-only | no | confirmed guarded | none |
@@ -95,8 +98,10 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/message-state.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/message-types.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/mux-webhook.ts` | mutation | no | dangerous unknown | .update( |
+| `src/lib/offline-field-actions.ts` | read-only | no | confirmed guarded | org/company guard |
 | `src/lib/offline-time-events.ts` | read-only | no | confirmed guarded | org/company guard |
 | `src/lib/offline-uploads.ts` | read-only | no | confirmed guarded | none |
+| `src/lib/offline-visibility.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/payroll-audit-utils.ts` | read-only | yes | confirmed guarded | none |
 | `src/lib/payroll-export-utils.ts` | read-only | yes | confirmed guarded | none |
 | `src/lib/payroll-period-utils.ts` | read-only | yes | confirmed guarded | none |
@@ -115,6 +120,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/safety-acknowledgements.ts` | mutation | no | needs manual review | .insert(, org/company guard |
 | `src/lib/server/file-attachment-guard.ts` | read-only | no | confirmed guarded | same-org guard helper, org/company guard |
 | `src/lib/server/id-guards.ts` | read-only | no | confirmed guarded | same-org guard helper |
+| `src/lib/server/material-driver-config.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/server/media-delete-permissions.ts` | read-only | yes | confirmed guarded | profile lookup |
 | `src/lib/server/media-delete.ts` | storage/media mutation | yes | confirmed guarded | .update(, role checks, org/company guard |
 | `src/lib/server/task-dispatch.ts` | task/message sensitive | no | confirmed guarded | .insert(, role checks, profile lookup, same-org guard helper, org/company guard |

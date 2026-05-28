@@ -459,11 +459,18 @@ Run this after deploying `fix(alpha7): stabilize offline field workflows`.
 Manual checks:
 
 - Turn on airplane mode and confirm the worker shell shows `Нет соединения — работаем офлайн`.
+- Before airplane mode, load worker `Задачи`, `Проекты`, one project detail, and `Сообщения`.
+- In airplane mode, reopen `Задачи` and confirm last-loaded tasks remain visible with `Офлайн — показаны последние загруженные данные` and `Обновлено: <time>`.
+- In airplane mode, open `Проекты` and confirm the last-loaded project list remains visible.
+- In airplane mode, tap a project that was opened before; confirm a cached project summary appears.
+- In airplane mode, tap a project that was never opened; confirm a friendly no-cache message appears instead of a broken/blank page.
+- In airplane mode, open `Сообщения` and confirm last-loaded private/direct message history remains visible.
 - In airplane mode, tap `Взять` on an open normal/material task and confirm `Ожидает соединения`.
 - Turn the connection back on and confirm the action syncs without creating a duplicate claim.
 - If another person already took the material task, confirm the second user sees a clear already-taken error.
 - In airplane mode, send a private/direct message without a file and confirm it is queued, not shown as a confirmed send.
 - Reconnect and confirm the message appears in sender and recipient history.
+- Reconnect and confirm cached/stale warnings clear after fresh data loads.
 - Confirm notification clear still does not remove the source message/task.
 - Start/finish a task on weak network and confirm no green success appears before server confirmation.
 - Try upload on weak connection and confirm upload success appears only after Storage + metadata succeeds.

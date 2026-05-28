@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-23T16:22:09.311Z",
+  "generatedAt": "2026-05-28T07:19:15.651Z",
   "rows": [
     {
       "path": "src/app/api/ai/actions/create-project/route.ts",
@@ -965,6 +965,16 @@
       "risk": "confirmed guarded"
     },
     {
+      "path": "src/lib/driver-time-projects.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
       "path": "src/lib/finance-access.ts",
       "classification": "read-only",
       "mutationEvidence": [],
@@ -979,6 +989,16 @@
     },
     {
       "path": "src/lib/geofence.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": true,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/gps-consent-ui.ts",
       "classification": "read-only",
       "mutationEvidence": [],
       "elevatedClientEvidence": [],
@@ -1184,6 +1204,16 @@
       "risk": "confirmed guarded"
     },
     {
+      "path": "src/lib/material-spec-parser.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
       "path": "src/lib/material-tasks.ts",
       "classification": "read-only",
       "mutationEvidence": [],
@@ -1282,6 +1312,18 @@
       "risk": "dangerous unknown"
     },
     {
+      "path": "src/lib/offline-field-actions.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
       "path": "src/lib/offline-time-events.ts",
       "classification": "read-only",
       "mutationEvidence": [],
@@ -1295,6 +1337,16 @@
     },
     {
       "path": "src/lib/offline-uploads.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/offline-visibility.ts",
       "classification": "read-only",
       "mutationEvidence": [],
       "elevatedClientEvidence": [],
@@ -1517,6 +1569,16 @@
       "authProfileGuardEvidence": [
         "same-org guard helper"
       ],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/server/material-driver-config.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
       "orgResourceGuardEvidence": [],
       "dangerousZone": false,
       "risk": "confirmed guarded"

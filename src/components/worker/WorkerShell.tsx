@@ -89,6 +89,10 @@ import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { mergeRealtimeTaskRow } from "@/lib/task-realtime";
 import { redactText } from "@/lib/safe-log";
 import { buildOfflineVisibilityState } from "@/lib/offline-visibility";
+import {
+  clearOfflineSnapshotsForActor,
+  saveOfflineSnapshot,
+} from "@/lib/offline-field-cache";
 
 const navItems = [
   { href: "/clock", icon: Timer, label: "Clock", labelKey: "worker.navClock" as TranslationKey },
@@ -581,6 +585,10 @@ export function WorkerShell({
   // after mount so SSR and hydration agree on the same starting value.
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [draining, setDraining] = useState(false);
+  const offlineCacheActor = useMemo(
+    () => ({ actorId: shell.profile.id, orgId: shell.profile.org_id }),
+    [shell.profile.id, shell.profile.org_id],
+  );
 
   // Hydrate queue once on mount.
   useEffect(() => {
@@ -597,6 +605,20 @@ export function WorkerShell({
     if (eventQueue.length === 0) return;
     setShell((current) => applyQueuedEventsToShell(current, eventQueue));
   }, []);
+
+  useEffect(() => {
+    if (!isOnline || (typeof navigator !== "undefined" && !navigator.onLine)) return;
+    saveOfflineSnapshot(offlineCacheActor, "worker-tasks", { tasks: shell.tasks });
+    saveOfflineSnapshot(offlineCacheActor, "material-tasks", {
+      tasks: shell.tasks.filter(isMaterialTask),
+    });
+    saveOfflineSnapshot(offlineCacheActor, "worker-projects", {
+      projects: shell.projects,
+      taskProjectIds: shell.tasks
+        .map((task) => task.project_id)
+        .filter((projectId): projectId is string => Boolean(projectId)),
+    });
+  }, [isOnline, offlineCacheActor, shell.projects, shell.tasks]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1244,6 +1266,7 @@ export function WorkerShell({
     setBusyAction("sign-out");
 
     try {
+      clearOfflineSnapshotsForActor(shell.profile.id);
       await supabase.auth.signOut();
       router.push("/login");
       router.refresh();
