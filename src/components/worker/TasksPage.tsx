@@ -754,6 +754,7 @@ export function TasksPage() {
                   nextSet.add(id);
                   return nextSet;
                 });
+                closeDetails();
               }
             },
             taskId,

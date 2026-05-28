@@ -44,6 +44,9 @@ Run this after deploys that touch application code or user workflows.
 - Worker opens the task.
 - Worker can take the task.
 - Worker can mark the task done.
+- Completion form closes after a successful done save.
+- The task details modal does not open automatically after completion.
+- Worker can still manually open task details with `Открыть детали`.
 - Task does not disappear after read.
 - Read, seen, claimed, and completed states still make sense.
 

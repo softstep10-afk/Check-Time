@@ -1102,6 +1102,7 @@ export function WorkerProjectView({
               });
               if (ok) {
                 markLocalTask(id, "done");
+                closeDetails();
               }
             },
             taskId,
