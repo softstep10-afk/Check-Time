@@ -8,15 +8,17 @@ const projectDetailSource = readFileSync(
 );
 
 describe("material driver UI", () => {
-  it("passes only driver profiles to the material assignment modal", () => {
-    expect(projectDetailSource).toContain("filterMaterialDriverProfiles");
+  it("passes eligible field users to the material assignment modal", () => {
+    expect(projectDetailSource).toContain("filterMaterialTakerProfiles");
     expect(projectDetailSource).toContain("configuredDriverProfileIds");
-    expect(projectDetailSource).toContain("assigneeProfiles={materialDriverProfiles}");
+    expect(projectDetailSource).toContain("assigneeProfiles={materialTakerProfiles}");
   });
 
-  it("does not fall back to the full team when no drivers exist", () => {
-    expect(projectDetailSource).toContain('t("materials.chooseDriver")');
-    expect(projectDetailSource).toContain('t("materials.noDriversAvailable")');
+  it("defaults material creation to the shared open queue without full team fallback", () => {
+    expect(projectDetailSource).toContain('t("materials.openQueueOption")');
+    expect(projectDetailSource).toContain('t("materials.noMaterialTakersAvailable")');
+    expect(projectDetailSource).toContain("const driverUserId = orderAssignedTo || null");
     expect(projectDetailSource).not.toContain('assigneeProfiles={[...taskAssigneeProjectProfiles, ...taskAssigneeOtherProfiles]}');
+    expect(projectDetailSource).not.toContain('setOrderError(t("materials.driverRequired"))');
   });
 });

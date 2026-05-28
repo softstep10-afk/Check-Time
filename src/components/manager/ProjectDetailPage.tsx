@@ -66,7 +66,7 @@ import {
   type MaterialTaskUrgency,
 } from "@/lib/material-tasks";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
-import { filterMaterialDriverProfiles } from "@/lib/material-driver-permissions";
+import { filterMaterialTakerProfiles } from "@/lib/material-driver-permissions";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
   getEffectiveTaskStatus,
@@ -506,9 +506,9 @@ export function ProjectDetailPage({
   }, [availableProfiles, taskAssigneeProjectProfiles]);
   const hasTaskAssignees =
     taskAssigneeProjectProfiles.length > 0 || taskAssigneeOtherProfiles.length > 0;
-  const materialDriverProfiles = useMemo(
+  const materialTakerProfiles = useMemo(
     () =>
-      filterMaterialDriverProfiles([
+      filterMaterialTakerProfiles([
         ...taskAssigneeProjectProfiles,
         ...taskAssigneeOtherProfiles,
       ], {
@@ -2875,7 +2875,7 @@ export function ProjectDetailPage({
         projectId={project.id}
         managerId={managerId}
         knownProfileNames={profileNameById}
-        assigneeProfiles={materialDriverProfiles}
+        assigneeProfiles={materialTakerProfiles}
       />
       {/* ── Receipts ── */}
       <ReceiptsSection
@@ -3598,16 +3598,12 @@ function MaterialsSection({
       .filter((row) => row.name.length > 0);
 
     if (materialRows.length === 0) return;
-    if (!orderAssignedTo) {
-      setOrderError(t("materials.driverRequired"));
-      return;
-    }
 
     setSavingOrder(true);
     setOrderError("");
     const orderId = createClientUuid();
     const trimmedOrderNote = orderNote.trim();
-    const driverUserId = orderAssignedTo;
+    const driverUserId = orderAssignedTo || null;
     const neededDate = orderNeededDate || null;
     const urgency: MaterialTaskUrgency =
       orderPriority === "urgent" || orderPriority === "high" ? "urgent" : "normal";
@@ -3947,7 +3943,9 @@ function MaterialsSection({
                                 <span>
                                   {t("materials.assignedTo")}: {item.driverName}
                                 </span>
-                              ) : null}
+                              ) : (
+                                <span>{t("materials.openQueueLabel")}</span>
+                              )}
                               {item.driverSeen ? <span>{t("materials.driverSeen")}</span> : null}
                             </div>
                             {item.delivered ? (
@@ -4031,10 +4029,10 @@ function MaterialsSection({
               <select
                 value={orderAssignedTo}
                 onChange={(event) => setOrderAssignedTo(event.target.value)}
-                aria-label={t("materials.assignDriver")}
+                aria-label={t("materials.assignMaterialTaker")}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
               >
-                <option value="">{t("materials.chooseDriver")}</option>
+                <option value="">{t("materials.openQueueOption")}</option>
                 {assigneeProfiles.map((profile) => (
                   <option key={profile.id} value={profile.id}>
                     {profile.name}
@@ -4043,7 +4041,7 @@ function MaterialsSection({
               </select>
               {assigneeProfiles.length === 0 ? (
                 <div className="text-[10px] font-semibold text-[var(--text-muted)]">
-                  {t("materials.noDriversAvailable")}
+                  {t("materials.noMaterialTakersAvailable")}
                 </div>
               ) : null}
               <DateField

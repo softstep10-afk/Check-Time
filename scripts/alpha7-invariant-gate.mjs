@@ -49,10 +49,11 @@ const uploadLimits = safeRead("src/lib/upload-limits.ts");
 const mediaDelete = safeRead("src/lib/media-delete-permissions.ts");
 
 add(/taskKind|materialRequest|category/.test(materialTasks), "material tasks use metadata/category/taskKind/materialRequest", "src/lib/material-tasks.ts");
-add(/role\s*===\s*["']driver["']|isMaterialDriverProfile|filterMaterialDriverProfiles/.test(srcText), "driver detection uses role driver or approved helper", "src");
+add(/role\s*===\s*["']driver["']|isMaterialDriverProfile|filterMaterialDriverProfiles|filterMaterialTakerProfiles/.test(srcText), "driver detection uses role driver or approved helper", "src");
 add(!/\b(Sanya|Саня)\b/.test(srcText), "src business logic does not hardcode Sanya/Саня", "src");
 add(!/Whole team \/ no driver|Вся команда \/ без водителя/.test(projectDetail), "material dropdown does not fall back to whole team", "ProjectDetailPage");
-add(/isMaterialDriverProfile/.test(materialRoute), "material task creation route validates driver assignee", "src/app/api/manager/tasks/route.ts");
+add(/isEligibleMaterialTaker/.test(materialRoute), "material task creation route validates selected field assignee", "src/app/api/manager/tasks/route.ts");
+add(!/Choose a driver for the material task/.test(materialRoute), "material task creation allows open shared queue", "src/app/api/manager/tasks/route.ts");
 add(/createManagerTask/.test(materialRoute) && /messages|message-tasks/.test(srcText), "normal tasks/messages remain separate", "task routes");
 
 add(/sender_id|recipient_id|buildPrivateMessageParticipantFilter/.test(messageState + workerMessages), "direct/private message history includes sender OR recipient", "message-state");

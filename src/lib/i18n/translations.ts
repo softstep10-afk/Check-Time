@@ -1977,7 +1977,7 @@ export const translations = {
   },
   "tasks.claimAlreadyAssigned": {
     en: "Someone else just took this task.",
-    ru: "Кто-то уже взял эту задачу.",
+    ru: "Задачу уже взял другой человек.",
   },
   "tasks.claimed": { en: "Task is now yours.", ru: "Задача теперь ваша." },
   "tasks.addProjectTask": { en: "Add project task", ru: "Добавить общую задачу" },
@@ -2115,9 +2115,22 @@ export const translations = {
   "materials.materialTask": { en: "Material task", ru: "Задача по материалам" },
   "materials.neededDate": { en: "Needed date", ru: "Когда нужно" },
   "materials.assignDriver": { en: "Assign driver", ru: "Кому назначить" },
+  "materials.assignMaterialTaker": { en: "Assign driver or worker", ru: "Кому назначить" },
   "materials.noDriver": { en: "Choose driver", ru: "Выберите водителя" },
   "materials.chooseDriver": { en: "Choose driver", ru: "Выберите водителя" },
+  "materials.openQueueOption": {
+    en: "Any driver or worker",
+    ru: "Любой водитель или рабочий",
+  },
+  "materials.openQueueLabel": {
+    en: "Open queue: first to take owns it",
+    ru: "Общая очередь: кто первый взял — того задача",
+  },
   "materials.noDriversAvailable": { en: "No drivers. Assign a driver in Team.", ru: "Нет водителей. Назначьте водителя в команде." },
+  "materials.noMaterialTakersAvailable": {
+    en: "No eligible drivers or workers are available.",
+    ru: "Нет доступных водителей или рабочих.",
+  },
   "materials.driverRequired": { en: "Choose a driver before saving material delivery.", ru: "Выберите водителя перед сохранением заявки." },
   "materials.assignedTo": { en: "Assigned to", ru: "Назначено" },
   "materials.driverSeen": { en: "Driver saw it", ru: "Водитель увидел" },

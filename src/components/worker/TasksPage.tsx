@@ -132,11 +132,11 @@ export function TasksPage() {
         };
       };
       if (!response.ok) {
-        const fallback =
+        const message =
           response.status === 409
             ? t("tasks.claimAlreadyAssigned")
-            : t("tasks.claimFailed");
-        setClaimMessage({ kind: "err", text: payload.error ?? fallback });
+            : payload.error ?? t("tasks.claimFailed");
+        setClaimMessage({ kind: "err", text: message });
         return;
       }
       const claimed = payload.task;

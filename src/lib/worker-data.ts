@@ -11,7 +11,10 @@ import {
   getAttachmentMediaIds,
 } from "@/lib/task-attachments";
 import { isMaterialTask } from "@/lib/material-tasks";
-import { shouldFilterWorkerTasksToMaterials } from "@/lib/material-driver-permissions";
+import {
+  canSeeOpenMaterialTask,
+  shouldFilterWorkerTasksToMaterials,
+} from "@/lib/material-driver-permissions";
 import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import { getCompletionMediaIds } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
@@ -330,6 +333,15 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
   );
   const materialDriverView = shouldFilterWorkerTasksToMaterials(profile, {
     configuredDriverProfileIds: configuredMaterialDriverIds,
+  });
+  const canSeeOpenMaterials = canSeeOpenMaterialTask(profile, {
+    configuredDriverProfileIds: configuredMaterialDriverIds,
+  });
+  tasks = tasks.filter((task) => {
+    if (task.assigned_to === null && isMaterialTask(task)) {
+      return canSeeOpenMaterials;
+    }
+    return true;
   });
   if (materialDriverView) {
     tasks = tasks.filter(isMaterialTask);

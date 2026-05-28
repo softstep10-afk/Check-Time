@@ -96,6 +96,29 @@ describe("material task helpers", () => {
     });
   });
 
+  it("builds open queue material metadata when no assignee is selected", () => {
+    expect(
+      buildMaterialTaskMetadata({
+        materialName: "paint",
+        urgency: "normal",
+        neededDate: "2026-06-04",
+        requestedBy: "manager-1",
+        driverUserId: null,
+        projectId: "project-1",
+      }),
+    ).toMatchObject({
+      category: "material",
+      taskKind: "material",
+      materialRequest: true,
+      materialName: "paint",
+      driverUserId: null,
+      schedule_kind: "delivery",
+      schedule_scope: "material",
+      schedule_delivery_status: "open",
+      delivery_available_to: "team",
+    });
+  });
+
   it("builds material title and alert text with project, urgency, material, and date", () => {
     const row = task({
       title: "screws",
@@ -129,6 +152,12 @@ describe("material task helpers", () => {
         { id: "driver-1" },
       ),
     ).toBe(false);
+    expect(
+      shouldShowInDriverMaterialList(
+        task({ metadata: { category: "material" }, assigned_to: null }),
+        { id: "driver-1" },
+      ),
+    ).toBe(true);
     expect(
       shouldShowInDriverMaterialList(task({ metadata: { category: "field" } }), {
         id: "driver-1",

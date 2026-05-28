@@ -856,19 +856,30 @@ export function WorkerShell({
       profileId: shell.profile.id,
       visibleProjectIds,
       profileRole: shell.profile.role,
+      canSeeOpenMaterialTasks: shell.profile.role === "worker" || Boolean(shell.materialDriverView),
+      materialOnly: Boolean(shell.materialDriverView),
     });
     if (!result.latestCreatedAt) return;
     saveTaskLastSeen(shell.profile.id, result.latestCreatedAt);
     setTaskLastSeenAt(result.latestCreatedAt);
-  }, [taskLastSeenAt, shell.tasks, shell.profile.id, shell.profile.role, visibleProjectIds]);
+  }, [
+    shell.materialDriverView,
+    shell.profile.id,
+    shell.profile.role,
+    shell.tasks,
+    taskLastSeenAt,
+    visibleProjectIds,
+  ]);
 
   const unseenTaskCount = useMemo(() => {
     return countUnseenTasks(shell.tasks, taskLastSeenAt, {
       profileId: shell.profile.id,
       visibleProjectIds,
       profileRole: shell.profile.role,
+      canSeeOpenMaterialTasks: shell.profile.role === "worker" || Boolean(shell.materialDriverView),
+      materialOnly: Boolean(shell.materialDriverView),
     }).count;
-  }, [shell.tasks, taskLastSeenAt, shell.profile.id, shell.profile.role, visibleProjectIds]);
+  }, [shell.materialDriverView, shell.tasks, taskLastSeenAt, shell.profile.id, shell.profile.role, visibleProjectIds]);
 
   const taskSeenSnapshotRef = useRef({
     profileId: shell.profile.id,
@@ -934,6 +945,9 @@ export function WorkerShell({
               profileId: current.profile.id,
               visibleProjectIds: new Set(current.projects.map((project) => project.id)),
               profileRole: current.profile.role,
+              canSeeOpenMaterialTasks:
+                current.profile.role === "worker" || Boolean(current.materialDriverView),
+              materialOnly: Boolean(current.materialDriverView),
               includeClosed: true,
             }),
           decorate: buildWorkerTaskItem,
@@ -953,10 +967,12 @@ export function WorkerShell({
       }
       if (
         !isTaskVisibleToWorker(row, {
-          profileId: shell.profile.id,
-          visibleProjectIds,
-          profileRole: shell.profile.role,
-        })
+        profileId: shell.profile.id,
+        visibleProjectIds,
+        profileRole: shell.profile.role,
+        canSeeOpenMaterialTasks: shell.profile.role === "worker" || Boolean(shell.materialDriverView),
+        materialOnly: Boolean(shell.materialDriverView),
+      })
       ) {
         return false;
       }

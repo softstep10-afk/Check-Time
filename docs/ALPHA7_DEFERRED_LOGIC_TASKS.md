@@ -259,6 +259,9 @@ Completed scope:
 - Added owner/admin-safe setup path for assigning the existing `driver` role through team profile editing.
 - Kept manager/supervisor/worker from assigning the `driver` role.
 - Kept material requests as normal tasks with material/delivery metadata.
+- Material requests now default to an open shared field queue: `Любой водитель или рабочий`.
+- Optional material assignment accepts eligible field users only: workers, drivers, and configured supervisor-drivers.
+- Open material tasks can be taken by the first eligible field user; later claim attempts are blocked by the existing assigned-to-null update guard.
 - Preserved normal task creation, message/task separation, notifications-as-signals, and read/taken/done lifecycle.
 - Added project card/detail indicators for open material requests, urgent material requests, assigned material tasks, and driver seen state.
 - Reused existing task realtime subscriptions and schedule task/delivery entries.
@@ -272,6 +275,7 @@ Not changed:
 - Supabase RLS, Storage policies, database schema, or migrations.
 - Media delete privilege for Andrey and Sergey.
 - Normal worker task visibility for non-driver workers.
+- Normal workers keep normal tasks and additionally see open material tasks.
 - No SQL/manual production data mutation is required when owner/admin uses the UI.
 - No role change is required for a supervisor-driver when `MATERIAL_DRIVER_PROFILE_IDS` is configured.
 - Direct SQL Supabase Step 0 remains separate/blocked.

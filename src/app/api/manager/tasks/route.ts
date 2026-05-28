@@ -12,7 +12,7 @@ import {
   buildMaterialTaskTitle,
   normalizeMaterialTaskUrgency,
 } from "@/lib/material-tasks";
-import { isMaterialDriverProfile } from "@/lib/material-driver-permissions";
+import { isEligibleMaterialTaker } from "@/lib/material-driver-permissions";
 import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -117,12 +117,6 @@ export async function POST(request: NextRequest) {
       mediaIds: attachmentMediaIds.value,
     });
     const materialEnabled = material.enabled && material.materialName.length > 0;
-    if (materialEnabled && !assignedTo.value) {
-      return NextResponse.json(
-        { error: "Choose a driver for the material task." },
-        { status: 400 },
-      );
-    }
     if (materialEnabled && assignedTo.value) {
       const { data: assignee, error: assigneeError } = await adminClient
         .from("profiles")
@@ -148,11 +142,11 @@ export async function POST(request: NextRequest) {
           { status: 404 },
         );
       }
-      if (!isMaterialDriverProfile(assignee, {
+      if (!isEligibleMaterialTaker(assignee, {
         configuredDriverProfileIds: configuredMaterialDriverIds,
       })) {
         return NextResponse.json(
-          { error: "Material tasks can only be assigned to drivers." },
+          { error: "Material tasks can only be assigned to eligible drivers or workers." },
           { status: 403 },
         );
       }

@@ -65,29 +65,35 @@ Run this after deploys that touch application code or user workflows.
 
 ## Materials / Driver Workflow
 
-- Driver setup note: Sanya appears in material driver dropdown only after his profile role is set to `driver` or his stable profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
+- Driver setup note: Sanya gets the focused driver material queue only when his profile role is `driver` or his stable profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
 - If Sanya must remain supervisor-driver, do not change him from `supervisor` to `driver`; configure his profile id in `MATERIAL_DRIVER_PROFILE_IDS`.
 - Owner/admin can set a normal driver through `Команда` -> Sanya profile -> `Роль` -> `Водитель` -> `Сохранить профиль`.
 - No hardcoded Sanya rule is used.
 - Driver remains worker-like and sees the material-focused workflow.
 - Supervisor-driver configured by profile id remains worker-like and does not gain manager/admin powers.
 - Normal workers still see normal tasks.
+- Normal workers also see open shared material tasks.
 - No SQL/manual DB mutation is required when the owner/admin UI is available.
 - Direct SQL Supabase Step 0 and production RLS/Storage verification remain separate blocked items.
 - Open "Добавить материал".
-- Confirm the assignee dropdown shows only users with role `driver`.
-- Confirm Sanya appears only if his production profile has role `driver` or his profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
+- Confirm the default assignee option is `Любой водитель или рабочий`.
+- Confirm saving with no selected person creates an open shared material task.
+- Confirm the optional assignee dropdown shows eligible field users only: workers, drivers, and configured supervisor-drivers.
+- Confirm Sanya can remain supervisor-driver through `MATERIAL_DRIVER_PROFILE_IDS` when focused driver behavior is needed.
 - Confirm the dropdown does not fall back to the full team.
-- If no drivers exist, confirm the UI shows an empty/no-driver state instead of workers/managers/supervisors.
-- Manager creates an urgent material task for a driver.
-- Manager creates a non-urgent material task for a driver.
+- If no eligible field users exist, confirm the UI shows an empty/none-available state instead of managers/owners/admins.
+- Manager creates an urgent open material task.
+- Manager creates a non-urgent open material task.
 - Confirm saving material shows "Сохраняем..." / "Сохраняем материал..." and duplicate save does not create duplicate tasks.
 - Driver sees the material task immediately in the worker task area.
-- Driver receives the existing task notification/banner for the material task.
-- Driver sees project name, material name, urgency, and needed date.
-- Driver schedule shows the material task on the selected needed date.
+- Worker sees the open material task in addition to normal assigned tasks.
+- Worker or driver can press `Взять`; first take wins.
+- A second user trying to take the same open material task sees `Задачу уже взял другой человек`.
+- Eligible field users receive the existing task notification/banner for the material task where realtime/RLS allows it.
+- Driver/worker sees project name, material name, urgency, and needed date.
+- Schedule shows the material task on the selected needed date.
 - Owner/manager sees a material-needed badge on project card/detail.
-- Owner/manager sees when the assigned driver read, took, or completed the task.
+- Owner/manager sees who took/read/completed the task.
 - Normal worker task flow still works for non-driver workers.
 - Normal tasks do not disappear after read/taken/done.
 - Messages remain messages; material request remains a task.
@@ -98,12 +104,13 @@ Run this after deploys that touch application code or user workflows.
 Material drivers:
 
 - Open "Добавить материал".
-- Confirm the assignee dropdown shows only drivers.
-- Confirm Sanya appears only if his profile role is `driver` or his profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.
-- Confirm there is no full-team fallback.
+- Confirm the default option is `Любой водитель или рабочий`.
+- Confirm the optional assignee dropdown shows eligible field users, not the full team.
+- Confirm Sanya can remain supervisor-driver through `MATERIAL_DRIVER_PROFILE_IDS`.
+- Confirm there is no full-team fallback to managers/owners/admins.
 - Create an urgent material task.
 - Create a non-urgent material task.
-- Confirm the driver receives the task notification/banner.
+- Confirm eligible field users see the open material task and can take it.
 
 Action indicators:
 

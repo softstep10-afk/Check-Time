@@ -5,6 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditServer } from "@/lib/audit-server";
 import { readRequiredUuid } from "@/lib/server/id-guards";
 import { isEffectiveOpenTask } from "@/lib/task-status";
+import { isMaterialTask } from "@/lib/material-tasks";
+import { canClaimOpenMaterialTask } from "@/lib/material-driver-permissions";
+import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import type { Task } from "@/types/database";
 
 const DELIVERY_CLAIM_ROLES = new Set([
@@ -116,11 +119,23 @@ export async function POST(request: NextRequest) {
     }
     const taskMetadata = asRecord(task.metadata);
     const isDeliveryTask = taskMetadata.schedule_kind === "delivery";
+    const isMaterialDeliveryTask = isMaterialTask({ ...task, metadata: taskMetadata });
 
     if (!task.project_id && !isDeliveryTask) {
       return NextResponse.json(
         { error: "Common (no-project) tasks cannot be claimed here." },
         { status: 400 },
+      );
+    }
+    if (
+      isMaterialDeliveryTask &&
+      !canClaimOpenMaterialTask(profile, {
+        configuredDriverProfileIds: readMaterialDriverProfileIdsFromEnv(),
+      })
+    ) {
+      return NextResponse.json(
+        { error: "This role cannot claim material tasks." },
+        { status: 403 },
       );
     }
     if (isDeliveryTask && !DELIVERY_CLAIM_ROLES.has(profile.role)) {
@@ -198,7 +213,7 @@ export async function POST(request: NextRequest) {
       claimed_at: claimedAt,
       ...(isDeliveryTask
         ? {
-            schedule_delivery_status: "claimed",
+            schedule_delivery_status: isMaterialDeliveryTask ? "taken" : "claimed",
             delivery_claimed_by: user.id,
             delivery_claimed_at: claimedAt,
           }

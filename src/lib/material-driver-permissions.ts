@@ -76,3 +76,33 @@ export function filterMaterialDriverProfiles<T extends MaterialDriverProfileLike
 ): T[] {
   return profiles.filter((profile) => isMaterialDriverProfile(profile, options));
 }
+
+export function isEligibleMaterialTaker(
+  profile: MaterialDriverProfileLike | null | undefined,
+  options: MaterialDriverPermissionOptions = {},
+): boolean {
+  if (!profile) return false;
+  if (isMaterialDriverProfile(profile, options)) return true;
+  return profile.role === "worker";
+}
+
+export function canSeeOpenMaterialTask(
+  profile: MaterialDriverProfileLike | null | undefined,
+  options: MaterialDriverPermissionOptions = {},
+): boolean {
+  return isEligibleMaterialTaker(profile, options);
+}
+
+export function canClaimOpenMaterialTask(
+  profile: MaterialDriverProfileLike | null | undefined,
+  options: MaterialDriverPermissionOptions = {},
+): boolean {
+  return isEligibleMaterialTaker(profile, options);
+}
+
+export function filterMaterialTakerProfiles<T extends MaterialDriverProfileLike>(
+  profiles: readonly T[],
+  options: MaterialDriverPermissionOptions = {},
+): T[] {
+  return profiles.filter((profile) => isEligibleMaterialTaker(profile, options));
+}

@@ -32,6 +32,10 @@ export interface TaskVisibilityArgs {
   visibleProjectIds: Set<string>;
   /** Existing profile role; driver gets the focused material queue. */
   profileRole?: string | null;
+  /** True for workers, drivers, or explicitly configured supervisor-drivers. */
+  canSeeOpenMaterialTasks?: boolean;
+  /** True when this worker shell should be material-only. */
+  materialOnly?: boolean;
   /**
    * Realtime status merges need to keep a row visible when it changes
    * from pending -> in_progress -> done. Badges keep the default false
@@ -78,6 +82,9 @@ export function isTaskVisibleToWorker(
   if (task.deleted_at) return false;
   if (!args.includeClosed && !isEffectiveOpenTask(task)) return false;
 
+  const isOpenMaterial = task.assigned_to === null && isMaterialTask(task);
+  if (isOpenMaterial && !args.canSeeOpenMaterialTasks) return false;
+
   const visible =
     task.assigned_to === args.profileId ||
     (task.assigned_to === null && task.metadata?.schedule_kind === "delivery") ||
@@ -86,7 +93,7 @@ export function isTaskVisibleToWorker(
       args.visibleProjectIds.has(task.project_id));
 
   if (!visible) return false;
-  if (args.profileRole === "driver") return isMaterialTask(task);
+  if (args.materialOnly || args.profileRole === "driver") return isMaterialTask(task);
   return true;
 }
 

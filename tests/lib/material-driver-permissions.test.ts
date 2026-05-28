@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   canUseDriverMaterialView,
   filterMaterialDriverProfiles,
+  filterMaterialTakerProfiles,
+  isEligibleMaterialTaker,
   isMaterialDriverProfile,
   shouldFilterWorkerTasksToMaterials,
 } from "@/lib/material-driver-permissions";
@@ -20,6 +22,22 @@ describe("material driver permissions", () => {
       expect(isMaterialDriverProfile({ id: `${role}-1`, role })).toBe(false);
       expect(shouldFilterWorkerTasksToMaterials({ id: `${role}-1`, role })).toBe(false);
     }
+  });
+
+  it("allows workers and material drivers to take open material tasks", () => {
+    const configuredIds = new Set(["supervisor-driver-1"]);
+
+    expect(isEligibleMaterialTaker({ id: "worker-1", role: "worker" })).toBe(true);
+    expect(isEligibleMaterialTaker({ id: "driver-1", role: "driver" })).toBe(true);
+    expect(
+      isEligibleMaterialTaker(
+        { id: "supervisor-driver-1", role: "supervisor" },
+        { configuredDriverProfileIds: configuredIds },
+      ),
+    ).toBe(true);
+    expect(isEligibleMaterialTaker({ id: "manager-1", role: "manager" })).toBe(false);
+    expect(isEligibleMaterialTaker({ id: "owner-1", role: "owner" })).toBe(false);
+    expect(isEligibleMaterialTaker({ id: "supervisor-1", role: "supervisor" })).toBe(false);
   });
 
   it("allows an explicitly configured supervisor-driver by stable profile id", () => {
@@ -97,6 +115,23 @@ describe("material driver permissions", () => {
         configuredDriverProfileIds: new Set(["supervisor-driver-1"]),
       }).map((profile) => profile.id),
     ).toEqual(["driver-1", "supervisor-driver-1"]);
+  });
+
+  it("filters material taker choices to workers, drivers, and configured supervisor-drivers", () => {
+    const profiles = [
+      { id: "driver-1", name: "Driver One", role: "driver" },
+      { id: "worker-1", name: "Worker One", role: "worker" },
+      { id: "supervisor-driver-1", name: "Supervisor Driver", role: "supervisor" },
+      { id: "supervisor-1", name: "Supervisor One", role: "supervisor" },
+      { id: "manager-1", name: "Manager One", role: "manager" },
+      { id: "owner-1", name: "Owner One", role: "owner" },
+    ];
+
+    expect(
+      filterMaterialTakerProfiles(profiles, {
+        configuredDriverProfileIds: new Set(["supervisor-driver-1"]),
+      }).map((profile) => profile.id),
+    ).toEqual(["driver-1", "worker-1", "supervisor-driver-1"]);
   });
 
   it("parses configured material driver ids safely", async () => {

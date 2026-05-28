@@ -75,6 +75,42 @@ describe("isTaskVisibleToWorker", () => {
     ).toBe(true);
   });
 
+  it("shows open material tasks only to eligible field users", () => {
+    const openMaterial = makeTask({
+      id: "open-material",
+      assigned_to: null,
+      project_id: "p1",
+      metadata: {
+        category: "material",
+        schedule_kind: "delivery",
+        schedule_delivery_status: "open",
+      },
+    });
+
+    expect(
+      isTaskVisibleToWorker(openMaterial, {
+        ...args,
+        profileRole: "worker",
+        canSeeOpenMaterialTasks: true,
+      }),
+    ).toBe(true);
+    expect(
+      isTaskVisibleToWorker(openMaterial, {
+        ...args,
+        profileRole: "driver",
+        canSeeOpenMaterialTasks: true,
+        materialOnly: true,
+      }),
+    ).toBe(true);
+    expect(
+      isTaskVisibleToWorker(openMaterial, {
+        ...args,
+        profileRole: "supervisor",
+        canSeeOpenMaterialTasks: false,
+      }),
+    ).toBe(false);
+  });
+
   it("excludes tasks assigned to another worker", () => {
     expect(
       isTaskVisibleToWorker(

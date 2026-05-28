@@ -8,13 +8,14 @@ const routeSource = readFileSync(
 );
 
 describe("manager material task route guard", () => {
-  it("requires material tasks to have a driver assignee", () => {
-    expect(routeSource).toContain("Choose a driver for the material task.");
-    expect(routeSource).toContain("Material tasks can only be assigned to drivers.");
-    expect(routeSource).toContain("isMaterialDriverProfile");
+  it("allows open material tasks and validates selected assignees as field takers", () => {
+    expect(routeSource).not.toContain("Choose a driver for the material task.");
+    expect(routeSource).toContain("Material tasks can only be assigned to eligible drivers or workers.");
+    expect(routeSource).toContain("isEligibleMaterialTaker");
     expect(routeSource).toContain("readMaterialDriverProfileIdsFromEnv");
     expect(routeSource).toContain("configuredDriverProfileIds");
     expect(routeSource).toContain(".select(\"id, org_id, role, is_active, deleted_at\")");
+    expect(routeSource).toContain("assignedTo: assignedTo.value");
   });
 
   it("keeps normal task creation on the same route", () => {
