@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
 import { useTranslation } from "@/lib/i18n";
 import { keepStableListIfUnchanged } from "@/lib/list-stability";
-import { markMessagesReadById } from "@/lib/message-state";
+import { markMessagesReadById, sortMessagesForStableNotificationList } from "@/lib/message-state";
 function relativeTime(iso: string, lang: "en" | "ru"): string {
   const diff = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
   if (diff < 60) return lang === "ru" ? "только что" : "just now";
@@ -21,7 +21,6 @@ function relativeTime(iso: string, lang: "en" | "ru"): string {
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
 import {
   PRIORITY_COLOR,
-  PRIORITY_ORDER,
   type AppMessage,
   type MessageAttachment,
   type MessagePriority,
@@ -280,12 +279,8 @@ export function NotificationBell({
 
   // Urgent first, then info/good/task; within each band newest first.
   const sortedMessages = useMemo(() => {
-    return [...unreadMessages].sort((a, b) => {
-      const orderDelta = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
-      if (orderDelta !== 0) return orderDelta;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
-  }, [unreadMessages]);
+    return sortMessagesForStableNotificationList(messages);
+  }, [messages]);
 
   useEffect(() => {
     if (!loaded) return;

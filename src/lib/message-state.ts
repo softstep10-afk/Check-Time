@@ -40,6 +40,27 @@ export function markMessagesReadById<T extends MessageStateItem>(
   );
 }
 
+const MESSAGE_PRIORITY_ORDER: Record<MessagePriority, number> = {
+  urgent: 0,
+  task: 1,
+  info: 2,
+  good: 3,
+};
+
+export function sortMessagesForStableNotificationList<
+  T extends MessageStateItem & { priority?: MessagePriority },
+>(messages: readonly T[]): T[] {
+  return [...messages].sort((left, right) => {
+    const unreadGap = Number(Boolean(left.read)) - Number(Boolean(right.read));
+    if (unreadGap !== 0) return unreadGap;
+    const priorityGap =
+      MESSAGE_PRIORITY_ORDER[left.priority ?? "info"] -
+      MESSAGE_PRIORITY_ORDER[right.priority ?? "info"];
+    if (priorityGap !== 0) return priorityGap;
+    return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+  });
+}
+
 export function isPrivateMessageVisibleToProfile(
   message: { sender_id?: string | null; recipient_id?: string | null },
   profileId: string,

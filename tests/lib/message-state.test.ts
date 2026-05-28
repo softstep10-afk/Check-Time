@@ -7,6 +7,7 @@ import {
   markMessagesReadById,
   mergeMessagesById,
   readLinkedTaskId,
+  sortMessagesForStableNotificationList,
 } from "@/lib/message-state";
 
 const baseMessages = [
@@ -95,5 +96,30 @@ describe("message state helpers", () => {
     expect(buildPrivateMessageParticipantFilter("profile-1")).toBe(
       "sender_id.eq.profile-1,recipient_id.eq.profile-1",
     );
+  });
+
+  it("keeps read private messages in the notification list after acknowledgement", () => {
+    const acknowledged = markMessagesReadById(baseMessages, ["message-2"]);
+    const sorted = sortMessagesForStableNotificationList(acknowledged);
+
+    expect(sorted.map((message) => message.id)).toEqual(["message-1", "message-2"]);
+    expect(sorted.find((message) => message.id === "message-2")?.read).toBe(true);
+  });
+
+  it("keeps sender and recipient history stable after realtime read updates", () => {
+    const sent = {
+      id: "direct-1",
+      sender_id: "sender-1",
+      recipient_id: "recipient-1",
+      created_at: "2026-05-21T10:00:00Z",
+      read: false,
+      text: "Private note",
+    };
+    const updated = mergeMessagesById([sent], { ...sent, read: true });
+
+    expect(updated).toHaveLength(1);
+    expect(isPrivateMessageVisibleToProfile(updated[0], "sender-1")).toBe(true);
+    expect(isPrivateMessageVisibleToProfile(updated[0], "recipient-1")).toBe(true);
+    expect(updated[0].read).toBe(true);
   });
 });
