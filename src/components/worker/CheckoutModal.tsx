@@ -6,6 +6,7 @@ import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { createClient } from "@/lib/supabase/client";
+import { isDriverTimeProject } from "@/lib/driver-time-projects";
 
 function startOfTodayMs(): number {
   const d = new Date();
@@ -43,6 +44,12 @@ export function CheckoutModal({
   const videoSatisfied = !requireVideo || hasVideoToday || pickedAt !== null;
   const uploading = busyAction === "before-leave-video";
   const checkingOut = busyAction === "clock-out";
+  const activeProject = useMemo(
+    () =>
+      shell.projects.find((project) => project.id === shell.clockState.currentProjectId) ?? null,
+    [shell.clockState.currentProjectId, shell.projects],
+  );
+  const gpsNotRequired = isDriverTimeProject(activeProject);
   const disabled = !videoSatisfied || uploading || checkingOut;
 
   function handleClose() {
@@ -110,7 +117,10 @@ export function CheckoutModal({
     // keeping both copies means the manager sees the note whether they
     // open the shift via Day Detail (clock_out row) or open the video
     // (caption under the player).
-    const closed = await clockOut({ note: checkoutNote });
+    const closed = await clockOut({
+      note: checkoutNote,
+      ...(gpsNotRequired ? { skipGps: true, gpsErrorKind: "unavailable" as const } : {}),
+    });
     if (closed) {
       handleClose();
     }

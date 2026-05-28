@@ -9,6 +9,7 @@ import {
   PROJECT_GPS_RADIUS_MIN,
   validateProjectSaveBody,
 } from "@/lib/project-save";
+import { DRIVER_TIME_PROJECT_KIND } from "@/lib/driver-time-projects";
 
 describe("clampProjectGpsRadius", () => {
   it("keeps values inside the supported range", () => {
@@ -129,6 +130,45 @@ describe("validateProjectSaveBody", () => {
     });
   });
 
+  it("allows driver time projects without GPS coordinates or confirmation", () => {
+    expect(
+      validateProjectSaveBody(
+        {
+          name: "Driver Work - Alex",
+          address: "",
+          notes: "Store runs",
+          rate: "42.50",
+          radius_m: "180",
+          lat: "",
+          lng: "",
+          coordinatesConfirmed: false,
+          driver_time_project: true,
+        },
+        { allowBlankCoordinates: false },
+      ),
+    ).toEqual({
+      ok: true,
+      payload: {
+        name: "Driver Work - Alex",
+        address: null,
+        notes: "Store runs",
+        rate: 42.5,
+        radius_m: 180,
+        gps_radius_m: PROJECT_GPS_RADIUS_DEFAULT,
+        status: "active",
+        start_date: null,
+        end_date: null,
+        timeline_status: "on_track",
+        budget_status: "on_budget",
+        settings: {
+          projectKind: DRIVER_TIME_PROJECT_KIND,
+          gpsNotRequired: true,
+          client_tone: "green",
+        },
+      },
+    });
+  });
+
   it("preserves existing optional fields when an edit form omits them", () => {
     expect(
       validateProjectSaveBody(
@@ -166,6 +206,69 @@ describe("validateProjectSaveBody", () => {
         budget_status: "on_budget",
         settings: {
           client_tone: "green",
+        },
+      },
+    });
+  });
+
+  it("preserves an existing driver time project marker when the edit form omits it", () => {
+    expect(
+      validateProjectSaveBody(
+        {
+          name: "Driver Work - Alex",
+          address: "",
+          notes: "",
+          rate: "42.50",
+          radius_m: "180",
+          status: "active",
+          lat: null,
+          lng: null,
+          coordinatesConfirmed: false,
+        },
+        {
+          allowBlankCoordinates: true,
+          fallbackSettings: {
+            projectKind: DRIVER_TIME_PROJECT_KIND,
+            gpsNotRequired: true,
+          },
+        },
+      ),
+    ).toMatchObject({
+      ok: true,
+      payload: {
+        settings: {
+          projectKind: DRIVER_TIME_PROJECT_KIND,
+          gpsNotRequired: true,
+          client_tone: "green",
+        },
+      },
+    });
+  });
+
+  it("can turn off driver time project markers without dropping unrelated settings", () => {
+    expect(
+      validateProjectSaveBody(
+        {
+          name: "Warehouse",
+          lat: "37.7749",
+          lng: "-122.4194",
+          coordinatesConfirmed: true,
+          driver_time_project: false,
+        },
+        {
+          allowBlankCoordinates: false,
+          fallbackSettings: {
+            projectKind: DRIVER_TIME_PROJECT_KIND,
+            gpsNotRequired: true,
+            client_tone: "yellow",
+          },
+        },
+      ),
+    ).toMatchObject({
+      ok: true,
+      payload: {
+        settings: {
+          client_tone: "yellow",
         },
       },
     });

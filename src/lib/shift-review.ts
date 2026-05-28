@@ -128,6 +128,8 @@ export function deriveShiftReview(args: {
   durationMinutes: number;
   /** True if the original clock_in event recorded a gps_point. */
   hadGpsAtClockIn: boolean;
+  /** True for service projects where GPS is intentionally not required. */
+  gpsWarningSuppressed?: boolean;
   /** GPS freshness object from deriveGpsFreshness. Only used while open. */
   gpsFreshness: GpsFreshness | null;
   /** profiles.require_video for this worker. */
@@ -139,7 +141,9 @@ export function deriveShiftReview(args: {
 
   if (args.isOpen) {
     // GPS picture — pick at most one GPS-related reason.
-    if (!args.hadGpsAtClockIn) {
+    if (args.gpsWarningSuppressed) {
+      // Driver-time/service projects intentionally allow no-GPS work.
+    } else if (!args.hadGpsAtClockIn) {
       reasons.push("no_gps");
     } else {
       const status = args.gpsFreshness?.status;
@@ -161,7 +165,7 @@ export function deriveShiftReview(args: {
     // manager review before pay: missing GPS at clock-in, missing checkout
     // proof, and unusually long duration. GPS freshness is intentionally
     // active-only because live GPS pings stop after checkout.
-    if (!args.hadGpsAtClockIn) {
+    if (!args.gpsWarningSuppressed && !args.hadGpsAtClockIn) {
       reasons.push("no_gps");
     }
     if (args.requireVideo && args.videoStatus === "pending") {

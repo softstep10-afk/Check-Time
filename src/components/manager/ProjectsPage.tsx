@@ -29,6 +29,7 @@ import {
   formatProjectCountdown,
   projectScheduleToneStyle,
 } from "@/lib/project-schedule";
+import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import type {
   ProjectBudgetStatus,
   ProjectStatus,
@@ -568,6 +569,8 @@ export function ProjectsPage({
   const [reverseLookupTarget, setReverseLookupTarget] = useState<"create" | "edit" | null>(null);
   const [createCoordinatesConfirmed, setCreateCoordinatesConfirmed] = useState(false);
   const [editCoordinatesConfirmed, setEditCoordinatesConfirmed] = useState(false);
+  const [createDriverTimeProject, setCreateDriverTimeProject] = useState(false);
+  const [editDriverTimeProject, setEditDriverTimeProject] = useState(false);
   const [createDeviceLocation, setCreateDeviceLocation] = useState<DeviceLocationAssessment | null>(null);
   const [editDeviceLocation, setEditDeviceLocation] = useState<DeviceLocationAssessment | null>(null);
   const [createAddressLookup, setCreateAddressLookup] = useState<AddressLookupState | null>(null);
@@ -627,7 +630,9 @@ export function ProjectsPage({
     return sorted;
   }, [initialProjects, statusFilter, sortBy, searchQuery, hasFinanceAccess]);
   const projectsMissingCoordinatesCount = useMemo(() => {
-    return initialProjects.filter((project) => !project.hasValidSiteCoordinates).length;
+    return initialProjects.filter(
+      (project) => !project.hasValidSiteCoordinates && !isDriverTimeProject(project),
+    ).length;
   }, [initialProjects]);
   const createFormRef = useRef<HTMLFormElement>(null);
   const createLatRef = useRef<HTMLInputElement>(null);
@@ -641,6 +646,7 @@ export function ProjectsPage({
 
   function openCreateProjectPanel() {
     setCreateCoordinatesConfirmed(false);
+    setCreateDriverTimeProject(false);
     setCreateDeviceLocation(null);
     setCreateAddressLookup(null);
     setCreateAddressLookupError("");
@@ -650,6 +656,7 @@ export function ProjectsPage({
   function closeCreateProjectPanel() {
     setShowCreatePanel(false);
     setCreateCoordinatesConfirmed(false);
+    setCreateDriverTimeProject(false);
     setCreateDeviceLocation(null);
     setCreateAddressLookup(null);
     setCreateAddressLookupError("");
@@ -670,12 +677,15 @@ export function ProjectsPage({
     setEditDeviceLocation(null);
     setEditAddressLookup(null);
     setEditAddressLookupError("");
+    const project = initialProjects.find((item) => item.id === projectId) ?? null;
+    setEditDriverTimeProject(isDriverTimeProject(project));
     setEditingProjectId(projectId);
   }
 
   function closeEditProject() {
     setEditingProjectId(null);
     setEditCoordinatesConfirmed(false);
+    setEditDriverTimeProject(false);
     setEditDeviceLocation(null);
     setEditAddressLookup(null);
     setEditAddressLookupError("");
@@ -918,6 +928,7 @@ export function ProjectsPage({
     const clientTone = formData.get("client_tone")?.toString() ?? "green";
     const timelineStatus = formData.get("timeline_status")?.toString() ?? "on_track";
     const budgetStatus = formData.get("budget_status")?.toString() ?? "on_budget";
+    const driverTimeProject = formData.get("driver_time_project") === "on";
 
     if (!name) {
       setMessage(t("projects.nameRequired"));
@@ -928,7 +939,9 @@ export function ProjectsPage({
     // geofence has nothing to check against and anyone can clock in
     // from anywhere on this project. Refuse the insert before it
     // reaches Supabase rather than saving a site_point: null row.
-    const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"));
+    const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"), {
+      allowBlank: driverTimeProject,
+    });
     if (coordinates.error) {
       setMessage(
         coordinates.error === "invalid"
@@ -938,12 +951,12 @@ export function ProjectsPage({
       form.reportValidity();
       return;
     }
-    if (!coordinates.point) {
+    if (!driverTimeProject && !coordinates.point) {
       setMessage(t("projects.coordsRequired"));
       form.reportValidity();
       return;
     }
-    if (!createCoordinatesConfirmed) {
+    if (!driverTimeProject && !createCoordinatesConfirmed) {
       setMessage(t("projects.coordsConfirmationRequired"));
       form.reportValidity();
       return;
@@ -964,9 +977,10 @@ export function ProjectsPage({
           : {}),
         radius_m: Number.isFinite(radius) ? radius : 200,
         gps_radius_m: gpsRadius,
-        lat: coordinates.point.lat,
-        lng: coordinates.point.lng,
+        lat: coordinates.point?.lat ?? null,
+        lng: coordinates.point?.lng ?? null,
         coordinatesConfirmed: createCoordinatesConfirmed,
+        driver_time_project: driverTimeProject,
         start_date: startDate || null,
         end_date: endDate || null,
         client_tone: clientTone,
@@ -1011,6 +1025,7 @@ export function ProjectsPage({
     const clientTone = formData.get("client_tone")?.toString() ?? (existingProject ? getClientTone(existingProject) : "green");
     const timelineStatus = formData.get("timeline_status")?.toString() ?? existingProject?.timeline_status ?? "on_track";
     const budgetStatus = formData.get("budget_status")?.toString() ?? existingProject?.budget_status ?? "on_budget";
+    const driverTimeProject = formData.get("driver_time_project") === "on";
 
     if (!name) {
       setMessage(t("projects.nameRequired"));
@@ -1018,7 +1033,7 @@ export function ProjectsPage({
     }
 
     const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"), {
-      allowBlank: existingProject?.hasValidSiteCoordinates ?? true,
+      allowBlank: driverTimeProject || existingProject?.hasValidSiteCoordinates || false,
     });
     if (coordinates.error) {
       setMessage(
@@ -1029,7 +1044,7 @@ export function ProjectsPage({
       event.currentTarget.reportValidity();
       return;
     }
-    if (!editCoordinatesConfirmed) {
+    if (!driverTimeProject && !editCoordinatesConfirmed) {
       setMessage(t("projects.coordsConfirmationRequired"));
       event.currentTarget.reportValidity();
       return;
@@ -1054,6 +1069,7 @@ export function ProjectsPage({
         lat: coordinates.point?.lat ?? null,
         lng: coordinates.point?.lng ?? null,
         coordinatesConfirmed: editCoordinatesConfirmed,
+        driver_time_project: driverTimeProject,
         start_date: startDate || null,
         end_date: endDate || null,
         client_tone: clientTone,
@@ -1238,6 +1254,28 @@ export function ProjectsPage({
             placeholder={t("projects.projectName")}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
+          <label className="md:col-span-2 flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,168,120,0.08)] px-3 py-3 text-sm text-[var(--text-secondary)]">
+            <input
+              type="checkbox"
+              name="driver_time_project"
+              checked={createDriverTimeProject}
+              onChange={(event) => {
+                setCreateDriverTimeProject(event.target.checked);
+                if (event.target.checked) {
+                  setCreateCoordinatesConfirmed(false);
+                }
+              }}
+              className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border-default)]"
+            />
+            <span>
+              <span className="block font-semibold text-[var(--text-primary)]">
+                {t("projects.driverTimeProject")}
+              </span>
+              <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                {t("projects.driverTimeProjectHint")}
+              </span>
+            </span>
+          </label>
           <div className="md:col-span-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.2)] p-3">
             <TextInputWithVoice
               name="address"
@@ -1349,7 +1387,7 @@ export function ProjectsPage({
               name="lat"
               type="text"
               inputMode="decimal"
-              required
+              required={!createDriverTimeProject}
               onPaste={(event) =>
                 applyPastedCoordinatePair(event, createLatRef.current, createLngRef.current, () => {
                   setCreateCoordinatesConfirmed(false);
@@ -1393,7 +1431,7 @@ export function ProjectsPage({
             name="lng"
             type="text"
             inputMode="decimal"
-            required
+            required={!createDriverTimeProject}
             onPaste={(event) =>
               applyPastedCoordinatePair(event, createLatRef.current, createLngRef.current, () => {
                 setCreateCoordinatesConfirmed(false);
@@ -1412,7 +1450,7 @@ export function ProjectsPage({
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
           <p className="md:col-span-2 text-xs text-[var(--text-muted)]">
-            {t("projects.deviceLocationHint")}
+            {createDriverTimeProject ? t("projects.driverTimeGpsHint") : t("projects.deviceLocationHint")}
           </p>
           {createDeviceLocation ? (
             <div
@@ -1454,7 +1492,8 @@ export function ProjectsPage({
           >
             <input
               type="checkbox"
-              required
+              required={!createDriverTimeProject}
+              disabled={createDriverTimeProject}
               checked={createCoordinatesConfirmed}
               onChange={(event) => setCreateCoordinatesConfirmed(event.target.checked)}
               className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border-default)]"
@@ -1559,6 +1598,7 @@ export function ProjectsPage({
       <section className="grid gap-4 xl:grid-cols-2">
         {visibleProjects.map((project) => {
           const state = activityState(project);
+          const driverTimeProject = isDriverTimeProject(project);
           const hasSiteCoordinates = project.hasValidSiteCoordinates;
           const scheduleHealth = deriveProjectScheduleHealth({
             startDate: project.start_date,
@@ -1622,7 +1662,12 @@ export function ProjectsPage({
                       <span
                         className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
                         style={
-                          hasSiteCoordinates
+                          driverTimeProject
+                            ? {
+                                background: "rgba(15, 168, 120, 0.14)",
+                                color: "var(--green)",
+                              }
+                            : hasSiteCoordinates
                             ? {
                                 background: "rgba(15, 168, 120, 0.14)",
                                 color: "var(--green)",
@@ -1633,10 +1678,18 @@ export function ProjectsPage({
                               }
                         }
                       >
-                        {hasSiteCoordinates ? t("projects.gpsOkBadge") : t("projects.gpsMissingBadge")}
+                        {driverTimeProject
+                          ? t("projects.driverTimeProject")
+                          : hasSiteCoordinates
+                            ? t("projects.gpsOkBadge")
+                            : t("projects.gpsMissingBadge")}
                       </span>
                       <span className="text-[11px] text-[var(--text-secondary)]">
-                        {hasSiteCoordinates ? t("projects.gpsOkHint") : t("projects.noSiteCoords")}
+                        {driverTimeProject
+                          ? t("projects.driverTimeGpsNotRequired")
+                          : hasSiteCoordinates
+                            ? t("projects.gpsOkHint")
+                            : t("projects.noSiteCoords")}
                       </span>
                     </div>
                     {state === "stale" ? (
@@ -1853,6 +1906,28 @@ export function ProjectsPage({
                 defaultValue={editingProject.name}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
+              <label className="flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,168,120,0.08)] px-3 py-3 text-sm text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  name="driver_time_project"
+                  checked={editDriverTimeProject}
+                  onChange={(event) => {
+                    setEditDriverTimeProject(event.target.checked);
+                    if (event.target.checked) {
+                      setEditCoordinatesConfirmed(false);
+                    }
+                  }}
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border-default)]"
+                />
+                <span>
+                  <span className="block font-semibold text-[var(--text-primary)]">
+                    {t("projects.driverTimeProject")}
+                  </span>
+                  <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                    {t("projects.driverTimeProjectHint")}
+                  </span>
+                </span>
+              </label>
               <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.2)] p-3">
                 <TextInputWithVoice
                   name="address"
@@ -1982,7 +2057,7 @@ export function ProjectsPage({
                     name="lat"
                     type="text"
                     inputMode="decimal"
-                    required={!editingProject.hasValidSiteCoordinates}
+                    required={!editDriverTimeProject && !editingProject.hasValidSiteCoordinates}
                     onPaste={(event) =>
                       applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
                         setEditCoordinatesConfirmed(false);
@@ -2027,7 +2102,7 @@ export function ProjectsPage({
                   name="lng"
                   type="text"
                   inputMode="decimal"
-                  required={!editingProject.hasValidSiteCoordinates}
+                  required={!editDriverTimeProject && !editingProject.hasValidSiteCoordinates}
                   onPaste={(event) =>
                     applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
                       setEditCoordinatesConfirmed(false);
@@ -2048,7 +2123,7 @@ export function ProjectsPage({
                 />
               </div>
               <p className="text-xs text-[var(--text-muted)]">
-                {t("projects.deviceLocationHint")}
+                {editDriverTimeProject ? t("projects.driverTimeGpsHint") : t("projects.deviceLocationHint")}
               </p>
               {editDeviceLocation ? (
                 <div
@@ -2090,7 +2165,8 @@ export function ProjectsPage({
               >
                 <input
                   type="checkbox"
-                  required
+                  required={!editDriverTimeProject}
+                  disabled={editDriverTimeProject}
                   checked={editCoordinatesConfirmed}
                   onChange={(event) => setEditCoordinatesConfirmed(event.target.checked)}
                   className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border-default)]"

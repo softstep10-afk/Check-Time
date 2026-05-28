@@ -5,6 +5,7 @@ import { requireManagerContext } from "@/lib/manager-data";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
 import { buildPayrollActionAuditPayload } from "@/lib/payroll-audit-utils";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import {
   buildShiftReviewAckEventIds,
   deriveShiftReview,
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
     const payableEventIds = new Set(preview.lines.flatMap((line) => line.eventIds));
     const acknowledgedShiftEventIds = buildShiftReviewAckEventIds(workspace.timeEvents);
     const profilesById = new Map(workspace.profiles.map((entry) => [entry.id, entry]));
+    const projectsById = new Map(workspace.projects.map((entry) => [entry.id, entry]));
     const clockInById = new Map(
       workspace.timeEvents
         .filter((event) => event.event_type === "clock_in")
@@ -128,6 +130,9 @@ export async function POST(request: NextRequest) {
         isOpen: false,
         durationMinutes: session.durationMinutes,
         hadGpsAtClockIn: clockIn?.gps_point != null,
+        gpsWarningSuppressed: isGpsWarningSuppressedForProject(
+          projectsById.get(session.projectId),
+        ),
         gpsFreshness: null,
         requireVideo: worker?.require_video ?? false,
         videoStatus: session.checkoutStatus,

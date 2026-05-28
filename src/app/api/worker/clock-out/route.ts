@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 import { buildNoGpsMetadata, type WorkerGpsErrorKind } from "@/lib/worker-clock-metadata";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { TimeEvent } from "@/types/database";
 
 type ClockOutBody = {
@@ -12,6 +13,7 @@ type ClockOutBody = {
   gpsErrorKind?: unknown;
   note?: unknown;
   clientEventId?: unknown;
+  gpsReviewSuppressed?: unknown;
 };
 
 type WorkerProfile = {
@@ -160,9 +162,17 @@ export async function POST(request: NextRequest) {
     const openMs = new Date(latestEvent.event_time).getTime();
     const requestedMs = new Date(requestedTimestamp).getTime();
     const eventTime = Number.isFinite(openMs) && requestedMs <= openMs ? nowIso : requestedTimestamp;
+    const { data: project } = await admin
+      .from("projects")
+      .select("settings")
+      .eq("id", latestEvent.project_id)
+      .eq("org_id", profile.org_id)
+      .maybeSingle<{ settings: Record<string, unknown> | null }>();
     const noGpsMetadata = buildNoGpsMetadata({
       skippedGps: !gps,
       errorKind: gpsErrorKind,
+      gpsReviewSuppressed:
+        isGpsWarningSuppressedForProject(project) || body.gpsReviewSuppressed === true,
     });
 
     const { data: insertedEvent, error: insertError } = await admin

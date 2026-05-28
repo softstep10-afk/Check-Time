@@ -20,6 +20,7 @@ import {
   deriveShiftReview,
   type ShiftReview,
 } from "@/lib/shift-review";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { Media, PayrollClosure, PayrollLineItem, PayrollRun, TimeEvent } from "@/types/database";
 
 // F5 must reflect the worker's latest shifts, tasks, and media.
@@ -85,8 +86,11 @@ export default async function TeamMemberRoutePage({
     if (e.event_type === "clock_in") clockInById.set(e.id, e);
   }
   const hasGpsBySessionId: Record<string, boolean> = {};
+  const projectRecordById = new Map(data.projects.map((project) => [project.id, project]));
   for (const s of workerSessions) {
-    hasGpsBySessionId[s.id] = clockInById.get(s.clockInEventId)?.gps_point != null;
+    hasGpsBySessionId[s.id] =
+      clockInById.get(s.clockInEventId)?.gps_point != null ||
+      isGpsWarningSuppressedForProject(projectRecordById.get(s.projectId));
   }
 
   // Current Mon-Sun window — same convention as buildProfileSummaries.weekMinutes.
@@ -105,7 +109,9 @@ export default async function TeamMemberRoutePage({
     if (s.clockInTime < weekStartIso) continue;
     const day = s.clockInTime.slice(0, 10);
     dailyMap.set(day, (dailyMap.get(day) ?? 0) + s.durationMinutes);
-    const hasGps = clockInById.get(s.clockInEventId)?.gps_point != null;
+    const hasGps =
+      clockInById.get(s.clockInEventId)?.gps_point != null ||
+      isGpsWarningSuppressedForProject(projectRecordById.get(s.projectId));
     if (hasGps) weekGpsMinutes += s.durationMinutes;
     else weekNoGpsMinutes += s.durationMinutes;
   }
@@ -304,6 +310,9 @@ export default async function TeamMemberRoutePage({
       isOpen: true,
       durationMinutes: openSession.durationMinutes,
       hadGpsAtClockIn: clockInEvent?.gps_point != null,
+      gpsWarningSuppressed: isGpsWarningSuppressedForProject(
+        projectRecordById.get(openSession.projectId),
+      ),
       gpsFreshness: freshness,
       requireVideo: profile.require_video,
       videoStatus: "not_required",

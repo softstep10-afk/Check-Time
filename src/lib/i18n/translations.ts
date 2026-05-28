@@ -353,6 +353,16 @@ export const translations = {
   "projects.gpsMissingBadge": { en: "Missing GPS", ru: "Нет GPS" },
   "projects.gpsMissingSummary": { en: "{count} project(s) still missing a valid GPS fence.", ru: "У {count} проектов всё ещё нет корректной GPS-границы." },
   "projects.noSiteCoords": { en: "No valid GPS fence saved yet", ru: "Корректная GPS-граница ещё не сохранена" },
+  "projects.driverTimeProject": { en: "Driver time project", ru: "Проект времени водителя" },
+  "projects.driverTimeProjectHint": {
+    en: "GPS is not required. Use this for driver service time from stores or supply locations.",
+    ru: "GPS не требуется. Используйте для рабочего времени водителя от магазинов или точек снабжения.",
+  },
+  "projects.driverTimeGpsHint": {
+    en: "This driver time project can start and end without GPS. Time is counted normally.",
+    ru: "Этот проект водителя можно начинать и закрывать без GPS. Время считается обычно.",
+  },
+  "projects.driverTimeGpsNotRequired": { en: "GPS not required", ru: "GPS не требуется" },
   "projects.fixCoordinates": { en: "Fix GPS", ru: "Исправить GPS" },
   "projects.fixCoordinatesHint": { en: "Use Fix GPS to add latitude and longitude before crews rely on this project for location truth.", ru: "Используйте «Исправить GPS», чтобы добавить широту и долготу до того, как бригада начнёт полагаться на этот проект для проверки местоположения." },
   "projects.openDetail": { en: "Open detail", ru: "Подробности" },

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
+import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import type { ProjectStatus } from "@/types/database";
 
@@ -51,6 +52,7 @@ export function WorkerProjectsList() {
           {projects.map((project) => {
             const tone =
               STATUS_COLORS[project.status as ProjectStatus] ?? STATUS_COLORS.active;
+            const driverTimeProject = isDriverTimeProject(project);
             const hasFence = project.site !== null;
             const taskCount = tasksByProject.get(project.id) ?? 0;
             return (
@@ -76,17 +78,29 @@ export function WorkerProjectsList() {
                         style={{
                           background: hasFence
                             ? "rgba(46, 166, 122, 0.14)"
+                            : driverTimeProject
+                              ? "rgba(46, 166, 122, 0.14)"
                             : "rgba(107, 114, 128, 0.18)",
-                          color: hasFence ? "var(--green)" : "var(--text-muted)",
+                          color: hasFence || driverTimeProject ? "var(--green)" : "var(--text-muted)",
                         }}
-                        title={hasFence ? t("worker.projectFenceOn") : t("worker.projectFenceOff")}
+                        title={
+                          driverTimeProject
+                            ? t("projects.driverTimeGpsNotRequired")
+                            : hasFence
+                              ? t("worker.projectFenceOn")
+                              : t("worker.projectFenceOff")
+                        }
                       >
-                        {hasFence ? (
+                        {hasFence || driverTimeProject ? (
                           <Navigation size={9} />
                         ) : (
                           <NavigationOff size={9} />
                         )}
-                        {hasFence ? t("worker.projectFenceOn") : t("worker.projectFenceOff")}
+                        {driverTimeProject
+                          ? t("projects.driverTimeProject")
+                          : hasFence
+                            ? t("worker.projectFenceOn")
+                            : t("worker.projectFenceOff")}
                       </span>
                     </div>
                     {project.address ? (

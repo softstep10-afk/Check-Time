@@ -34,6 +34,8 @@ export interface NoGpsMetadataInput {
   errorKind?: WorkerGpsErrorKind | null;
   /** True when the time_event was queued because the network is down. */
   offlineQueued?: boolean;
+  /** True when no-GPS is expected for this project and should not demand review. */
+  gpsReviewSuppressed?: boolean;
 }
 
 export interface NoGpsMetadataPatch {
@@ -62,7 +64,7 @@ export function buildNoGpsMetadata(input: NoGpsMetadataInput): NoGpsMetadataPatc
       location_unverified: true,
       gps_status: "offline_pending_sync",
       ...(input.errorKind ? { gps_error_kind: input.errorKind } : {}),
-      needs_review: true,
+      ...(input.gpsReviewSuppressed ? {} : { needs_review: true }),
     };
   }
   let status: WorkerGpsStatusMarker = "no_gps";
@@ -73,6 +75,6 @@ export function buildNoGpsMetadata(input: NoGpsMetadataInput): NoGpsMetadataPatc
     location_unverified: true,
     gps_status: status,
     ...(input.errorKind ? { gps_error_kind: input.errorKind } : {}),
-    needs_review: true,
+    ...(input.gpsReviewSuppressed ? {} : { needs_review: true }),
   };
 }

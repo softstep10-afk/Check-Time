@@ -19,6 +19,7 @@ import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { canDeleteMediaEverywhereServer } from "@/lib/server/media-delete-permissions";
 import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { Media } from "@/types/database";
 
 export default async function ProjectDetailRoutePage({
@@ -125,16 +126,19 @@ export default async function ProjectDetailRoutePage({
       .map((e) => [e.id, e]),
   );
   const gpsStatusByProfileId: Record<string, WorkerGpsStatus> = {};
+  const gpsWarningSuppressed = isGpsWarningSuppressedForProject(project);
   for (const session of sessions) {
     if (!session.isOpen || session.projectId !== id) continue;
     const clockInEvent = clockInEventById.get(session.clockInEventId);
-    gpsStatusByProfileId[session.profileId] = deriveWorkerGpsStatus({
-      clockInGpsPoint: clockInEvent?.gps_point,
-      projectSitePoint: project.site_point,
-      projectRadiusM:
-        (project as { gps_radius_m?: number | null }).gps_radius_m ??
-        project.radius_m,
-    });
+    gpsStatusByProfileId[session.profileId] = gpsWarningSuppressed
+      ? "no_fence"
+      : deriveWorkerGpsStatus({
+          clockInGpsPoint: clockInEvent?.gps_point,
+          projectSitePoint: project.site_point,
+          projectRadiusM:
+            (project as { gps_radius_m?: number | null }).gps_radius_m ??
+            project.radius_m,
+        });
   }
 
   // GPS freshness — query latest worker_live_locations.recorded_at for
@@ -187,6 +191,7 @@ export default async function ProjectDetailRoutePage({
       isOpen: true,
       durationMinutes: session.durationMinutes,
       hadGpsAtClockIn: clockInEvent?.gps_point != null,
+      gpsWarningSuppressed,
       gpsFreshness: freshnessByProfileId[session.profileId] ?? null,
       requireVideo: profile?.require_video ?? false,
       videoStatus: "not_required",

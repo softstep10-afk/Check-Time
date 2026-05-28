@@ -13,6 +13,7 @@ import {
   formatElapsedSeconds,
 } from "@/lib/worker-utils";
 import { useTranslation } from "@/lib/i18n";
+import { isDriverTimeProject } from "@/lib/driver-time-projects";
 
 export function ClockPage() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export function ClockPage() {
       shell.projects.find((project) => project.id === shell.clockState.currentProjectId) ?? null,
     [shell.clockState.currentProjectId, shell.projects],
   );
+  const activeProjectGpsNotRequired = isDriverTimeProject(activeProject);
   const lastClosedSession =
     shell.sessions.find((session) => session.clockOutTime !== null) ?? null;
 
@@ -181,8 +183,12 @@ export function ClockPage() {
             // disconnect. A totally missing lastGpsCheck means either the
             // worker has no GPS hardware or permission was denied.
             const hasGps = Boolean(lastGpsCheck && lastGpsCheck.accuracy !== null);
-            const gpsColor = hasGps ? "var(--green)" : "var(--red)";
-            const gpsLabel = hasGps ? t("clock.gpsActive") : t("clock.gpsOff");
+            const gpsColor = hasGps || activeProjectGpsNotRequired ? "var(--green)" : "var(--red)";
+            const gpsLabel = activeProjectGpsNotRequired
+              ? t("projects.driverTimeGpsNotRequired")
+              : hasGps
+                ? t("clock.gpsActive")
+                : t("clock.gpsOff");
             return (
               <div className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: gpsColor }}>
                 <span
@@ -222,7 +228,11 @@ export function ClockPage() {
                 </div>
               </div>
               <div className="text-right text-xs text-[var(--text-muted)]">
-                {activeProject.site ? `${activeProject.radius_m}${t("clock.radiusM")}` : t("clock.gpsOnly")}
+                {activeProjectGpsNotRequired
+                  ? t("projects.driverTimeGpsNotRequired")
+                  : activeProject.site
+                    ? `${activeProject.radius_m}${t("clock.radiusM")}`
+                    : t("clock.gpsOnly")}
               </div>
             </div>
           </div>

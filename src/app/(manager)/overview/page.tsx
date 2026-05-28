@@ -49,6 +49,7 @@ import {
   type CommandCenterActionItem,
 } from "@/lib/command-center";
 import { getDisplayOrgName } from "@/lib/brand";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 
 // 0 = force-dynamic. F5 must always fetch the current state of time_events,
 // projects, tasks, media; OverviewLiveIndicator still pushes router.refresh()
@@ -148,17 +149,21 @@ export default async function OverviewPage() {
       const project = projectsById.get(session.projectId);
       const clockInEvent = clockInEventsById.get(session.clockInEventId);
       const todayMinutes = session.durationMinutes;
-      const gpsStatus = deriveWorkerGpsStatus({
-        clockInGpsPoint: clockInEvent?.gps_point,
-        projectSitePoint: project?.site_point,
-        projectRadiusM:
-          (project as { gps_radius_m?: number | null } | undefined)?.gps_radius_m ??
-          project?.radius_m,
-      });
+      const gpsWarningSuppressed = isGpsWarningSuppressedForProject(project);
+      const gpsStatus = gpsWarningSuppressed
+        ? "no_fence"
+        : deriveWorkerGpsStatus({
+            clockInGpsPoint: clockInEvent?.gps_point,
+            projectSitePoint: project?.site_point,
+            projectRadiusM:
+              (project as { gps_radius_m?: number | null } | undefined)?.gps_radius_m ??
+              project?.radius_m,
+          });
       return {
         ...session,
         projectAddress: project?.address ?? null,
         gpsStatus,
+        gpsWarningSuppressed,
         todayMinutes,
       };
     });
@@ -232,6 +237,7 @@ export default async function OverviewPage() {
         isOpen: true,
         durationMinutes: session.todayMinutes,
         hadGpsAtClockIn: clockInEvent?.gps_point != null,
+        gpsWarningSuppressed: session.gpsWarningSuppressed,
         gpsFreshness: freshnessByProfileId.get(session.profileId) ?? null,
         requireVideo: profile?.require_video ?? false,
         videoStatus: "not_required",
@@ -256,10 +262,12 @@ export default async function OverviewPage() {
     .map((session) => {
       const profile = profilesByIdForReview.get(session.profileId);
       const clockInEvent = clockInEventsById.get(session.clockInEventId);
+      const project = projectsById.get(session.projectId);
       const review = deriveShiftReview({
         isOpen: false,
         durationMinutes: session.durationMinutes,
         hadGpsAtClockIn: clockInEvent?.gps_point != null,
+        gpsWarningSuppressed: isGpsWarningSuppressedForProject(project),
         gpsFreshness: null,
         requireVideo: profile?.require_video ?? false,
         videoStatus: session.checkoutStatus,
@@ -860,11 +868,21 @@ export default async function OverviewPage() {
                           className="inline-block h-2 w-2 rounded-full"
                           style={{ background: GPS_STATUS_COLOR[session.gpsStatus] }}
                         />
-                        {gpsStatusLabel[session.gpsStatus]}
+                        {session.gpsWarningSuppressed
+                          ? t("projects.driverTimeGpsNotRequired")
+                          : gpsStatusLabel[session.gpsStatus]}
                       </span>
                     </td>
                     <td className="py-3 pr-4">
-                      {(() => {
+                      {session.gpsWarningSuppressed ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
+                          style={{ color: "var(--green)" }}
+                        >
+                          <span className="inline-block h-2 w-2 rounded-full bg-current" />
+                          {t("projects.driverTimeProject")}
+                        </span>
+                      ) : (() => {
                         const fresh =
                           freshnessByProfileId.get(session.profileId) ??
                           ({

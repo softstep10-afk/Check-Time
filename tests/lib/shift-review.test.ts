@@ -69,6 +69,20 @@ describe("deriveShiftReview — open shifts", () => {
     expect(r.reasons).toContain("no_gps");
   });
 
+  it("does not flag no_gps on driver time projects where GPS is not required", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 4 * 60,
+      hadGpsAtClockIn: false,
+      gpsWarningSuppressed: true,
+      gpsFreshness: fresh("no_signal"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("normal");
+    expect(r.reasons).not.toContain("no_gps");
+  });
+
   it("treats freshness=no_signal with prior GPS as gps_lost", () => {
     const r = deriveShiftReview({
       isOpen: true,
@@ -129,6 +143,20 @@ describe("deriveShiftReview — open shifts", () => {
       videoStatus: "not_required",
     });
     expect(r.status).toBe("needs_review");
+  });
+
+  it("still flags long open driver time shifts without showing no_gps", () => {
+    const r = deriveShiftReview({
+      isOpen: true,
+      durationMinutes: 14 * 60,
+      hadGpsAtClockIn: false,
+      gpsWarningSuppressed: true,
+      gpsFreshness: fresh("no_signal"),
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("long_shift");
+    expect(r.reasons).toEqual(["long_shift"]);
   });
 
   it("does not promote long_shift + gps_stale to needs_review", () => {
@@ -208,6 +236,20 @@ describe("deriveShiftReview — closed shifts", () => {
     });
     expect(r.status).toBe("no_gps");
     expect(r.reasons).toContain("no_gps");
+  });
+
+  it("does not flag closed driver time shifts only because GPS was intentionally unavailable", () => {
+    const r = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: 4 * 60,
+      hadGpsAtClockIn: false,
+      gpsWarningSuppressed: true,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    expect(r.status).toBe("normal");
+    expect(r.reasons).not.toContain("no_gps");
   });
 
   it("promotes closed no-GPS long shifts to needs_review", () => {

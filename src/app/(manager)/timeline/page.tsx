@@ -11,6 +11,7 @@ import {
   getShiftReviewAck,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 
 export const revalidate = 30;
 
@@ -114,6 +115,7 @@ export default async function TimelinePage({
   const hasFilters = Boolean(worker || project || type || start || end);
   const data = await getTimelinePageData();
   const sessions = buildManagerSessions(data);
+  const projectById = new Map(data.projects.map((item) => [item.id, item]));
   const sessionsByEventId = new Map<string, (typeof sessions)[number]>();
   const profilesById = new Map(data.profiles.map((profile) => [profile.id, profile]));
   const clockInEventsById = new Map(
@@ -287,10 +289,14 @@ export default async function TimelinePage({
               const profile = profilesById.get(session.profileId);
               const clockInEvent = clockInEventsById.get(session.clockInEventId);
               const closeEvent = session.clockOutEventId ? clockOutEventsById.get(session.clockOutEventId) : null;
+              const gpsSuppressed = isGpsWarningSuppressedForProject(
+                projectById.get(session.projectId),
+              );
               const review = deriveShiftReview({
                 isOpen: session.isOpen,
                 durationMinutes: session.durationMinutes,
                 hadGpsAtClockIn: clockInEvent?.gps_point != null,
+                gpsWarningSuppressed: gpsSuppressed,
                 gpsFreshness: null,
                 requireVideo: profile?.require_video ?? false,
                 videoStatus: session.isOpen ? "not_required" : session.checkoutStatus,
@@ -340,8 +346,12 @@ export default async function TimelinePage({
 
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {chip(
-                      clockInEvent?.gps_point ? t("timeline.gpsCaptured") : t("timeline.noGps"),
-                      clockInEvent?.gps_point ? "good" : "warning",
+                      gpsSuppressed
+                        ? t("projects.driverTimeGpsNotRequired")
+                        : clockInEvent?.gps_point
+                          ? t("timeline.gpsCaptured")
+                          : t("timeline.noGps"),
+                      gpsSuppressed || clockInEvent?.gps_point ? "good" : "warning",
                     )}
                     {videoLabel ? chip(videoLabel, session.checkoutStatus === "pending" ? "warning" : "good") : null}
                     {ack
@@ -400,11 +410,15 @@ export default async function TimelinePage({
                 const videoLabel = videoStatusLabel(item.video_status, t, Boolean(ack));
                 const profile = profilesById.get(item.profile_id);
                 const clockInEvent = session ? clockInEventsById.get(session.clockInEventId) : null;
+                const gpsSuppressed = session
+                  ? isGpsWarningSuppressedForProject(projectById.get(session.projectId))
+                  : false;
                 const review = session && isCloseEvent
                   ? deriveShiftReview({
                       isOpen: false,
                       durationMinutes: session.durationMinutes,
                       hadGpsAtClockIn: clockInEvent?.gps_point != null,
+                      gpsWarningSuppressed: gpsSuppressed,
                       gpsFreshness: null,
                       requireVideo: profile?.require_video ?? false,
                       videoStatus: item.video_status,
@@ -453,7 +467,14 @@ export default async function TimelinePage({
                       {openDuration !== null
                         ? chip(`${t("timeline.openDuration")}: ${formatDurationCompact(openDuration)}`, "warning")
                         : null}
-                      {chip(item.gps_point ? t("timeline.gpsCaptured") : t("timeline.noGps"), item.gps_point ? "good" : "warning")}
+                      {chip(
+                        gpsSuppressed
+                          ? t("projects.driverTimeGpsNotRequired")
+                          : item.gps_point
+                            ? t("timeline.gpsCaptured")
+                            : t("timeline.noGps"),
+                        gpsSuppressed || item.gps_point ? "good" : "warning",
+                      )}
                       {videoLabel ? chip(videoLabel, item.video_status === "pending" ? "warning" : "good") : null}
                       {review && review.status !== "normal" && !ack
                         ? chip(

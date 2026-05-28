@@ -1,5 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { parseCoordinateInputPair, parseGeoPoint, toSupabasePoint } from "@/lib/worker-utils";
+import {
+  isDriverTimeProject,
+  mergeDriverTimeProjectSettings,
+  readDriverTimeProjectFlag,
+} from "@/lib/driver-time-projects";
 import type {
   Project,
   ProjectBudgetStatus,
@@ -182,8 +187,13 @@ export function validateProjectSaveBody(
     return { ok: false, error: "Project name is required.", status: 400 };
   }
 
+  const fallbackSettings = readSettings(options.fallbackSettings);
+  const driverTimeProject = hasOwn(body, "driver_time_project")
+    ? readDriverTimeProjectFlag(body.driver_time_project)
+    : isDriverTimeProject({ settings: fallbackSettings });
+
   const coordinates = parseCoordinateInputPair(body.lat, body.lng, {
-    allowBlank: options.allowBlankCoordinates,
+    allowBlank: options.allowBlankCoordinates || driverTimeProject,
   });
 
   if (coordinates.error) {
@@ -197,7 +207,11 @@ export function validateProjectSaveBody(
     };
   }
 
-  if ((options.requireConfirmation ?? true) && !readConfirmed(body.coordinatesConfirmed)) {
+  if (
+    !driverTimeProject &&
+    (options.requireConfirmation ?? true) &&
+    !readConfirmed(body.coordinatesConfirmed)
+  ) {
     return {
       ok: false,
       error: "Confirm these coordinates are correct for this job site before saving.",
@@ -209,9 +223,9 @@ export function validateProjectSaveBody(
   const fallbackRadius = options.fallbackRadius ?? PROJECT_RADIUS_DEFAULT;
   const fallbackGpsRadius = options.fallbackGpsRadius ?? PROJECT_GPS_RADIUS_DEFAULT;
   const defaultStatus = options.defaultStatus ?? "active";
-  const fallbackSettings = readSettings(options.fallbackSettings);
   const fallbackClientTone = readClientTone(fallbackSettings.client_tone, "green");
   const clientTone = readClientTone(body.client_tone, fallbackClientTone);
+  const settings = mergeDriverTimeProjectSettings(fallbackSettings, driverTimeProject);
 
   const payload: Record<string, unknown> = {
     name,
@@ -232,7 +246,7 @@ export function validateProjectSaveBody(
       ? body.budget_status
       : options.fallbackBudgetStatus ?? "on_budget",
     settings: {
-      ...fallbackSettings,
+      ...settings,
       client_tone: clientTone,
     },
   };

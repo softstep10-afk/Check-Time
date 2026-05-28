@@ -28,6 +28,7 @@ import {
 } from "@/lib/safety-acknowledgements";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
 import { canUseDriverMaterialView } from "@/lib/material-driver-permissions";
+import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { splitWorkerProjectTasks } from "@/lib/task-notifications";
 import {
   buildMaterialTaskMetadata,
@@ -289,6 +290,7 @@ export function WorkerProjectView({
   const { busyAction, updateTaskStatus } = workerShell;
   const supabase = useMemo(() => createClient(), []);
   const projectSite = useMemo(() => parseGeoPoint(project.site_point), [project.site_point]);
+  const driverTimeProject = isDriverTimeProject(project);
   const [taskList, setTaskList] = useState<TaskWithAttachments[]>(tasks);
   const [projectMediaList, setProjectMediaList] = useState<TaskAttachmentRef[]>(projectMedia);
   const [selectedTask, setSelectedTask] = useState<TaskWithAttachments | null>(null);
@@ -623,12 +625,24 @@ export function WorkerProjectView({
             compact
           />
         </div>
+        {driverTimeProject ? (
+          <p
+            className="mt-3 inline-flex rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+            style={{ background: "rgba(15,168,120,0.14)", color: "var(--green)" }}
+          >
+            {t("projects.driverTimeGpsNotRequired")}
+          </p>
+        ) : null}
       </section>
 
       {/* Clock In / Clock Out for THIS project. Reuses the shell's existing
           clockIn / clockOut from useWorkerShell — the GPS prompt, offline
           queue, and require-video gate all flow through unchanged. */}
-      <ProjectClockControls projectId={project.id} projectName={project.name} />
+      <ProjectClockControls
+        projectId={project.id}
+        projectName={project.name}
+        gpsNotRequired={driverTimeProject}
+      />
 
       <section className="surface-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1355,9 +1369,11 @@ function ProjectReceiptsList({
 function ProjectClockControls({
   projectId,
   projectName,
+  gpsNotRequired,
 }: {
   projectId: string;
   projectName: string;
+  gpsNotRequired: boolean;
 }) {
   const { shell, busyAction, clockIn } = useWorkerShell();
   const { t } = useTranslation();
@@ -1377,7 +1393,7 @@ function ProjectClockControls({
 
   function handleStart(noGps = false) {
     setAckError(null);
-    setPendingNoGpsStart(noGps);
+    setPendingNoGpsStart(gpsNotRequired || noGps);
     setSafetyOpen(true);
   }
 
@@ -1477,9 +1493,14 @@ function ProjectClockControls({
         </>
       ) : (
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {gpsNotRequired ? (
+            <p className="sm:col-span-2 rounded-[var(--radius-md)] border border-[rgba(15,168,120,0.28)] bg-[rgba(15,168,120,0.08)] px-3 py-2 text-xs font-semibold text-[var(--green)]">
+              {t("projects.driverTimeGpsHint")}
+            </p>
+          ) : null}
           <button
             type="button"
-            onClick={() => handleStart(false)}
+            onClick={() => handleStart(gpsNotRequired)}
             disabled={startingShift}
             className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
             style={{ background: "#f59e0b", color: "var(--text-inverse)" }}
@@ -1487,16 +1508,18 @@ function ProjectClockControls({
             <Play size={14} />
             {startingShift ? t("clock.checkingLocation") : t("clock.startShiftCta")}
           </button>
-          <button
-            type="button"
-            onClick={() => handleStart(true)}
-            disabled={startingShift}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border px-4 py-3 text-sm font-semibold disabled:opacity-50"
-            style={{ borderColor: "rgba(245,158,11,0.45)", color: "#f59e0b" }}
-          >
-            <Play size={14} />
-            {t("worker.gpsPromptStartWithoutGps")}
-          </button>
+          {gpsNotRequired ? null : (
+            <button
+              type="button"
+              onClick={() => handleStart(true)}
+              disabled={startingShift}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border px-4 py-3 text-sm font-semibold disabled:opacity-50"
+              style={{ borderColor: "rgba(245,158,11,0.45)", color: "#f59e0b" }}
+            >
+              <Play size={14} />
+              {t("worker.gpsPromptStartWithoutGps")}
+            </button>
+          )}
         </div>
       )}
 

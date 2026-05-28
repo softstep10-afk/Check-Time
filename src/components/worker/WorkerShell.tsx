@@ -65,6 +65,7 @@ import {
   shouldBlockCompletionFileUpload,
 } from "@/lib/task-notifications";
 import { buildMaterialTaskNotificationText, isMaterialTask } from "@/lib/material-tasks";
+import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import { uploadTaskAttachment } from "@/lib/task-attachments";
 import { buildNoGpsMetadata } from "@/lib/worker-clock-metadata";
@@ -1287,6 +1288,7 @@ export function WorkerShell({
       const noGpsMetadata = buildNoGpsMetadata({
         skippedGps: !gps,
         errorKind: options?.gpsErrorKind ?? null,
+        gpsReviewSuppressed: isDriverTimeProject(project),
       });
 
       const insertPayload: QueuedTimeEventPayload = {
@@ -1358,6 +1360,7 @@ export function WorkerShell({
           skippedGps: !gps,
           errorKind: options?.gpsErrorKind ?? null,
           offlineQueued: true,
+          gpsReviewSuppressed: isDriverTimeProject(project),
         });
         const queuedPayload: QueuedTimeEventPayload = {
           ...insertPayload,
@@ -1523,6 +1526,9 @@ export function WorkerShell({
       const noGpsMetadata = buildNoGpsMetadata({
         skippedGps: !gps,
         errorKind: options?.gpsErrorKind ?? null,
+        gpsReviewSuppressed: isDriverTimeProject(
+          shell.projects.find((entry) => entry.id === shell.clockState.currentProjectId),
+        ),
       });
       const insertPayload: QueuedTimeEventPayload = {
         org_id: shell.profile.org_id,
@@ -1559,6 +1565,9 @@ export function WorkerShell({
               eventTime: timestamp,
               gps,
               gpsErrorKind: options?.gpsErrorKind ?? null,
+              gpsReviewSuppressed: isDriverTimeProject(
+                shell.projects.find((entry) => entry.id === shell.clockState.currentProjectId),
+              ),
               note: trimmedNote,
               clientEventId: client_event_id,
             }),

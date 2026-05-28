@@ -47,6 +47,19 @@ Run this after deploys that touch application code or user workflows.
 - Task does not disappear after read.
 - Read, seen, claimed, and completed states still make sense.
 
+## Driver Time Projects / No-GPS Driver Time
+
+- Owner/manager creates a project named like `Водитель — <Name>`.
+- Owner/manager enables the driver time project option.
+- Project can be saved without GPS coordinates.
+- Driver sees the driver time project in the worker project list.
+- Driver clocks in without GPS.
+- Owner/manager sees the active driver shift and running time.
+- No `No GPS` warning is shown for the driver time project.
+- Driver checks out and hours are counted normally.
+- A normal construction project without GPS still shows the existing GPS warning.
+- Payroll, shifts, archive/trash, and GPS behavior for normal projects remain unchanged.
+
 ## Materials / Driver Workflow
 
 - Driver setup note: Sanya appears in material driver dropdown only after his profile role is set to `driver` or his stable profile id is configured in `MATERIAL_DRIVER_PROFILE_IDS`.

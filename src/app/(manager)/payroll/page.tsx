@@ -7,6 +7,7 @@ import { buildShiftReviewAckEventIds } from "@/lib/shift-review";
 import { PayrollCalculator } from "@/components/manager/PayrollCalculator";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 
 export const revalidate = 30;
 
@@ -34,8 +35,11 @@ export default async function PayrollPage() {
     }
   }
   const hasGpsBySessionId: Record<string, boolean> = {};
+  const projectById = new Map(data.projects.map((project) => [project.id, project]));
   for (const session of sessions) {
-    hasGpsBySessionId[session.id] = gpsByEventId.get(session.clockInEventId) ?? false;
+    hasGpsBySessionId[session.id] =
+      (gpsByEventId.get(session.clockInEventId) ?? false) ||
+      isGpsWarningSuppressedForProject(projectById.get(session.projectId));
   }
 
   return (

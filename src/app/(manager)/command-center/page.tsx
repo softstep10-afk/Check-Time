@@ -33,6 +33,7 @@ import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { getServerLocale } from "@/lib/i18n/server";
 import { formatDurationCompact } from "@/lib/worker-utils";
+import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { TaskPriority } from "@/types/database";
 
 export const revalidate = 15;
@@ -318,6 +319,7 @@ export default async function CommandCenterPage() {
     includeFinancials: data.manager.role === "owner" || data.manager.role === "admin",
   });
   const projectsById = new Map(data.projects.map((project) => [project.id, project.name]));
+  const projectRecordById = new Map(data.projects.map((project) => [project.id, project]));
   const profilesById = new Map(data.profiles.map((profile) => [profile.id, profile.name]));
   const profileRecordById = new Map(data.profiles.map((profile) => [profile.id, profile]));
   const clockInEventsById = new Map(data.timeEvents.map((event) => [event.id, event]));
@@ -420,6 +422,9 @@ export default async function CommandCenterPage() {
         isOpen: false,
         durationMinutes: session.durationMinutes,
         hadGpsAtClockIn: clockInEvent?.gps_point != null,
+        gpsWarningSuppressed: isGpsWarningSuppressedForProject(
+          projectRecordById.get(session.projectId),
+        ),
         gpsFreshness: null,
         requireVideo: profile?.require_video ?? false,
         videoStatus: session.checkoutStatus,
@@ -493,6 +498,9 @@ export default async function CommandCenterPage() {
       isOpen: true,
       durationMinutes: session.durationMinutes,
       hadGpsAtClockIn: clockInEvent?.gps_point != null,
+      gpsWarningSuppressed: isGpsWarningSuppressedForProject(
+        projectRecordById.get(session.projectId),
+      ),
       gpsFreshness: freshness,
       requireVideo: profile?.require_video ?? false,
       videoStatus: "not_required",

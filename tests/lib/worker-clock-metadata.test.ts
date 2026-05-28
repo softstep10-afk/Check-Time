@@ -15,6 +15,14 @@ describe("buildNoGpsMetadata", () => {
     });
   });
 
+  it("keeps no-GPS facts but suppresses review for driver time projects", () => {
+    const out = buildNoGpsMetadata({ skippedGps: true, gpsReviewSuppressed: true });
+    expect(out).toEqual({
+      location_unverified: true,
+      gps_status: "no_gps",
+    });
+  });
+
   it("encodes a denied error kind", () => {
     const out = buildNoGpsMetadata({ skippedGps: true, errorKind: "denied" });
     expect(out.gps_status).toBe("gps_denied");
@@ -44,6 +52,18 @@ describe("buildNoGpsMetadata", () => {
     expect(queued.gps_status).toBe("offline_pending_sync");
     expect(queued.needs_review).toBe(true);
     expect(queued.location_unverified).toBe(true);
+  });
+
+  it("keeps offline facts but suppresses review for driver time projects", () => {
+    const queued = buildNoGpsMetadata({
+      skippedGps: false,
+      offlineQueued: true,
+      gpsReviewSuppressed: true,
+    });
+    expect(queued).toEqual({
+      location_unverified: true,
+      gps_status: "offline_pending_sync",
+    });
   });
 
   it("preserves errorKind alongside offline_pending_sync when both apply", () => {

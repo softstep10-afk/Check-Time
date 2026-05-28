@@ -65,6 +65,7 @@ import {
   isMaterialTask,
   type MaterialTaskUrgency,
 } from "@/lib/material-tasks";
+import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { filterMaterialDriverProfiles } from "@/lib/material-driver-permissions";
 import { mergeRealtimeTaskRow, removeTaskById } from "@/lib/task-realtime";
 import {
@@ -395,6 +396,7 @@ export function ProjectDetailPage({
   const [geocodingAddress, setGeocodingAddress] = useState(false);
   const [fetchingAddressFromLocation, setFetchingAddressFromLocation] = useState(false);
   const [coordinatesConfirmed, setCoordinatesConfirmed] = useState(false);
+  const [editDriverTimeProject, setEditDriverTimeProject] = useState(isDriverTimeProject(project));
   const [deviceLocation, setDeviceLocation] = useState<DeviceLocationAssessment | null>(null);
   const [addressLookup, setAddressLookup] = useState<AddressLookupState | null>(null);
   const [addressLookupError, setAddressLookupError] = useState("");
@@ -756,6 +758,7 @@ export function ProjectDetailPage({
 
   function openEditModal() {
     setCoordinatesConfirmed(false);
+    setEditDriverTimeProject(isDriverTimeProject(project));
     setDeviceLocation(null);
     setAddressLookup(null);
     setAddressLookupError("");
@@ -765,6 +768,7 @@ export function ProjectDetailPage({
   function closeEditModal() {
     setShowEditModal(false);
     setCoordinatesConfirmed(false);
+    setEditDriverTimeProject(isDriverTimeProject(project));
     setDeviceLocation(null);
     setAddressLookup(null);
     setAddressLookupError("");
@@ -974,8 +978,9 @@ export function ProjectDetailPage({
     const status = (formData.get("status")?.toString() ?? project.status) as ProjectStatus;
     const startDate = formData.get("start_date")?.toString() ?? "";
     const endDate = formData.get("end_date")?.toString() ?? "";
+    const driverTimeProject = formData.get("driver_time_project") === "on";
     const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"), {
-      allowBlank: project.hasValidSiteCoordinates,
+      allowBlank: driverTimeProject || project.hasValidSiteCoordinates,
     });
     if (coordinates.error) {
       setMessage(
@@ -986,7 +991,7 @@ export function ProjectDetailPage({
       event.currentTarget.reportValidity();
       return;
     }
-    if (!coordinatesConfirmed) {
+    if (!driverTimeProject && !coordinatesConfirmed) {
       setMessage(t("projects.coordsConfirmationRequired"));
       event.currentTarget.reportValidity();
       return;
@@ -1017,6 +1022,7 @@ export function ProjectDetailPage({
         lat: coordinates.point?.lat ?? null,
         lng: coordinates.point?.lng ?? null,
         coordinatesConfirmed,
+        driver_time_project: driverTimeProject,
       }),
     });
 
@@ -1483,6 +1489,7 @@ export function ProjectDetailPage({
           : materialIndicator.primaryLabel === "needed"
             ? t("materials.projectBadgeNeeded")
             : null;
+  const driverTimeProject = isDriverTimeProject(project);
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
@@ -1507,7 +1514,12 @@ export function ProjectDetailPage({
               <span
                 className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
                 style={
-                  site
+                  driverTimeProject
+                    ? {
+                        background: "rgba(15, 168, 120, 0.14)",
+                        color: "var(--green)",
+                      }
+                    : site
                     ? {
                         background: "rgba(15, 168, 120, 0.14)",
                         color: "var(--green)",
@@ -1518,10 +1530,18 @@ export function ProjectDetailPage({
                       }
                 }
               >
-                {site ? t("projects.gpsOkBadge") : t("projects.gpsMissingBadge")}
+                {driverTimeProject
+                  ? t("projects.driverTimeProject")
+                  : site
+                    ? t("projects.gpsOkBadge")
+                    : t("projects.gpsMissingBadge")}
               </span>
               <span className="text-xs text-[var(--text-secondary)]">
-                {site ? t("projects.gpsOkHint") : t("projects.noSiteCoords")}
+                {driverTimeProject
+                  ? t("projects.driverTimeGpsNotRequired")
+                  : site
+                    ? t("projects.gpsOkHint")
+                    : t("projects.noSiteCoords")}
               </span>
               {materialBadgeLabel ? (
                 <span
@@ -1755,7 +1775,9 @@ export function ProjectDetailPage({
                 const weekHours = worker.weekMinutes / 60;
                 const onSiteForThisProject = worker.isOnSite && worker.currentProjectName === project.name;
                 const gpsStatus = onSiteForThisProject ? gpsStatusByProfileId[worker.id] ?? null : null;
-                const gpsStatusLabel = !gpsStatus
+                const gpsStatusLabel = driverTimeProject && onSiteForThisProject
+                  ? t("projects.driverTimeGpsNotRequired")
+                  : !gpsStatus
                   ? null
                   : gpsStatus === "on_site"
                     ? t("gpsStatus.onSite")
@@ -1764,7 +1786,7 @@ export function ProjectDetailPage({
                       : gpsStatus === "off_site"
                         ? t("gpsStatus.offSite")
                         : t("gpsStatus.noFence");
-                const freshness = onSiteForThisProject
+                const freshness = onSiteForThisProject && !driverTimeProject
                   ? gpsFreshnessByProfileId[worker.id] ?? null
                   : null;
                 const freshnessLabelMap: Record<GpsFreshnessStatus, string> = {
@@ -1819,7 +1841,9 @@ export function ProjectDetailPage({
                             <span
                               className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.1em]"
                               style={{
-                                color: gpsStatus
+                                color: driverTimeProject && onSiteForThisProject
+                                  ? "var(--green)"
+                                  : gpsStatus
                                   ? GPS_STATUS_COLOR[gpsStatus]
                                   : "var(--text-muted)",
                               }}
@@ -1827,7 +1851,9 @@ export function ProjectDetailPage({
                               <span
                                 className="inline-block h-1.5 w-1.5 rounded-full"
                                 style={{
-                                  background: gpsStatus
+                                  background: driverTimeProject && onSiteForThisProject
+                                    ? "var(--green)"
+                                    : gpsStatus
                                     ? GPS_STATUS_COLOR[gpsStatus]
                                     : "var(--text-muted)",
                                 }}
@@ -3026,6 +3052,28 @@ export function ProjectDetailPage({
                 defaultValue={project.name}
                 className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
+              <label className="flex items-start gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,168,120,0.08)] px-3 py-3 text-sm text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  name="driver_time_project"
+                  checked={editDriverTimeProject}
+                  onChange={(event) => {
+                    setEditDriverTimeProject(event.target.checked);
+                    if (event.target.checked) {
+                      setCoordinatesConfirmed(false);
+                    }
+                  }}
+                  className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border-default)]"
+                />
+                <span>
+                  <span className="block font-semibold text-[var(--text-primary)]">
+                    {t("projects.driverTimeProject")}
+                  </span>
+                  <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                    {t("projects.driverTimeProjectHint")}
+                  </span>
+                </span>
+              </label>
               <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.2)] p-3">
                 <TextInputWithVoice
                   name="address"
@@ -3118,7 +3166,7 @@ export function ProjectDetailPage({
                     name="lat"
                     type="text"
                     inputMode="decimal"
-                    required={!project.hasValidSiteCoordinates}
+                    required={!editDriverTimeProject && !project.hasValidSiteCoordinates}
                     onPaste={(event) =>
                       applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
                         setCoordinatesConfirmed(false);
@@ -3154,7 +3202,7 @@ export function ProjectDetailPage({
                   name="lng"
                   type="text"
                   inputMode="decimal"
-                  required={!project.hasValidSiteCoordinates}
+                  required={!editDriverTimeProject && !project.hasValidSiteCoordinates}
                   onPaste={(event) =>
                     applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
                       setCoordinatesConfirmed(false);
@@ -3175,7 +3223,7 @@ export function ProjectDetailPage({
                 />
               </div>
               <p className="text-xs text-[var(--text-muted)]">
-                {t("projects.deviceLocationHint")}
+                {editDriverTimeProject ? t("projects.driverTimeGpsHint") : t("projects.deviceLocationHint")}
               </p>
               {deviceLocation ? (
                 <div
@@ -3217,7 +3265,8 @@ export function ProjectDetailPage({
               >
                 <input
                   type="checkbox"
-                  required
+                  required={!editDriverTimeProject}
+                  disabled={editDriverTimeProject}
                   checked={coordinatesConfirmed}
                   onChange={(event) => setCoordinatesConfirmed(event.target.checked)}
                   className="mt-1 h-4 w-4 shrink-0 rounded border-[var(--border-default)]"
