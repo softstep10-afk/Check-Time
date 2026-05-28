@@ -50,6 +50,17 @@ Run this after deploys that touch application code or user workflows.
 - Task does not disappear after read.
 - Read, seen, claimed, and completed states still make sense.
 
+## Mobile Project And Task UX
+
+- Tap the project card body; it opens the project.
+- Tap address/navigation/copy controls; they do not accidentally open the project.
+- Mobile task buttons fit inside the screen after taking a task.
+- `Открыть детали`, `Взять` / `Начать`, and `Готово` stack cleanly on mobile.
+- Jarvis floating button does not cover task action buttons.
+- Mark a normal task done without entering a description.
+- Mark a material task done without entering a description.
+- Completion files/notes still save when provided.
+
 ## Driver Time Projects / No-GPS Driver Time
 
 - Owner/manager creates a project named like `Водитель — <Name>`.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<ProjectStatus, { bg: string; color: string }> = {
 export function WorkerProjectsList() {
   const { shell } = useWorkerShell();
   const { t } = useTranslation();
+  const router = useRouter();
   const projects = shell.projects;
 
   // Per-project task counts derived once from shell.tasks. shell.tasks is
@@ -55,11 +56,22 @@ export function WorkerProjectsList() {
             const driverTimeProject = isDriverTimeProject(project);
             const hasFence = project.site !== null;
             const taskCount = tasksByProject.get(project.id) ?? 0;
+            function openProject() {
+              router.push(`/project/${project.id}`);
+            }
             return (
-              <Link
+              <article
                 key={project.id}
-                href={`/project/${project.id}`}
-                className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3"
+                role="button"
+                tabIndex={0}
+                onClick={openProject}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  openProject();
+                }}
+                data-testid="worker-project-card"
+                className="block cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 outline-none transition hover:border-[var(--brand-yellow)] focus:ring-2 focus:ring-[var(--brand-yellow)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -104,7 +116,10 @@ export function WorkerProjectsList() {
                       </span>
                     </div>
                     {project.address ? (
-                      <div className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+                      <div
+                        className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]"
+                        onClick={(event) => event.stopPropagation()}
+                      >
                         <MapPin size={11} className="shrink-0" />
                         <span className="truncate">{project.address}</span>
                       </div>
@@ -127,7 +142,7 @@ export function WorkerProjectsList() {
                     <ArrowRight size={11} />
                   </span>
                 </div>
-              </Link>
+              </article>
             );
           })}
         </section>

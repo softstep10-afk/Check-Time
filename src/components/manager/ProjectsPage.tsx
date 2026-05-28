@@ -1646,7 +1646,10 @@ export function ProjectsPage({
                         {project.name}
                       </div>
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+                    <div
+                      className="mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]"
+                      onClick={(event) => event.stopPropagation()}
+                    >
                       <span className="truncate">{project.address ?? t("common.noAddressSet")}</span>
                       {project.address ? <CopyAddressButton address={project.address} /> : null}
                     </div>

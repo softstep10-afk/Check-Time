@@ -467,12 +467,12 @@ export function TasksPage() {
           </div>
         ) : null}
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <button
             type="button"
             onClick={() => openDetails(task)}
             data-testid="worker-task-open-details"
-            className="button-base button-secondary flex-1"
+            className="button-base button-secondary w-full justify-center sm:flex-1"
           >
             <Eye size={14} />
             {t("tasks.viewDetails")}
@@ -482,7 +482,7 @@ export function TasksPage() {
               type="button"
               onClick={() => void updateTaskStatus(task.id, "in_progress")}
               disabled={updating}
-              className="button-base button-secondary flex-1"
+              className="button-base button-secondary w-full justify-center sm:flex-1"
             >
               <Play size={14} />
               {taking ? t("tasks.taking") : t("common.start")}
@@ -494,7 +494,7 @@ export function TasksPage() {
               onClick={() => openCompletion(task)}
               disabled={updating}
               data-testid="worker-task-mark-done-card"
-              className="button-base button-primary flex-1"
+              className="button-base button-primary w-full justify-center sm:flex-1"
             >
               <CheckCircle2 size={14} />
               {finishing ? t("tasks.finishing") : t("tasks.markDone")}
@@ -504,7 +504,7 @@ export function TasksPage() {
               type="button"
               onClick={() => void handleClaimTask(task.id)}
               disabled={claimBusyTaskId === task.id}
-              className="button-base button-primary flex-1"
+              className="button-base button-primary w-full justify-center sm:flex-1"
             >
               <Play size={14} />
               {claimBusyTaskId === task.id ? t("common.saving") : t("tasks.claimCta")}
