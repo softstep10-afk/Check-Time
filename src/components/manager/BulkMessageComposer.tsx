@@ -46,6 +46,7 @@ export function BulkMessageComposer({
   senderName,
   crew,
   projects = [],
+  historyLimit = 20,
   embedded = false,
 }: {
   orgId: string;
@@ -54,6 +55,7 @@ export function BulkMessageComposer({
   senderRole?: string;
   crew: CrewMember[];
   projects?: ProjectOption[];
+  historyLimit?: number;
   embedded?: boolean;
 }) {
   const { t, locale } = useTranslation();
@@ -85,10 +87,10 @@ export function BulkMessageComposer({
       .select("id, recipient_id, text, priority, read, created_at")
       .eq("sender_id", senderId)
       .order("created_at", { ascending: false })
-      .limit(20);
+      .limit(historyLimit);
     setHistory((data ?? []) as HistoryRow[]);
     setHistoryLoading(false);
-  }, [supabase, senderId]);
+  }, [historyLimit, supabase, senderId]);
 
   const scheduleHistoryLoad = useCallback(() => {
     if (historyReloadTimerRef.current) clearTimeout(historyReloadTimerRef.current);

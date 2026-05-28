@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   buildCommandCenterQueue,
   type CommandCenterActionItem,
 } from "@/lib/command-center";
+
+const commandCenterSource = readFileSync(
+  resolve(process.cwd(), "src/app/(manager)/command-center/page.tsx"),
+  "utf8",
+);
+const bulkComposerSource = readFileSync(
+  resolve(process.cwd(), "src/components/manager/BulkMessageComposer.tsx"),
+  "utf8",
+);
 
 function item(
   id: string,
@@ -62,5 +73,56 @@ describe("buildCommandCenterQueue", () => {
     expect(queue.primaryAction).toBeNull();
     expect(queue.hasActions).toBe(false);
     expect(queue.totalCount).toBe(0);
+  });
+});
+
+describe("Command Center layout limits", () => {
+  it("keeps live operations first and limits visible operations to six", () => {
+    const liveOpsIndex = commandCenterSource.indexOf("{text.liveOps}");
+    const metricIndex = commandCenterSource.indexOf("label: text.openTasks");
+    const dispatchIndex = commandCenterSource.indexOf("{text.dispatchTitle}");
+
+    expect(liveOpsIndex).toBeGreaterThanOrEqual(0);
+    expect(liveOpsIndex).toBeLessThan(metricIndex);
+    expect(liveOpsIndex).toBeLessThan(dispatchIndex);
+    expect(commandCenterSource).toContain("visibleLiveWorkers = liveWorkers.slice(0, COMMAND_CENTER_PREVIEW_LIMIT)");
+    expect(commandCenterSource).toContain("visibleLiveWorkers.map");
+  });
+
+  it("moves the owner attention queue near the bottom and limits it to six", () => {
+    const riskIndex = commandCenterSource.indexOf("{text.riskQueue}");
+    const messagesIndex = commandCenterSource.indexOf("{text.messagesTitle}");
+    const taskBoardIndex = commandCenterSource.indexOf("{text.taskBoardTitle}");
+
+    expect(riskIndex).toBeGreaterThan(messagesIndex);
+    expect(riskIndex).toBeLessThan(taskBoardIndex);
+    expect(commandCenterSource).toContain("visibleOwnerAttentionItems = ownerAttentionItems.slice(0, COMMAND_CENTER_PREVIEW_LIMIT)");
+    expect(commandCenterSource).toContain("visibleOwnerAttentionItems.map");
+  });
+
+  it("shows no more than six task status cards by default", () => {
+    expect(commandCenterSource).toContain("visibleDispatchTasks = dispatchTasks.slice(0, COMMAND_CENTER_PREVIEW_LIMIT)");
+    expect(commandCenterSource).toContain("visibleDispatchTasks.map");
+    expect(commandCenterSource).toContain("{text.showAll}");
+  });
+
+  it("limits recent embedded Command Center messages to the latest three", () => {
+    expect(commandCenterSource).toContain("COMMAND_CENTER_RECENT_MESSAGE_LIMIT = 3");
+    expect(commandCenterSource).toContain("historyLimit={COMMAND_CENTER_RECENT_MESSAGE_LIMIT}");
+    expect(bulkComposerSource).toContain("historyLimit = 20");
+    expect(bulkComposerSource).toContain(".limit(historyLimit)");
+  });
+
+  it("keeps protected Command Center blocks mounted", () => {
+    for (const token of [
+      "{text.aiNext}",
+      "{text.actionLedger}",
+      "BulkMessageComposer",
+      "ManagerTasksPage",
+      "{text.openProjects}",
+      "{text.taskBoardTitle}",
+    ]) {
+      expect(commandCenterSource).toContain(token);
+    }
   });
 });

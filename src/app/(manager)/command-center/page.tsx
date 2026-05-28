@@ -37,6 +37,8 @@ import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { TaskPriority } from "@/types/database";
 
 export const revalidate = 15;
+const COMMAND_CENTER_PREVIEW_LIMIT = 6;
+const COMMAND_CENTER_RECENT_MESSAGE_LIMIT = 3;
 
 const COPY = {
   en: {
@@ -60,6 +62,7 @@ const COPY = {
     noAssignee: "Unassigned",
     openProject: "Open project",
     openTaskBoard: "Open full task board",
+    showAll: "Show all",
     openProjects: "Create task in project",
     openSchedule: "Open schedule",
     openPayroll: "Open payroll",
@@ -119,6 +122,7 @@ const COPY = {
     noAssignee: "Не назначено",
     openProject: "Открыть проект",
     openTaskBoard: "Открыть полную доску",
+    showAll: "Показать все",
     openProjects: "Создать задачу в проекте",
     openSchedule: "Открыть расписание",
     openPayroll: "Открыть зарплату",
@@ -401,8 +405,7 @@ export default async function CommandCenterPage() {
       const leftTime = new Date(left.updated_at ?? left.created_at).getTime();
       const rightTime = new Date(right.updated_at ?? right.created_at).getTime();
       return rightTime - leftTime;
-    })
-    .slice(0, 12);
+    });
   const auditDateFormatter = new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
     month: "short",
     day: "numeric",
@@ -515,6 +518,10 @@ export default async function CommandCenterPage() {
       if (statusGap !== 0) return statusGap;
       return right.durationMinutes - left.durationMinutes;
     });
+  const visibleLiveWorkers = liveWorkers.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
+  const ownerAttentionItems = [...liveRisks, ...closedShiftIssues];
+  const visibleOwnerAttentionItems = ownerAttentionItems.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
+  const visibleDispatchTasks = dispatchTasks.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
   const inactiveActiveProjects = projectSummaries
     .filter((project) => project.status === "active")
     .filter((project) => project.onSiteWorkerCount === 0 && project.openTaskCount > 0)
@@ -600,32 +607,6 @@ export default async function CommandCenterPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {metricCard({
-          label: text.openTasks,
-          value: openTasks.length,
-          detail: text.taskPulseDesc,
-          tone: openTasks.length > 0 ? "warning" : "good",
-        })}
-        {metricCard({
-          label: text.urgentTasks,
-          value: priorityTasks.length,
-          detail: text.noPriorityTasks,
-          tone: priorityTasks.length > 0 ? "warning" : "good",
-        })}
-        {metricCard({
-          label: text.unassigned,
-          value: unassignedTasks.length,
-          detail: text.noAssignee,
-          tone: unassignedTasks.length > 0 ? "warning" : "good",
-        })}
-        {metricCard({
-          label: text.activeProjects,
-          value: activeProjects.length,
-          detail: text.openProjects,
-        })}
-      </section>
-
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
         <div className="surface-card p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -651,7 +632,7 @@ export default async function CommandCenterPage() {
                 {text.noLiveWorkers}
               </div>
             ) : (
-              liveWorkers.map((worker) => {
+              visibleLiveWorkers.map((worker) => {
                 const reviewColor = SHIFT_REVIEW_COLOR[worker.review.status];
                 const gpsColor = GPS_FRESHNESS_COLOR[worker.freshness.status];
                 return (
@@ -704,67 +685,16 @@ export default async function CommandCenterPage() {
               })
             )}
           </div>
+          {liveWorkers.length > COMMAND_CENTER_PREVIEW_LIMIT ? (
+            <div className="mt-4">
+              <Link href="/overview" className="button-base button-secondary px-3 py-2 text-xs">
+                {text.showAll}
+              </Link>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-5">
-          <section className="surface-card p-4">
-            <div className="flex items-start gap-3">
-              <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                style={{ background: liveRisks.length > 0 ? "rgba(239, 68, 68, 0.12)" : "rgba(15, 168, 120, 0.12)" }}
-              >
-                {liveRisks.length > 0 ? (
-                  <AlertTriangle size={18} className="text-[var(--red)]" />
-                ) : (
-                  <CheckCircle2 size={18} className="text-[var(--green)]" />
-                )}
-              </span>
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">
-                  {text.riskQueue}
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
-                  {text.closedShiftIssues}: {closedShiftIssues.length}
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 space-y-2">
-              {[...liveRisks.slice(0, 4), ...closedShiftIssues.slice(0, 3)].length === 0 ? (
-                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-                  {text.noRisks}
-                </div>
-              ) : (
-                [...liveRisks.slice(0, 4), ...closedShiftIssues.slice(0, 3)].map((item) => {
-                  const color = SHIFT_REVIEW_COLOR[item.review.status];
-                  return (
-                    <Link
-                      key={`${item.isOpen ? "open" : "closed"}-${item.id}`}
-                      href={`/team/${item.profileId}`}
-                      className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 transition hover:border-[var(--brand-yellow)]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                            {item.profileName}
-                          </div>
-                          <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                            {item.projectName} · {formatDurationCompact(item.durationMinutes)}
-                          </div>
-                        </div>
-                        <span
-                          className="rounded-[var(--radius-pill)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em]"
-                          style={{ background: `${color}1f`, color }}
-                        >
-                          {shiftReviewLabel[item.review.status]}
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
           <section className="surface-card p-4">
             <div className="flex items-start gap-3">
               <span
@@ -854,6 +784,32 @@ export default async function CommandCenterPage() {
         </div>
       </section>
 
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {metricCard({
+          label: text.openTasks,
+          value: openTasks.length,
+          detail: text.taskPulseDesc,
+          tone: openTasks.length > 0 ? "warning" : "good",
+        })}
+        {metricCard({
+          label: text.urgentTasks,
+          value: priorityTasks.length,
+          detail: text.noPriorityTasks,
+          tone: priorityTasks.length > 0 ? "warning" : "good",
+        })}
+        {metricCard({
+          label: text.unassigned,
+          value: unassignedTasks.length,
+          detail: text.noAssignee,
+          tone: unassignedTasks.length > 0 ? "warning" : "good",
+        })}
+        {metricCard({
+          label: text.activeProjects,
+          value: activeProjects.length,
+          detail: text.openProjects,
+        })}
+      </section>
+
       <section className="surface-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -878,7 +834,7 @@ export default async function CommandCenterPage() {
               {text.dispatchNoTasks}
             </div>
           ) : (
-            dispatchTasks.map((task) => {
+            visibleDispatchTasks.map((task) => {
               const audit = getManagerTaskRowAuditText(task, profilesById, {
                 unassigned: text.noAssignee,
                 unknown: text.unknown,
@@ -955,6 +911,13 @@ export default async function CommandCenterPage() {
             })
           )}
         </div>
+        {dispatchTasks.length > COMMAND_CENTER_PREVIEW_LIMIT ? (
+          <div className="mt-4">
+            <Link href="/tasks" className="button-base button-secondary px-3 py-2 text-xs">
+              {text.showAll}
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -970,6 +933,7 @@ export default async function CommandCenterPage() {
             senderRole={data.manager.role}
             crew={crew}
             projects={projects}
+            historyLimit={COMMAND_CENTER_RECENT_MESSAGE_LIMIT}
             embedded
           />
         </div>
@@ -1031,6 +995,11 @@ export default async function CommandCenterPage() {
               <Link href="/tasks" className="button-base button-secondary px-3 py-2 text-xs">
                 {text.openTaskBoard}
               </Link>
+              {(priorityTasks.length > 0 ? priorityTasks.length : openTasks.length) > COMMAND_CENTER_PREVIEW_LIMIT ? (
+                <Link href="/tasks" className="button-base button-secondary px-3 py-2 text-xs">
+                  {text.showAll}
+                </Link>
+              ) : null}
               <Link href="/projects" className="button-base button-primary px-3 py-2 text-xs">
                 {text.openProjects}
               </Link>
@@ -1048,6 +1017,71 @@ export default async function CommandCenterPage() {
               {quickLink({ href: "/ai", icon: Bot, label: text.openAi })}
             </div>
           </section>
+        </div>
+      </section>
+
+      <section className="surface-card p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+              style={{ background: ownerAttentionItems.length > 0 ? "rgba(239, 68, 68, 0.12)" : "rgba(15, 168, 120, 0.12)" }}
+            >
+              {ownerAttentionItems.length > 0 ? (
+                <AlertTriangle size={18} className="text-[var(--red)]" />
+              ) : (
+                <CheckCircle2 size={18} className="text-[var(--green)]" />
+              )}
+            </span>
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {text.riskQueue}
+              </h2>
+              <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                {text.closedShiftIssues}: {closedShiftIssues.length}
+              </p>
+            </div>
+          </div>
+          {ownerAttentionItems.length > COMMAND_CENTER_PREVIEW_LIMIT ? (
+            <Link href="/overview" className="button-base button-secondary px-3 py-2 text-xs">
+              {text.showAll}
+            </Link>
+          ) : null}
+        </div>
+        <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+          {visibleOwnerAttentionItems.length === 0 ? (
+            <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)] md:col-span-2 xl:col-span-3">
+              {text.noRisks}
+            </div>
+          ) : (
+            visibleOwnerAttentionItems.map((item) => {
+              const color = SHIFT_REVIEW_COLOR[item.review.status];
+              return (
+                <Link
+                  key={`${item.isOpen ? "open" : "closed"}-${item.id}`}
+                  href={`/team/${item.profileId}`}
+                  className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 transition hover:border-[var(--brand-yellow)]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                        {item.profileName}
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                        {item.projectName} · {formatDurationCompact(item.durationMinutes)}
+                      </div>
+                    </div>
+                    <span
+                      className="rounded-[var(--radius-pill)] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em]"
+                      style={{ background: `${color}1f`, color }}
+                    >
+                      {shiftReviewLabel[item.review.status]}
+                    </span>
+                  </div>
+                </Link>
+              );
+            })
+          )}
         </div>
       </section>
 
