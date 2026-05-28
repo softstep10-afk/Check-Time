@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
+import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { OfflineCacheEmptyState, OfflineCacheNotice } from "@/components/worker/OfflineCacheNotice";
 import { useTranslation } from "@/lib/i18n";
@@ -21,6 +22,18 @@ const STATUS_COLORS: Record<ProjectStatus, { bg: string; color: string }> = {
   completed: { bg: "rgba(107, 114, 128, 0.18)", color: "var(--text-muted)" },
   archived: { bg: "rgba(107, 114, 128, 0.10)", color: "var(--text-muted)" },
 };
+
+const PROJECT_CARD_INTERACTIVE_SELECTOR =
+  "button,a,input,textarea,select,label,[role='button'],[data-project-card-action]";
+
+function shouldIgnoreProjectCardActivation(
+  target: EventTarget | null,
+  currentTarget: HTMLElement,
+): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const interactiveTarget = target.closest(PROJECT_CARD_INTERACTIVE_SELECTOR);
+  return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
+}
 
 export function WorkerProjectsList() {
   const { shell, isOnline } = useWorkerShell();
@@ -107,14 +120,18 @@ export function WorkerProjectsList() {
                 key={project.id}
                 role="button"
                 tabIndex={0}
-                onClick={openProject}
+                onClick={(event) => {
+                  if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
+                  openProject();
+                }}
                 onKeyDown={(event) => {
                   if (event.key !== "Enter" && event.key !== " ") return;
+                  if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
                   event.preventDefault();
                   openProject();
                 }}
                 data-testid="worker-project-card"
-                className="block cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 outline-none transition hover:border-[var(--brand-yellow)] focus:ring-2 focus:ring-[var(--brand-yellow)]"
+                className="block touch-manipulation cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 outline-none transition hover:border-[var(--brand-yellow)] focus:ring-2 focus:ring-[var(--brand-yellow)]"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -161,6 +178,7 @@ export function WorkerProjectsList() {
                     {project.address ? (
                       <div
                         className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]"
+                        data-project-card-action="address"
                         onClick={(event) => event.stopPropagation()}
                       >
                         <MapPin size={11} className="shrink-0" />
@@ -184,6 +202,14 @@ export function WorkerProjectsList() {
                     {t("worker.openProject")}
                     <ArrowRight size={11} />
                   </span>
+                </div>
+                <div className="mt-3" data-project-card-action="navigation">
+                  <ProjectNavigationActions
+                    projectName={project.name}
+                    address={project.address}
+                    siteCoordinates={project.site}
+                    compact
+                  />
                 </div>
               </article>
             );

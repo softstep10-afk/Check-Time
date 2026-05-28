@@ -56,8 +56,14 @@ Run this after deploys that touch application code or user workflows.
 
 ## Mobile Project And Task UX
 
-- Tap the project card body; it opens the project.
+- Tap the manager project card body once; it opens the project on the first tap.
+- Tap the worker project card body once; it opens the project on the first tap.
+- Confirm the visible `Поехать` button appears on project cards when address or coordinates exist.
+- Tap `Поехать` on a project card; it opens navigation and does not open the project detail accidentally.
+- Open a project detail page and confirm `Поехать` is visible near the title/address without scrolling.
+- Open a project-related schedule entry and confirm `Поехать` appears when that project has an address or coordinates.
 - Tap address/navigation/copy controls; they do not accidentally open the project.
+- Tap copy address/location; copy still works and does not open the project.
 - Mobile task buttons fit inside the screen after taking a task.
 - `Открыть детали`, `Взять` / `Начать`, and `Готово` stack cleanly on mobile.
 - Jarvis floating button does not cover task action buttons.
@@ -176,6 +182,9 @@ Private messages:
 Mobile "Поехать":
 
 - Mobile project card/detail shows "Поехать".
+- Project card `Поехать` is visible before opening the project when a destination exists.
+- Project detail `Поехать` is visible near the top title/address area.
+- Tapping `Поехать` does not trigger the project-card open action.
 - First tap asks for Apple Maps, Google Maps, or Tesla/share/copy.
 - Confirm `Открывать так по умолчанию` stores the selected app locally.
 - Confirm next normal `Поехать` opens the saved default immediately.

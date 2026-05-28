@@ -15,6 +15,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { createClient } from "@/lib/supabase/client";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { useTranslation } from "@/lib/i18n";
@@ -28,6 +29,8 @@ import {
   getMaterialTaskUrgency,
   isMaterialTask,
 } from "@/lib/material-tasks";
+import { parseGeoPoint } from "@/lib/worker-utils";
+import type { WorkerGeoPoint } from "@/lib/worker-types";
 import type { Profile, Project, Task, UserRole } from "@/types/database";
 
 type ScheduleKind =
@@ -53,7 +56,10 @@ type CalendarEntry = {
   title: string;
   startsAt: string | null;
   endsAt: string | null;
+  projectId: string | null;
   projectName: string | null;
+  projectAddress: string | null;
+  projectSite: WorkerGeoPoint | null;
   assigneeName: string | null;
   assigneeId: string | null;
   description: string | null;
@@ -752,6 +758,7 @@ export default function SchedulePageClient() {
         const materialTask = isMaterialTask(task);
         const materialUrgency = getMaterialTaskUrgency(task);
         const materialName = getMaterialTaskMaterialName(task);
+        const project = task.project_id ? projectsById.get(task.project_id) ?? null : null;
         const title = materialTask
           ? materialUrgency === "urgent"
             ? `${text.materialUrgentPrefix}: ${materialName ?? task.title}`
@@ -766,7 +773,10 @@ export default function SchedulePageClient() {
           title,
           startsAt,
           endsAt,
-          projectName: task.project_id ? projectsById.get(task.project_id)?.name ?? null : null,
+          projectId: task.project_id,
+          projectName: project?.name ?? null,
+          projectAddress: project?.address ?? null,
+          projectSite: project ? parseGeoPoint(project.site_point) : null,
           assigneeName: task.assigned_to ? profilesById.get(task.assigned_to)?.name ?? null : null,
           assigneeId: task.assigned_to,
           description: materialTask
@@ -795,6 +805,7 @@ export default function SchedulePageClient() {
         startDate: project.start_date,
         endDate: project.end_date,
       });
+      const projectSite = parseGeoPoint(project.site_point);
       const out: CalendarEntry[] = [];
       if (project.start_date && project.start_date >= loadStart && project.start_date <= loadEnd) {
         out.push({
@@ -805,7 +816,10 @@ export default function SchedulePageClient() {
           title: project.name,
           startsAt: `${project.start_date}T08:00:00`,
           endsAt: null,
+          projectId: project.id,
           projectName: project.name,
+          projectAddress: project.address,
+          projectSite,
           assigneeName: null,
           assigneeId: null,
           description: project.address,
@@ -823,7 +837,10 @@ export default function SchedulePageClient() {
           title: project.name,
           startsAt: `${project.end_date}T17:00:00`,
           endsAt: null,
+          projectId: project.id,
           projectName: project.name,
+          projectAddress: project.address,
+          projectSite,
           assigneeName: null,
           assigneeId: null,
           description: `${scheduleStateLabel(health.state, text)} · ${formatProjectCountdown(health, locale)}`,
@@ -1723,6 +1740,16 @@ export default function SchedulePageClient() {
                 <div>
                   <span className="font-semibold text-[var(--text-primary)]">{text.projectLabel}:</span>{" "}
                   {selectedEntry.projectName}
+                </div>
+              ) : null}
+              {selectedEntry.projectName && (selectedEntry.projectAddress || selectedEntry.projectSite) ? (
+                <div className="pt-1">
+                  <ProjectNavigationActions
+                    projectName={selectedEntry.projectName}
+                    address={selectedEntry.projectAddress}
+                    siteCoordinates={selectedEntry.projectSite}
+                    compact
+                  />
                 </div>
               ) : null}
               {selectedEntry.assigneeName ? (

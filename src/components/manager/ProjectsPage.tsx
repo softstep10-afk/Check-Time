@@ -57,6 +57,18 @@ const CLIENT_TONE_COLOR: Record<ClientTone, string> = {
 
 type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
 
+const PROJECT_CARD_INTERACTIVE_SELECTOR =
+  "button,a,input,textarea,select,label,[role='button'],[data-project-card-action]";
+
+function shouldIgnoreProjectCardActivation(
+  target: EventTarget | null,
+  currentTarget: HTMLElement,
+): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const interactiveTarget = target.closest(PROJECT_CARD_INTERACTIVE_SELECTOR);
+  return Boolean(interactiveTarget && interactiveTarget !== currentTarget);
+}
+
 type AddressLookupState = ProjectAddressGeocodeResult & {
   requestedAddress: string;
 };
@@ -1615,25 +1627,28 @@ export function ProjectsPage({
           const cardBorder = `2px solid ${effectiveScheduleStyle.color}`;
           const cardShadow = `0 0 0 1px ${effectiveScheduleStyle.borderColor}, 0 0 18px ${effectiveScheduleStyle.background}`;
           const statusPanelTitle = `${projectStatusLabel(t, project.status)} · ${scheduleLabel} · ${deadlineCountdown}`;
+          const openProjectDetail = () => router.push(`/projects/${project.id}`);
 
           return (
             <article
               key={project.id}
-              className="surface-card p-4"
+              role="button"
+              tabIndex={0}
+              onClick={(event) => {
+                if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
+                openProjectDetail();
+              }}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                if (shouldIgnoreProjectCardActivation(event.target, event.currentTarget)) return;
+                event.preventDefault();
+                openProjectDetail();
+              }}
+              data-testid="manager-project-card"
+              className="surface-card touch-manipulation cursor-pointer p-4 outline-none transition focus:ring-2 focus:ring-[var(--brand-yellow)]"
               style={{ border: cardBorder, boxShadow: cardShadow }}
             >
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => router.push(`/projects/${project.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    router.push(`/projects/${project.id}`);
-                  }
-                }}
-                className="w-full text-left cursor-pointer space-y-3"
-              >
+              <div className="w-full space-y-3 text-left">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -1648,12 +1663,13 @@ export function ProjectsPage({
                     </div>
                     <div
                       className="mt-1 flex items-center gap-2 text-xs text-[var(--text-secondary)]"
+                      data-project-card-action="address"
                       onClick={(event) => event.stopPropagation()}
                     >
                       <span className="truncate">{project.address ?? t("common.noAddressSet")}</span>
                       {project.address ? <CopyAddressButton address={project.address} /> : null}
                     </div>
-                    <div className="mt-2">
+                    <div className="mt-2" data-project-card-action="navigation">
                       <ProjectNavigationActions
                         projectName={project.name}
                         address={project.address}
