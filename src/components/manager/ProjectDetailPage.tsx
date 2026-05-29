@@ -63,6 +63,7 @@ import {
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import {
   getMaterialIndicatorState,
+  getMaterialTaskLinks,
   getMaterialTaskNeededDate,
   getMaterialTaskUrgency,
   hasDriverSeenMaterialTask,
@@ -2257,6 +2258,7 @@ export function ProjectDetailPage({
               const materialUrgency = getMaterialTaskUrgency(task);
               const materialNeededDate = getMaterialTaskNeededDate(task);
               const materialDriverSeen = hasDriverSeenMaterialTask(task);
+              const materialLinks = materialTask ? getMaterialTaskLinks(task) : [];
               const rowAudit = getManagerTaskRowAuditText(
                 {
                   ...task,
@@ -2338,6 +2340,21 @@ export function ProjectDetailPage({
                 </div>
                 {task.description ? (
                   <p className="mt-3 text-sm text-[var(--text-secondary)]">{task.description}</p>
+                ) : null}
+                {materialLinks.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {materialLinks.map((link) => (
+                      <a
+                        key={link}
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-[var(--brand-yellow)]"
+                      >
+                        {t("materials.orderLinkLabel")}
+                      </a>
+                    ))}
+                  </div>
                 ) : null}
                 {materialTask ? (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium text-[var(--text-muted)]">
@@ -3499,6 +3516,7 @@ type MaterialItem = {
   receiptAttachedById: string | null;
   receiptAttachedByName: string | null;
   receipt: ViewerMediaItem | null;
+  links: string[];
 };
 
 type MaterialOrderGroup = {
@@ -3508,6 +3526,7 @@ type MaterialOrderGroup = {
   createdAt: string;
   priority: TaskPriority;
   note: string;
+  link: string | null;
   items: MaterialItem[];
 };
 
@@ -3536,6 +3555,7 @@ function MaterialsSection({
   const [orderNeededDate, setOrderNeededDate] = useState("");
   const [orderPriority, setOrderPriority] = useState<TaskPriority>("medium");
   const [orderNote, setOrderNote] = useState("");
+  const [orderLink, setOrderLink] = useState("");
   const [orderSpecPasteText, setOrderSpecPasteText] = useState("");
   const [orderSpecFeedback, setOrderSpecFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [orderFiles, setOrderFiles] = useState<File[]>([]);
@@ -3660,6 +3680,7 @@ function MaterialsSection({
         typeof row.metadata?.receipt_id === "string"
           ? receiptById.get(row.metadata.receipt_id) ?? null
           : null,
+      links: getMaterialTaskLinks(row),
     }));
   }, [supabase, projectId, managerId, knownProfileNames, t]);
 
@@ -3691,6 +3712,7 @@ function MaterialsSection({
     setOrderNeededDate("");
     setOrderPriority("medium");
     setOrderNote("");
+    setOrderLink("");
     setOrderSpecPasteText("");
     setOrderSpecFeedback(null);
     setOrderFiles([]);
@@ -3804,6 +3826,7 @@ function MaterialsSection({
     }
     const orderId = createClientUuid();
     const trimmedOrderNote = orderNote.trim();
+    const trimmedOrderLink = orderLink.trim();
     const driverUserId = orderAssignedTo || null;
     const neededDate = orderNeededDate || null;
     const urgency: MaterialTaskUrgency =
@@ -3838,6 +3861,7 @@ function MaterialsSection({
             unit: row.unit,
             orderId,
             orderNote: trimmedOrderNote,
+            orderLink: trimmedOrderLink,
             orderSize: materialRows.length,
             materialItems,
           },
@@ -3872,9 +3896,11 @@ function MaterialsSection({
       const orderId = typeof item.metadata.order_id === "string" ? item.metadata.order_id : null;
       const groupKey = orderId ?? `legacy-${item.id}`;
       const note = typeof item.metadata.order_note === "string" ? item.metadata.order_note : "";
+      const link = item.links[0] ?? null;
       const current = grouped.get(groupKey);
       if (current) {
         current.items.push(item);
+        if (!current.link && link) current.link = link;
         if (new Date(item.createdAt).getTime() < new Date(current.createdAt).getTime()) {
           current.createdAt = item.createdAt;
         }
@@ -3886,6 +3912,7 @@ function MaterialsSection({
           createdAt: item.createdAt,
           priority: item.priority,
           note,
+          link,
           items: [item],
         });
       }
@@ -4094,6 +4121,11 @@ function MaterialsSection({
                         {group.note}
                       </p>
                     ) : null}
+                    {group.link ? (
+                      <p className="mt-1 truncate text-xs font-semibold text-[var(--brand-yellow)]">
+                        {t("materials.orderLinkLabel")}
+                      </p>
+                    ) : null}
                   </div>
                 }
               >
@@ -4101,6 +4133,16 @@ function MaterialsSection({
                   <p className="mb-3 whitespace-pre-wrap rounded-[var(--radius-md)] bg-[var(--bg-card)] p-3 text-xs text-[var(--text-secondary)]">
                     {group.note}
                   </p>
+                ) : null}
+                {group.link ? (
+                  <a
+                    href={group.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mb-3 inline-flex text-xs font-semibold text-[var(--brand-yellow)]"
+                  >
+                    {t("materials.orderLinkLabel")}
+                  </a>
                 ) : null}
                 <div className="space-y-2">
                   {group.items.map((item) => {
@@ -4277,6 +4319,13 @@ function MaterialsSection({
                 className="min-h-[82px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
               />
             </div>
+            <input
+              type="url"
+              value={orderLink}
+              onChange={(event) => setOrderLink(event.target.value)}
+              placeholder={t("materials.orderLinkPlaceholder")}
+              className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+            />
             <div className="grid gap-2 rounded-[var(--radius-md)] border border-dashed border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>

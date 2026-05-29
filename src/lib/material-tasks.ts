@@ -35,6 +35,7 @@ export interface MaterialTaskMetadataInput {
   unit?: string | null;
   orderId?: string | null;
   orderNote?: string | null;
+  orderLink?: string | null;
   orderSize?: number | null;
   materialItems?: MaterialTaskItem[] | null;
 }
@@ -56,6 +57,19 @@ function readMetadata(value: unknown): Record<string, unknown> {
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+export function normalizeMaterialTaskLink(value: unknown): string | null {
+  const raw = readString(value);
+  if (!raw) return null;
+  const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const url = new URL(withProtocol);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function readStringOrNumber(value: unknown): string | number | null {
@@ -130,6 +144,21 @@ export function getMaterialTaskItems(task: MaterialTaskLike): MaterialTaskItem[]
   const metadata = readMetadata(task.metadata);
   if (!Array.isArray(metadata.materialItems)) return [];
   return normalizeMaterialTaskItems(metadata.materialItems);
+}
+
+export function getMaterialTaskLinks(task: MaterialTaskLike): string[] {
+  const metadata = readMetadata(task.metadata);
+  const links = new Set<string>();
+  const maybeLinks = metadata.materialLinks;
+  if (Array.isArray(maybeLinks)) {
+    for (const value of maybeLinks) {
+      const link = normalizeMaterialTaskLink(value);
+      if (link) links.add(link);
+    }
+  }
+  const orderLink = normalizeMaterialTaskLink(metadata.order_link ?? metadata.orderLink);
+  if (orderLink) links.add(orderLink);
+  return Array.from(links);
 }
 
 export function hasDriverSeenMaterialTask(task: MaterialTaskLike): boolean {
@@ -220,6 +249,7 @@ export function buildMaterialTaskMetadata(input: MaterialTaskMetadataInput): Rec
   const neededDate = normalizeDate(input.neededDate);
   const driverUserId = readString(input.driverUserId);
   const materialItems = normalizeMaterialTaskItems(input.materialItems);
+  const orderLink = normalizeMaterialTaskLink(input.orderLink);
   return {
     ...(input.base ?? {}),
     category: "material",
@@ -236,6 +266,8 @@ export function buildMaterialTaskMetadata(input: MaterialTaskMetadataInput): Rec
     unit: input.unit ?? null,
     order_id: input.orderId ?? null,
     order_note: input.orderNote ?? null,
+    order_link: orderLink,
+    materialLinks: orderLink ? [orderLink] : null,
     order_size: input.orderSize ?? null,
     materialItems: materialItems.length > 0 ? materialItems : null,
     schedule_kind: "delivery",

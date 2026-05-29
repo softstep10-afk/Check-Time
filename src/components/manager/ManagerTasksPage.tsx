@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
@@ -10,6 +10,7 @@ import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { useTranslation } from "@/lib/i18n";
 import { DateField } from "@/components/shared/DateField";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
+import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
 import {
   buildProfileNameMap,
   getCompletionMediaIds,
@@ -20,6 +21,7 @@ import {
 import {
   getAttachmentMediaIds,
   mergeTaskAttachmentRefs,
+  uploadTaskAttachment,
   type TaskAttachmentRef,
 } from "@/lib/task-attachments";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
@@ -28,6 +30,7 @@ import { formatDateTime } from "@/lib/worker-utils";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import {
   getMaterialTaskNeededDate,
+  getMaterialTaskLinks,
   getMaterialTaskUrgency,
   hasDriverSeenMaterialTask,
   isMaterialTask,
@@ -114,7 +117,9 @@ export function ManagerTasksPage({
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "error" | "info">("success");
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
-  const [pendingClearDone, setPendingClearDone] = useState(false);
+  const [createTaskAttachmentFiles, setCreateTaskAttachmentFiles] = useState<File[]>([]);
+  const createTaskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
+  const [hideCompletedTasks, setHideCompletedTasks] = useState(false);
 
   const [filterProject, setFilterProject] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
@@ -242,13 +247,10 @@ export function ManagerTasksPage({
     return tasks.filter((task) => {
       if (filterProject && task.project_id !== filterProject) return false;
       if (filterStatus && getEffectiveTaskStatus(task) !== filterStatus) return false;
+      if (!filterStatus && hideCompletedTasks && isEffectiveCompletedTask(task)) return false;
       return true;
     });
-  }, [tasks, filterProject, filterStatus]);
-  const completedTasks = useMemo(
-    () => tasks.filter(isEffectiveCompletedTask),
-    [tasks],
-  );
+  }, [tasks, filterProject, filterStatus, hideCompletedTasks]);
 
   function priorityLabel(priority: TaskPriority): string {
     if (priority === "urgent") return t("tasks.priorityUrgent");
@@ -290,6 +292,37 @@ export function ManagerTasksPage({
 
     setBusyKey("create-task");
     setMessage("");
+    const uploadedMediaIds: string[] = [];
+    const uploadedAttachmentRefs: TaskAttachmentRef[] = [];
+    for (const file of createTaskAttachmentFiles) {
+      if (!file || file.size === 0) {
+        setMessage(t("tasks.attachmentCloudFallback"));
+        setMessageTone("error");
+        setBusyKey(null);
+        return;
+      }
+      const validation = validateUploadFile(file);
+      if (!validation.ok) {
+        setMessage(t("tasks.attachmentCloudFallback"));
+        setMessageTone("error");
+        setBusyKey(null);
+        return;
+      }
+      const uploadResult = await uploadTaskAttachment(supabase, {
+        orgId,
+        projectId: projectId || null,
+        uploadedBy: managerId,
+        file,
+      });
+      if (!uploadResult.ok) {
+        setMessage(t("tasks.attachmentUploadFailed"));
+        setMessageTone("error");
+        setBusyKey(null);
+        return;
+      }
+      uploadedMediaIds.push(uploadResult.mediaId);
+      uploadedAttachmentRefs.push(uploadResult.attachment);
+    }
     const response = await fetch("/api/manager/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -301,6 +334,7 @@ export function ManagerTasksPage({
         priority,
         dueDate: dueDate || null,
         source: "manager_tasks_page",
+        attachmentMediaIds: uploadedMediaIds,
       }),
     });
     const result = (await response.json().catch(() => ({}))) as {
@@ -329,7 +363,16 @@ export function ManagerTasksPage({
         : null,
     };
     setTasks((prev) => [nextRow, ...prev.filter((existing) => existing.id !== task.id)]);
+    if (uploadedAttachmentRefs.length > 0) {
+      setAttachmentMediaList((current) =>
+        mergeTaskAttachmentRefs(current, uploadedAttachmentRefs),
+      );
+    }
     form.reset();
+    setCreateTaskAttachmentFiles([]);
+    if (createTaskAttachmentInputRef.current) {
+      createTaskAttachmentInputRef.current.value = "";
+    }
     setMessage(t("tasks.created"));
     setMessageTone("success");
     router.refresh();
@@ -410,7 +453,6 @@ export function ManagerTasksPage({
   async function handleDelete(taskId: string) {
     if (pendingDeleteTaskId !== taskId) {
       setPendingDeleteTaskId(taskId);
-      setPendingClearDone(false);
       setMessage(t("tasks.deleteSecondClick"));
       setMessageTone("info");
       return;
@@ -450,53 +492,6 @@ export function ManagerTasksPage({
             completed_at: previousTask.completed_at,
           }
         : null,
-      afterData: {
-        deleted_at: deletedAt,
-      },
-    });
-  }
-
-  async function handleClearCompleted() {
-    const ids = completedTasks.map((task) => task.id);
-    if (ids.length === 0) return;
-
-    if (!pendingClearDone) {
-      setPendingClearDone(true);
-      setPendingDeleteTaskId(null);
-      setMessage(
-        t("tasks.clearCompletedSecondClick").replace("{count}", String(ids.length)),
-      );
-      setMessageTone("info");
-      return;
-    }
-
-    setBusyKey("clear-completed");
-    const deletedAt = new Date().toISOString();
-    const { error } = await supabase
-      .from("tasks")
-      .update({ deleted_at: deletedAt })
-      .in("id", ids);
-    setBusyKey(null);
-    if (error) {
-      setMessage(error.message);
-      setMessageTone("error");
-      return;
-    }
-    setPendingClearDone(false);
-    setTasks((prev) => prev.filter((task) => !isEffectiveCompletedTask(task)));
-    setMessage(t("tasks.completedCleared").replace("{count}", String(ids.length)));
-    setMessageTone("success");
-    void logAudit({
-      orgId,
-      actorId: managerId,
-      actorName: managerName,
-      actorRole: managerRole,
-      action: "tasks_completed_cleared",
-      targetType: "task",
-      beforeData: {
-        task_ids: ids,
-        count: ids.length,
-      },
       afterData: {
         deleted_at: deletedAt,
       },
@@ -633,6 +628,29 @@ export function ManagerTasksPage({
                 className="min-h-12 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
               />
             </div>
+            <div className="space-y-2">
+              <input
+                ref={createTaskAttachmentInputRef}
+                type="file"
+                multiple
+                accept={ACCEPT_ALL_UPLOADS}
+                data-testid="manager-create-task-attachments"
+                onChange={(event) =>
+                  setCreateTaskAttachmentFiles(
+                    event.target.files ? Array.from(event.target.files) : [],
+                  )
+                }
+                className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+              />
+              {createTaskAttachmentFiles.length > 0 ? (
+                <div className="text-[10px] text-[var(--text-muted)]">
+                  {createTaskAttachmentFiles.length} {t("tasks.attachmentsCount")}
+                </div>
+              ) : null}
+              <div className="text-[10px] font-semibold text-[var(--text-muted)]">
+                {t("tasks.attachmentInlineLabel")}
+              </div>
+            </div>
             <button
               type="submit"
               disabled={busyKey === "create-task"}
@@ -652,19 +670,14 @@ export function ManagerTasksPage({
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => void handleClearCompleted()}
-                disabled={completedTasks.length === 0 || busyKey === "clear-completed"}
-                className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                onClick={() => setHideCompletedTasks((current) => !current)}
+                className="rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
                 style={{
-                  borderColor: pendingClearDone ? "rgba(212, 81, 94, 0.36)" : "var(--border-default)",
-                  color: pendingClearDone ? "var(--red)" : "var(--text-primary)",
+                  borderColor: hideCompletedTasks ? "rgba(191, 162, 52, 0.5)" : "var(--border-default)",
+                  color: hideCompletedTasks ? "var(--brand-yellow)" : "var(--text-primary)",
                 }}
               >
-                {busyKey === "clear-completed"
-                  ? t("common.saving")
-                  : pendingClearDone
-                    ? t("tasks.confirmClearCompleted")
-                    : t("tasks.clearCompleted")}
+                {hideCompletedTasks ? t("tasks.showCompleted") : t("tasks.clearCompleted")}
               </button>
               <select
                 value={filterProject}
@@ -717,6 +730,7 @@ export function ManagerTasksPage({
                 const materialUrgency = getMaterialTaskUrgency(task);
                 const materialNeededDate = getMaterialTaskNeededDate(task);
                 const materialDriverSeen = hasDriverSeenMaterialTask(task);
+                const materialLinks = materialTask ? getMaterialTaskLinks(task) : [];
                 const rowAudit = getManagerTaskRowAuditText(task, workerNameById, {
                   unassigned: t("tasks.unassigned"),
                   unknown: t("tasks.unknown"),
@@ -838,6 +852,21 @@ export function ManagerTasksPage({
                           <p className="mt-2 line-clamp-2 text-xs text-[var(--text-muted)]">
                             {task.description}
                           </p>
+                        ) : null}
+                        {materialLinks.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {materialLinks.map((link) => (
+                              <a
+                                key={link}
+                                href={link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-semibold text-[var(--brand-yellow)]"
+                              >
+                                {t("materials.orderLinkLabel")}
+                              </a>
+                            ))}
+                          </div>
                         ) : null}
                         {(() => {
                           const refs = getAttachmentMediaIds(task)

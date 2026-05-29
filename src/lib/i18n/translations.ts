@@ -1915,7 +1915,8 @@ export const translations = {
     en: "Click the same delete button again to move this task to trash.",
     ru: "Нажмите ту же кнопку удаления ещё раз, чтобы перенести задачу в корзину.",
   },
-  "tasks.clearCompleted": { en: "Clear completed", ru: "Убрать выполненные" },
+  "tasks.clearCompleted": { en: "Hide completed", ru: "Убрать выполненные" },
+  "tasks.showCompleted": { en: "Show completed", ru: "Показать выполненные" },
   "tasks.confirmClearCompleted": { en: "Confirm clear completed", ru: "Подтвердить уборку" },
   "tasks.clearCompletedSecondClick": {
     en: "This will move {count} completed task(s) to trash. Click Confirm clear completed to continue.",
@@ -2223,6 +2224,11 @@ export const translations = {
   "materials.specDuplicatesCleaned": { en: "Repeated text cleaned.", ru: "Повторы очищены." },
   "materials.specParseEmpty": { en: "No material rows found.", ru: "Не нашёл строк материалов." },
   "materials.addFile": { en: "Add file", ru: "Добавить файл" },
+  "materials.orderLinkPlaceholder": {
+    en: "Link to material/specification (optional)",
+    ru: "Ссылка на материал/спецификацию (необязательно)",
+  },
+  "materials.orderLinkLabel": { en: "Open material link", ru: "Открыть ссылку материала" },
   "materials.addFileHint": {
     en: "Attach Excel, CSV, PDF, photo, or other supported project document.",
     ru: "Прикрепите Excel, CSV, PDF, фото или другой поддерживаемый документ.",

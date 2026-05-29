@@ -6,12 +6,14 @@ import {
   getMaterialIndicatorState,
   getMaterialTaskDriverId,
   getMaterialTaskItems,
+  getMaterialTaskLinks,
   getMaterialTaskNeededDate,
   getMaterialTaskScheduleDate,
   getMaterialTaskUrgency,
   hasDriverSeenMaterialTask,
   hasOpenMaterialRequest,
   isMaterialTask,
+  normalizeMaterialTaskLink,
   shouldShowInDriverMaterialList,
 } from "@/lib/material-tasks";
 
@@ -125,6 +127,34 @@ describe("material task helpers", () => {
     ]);
   });
 
+  it("normalizes and dedupes safe material request links", () => {
+    expect(normalizeMaterialTaskLink("supplier.example/spec.pdf")).toBe(
+      "https://supplier.example/spec.pdf",
+    );
+    expect(normalizeMaterialTaskLink("https://supplier.example/spec.pdf")).toBe(
+      "https://supplier.example/spec.pdf",
+    );
+    expect(normalizeMaterialTaskLink("javascript:alert(1)")).toBeNull();
+    expect(
+      getMaterialTaskLinks(
+        task({
+          metadata: {
+            category: "material",
+            order_link: "supplier.example/spec.pdf",
+            materialLinks: [
+              "https://supplier.example/spec.pdf",
+              "http://supplier.example/quote",
+              "javascript:alert(1)",
+            ],
+          },
+        }),
+      ),
+    ).toEqual([
+      "https://supplier.example/spec.pdf",
+      "http://supplier.example/quote",
+    ]);
+  });
+
   it("builds open queue material metadata when no assignee is selected", () => {
     expect(
       buildMaterialTaskMetadata({
@@ -145,6 +175,22 @@ describe("material task helpers", () => {
       schedule_scope: "material",
       schedule_delivery_status: "open",
       delivery_available_to: "team",
+    });
+  });
+
+  it("stores material request links in existing task metadata", () => {
+    expect(
+      buildMaterialTaskMetadata({
+        materialName: "gypsum",
+        urgency: "normal",
+        requestedBy: "manager-1",
+        driverUserId: null,
+        projectId: "project-1",
+        orderLink: "supplier.example/spec.pdf",
+      }),
+    ).toMatchObject({
+      order_link: "https://supplier.example/spec.pdf",
+      materialLinks: ["https://supplier.example/spec.pdf"],
     });
   });
 

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-29T07:34:40.674Z",
+  "generatedAt": "2026-05-29T08:08:04.479Z",
   "rows": [
     {
       "path": "src/app/api/ai/actions/create-project/route.ts",
@@ -411,6 +411,28 @@
       ],
       "elevatedClientEvidence": [
         "createAdminClient"
+      ],
+      "authProfileGuardEvidence": [
+        "role checks",
+        "profile lookup",
+        "same-org guard helper"
+      ],
+      "orgResourceGuardEvidence": [
+        "org/company guard"
+      ],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/app/api/tasks/[id]/attachments/route.ts",
+      "classification": "task/message sensitive",
+      "mutationEvidence": [
+        ".update(",
+        "revalidatePath"
+      ],
+      "elevatedClientEvidence": [
+        "createAdminClient",
+        "service role"
       ],
       "authProfileGuardEvidence": [
         "role checks",

@@ -30,4 +30,10 @@ describe("manager material task route guard", () => {
     expect(routeSource).toContain("attachment_media_ids: safeAttachmentMediaIds");
     expect(routeSource).toContain("materialItems: material.materialItems");
   });
+
+  it("preserves material request links in task metadata without schema changes", () => {
+    expect(routeSource).toContain("orderLink: readText(input.orderLink)");
+    expect(routeSource).toContain("orderLink: material.orderLink || null");
+    expect(routeSource).not.toContain("alter table");
+  });
 });

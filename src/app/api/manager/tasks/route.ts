@@ -18,7 +18,7 @@ import { isEligibleMaterialTaker } from "@/lib/material-driver-permissions";
 import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { TaskAttachmentRef } from "@/lib/task-attachments";
+import { linkMediaToTask, type TaskAttachmentRef } from "@/lib/task-attachments";
 import type { TaskPriority } from "@/types/database";
 
 function readText(value: unknown): string {
@@ -41,6 +41,7 @@ function readMaterialPayload(value: unknown): {
   unit: string;
   orderId: string;
   orderNote: string;
+  orderLink: string;
   orderSize: number | null;
   materialItems: MaterialTaskItem[];
 } {
@@ -55,6 +56,7 @@ function readMaterialPayload(value: unknown): {
       unit: "",
       orderId: "",
       orderNote: "",
+      orderLink: "",
       orderSize: null,
       materialItems: [],
     };
@@ -74,6 +76,7 @@ function readMaterialPayload(value: unknown): {
     unit: readText(input.unit),
     orderId: readText(input.orderId),
     orderNote: readText(input.orderNote),
+    orderLink: readText(input.orderLink),
     orderSize,
     materialItems: normalizeMaterialTaskItems(input.materialItems),
   };
@@ -218,12 +221,14 @@ export async function POST(request: NextRequest) {
               unit: material.unit || null,
               orderId: material.orderId || null,
               orderNote: material.orderNote || material.notes || null,
+              orderLink: material.orderLink || null,
               orderSize: material.orderSize,
               materialItems: material.materialItems,
             })
           : {}),
       },
     });
+    await linkMediaToTask(adminClient, task.id, safeAttachmentMediaIds);
 
     revalidatePath("/tasks");
     revalidatePath("/command-center");

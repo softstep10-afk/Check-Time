@@ -63,6 +63,7 @@ Before manual QA for any new change:
 ## Tasks
 
 - Manager creates a normal task.
+- In `Назначить задачу`, attach a PDF/photo/video/Word/Excel/CSV before saving and confirm the task is not marked created until upload and save complete.
 - Worker sees the task.
 - Worker opens the task.
 - In task details, confirm `Добавить файл` is visible.
@@ -72,6 +73,8 @@ Before manual QA for any new change:
 - Confirm task attachments remain on the task and do not appear as generic project media.
 - Worker can take the task.
 - Worker can mark the task done.
+- In manager task filters, press `Убрать выполненные`, then press `Показать выполненные` and confirm completed tasks return.
+- Select status `Готово` and confirm completed tasks are visible even after using `Убрать выполненные`.
 - Completion form closes after a successful done save.
 - The task details modal does not open automatically after completion.
 - Worker can still manually open task details with `Открыть детали`.
@@ -175,6 +178,7 @@ Before manual QA for any new change:
 - Edit one position, remove one position, and add one manually with `Добавить позицию`.
 - Attach an Excel/CSV specification file.
 - Attach a PDF/photo specification file.
+- Add a material/specification URL in the link field and confirm owner/manager/worker/driver can open it from the material task.
 - Confirm saving with no selected person creates an open shared material task.
 - Confirm the optional assignee dropdown shows eligible field users only: workers, drivers, and configured supervisor-drivers.
 - Confirm Sanya can remain supervisor-driver through `MATERIAL_DRIVER_PROFILE_IDS` when focused driver behavior is needed.

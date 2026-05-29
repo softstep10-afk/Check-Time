@@ -26,6 +26,15 @@ describe("manager material request UI source", () => {
     expect(projectDetailSource).toContain("ACCEPT_ALL_UPLOADS");
   });
 
+  it("lets material requests carry an optional link alongside files and parsed rows", () => {
+    expect(projectDetailSource).toContain("const [orderLink, setOrderLink] = useState(\"\")");
+    expect(projectDetailSource).toContain("const trimmedOrderLink = orderLink.trim()");
+    expect(projectDetailSource).toContain("orderLink: trimmedOrderLink");
+    expect(projectDetailSource).toContain("materials.orderLinkPlaceholder");
+    expect(projectDetailSource).toContain("getMaterialTaskLinks");
+    expect(projectDetailSource).toContain("materials.orderLinkLabel");
+  });
+
   it("keeps save enabled from name-only rows after parsing or manual add", () => {
     expect(projectDetailSource).toContain("const hasNamedOrderRow = orderRows.some");
     expect(projectDetailSource).toContain("disabled={!hasNamedOrderRow || savingOrder}");

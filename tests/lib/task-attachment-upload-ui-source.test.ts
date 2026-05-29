@@ -33,11 +33,28 @@ describe("task attachment upload surfaces", () => {
     expect(managerProjectSource).toContain("<TaskAttachmentUploader");
   });
 
+  it("lets managers attach files while creating tasks without changing project media", () => {
+    expect(managerTasksSource).toContain('data-testid="manager-create-task-attachments"');
+    expect(managerTasksSource).toContain("setCreateTaskAttachmentFiles");
+    expect(managerTasksSource).toContain("uploadTaskAttachment(supabase");
+    expect(managerTasksSource).toContain("attachmentMediaIds: uploadedMediaIds");
+    expect(managerTasksSource).toContain("mergeTaskAttachmentRefs(current, uploadedAttachmentRefs)");
+    expect(managerTasksSource).toContain("ACCEPT_ALL_UPLOADS");
+  });
+
   it("keeps task attachments attached to tasks instead of generic project media", () => {
     expect(managerProjectSource).toContain("metadata.kind === \"project_media\"");
     expect(projectMediaSource).toContain("<TaskAttachmentList items={filteredItems} />");
     expect(managerProjectSource).toContain("getAttachmentMediaIds");
     expect(managerTasksSource).toContain("getAttachmentMediaIds");
+  });
+
+  it("links create-time task attachments to the created task on the server", () => {
+    const managerTaskRouteSource = readSource("src/app/api/manager/tasks/route.ts");
+    expect(managerTaskRouteSource).toContain("assertTaskAttachmentMediaTargets");
+    expect(managerTaskRouteSource).toContain("attachment_media_ids: safeAttachmentMediaIds");
+    expect(managerTaskRouteSource).toContain("attachment_refs: safeAttachmentRefs");
+    expect(managerTaskRouteSource).toContain("linkMediaToTask(adminClient, task.id, safeAttachmentMediaIds)");
   });
 });
 

@@ -77,4 +77,38 @@ describe("WorkerTaskDetailModal completion mode", () => {
     expect(html).toContain("Screws");
     expect(html).toContain("deck screws");
   });
+
+  it("renders material request links from metadata", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(
+        I18nProvider,
+        null,
+        React.createElement(WorkerTaskDetailModal, {
+          task: {
+            id: "task-1",
+            project_id: "project-1",
+            projectName: "Home",
+            assigned_to: "worker-1",
+            title: "Material run",
+            description: null,
+            priority: "medium",
+            status: "pending",
+            due_date: null,
+            metadata: {
+              category: "material",
+              order_link: "https://supplier.example/spec.pdf",
+            },
+          },
+          profileId: "worker-1",
+          busy: false,
+          onClose: vi.fn(),
+          onStart: vi.fn(),
+          onDone: vi.fn(),
+        }),
+      ),
+    );
+
+    expect(html).toContain("https://supplier.example/spec.pdf");
+    expect(html).toContain("Открыть ссылку материала");
+  });
 });

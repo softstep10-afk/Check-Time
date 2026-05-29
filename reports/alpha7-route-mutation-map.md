@@ -29,6 +29,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/app/api/payroll/export/route.ts` | read-only | yes | confirmed guarded | role checks, profile lookup, same-org guard helper |
 | `src/app/api/payroll/run/route.ts` | payroll/archive/GPS sensitive | yes | confirmed guarded | .insert(, .update(, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/schedule/route.ts` | elevated mutation | no | confirmed guarded | .insert(, .update(, createAdminClient, role checks, profile lookup, same-org guard helper, org/company guard |
+| `src/app/api/tasks/[id]/attachments/route.ts` | task/message sensitive | no | confirmed guarded | .update(, revalidatePath, createAdminClient, service role, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/team/create/route.ts` | team/auth sensitive | yes | confirmed guarded | auth.admin, .insert(, createAdminClient, auth.admin, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/team/delete/route.ts` | team/auth sensitive | yes | confirmed guarded | auth.admin, .update(, createAdminClient, auth.admin, role checks, profile lookup, same-org guard helper, org/company guard |
 | `src/app/api/team/pay-worker/route.ts` | team/auth sensitive | yes | confirmed guarded | .insert(, .update(, role checks, profile lookup, same-org guard helper, org/company guard |
