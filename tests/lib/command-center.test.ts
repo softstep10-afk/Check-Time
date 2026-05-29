@@ -77,16 +77,23 @@ describe("buildCommandCenterQueue", () => {
 });
 
 describe("Command Center layout limits", () => {
-  it("keeps live operations first and limits visible operations to six", () => {
+  it("puts team messages before live operations and limits visible operations to six", () => {
+    const messagesIndex = commandCenterSource.indexOf("{text.messagesTitle}");
     const liveOpsIndex = commandCenterSource.indexOf("{text.liveOps}");
     const metricIndex = commandCenterSource.indexOf("label: text.openTasks");
     const dispatchIndex = commandCenterSource.indexOf("{text.dispatchTitle}");
 
+    expect(messagesIndex).toBeGreaterThanOrEqual(0);
     expect(liveOpsIndex).toBeGreaterThanOrEqual(0);
+    expect(messagesIndex).toBeLessThan(liveOpsIndex);
     expect(liveOpsIndex).toBeLessThan(metricIndex);
     expect(liveOpsIndex).toBeLessThan(dispatchIndex);
     expect(commandCenterSource).toContain("visibleLiveWorkers = liveWorkers.slice(0, COMMAND_CENTER_PREVIEW_LIMIT)");
-    expect(commandCenterSource).toContain("visibleLiveWorkers.map");
+    expect(commandCenterSource).toContain("hiddenLiveWorkers = liveWorkers.slice(COMMAND_CENTER_PREVIEW_LIMIT)");
+    expect(commandCenterSource).toContain("visibleLiveWorkers.map(renderLiveWorkerCard)");
+    expect(commandCenterSource).toContain("hiddenLiveWorkers.map(renderLiveWorkerCard)");
+    expect(commandCenterSource).toContain("text.showAllPeople");
+    expect(commandCenterSource).toContain("text.collapse");
   });
 
   it("moves the owner attention queue near the bottom and limits it to six", () => {
@@ -111,6 +118,14 @@ describe("Command Center layout limits", () => {
     expect(commandCenterSource).toContain("historyLimit={COMMAND_CENTER_RECENT_MESSAGE_LIMIT}");
     expect(bulkComposerSource).toContain("historyLimit = 20");
     expect(bulkComposerSource).toContain(".limit(historyLimit)");
+  });
+
+  it("renders Jarvis next actions in a compact card style without removing actions", () => {
+    expect(commandCenterSource).toContain('data-testid="jarvis-next-actions-compact"');
+    expect(commandCenterSource).toContain('<section className="surface-card p-3"');
+    expect(commandCenterSource).toContain("line-clamp-1 text-[11px]");
+    expect(commandCenterSource).toContain("aiNextActions.map");
+    expect(commandCenterSource).toContain("href={aiPromptHref(item.prompt)}");
   });
 
   it("keeps protected Command Center blocks mounted", () => {

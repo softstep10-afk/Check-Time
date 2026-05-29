@@ -313,6 +313,10 @@ Live task/message statuses:
 
 - Projects page speed feels acceptable.
 - Command Center speed feels acceptable.
+- Command Center opens with `Сообщения команде` as the first main working block.
+- `Кто на смене` shows no more than 6 people by default.
+- If more than 6 people are on shift, `Показать всех` expands the full list and `Свернуть` collapses it.
+- `Следующие действия Jarvis` is compact but all suggested actions still open Jarvis.
 - Messages page speed feels acceptable.
 - Tasks page speed feels acceptable.
 - No obvious refresh storm after sending messages or updating tasks.

@@ -63,6 +63,8 @@ const COPY = {
     openProject: "Open project",
     openTaskBoard: "Open full task board",
     showAll: "Show all",
+    showAllPeople: "Show everyone",
+    collapse: "Collapse",
     openProjects: "Create task in project",
     openSchedule: "Open schedule",
     openPayroll: "Open payroll",
@@ -123,6 +125,8 @@ const COPY = {
     openProject: "Открыть проект",
     openTaskBoard: "Открыть полную доску",
     showAll: "Показать все",
+    showAllPeople: "Показать всех",
+    collapse: "Свернуть",
     openProjects: "Создать задачу в проекте",
     openSchedule: "Открыть расписание",
     openPayroll: "Открыть зарплату",
@@ -519,6 +523,7 @@ export default async function CommandCenterPage() {
       return right.durationMinutes - left.durationMinutes;
     });
   const visibleLiveWorkers = liveWorkers.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
+  const hiddenLiveWorkers = liveWorkers.slice(COMMAND_CENTER_PREVIEW_LIMIT);
   const ownerAttentionItems = [...liveRisks, ...closedShiftIssues];
   const visibleOwnerAttentionItems = ownerAttentionItems.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
   const visibleDispatchTasks = dispatchTasks.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
@@ -578,6 +583,57 @@ export default async function CommandCenterPage() {
           : `Jarvis, review ${project.name}. No one is on site but it has open tasks. What should I do next?`,
     })),
   ].slice(0, 6);
+  const renderLiveWorkerCard = (worker: (typeof liveWorkers)[number]) => {
+    const reviewColor = SHIFT_REVIEW_COLOR[worker.review.status];
+    const gpsColor = GPS_FRESHNESS_COLOR[worker.freshness.status];
+    return (
+      <Link
+        key={worker.id}
+        href={`/team/${worker.profileId}`}
+        className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 transition hover:border-[var(--brand-yellow)]"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-[var(--text-primary)]">
+                {worker.profileName}
+              </span>
+              <span className="rounded-[var(--radius-pill)] bg-[rgba(105,231,255,0.08)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ai-cyan-bright)]">
+                {worker.profileRole}
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+              <span className="inline-flex items-center gap-1">
+                <MapPin size={12} className="text-[var(--brand-yellow)]" />
+                {worker.projectName}
+              </span>
+              <span>{formatDurationCompact(worker.durationMinutes)}</span>
+            </div>
+            <div className="mt-2 text-xs text-[var(--text-secondary)]">
+              <span className="font-semibold text-[var(--text-muted)]">
+                {text.currentTask}:{" "}
+              </span>
+              {worker.task ? worker.task.title : text.noCurrentTask}
+            </div>
+          </div>
+          <div className="grid shrink-0 gap-1 text-right">
+            <span
+              className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+              style={{ background: `${gpsColor}1f`, color: gpsColor }}
+            >
+              {gpsFreshnessLabel[worker.freshness.status]} · {formatGpsAge(worker.freshness.ageMs)}
+            </span>
+            <span
+              className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
+              style={{ background: `${reviewColor}1f`, color: reviewColor }}
+            >
+              {shiftReviewLabel[worker.review.status]}
+            </span>
+          </div>
+        </div>
+      </Link>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-6 p-5">
@@ -607,6 +663,106 @@ export default async function CommandCenterPage() {
         </div>
       </section>
 
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-bold text-[var(--text-primary)]">{text.messagesTitle}</h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">{text.messagesDesc}</p>
+          </div>
+          <BulkMessageComposer
+            orgId={data.manager.org_id}
+            senderId={data.manager.id}
+            senderName={data.manager.name}
+            senderRole={data.manager.role}
+            crew={crew}
+            projects={projects}
+            historyLimit={COMMAND_CENTER_RECENT_MESSAGE_LIMIT}
+            embedded
+          />
+        </div>
+
+        <div className="space-y-5">
+          <section className="surface-card p-4">
+            <div className="flex items-start gap-3">
+              <span
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                style={{ background: "rgba(191, 162, 52, 0.12)" }}
+              >
+                <RadioTower size={18} style={{ color: "var(--brand-yellow)" }} />
+              </span>
+              <div>
+                <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                  {text.taskPulse}
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                  {text.taskPulseDesc}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              {topTasks.length === 0 ? (
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+                  {text.noPriorityTasks}
+                </div>
+              ) : (
+                topTasks.map((task) => {
+                  const accent = priorityColor[task.priority];
+                  return (
+                    <Link
+                      key={task.id}
+                      href={task.project_id ? `/projects/${task.project_id}#tasks` : "/tasks"}
+                      className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 transition hover:border-[var(--brand-yellow)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
+                            {task.title}
+                          </div>
+                          <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                            {task.projectName ?? text.noProject} · {task.assigneeName ?? text.noAssignee}
+                          </div>
+                        </div>
+                        <span
+                          className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase"
+                          style={{ background: `${accent}1f`, color: accent }}
+                        >
+                          {task.priority}
+                        </span>
+                      </div>
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/tasks" className="button-base button-secondary px-3 py-2 text-xs">
+                {text.openTaskBoard}
+              </Link>
+              {(priorityTasks.length > 0 ? priorityTasks.length : openTasks.length) > COMMAND_CENTER_PREVIEW_LIMIT ? (
+                <Link href="/tasks" className="button-base button-secondary px-3 py-2 text-xs">
+                  {text.showAll}
+                </Link>
+              ) : null}
+              <Link href="/projects" className="button-base button-primary px-3 py-2 text-xs">
+                {text.openProjects}
+              </Link>
+            </div>
+          </section>
+
+          <section className="surface-card p-4">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.quickControls}</h2>
+            <div className="mt-4 grid gap-2">
+              {quickLink({ href: "/projects", icon: FolderKanban, label: text.openProjects })}
+              {quickLink({ href: "/team", icon: Users, label: text.openTeam })}
+              {quickLink({ href: "/schedule", icon: CalendarDays, label: text.openSchedule })}
+              {quickLink({ href: "/payroll", icon: Wallet, label: text.openPayroll })}
+              {quickLink({ href: "/tasks", icon: ClipboardCheck, label: text.openTaskBoard })}
+              {quickLink({ href: "/ai", icon: Bot, label: text.openAi })}
+            </div>
+          </section>
+        </div>
+      </section>
+
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
         <div className="surface-card p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -632,89 +788,43 @@ export default async function CommandCenterPage() {
                 {text.noLiveWorkers}
               </div>
             ) : (
-              visibleLiveWorkers.map((worker) => {
-                const reviewColor = SHIFT_REVIEW_COLOR[worker.review.status];
-                const gpsColor = GPS_FRESHNESS_COLOR[worker.freshness.status];
-                return (
-                  <Link
-                    key={worker.id}
-                    href={`/team/${worker.profileId}`}
-                    className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 transition hover:border-[var(--brand-yellow)]"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-[var(--text-primary)]">
-                            {worker.profileName}
-                          </span>
-                          <span className="rounded-[var(--radius-pill)] bg-[rgba(105,231,255,0.08)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ai-cyan-bright)]">
-                            {worker.profileRole}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin size={12} className="text-[var(--brand-yellow)]" />
-                            {worker.projectName}
-                          </span>
-                          <span>{formatDurationCompact(worker.durationMinutes)}</span>
-                        </div>
-                        <div className="mt-2 text-xs text-[var(--text-secondary)]">
-                          <span className="font-semibold text-[var(--text-muted)]">
-                            {text.currentTask}:{" "}
-                          </span>
-                          {worker.task ? worker.task.title : text.noCurrentTask}
-                        </div>
-                      </div>
-                      <div className="grid shrink-0 gap-1 text-right">
-                        <span
-                          className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
-                          style={{ background: `${gpsColor}1f`, color: gpsColor }}
-                        >
-                          {gpsFreshnessLabel[worker.freshness.status]} · {formatGpsAge(worker.freshness.ageMs)}
-                        </span>
-                        <span
-                          className="rounded-[var(--radius-pill)] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em]"
-                          style={{ background: `${reviewColor}1f`, color: reviewColor }}
-                        >
-                          {shiftReviewLabel[worker.review.status]}
-                        </span>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })
+              visibleLiveWorkers.map(renderLiveWorkerCard)
             )}
           </div>
-          {liveWorkers.length > COMMAND_CENTER_PREVIEW_LIMIT ? (
-            <div className="mt-4">
-              <Link href="/overview" className="button-base button-secondary px-3 py-2 text-xs">
-                {text.showAll}
-              </Link>
-            </div>
+          {hiddenLiveWorkers.length > 0 ? (
+            <details className="group mt-4">
+              <summary className="button-base button-secondary inline-flex cursor-pointer list-none px-3 py-2 text-xs">
+                <span className="group-open:hidden">{text.showAllPeople}</span>
+                <span className="hidden group-open:inline">{text.collapse}</span>
+              </summary>
+              <div className="mt-3 grid gap-2">
+                {hiddenLiveWorkers.map(renderLiveWorkerCard)}
+              </div>
+            </details>
           ) : null}
         </div>
 
         <div className="space-y-5">
-          <section className="surface-card p-4">
-            <div className="flex items-start gap-3">
+          <section className="surface-card p-3" data-testid="jarvis-next-actions-compact">
+            <div className="flex items-start gap-2.5">
               <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
                 style={{ background: "rgba(105, 231, 255, 0.1)" }}
               >
-                <Sparkles size={18} className="text-[var(--ai-cyan-bright)]" />
+                <Sparkles size={15} className="text-[var(--ai-cyan-bright)]" />
               </span>
               <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                <h2 className="text-base font-bold text-[var(--text-primary)]">
                   {text.aiNext}
                 </h2>
-                <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                <p className="mt-0.5 text-[11px] leading-4 text-[var(--text-secondary)]">
                   AI suggests → owner approves → system writes → audit records.
                 </p>
               </div>
             </div>
-            <div className="mt-4 space-y-2">
+            <div className="mt-3 space-y-1.5">
               {aiNextActions.length === 0 ? (
-                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2.5 text-xs text-[var(--text-secondary)]">
                   {locale === "ru" ? "Jarvis сейчас не видит срочных действий." : "Jarvis does not see urgent actions right now."}
                 </div>
               ) : (
@@ -722,15 +832,15 @@ export default async function CommandCenterPage() {
                   <Link
                     key={item.id}
                     href={aiPromptHref(item.prompt)}
-                    className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 transition hover:border-[var(--ai-cyan)]"
+                    className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 transition hover:border-[var(--ai-cyan)]"
                   >
-                    <div className="text-sm font-semibold text-[var(--text-primary)]">
+                    <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
                       {item.title}
                     </div>
-                    <div className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
+                    <div className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-[var(--text-secondary)]">
                       {item.detail}
                     </div>
-                    <div className="mt-2 text-xs font-semibold text-[var(--ai-cyan-bright)]">
+                    <div className="mt-1 text-[11px] font-semibold text-[var(--ai-cyan-bright)]">
                       {text.askJarvis} -&gt;
                     </div>
                   </Link>
@@ -918,106 +1028,6 @@ export default async function CommandCenterPage() {
             </Link>
           </div>
         ) : null}
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-xl font-bold text-[var(--text-primary)]">{text.messagesTitle}</h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">{text.messagesDesc}</p>
-          </div>
-          <BulkMessageComposer
-            orgId={data.manager.org_id}
-            senderId={data.manager.id}
-            senderName={data.manager.name}
-            senderRole={data.manager.role}
-            crew={crew}
-            projects={projects}
-            historyLimit={COMMAND_CENTER_RECENT_MESSAGE_LIMIT}
-            embedded
-          />
-        </div>
-
-        <div className="space-y-5">
-          <section className="surface-card p-4">
-            <div className="flex items-start gap-3">
-              <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
-                style={{ background: "rgba(191, 162, 52, 0.12)" }}
-              >
-                <RadioTower size={18} style={{ color: "var(--brand-yellow)" }} />
-              </span>
-              <div>
-                <h2 className="text-lg font-bold text-[var(--text-primary)]">
-                  {text.taskPulse}
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
-                  {text.taskPulseDesc}
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 space-y-2">
-              {topTasks.length === 0 ? (
-                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-                  {text.noPriorityTasks}
-                </div>
-              ) : (
-                topTasks.map((task) => {
-                  const accent = priorityColor[task.priority];
-                  return (
-                    <Link
-                      key={task.id}
-                      href={task.project_id ? `/projects/${task.project_id}#tasks` : "/tasks"}
-                      className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 transition hover:border-[var(--brand-yellow)]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                            {task.title}
-                          </div>
-                          <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                            {task.projectName ?? text.noProject} · {task.assigneeName ?? text.noAssignee}
-                          </div>
-                        </div>
-                        <span
-                          className="rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[9px] font-bold uppercase"
-                          style={{ background: `${accent}1f`, color: accent }}
-                        >
-                          {task.priority}
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link href="/tasks" className="button-base button-secondary px-3 py-2 text-xs">
-                {text.openTaskBoard}
-              </Link>
-              {(priorityTasks.length > 0 ? priorityTasks.length : openTasks.length) > COMMAND_CENTER_PREVIEW_LIMIT ? (
-                <Link href="/tasks" className="button-base button-secondary px-3 py-2 text-xs">
-                  {text.showAll}
-                </Link>
-              ) : null}
-              <Link href="/projects" className="button-base button-primary px-3 py-2 text-xs">
-                {text.openProjects}
-              </Link>
-            </div>
-          </section>
-
-          <section className="surface-card p-4">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.quickControls}</h2>
-            <div className="mt-4 grid gap-2">
-              {quickLink({ href: "/projects", icon: FolderKanban, label: text.openProjects })}
-              {quickLink({ href: "/team", icon: Users, label: text.openTeam })}
-              {quickLink({ href: "/schedule", icon: CalendarDays, label: text.openSchedule })}
-              {quickLink({ href: "/payroll", icon: Wallet, label: text.openPayroll })}
-              {quickLink({ href: "/tasks", icon: ClipboardCheck, label: text.openTaskBoard })}
-              {quickLink({ href: "/ai", icon: Bot, label: text.openAi })}
-            </div>
-          </section>
-        </div>
       </section>
 
       <section className="surface-card p-4">
