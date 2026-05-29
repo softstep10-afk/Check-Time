@@ -40,7 +40,9 @@ import {
 import {
   getAttachmentMediaIds,
   linkMediaToTask,
+  mergeTaskAttachmentRefs,
   normalizeStoragePath,
+  type TaskAttachmentRef,
   uploadTaskAttachment,
 } from "@/lib/task-attachments";
 import {
@@ -51,6 +53,7 @@ import {
   getTaskCompletionAudit,
 } from "@/lib/task-notifications";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { TaskAttachmentUploader } from "@/components/shared/TaskAttachmentUploader";
 import { ProjectPlanningSections } from "@/components/manager/ProjectPlanningSections";
 import {
   MediaViewerModal,
@@ -544,14 +547,18 @@ export function ProjectDetailPage({
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
   const [mediaFilter, setMediaFilter] = useState<ProjectMediaCategory>("all");
   const [taskAttachmentFiles, setTaskAttachmentFiles] = useState<File[]>([]);
+  const [inlineTaskAttachmentRefs, setInlineTaskAttachmentRefs] = useState<TaskAttachmentRef[]>([]);
   const taskAttachmentInputRef = useRef<HTMLInputElement | null>(null);
   const editFormRef = useRef<HTMLFormElement | null>(null);
   const editLatRef = useRef<HTMLInputElement | null>(null);
   const editLngRef = useRef<HTMLInputElement | null>(null);
-  const mediaById = useMemo(
-    () => new Map(media.map((m) => [m.id, m])),
-    [media],
-  );
+  const mediaById = useMemo(() => {
+    const map = new Map<string, Media | TaskAttachmentRef>(media.map((m) => [m.id, m]));
+    for (const ref of inlineTaskAttachmentRefs) {
+      map.set(ref.id, ref);
+    }
+    return map;
+  }, [inlineTaskAttachmentRefs, media]);
   const profileNameById = useMemo(
     () => buildProfileNameMap([...assignedProfiles, ...availableProfiles, ...(completionProfiles ?? [])]),
     [assignedProfiles, availableProfiles, completionProfiles],
@@ -1250,6 +1257,20 @@ export function ProjectDetailPage({
     setBusyKey(null);
     setMessage(t("projectDetail.taskCreated"));
     router.refresh();
+  }
+
+  function handleInlineTaskAttachmentsAdded(
+    taskId: string,
+    metadata: Record<string, unknown> | null,
+    attachments: TaskAttachmentRef[],
+  ) {
+    setInlineTaskAttachmentRefs((current) => mergeTaskAttachmentRefs(current, attachments));
+    setTaskList((current) =>
+      current.map((task) =>
+        task.id === taskId ? { ...task, metadata: metadata ?? task.metadata } : task,
+      ),
+    );
+    setMessage(t("tasks.attachmentsAdded").replace("{count}", String(attachments.length)));
   }
 
   // Click-to-open for the Project Media list. Photos, videos, PDFs,
@@ -2365,6 +2386,17 @@ export function ProjectDetailPage({
                     </>
                   );
                 })()}
+                <TaskAttachmentUploader
+                  taskId={task.id}
+                  orgId={orgId}
+                  projectId={task.project_id}
+                  uploadedBy={managerId}
+                  disabled={isBusy}
+                  compact
+                  onAttached={({ taskId, metadata, attachments }) =>
+                    handleInlineTaskAttachmentsAdded(taskId, metadata, attachments)
+                  }
+                />
                 {(() => {
                   // Worker completion evidence — note, follow-up flag,
                   // and any media the worker uploaded via the

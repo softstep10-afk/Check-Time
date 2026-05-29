@@ -9,6 +9,7 @@ import { buildWorkerSessions, deriveClockState, deriveWorkerSummary, enrichProje
 import {
   fetchTaskAttachments,
   getAttachmentMediaIds,
+  getAttachmentRefs,
 } from "@/lib/task-attachments";
 import { isMaterialTask } from "@/lib/material-tasks";
 import {
@@ -365,8 +366,12 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
 
   const taskItems: WorkerTaskItem[] = tasks.map((task) => {
     const ids = getAttachmentMediaIds(task);
+    const fallbackAttachmentRefs = getAttachmentRefs(task);
+    const fallbackAttachmentById = new Map(
+      fallbackAttachmentRefs.map((ref) => [ref.id, ref]),
+    );
     const resolved = ids
-      .map((id) => attachmentMap.get(id))
+      .map((id) => attachmentMap.get(id) ?? fallbackAttachmentById.get(id))
       .filter((ref): ref is NonNullable<typeof ref> => Boolean(ref));
     const completionIds = getCompletionMediaIds(task);
     const completionResolved = completionIds

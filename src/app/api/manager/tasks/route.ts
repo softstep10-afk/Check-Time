@@ -18,6 +18,7 @@ import { isEligibleMaterialTaker } from "@/lib/material-driver-permissions";
 import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { TaskAttachmentRef } from "@/lib/task-attachments";
 import type { TaskPriority } from "@/types/database";
 
 function readText(value: unknown): string {
@@ -121,6 +122,26 @@ export async function POST(request: NextRequest) {
       projectId: projectId.value,
       mediaIds: attachmentMediaIds.value,
     });
+    let safeAttachmentRefs: TaskAttachmentRef[] = [];
+    if (safeAttachmentMediaIds.length > 0) {
+      const { data: attachmentRefs, error: attachmentRefsError } = await adminClient
+        .from("media")
+        .select("id, filename, mime_type, media_type, storage_path")
+        .in("id", safeAttachmentMediaIds);
+      if (attachmentRefsError) {
+        return NextResponse.json(
+          { error: "Attachment lookup failed." },
+          { status: 500 },
+        );
+      }
+      safeAttachmentRefs = (attachmentRefs ?? []) as TaskAttachmentRef[];
+      if (safeAttachmentRefs.length !== safeAttachmentMediaIds.length) {
+        return NextResponse.json(
+          { error: "Attachment is not available." },
+          { status: 404 },
+        );
+      }
+    }
     const materialEnabled = material.enabled && material.materialName.length > 0;
     if (materialEnabled && assignedTo.value) {
       const { data: assignee, error: assigneeError } = await adminClient
@@ -183,6 +204,7 @@ export async function POST(request: NextRequest) {
       auditAction: "task_created",
       metadata: {
         attachment_media_ids: safeAttachmentMediaIds,
+        attachment_refs: safeAttachmentRefs,
         ...(materialEnabled
           ? buildMaterialTaskMetadata({
               materialName: material.materialName,

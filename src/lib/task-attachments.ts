@@ -6,13 +6,13 @@ import { redactSensitive, redactText, safeErrorForLog } from "@/lib/safe-log";
 
 export type UploadAttachmentParams = {
   orgId: string;
-  projectId: string;
+  projectId: string | null;
   uploadedBy: string;
   file: File;
 };
 
 export type UploadAttachmentResult =
-  | { ok: true; mediaId: string }
+  | { ok: true; mediaId: string; attachment: TaskAttachmentRef }
   | { ok: false; error: string };
 
 /**
@@ -43,7 +43,9 @@ export async function uploadTaskAttachment(
 
   const safeName = buildSafeUploadName(file, "task-attachment");
   const displayName = file.name || safeName;
-  const storagePath = `${orgId}/${projectId}/tasks/${Date.now()}-${safeName}`;
+  const storagePath = projectId
+    ? `${orgId}/${projectId}/tasks/${Date.now()}-${safeName}`
+    : `${orgId}/tasks/${Date.now()}-${safeName}`;
 
   const resolvedContentType = inferUploadContentType(file);
   const { error: uploadErr } = await supabase.storage
@@ -85,7 +87,17 @@ export async function uploadTaskAttachment(
     console.error("[task-attach] media insert FAIL", safeErrorForLog(insertErr));
     return { ok: false, error: `media-insert: ${insertErr?.message ?? "no data"}` };
   }
-  return { ok: true, mediaId: data.id };
+  return {
+    ok: true,
+    mediaId: data.id,
+    attachment: {
+      id: data.id,
+      filename: displayName,
+      mime_type: resolvedContentType,
+      media_type: guessMediaType(file),
+      storage_path: storagePath,
+    },
+  };
 }
 
 /**
@@ -132,6 +144,26 @@ export type TaskAttachmentRef = {
   storage_path: string;
 };
 
+function sanitizeTaskAttachmentRef(value: unknown): TaskAttachmentRef | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.id !== "string" ||
+    typeof row.storage_path !== "string" ||
+    typeof row.media_type !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    storage_path: row.storage_path,
+    media_type: row.media_type,
+    filename: typeof row.filename === "string" ? row.filename : null,
+    mime_type: typeof row.mime_type === "string" ? row.mime_type : null,
+  };
+}
+
 /** Bulk fetch media rows by id; subject to the caller's media RLS. */
 export async function fetchTaskAttachments(
   supabase: SupabaseClient,
@@ -155,6 +187,35 @@ export function getAttachmentMediaIds(task: { metadata?: unknown }): string[] {
   const ids = meta?.attachment_media_ids;
   if (!Array.isArray(ids)) return [];
   return ids.filter((id): id is string => typeof id === "string");
+}
+
+/**
+ * Optional denormalized attachment refs stored in tasks.metadata. They let
+ * task-visible users render files that belong to a no-project/general task
+ * without changing media RLS. The media row remains the source of truth for
+ * signing/opening; this is only display/linkage data for already-visible tasks.
+ */
+export function getAttachmentRefs(task: { metadata?: unknown }): TaskAttachmentRef[] {
+  const meta = task.metadata as Record<string, unknown> | null | undefined;
+  const refs = meta?.attachment_refs;
+  if (!Array.isArray(refs)) return [];
+  return refs
+    .map(sanitizeTaskAttachmentRef)
+    .filter((ref): ref is TaskAttachmentRef => Boolean(ref));
+}
+
+export function mergeTaskAttachmentRefs(
+  existing: TaskAttachmentRef[] | undefined,
+  incoming: TaskAttachmentRef[],
+): TaskAttachmentRef[] {
+  const merged = new Map<string, TaskAttachmentRef>();
+  for (const ref of existing ?? []) {
+    merged.set(ref.id, ref);
+  }
+  for (const ref of incoming) {
+    merged.set(ref.id, ref);
+  }
+  return Array.from(merged.values());
 }
 
 /**

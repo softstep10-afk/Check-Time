@@ -65,6 +65,11 @@ Before manual QA for any new change:
 - Manager creates a normal task.
 - Worker sees the task.
 - Worker opens the task.
+- In task details, confirm `Добавить файл` is visible.
+- Attach a PDF directly to the task and confirm it appears in the task attachment list.
+- Attach a photo/video directly to the task and confirm open/download works.
+- Attach Word/Excel/CSV directly to the task and confirm open/download works.
+- Confirm task attachments remain on the task and do not appear as generic project media.
 - Worker can take the task.
 - Worker can mark the task done.
 - Completion form closes after a successful done save.

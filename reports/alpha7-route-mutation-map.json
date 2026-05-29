@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-29T07:00:28.797Z",
+  "generatedAt": "2026-05-29T07:34:40.674Z",
   "rows": [
     {
       "path": "src/app/api/ai/actions/create-project/route.ts",
@@ -1296,6 +1296,18 @@
       "mutationEvidence": [],
       "elevatedClientEvidence": [],
       "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/message-attachments.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [
+        "same-org guard helper"
+      ],
       "orgResourceGuardEvidence": [],
       "dangerousZone": false,
       "risk": "confirmed guarded"

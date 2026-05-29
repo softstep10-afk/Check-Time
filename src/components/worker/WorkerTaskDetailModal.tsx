@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Hand, Mic, MicOff, Paperclip, Play, X } from "lucide-react";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { TaskAttachmentUploader } from "@/components/shared/TaskAttachmentUploader";
 import { useTranslation } from "@/lib/i18n";
 import {
   getCompletionMediaIds,
@@ -70,6 +71,7 @@ type WorkerTaskDetailModalProps = {
    */
   initialMode?: WorkerTaskModalMode;
   profileId: string;
+  orgId?: string;
   busy: boolean;
   busyLabel?: string;
   onClose: () => void;
@@ -88,6 +90,11 @@ type WorkerTaskDetailModalProps = {
    * it undefined.
    */
   onClaim?: (taskId: string) => void;
+  onAttachmentsAdded?: (
+    taskId: string,
+    metadata: Record<string, unknown> | null,
+    attachments: TaskAttachmentRef[],
+  ) => void;
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -262,12 +269,14 @@ function WorkerTaskDetailModalBody({
   task,
   initialMode = "details",
   profileId,
+  orgId,
   busy,
   busyLabel,
   onClose,
   onStart,
   onDone,
   onClaim,
+  onAttachmentsAdded,
 }: WorkerTaskDetailModalProps) {
   const { t } = useTranslation();
   const [completionNote, setCompletionNote] = useState("");
@@ -330,7 +339,7 @@ function WorkerTaskDetailModalBody({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[520px] rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 sm:rounded-[var(--radius-lg)]"
+        className="max-h-[90vh] w-full max-w-[520px] overflow-y-auto rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 sm:rounded-[var(--radius-lg)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -410,6 +419,19 @@ function WorkerTaskDetailModalBody({
             </div>
             <TaskAttachmentList items={task.attachments} />
           </div>
+        ) : null}
+
+        {orgId ? (
+          <TaskAttachmentUploader
+            taskId={task.id}
+            orgId={orgId}
+            projectId={task.project_id}
+            uploadedBy={profileId}
+            disabled={busy}
+            onAttached={({ taskId, metadata, attachments }) =>
+              onAttachmentsAdded?.(taskId, metadata, attachments)
+            }
+          />
         ) : null}
 
         {task.project_id ? (

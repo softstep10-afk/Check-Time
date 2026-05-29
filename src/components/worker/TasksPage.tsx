@@ -37,6 +37,7 @@ import {
   submitWorkerTaskCompletion,
   type WorkerTaskModalMode,
 } from "@/lib/worker-task-ui";
+import { mergeTaskAttachmentRefs, type TaskAttachmentRef } from "@/lib/task-attachments";
 import type { WorkerProject, WorkerTaskItem } from "@/lib/worker-types";
 
 type TaskFilter = "all" | "mine" | "urgent" | "today";
@@ -72,6 +73,9 @@ export function TasksPage() {
   const [locallyCompletedTaskIds, setLocallyCompletedTaskIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [taskAttachmentOverrides, setTaskAttachmentOverrides] = useState<
+    Map<string, { metadata: Record<string, unknown> | null; attachments: TaskAttachmentRef[] }>
+  >(() => new Map());
   const [openError, setOpenError] = useState<string | null>(null);
   const [claimBusyTaskId, setClaimBusyTaskId] = useState<string | null>(null);
   const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
@@ -245,7 +249,8 @@ export function TasksPage() {
     if (
       claimedTaskAssignees.size === 0 &&
       claimedTaskMetadata.size === 0 &&
-      locallyCompletedTaskIds.size === 0
+      locallyCompletedTaskIds.size === 0 &&
+      taskAttachmentOverrides.size === 0
     ) {
       return sourceTasks;
     }
@@ -280,12 +285,24 @@ export function TasksPage() {
           : task,
       );
     }
+    if (taskAttachmentOverrides.size > 0) {
+      next = next.map((task) => {
+        const override = taskAttachmentOverrides.get(task.id);
+        if (!override) return task;
+        return {
+          ...task,
+          metadata: override.metadata ?? task.metadata,
+          attachments: mergeTaskAttachmentRefs(task.attachments, override.attachments),
+        };
+      });
+    }
     return next;
   }, [
     sourceTasks,
     claimedTaskAssignees,
     claimedTaskMetadata,
     locallyCompletedTaskIds,
+    taskAttachmentOverrides,
     shell.profile.id,
   ]);
 
@@ -769,6 +786,7 @@ export function TasksPage() {
         task={liveSelectedTask}
         initialMode={selectedTaskMode}
         profileId={shell.profile.id}
+        orgId={shell.profile.org_id}
         busy={
           liveSelectedTask
             ? (busyAction?.startsWith(`task-${liveSelectedTask.id}-`) ?? false) ||
@@ -820,6 +838,22 @@ export function TasksPage() {
           );
         }}
         onClaim={(taskId) => void handleClaimTask(taskId)}
+        onAttachmentsAdded={(taskId, metadata, attachments) => {
+          setTaskAttachmentOverrides((current) => {
+            const next = new Map(current);
+            next.set(taskId, { metadata, attachments });
+            return next;
+          });
+          setSelectedTask((current) =>
+            current && current.id === taskId
+              ? {
+                  ...current,
+                  metadata: metadata ?? current.metadata,
+                  attachments: mergeTaskAttachmentRefs(current.attachments, attachments),
+                }
+              : current,
+          );
+        }}
       />
     </div>
   );

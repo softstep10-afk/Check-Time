@@ -30,7 +30,7 @@ import {
   readLatestSafetyAck,
   writeSafetyAck,
 } from "@/lib/safety-acknowledgements";
-import { type TaskAttachmentRef } from "@/lib/task-attachments";
+import { mergeTaskAttachmentRefs, type TaskAttachmentRef } from "@/lib/task-attachments";
 import { canUseDriverMaterialView } from "@/lib/material-driver-permissions";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { splitWorkerProjectTasks } from "@/lib/task-notifications";
@@ -1331,6 +1331,7 @@ export function WorkerProjectView({
         task={liveSelectedTask ? { ...liveSelectedTask, projectName: project.name } : null}
         initialMode={selectedTaskMode}
         profileId={profileId}
+        orgId={orgId}
         busy={
           liveSelectedTask
             ? (busyAction?.startsWith(`task-${liveSelectedTask.id}-`) ?? false) ||
@@ -1383,6 +1384,28 @@ export function WorkerProjectView({
           );
         }}
         onClaim={(taskId) => void handleClaimTask(taskId)}
+        onAttachmentsAdded={(taskId, metadata, attachments) => {
+          setTaskList((current) =>
+            current.map((task) =>
+              task.id === taskId
+                ? {
+                    ...task,
+                    metadata: metadata ?? task.metadata,
+                    attachments: mergeTaskAttachmentRefs(task.attachments, attachments),
+                  }
+                : task,
+            ),
+          );
+          setSelectedTask((current) =>
+            current && current.id === taskId
+              ? {
+                  ...current,
+                  metadata: metadata ?? current.metadata,
+                  attachments: mergeTaskAttachmentRefs(current.attachments, attachments),
+                }
+              : current,
+          );
+        }}
       />
     </div>
   );

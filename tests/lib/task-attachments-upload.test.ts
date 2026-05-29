@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { uploadTaskAttachment } from "@/lib/task-attachments";
+import {
+  getAttachmentRefs,
+  mergeTaskAttachmentRefs,
+  uploadTaskAttachment,
+} from "@/lib/task-attachments";
 
 function makeFile(name: string, mime: string): File {
   return new File(["payload"], name, { type: mime });
@@ -50,7 +54,16 @@ describe("uploadTaskAttachment", () => {
       file: makeFile("Scope Document.DOCX", "application/octet-stream"),
     });
 
-    expect(result).toEqual({ ok: true, mediaId: "media-1" });
+    expect(result).toMatchObject({
+      ok: true,
+      mediaId: "media-1",
+      attachment: {
+        id: "media-1",
+        filename: "Scope Document.DOCX",
+        mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        media_type: "document",
+      },
+    });
     expect(storageFrom).toHaveBeenCalledWith("media");
     expect(upload).toHaveBeenCalledWith(
       expect.stringMatching(/^org-1\/project-1\/tasks\/\d+-scope-document\.docx$/),
@@ -68,6 +81,30 @@ describe("uploadTaskAttachment", () => {
         uploaded_by: "manager-1",
         filename: "Scope Document.DOCX",
         mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        metadata: { kind: "task_attachment" },
+      }),
+    );
+  });
+
+  it("uses an org-scoped no-project task path for general task attachments", async () => {
+    const { client, upload, insert } = makeUploadClient();
+    const result = await uploadTaskAttachment(client, {
+      orgId: "org-1",
+      projectId: null,
+      uploadedBy: "manager-1",
+      file: makeFile("todo.pdf", "application/pdf"),
+    });
+
+    expect(result).toMatchObject({ ok: true, mediaId: "media-1" });
+    expect(upload).toHaveBeenCalledWith(
+      expect.stringMatching(/^org-1\/tasks\/\d+-todo\.pdf$/),
+      expect.any(File),
+      expect.objectContaining({ contentType: "application/pdf" }),
+    );
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        org_id: "org-1",
+        project_id: null,
         metadata: { kind: "task_attachment" },
       }),
     );
@@ -105,5 +142,67 @@ describe("uploadTaskAttachment", () => {
       }),
     ).resolves.toEqual({ ok: false, error: "storage: storage failed" });
     expect(insert).not.toHaveBeenCalled();
+  });
+});
+
+describe("task attachment metadata refs", () => {
+  it("reads sanitized attachment refs and ignores malformed rows", () => {
+    const refs = getAttachmentRefs({
+      metadata: {
+        attachment_refs: [
+          {
+            id: "media-1",
+            filename: "scope.pdf",
+            mime_type: "application/pdf",
+            media_type: "pdf",
+            storage_path: "org/tasks/scope.pdf",
+          },
+          { id: "missing-storage", media_type: "pdf" },
+        ],
+      },
+    });
+
+    expect(refs).toEqual([
+      {
+        id: "media-1",
+        filename: "scope.pdf",
+        mime_type: "application/pdf",
+        media_type: "pdf",
+        storage_path: "org/tasks/scope.pdf",
+      },
+    ]);
+  });
+
+  it("dedupes attachment refs by id while preserving latest uploaded ref", () => {
+    expect(
+      mergeTaskAttachmentRefs(
+        [
+          {
+            id: "media-1",
+            filename: "old.pdf",
+            mime_type: "application/pdf",
+            media_type: "pdf",
+            storage_path: "old",
+          },
+        ],
+        [
+          {
+            id: "media-1",
+            filename: "new.pdf",
+            mime_type: "application/pdf",
+            media_type: "pdf",
+            storage_path: "new",
+          },
+        ],
+      ),
+    ).toEqual([
+      {
+        id: "media-1",
+        filename: "new.pdf",
+        mime_type: "application/pdf",
+        media_type: "pdf",
+        storage_path: "new",
+      },
+    ]);
   });
 });

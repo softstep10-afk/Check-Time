@@ -19,9 +19,11 @@ import {
 } from "@/lib/task-notifications";
 import {
   getAttachmentMediaIds,
+  mergeTaskAttachmentRefs,
   type TaskAttachmentRef,
 } from "@/lib/task-attachments";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
+import { TaskAttachmentUploader } from "@/components/shared/TaskAttachmentUploader";
 import { formatDateTime } from "@/lib/worker-utils";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import {
@@ -107,6 +109,7 @@ export function ManagerTasksPage({
   const { t } = useTranslation();
 
   const [tasks, setTasks] = useState<TaskRow[]>(initialTasks);
+  const [attachmentMediaList, setAttachmentMediaList] = useState<TaskAttachmentRef[]>(attachmentMedia);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"success" | "error" | "info">("success");
@@ -129,14 +132,31 @@ export function ManagerTasksPage({
     };
   }, [initialTasks]);
 
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setAttachmentMediaList((current) =>
+        keepStableListIfUnchanged(
+          current,
+          attachmentMedia,
+          (item) => `${item.id}\u001f${item.storage_path}\u001f${item.filename ?? ""}\u001f${item.mime_type ?? ""}`,
+        ),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentMedia]);
+
   const projectNameById = useMemo(
     () => new Map(projects.map((project) => [project.id, project.name])),
     [projects],
   );
   const workerNameById = useMemo(() => buildProfileNameMap(workers), [workers]);
   const attachmentById = useMemo(
-    () => new Map(attachmentMedia.map((m) => [m.id, m])),
-    [attachmentMedia],
+    () => new Map(attachmentMediaList.map((m) => [m.id, m])),
+    [attachmentMediaList],
   );
   const buildTaskRow = useCallback(
     (task: Task, existing: TaskRow | null): TaskRow => ({
@@ -313,6 +333,21 @@ export function ManagerTasksPage({
     setMessage(t("tasks.created"));
     setMessageTone("success");
     router.refresh();
+  }
+
+  function handleTaskAttachmentsAdded(
+    taskId: string,
+    metadata: Record<string, unknown> | null,
+    attachments: TaskAttachmentRef[],
+  ) {
+    setAttachmentMediaList((current) => mergeTaskAttachmentRefs(current, attachments));
+    setTasks((current) =>
+      current.map((task) =>
+        task.id === taskId ? { ...task, metadata: metadata ?? task.metadata } : task,
+      ),
+    );
+    setMessage(t("tasks.attachmentsAdded").replace("{count}", String(attachments.length)));
+    setMessageTone("success");
   }
 
   async function handleStatusChange(taskId: string, status: TaskStatus) {
@@ -818,6 +853,17 @@ export function ManagerTasksPage({
                             </>
                           );
                         })()}
+                        <TaskAttachmentUploader
+                          taskId={task.id}
+                          orgId={orgId}
+                          projectId={task.project_id}
+                          uploadedBy={managerId}
+                          disabled={updating}
+                          compact
+                          onAttached={({ taskId, metadata, attachments }) =>
+                            handleTaskAttachmentsAdded(taskId, metadata, attachments)
+                          }
+                        />
                         {(() => {
                           // Worker completion evidence — same shape as
                           // the Project Detail page panel, condensed for

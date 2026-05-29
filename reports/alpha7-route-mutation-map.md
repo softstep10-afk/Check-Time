@@ -96,6 +96,7 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/media-flags.ts` | storage/media mutation | no | dangerous unknown | .insert(, .update( |
 | `src/lib/media-gallery.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/media-playback.ts` | read-only | no | confirmed guarded | none |
+| `src/lib/message-attachments.ts` | read-only | no | confirmed guarded | same-org guard helper |
 | `src/lib/message-state.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/message-types.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/mux-webhook.ts` | mutation | no | dangerous unknown | .update( |
