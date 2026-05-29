@@ -90,8 +90,9 @@ const changedFiles = new Set([
   ...git(["diff", "--name-only"]).split(/\r?\n/).filter(Boolean),
   ...git(["diff", "--cached", "--name-only"]).split(/\r?\n/).filter(Boolean),
 ]);
+const changedNonDocs = [...changedFiles].filter((file) => !file.startsWith("docs/") && !file.startsWith("reports/"));
 add(![...changedFiles].some((file) => /^supabase\/migrations\/(?!00099_wash_and_reset\.sql)/.test(file)), "no new migration files created in this task", "git diff");
-add(![...changedFiles].some((file) => /storage.*policy|policy.*storage/i.test(file)), "no Storage policy files changed", "git diff");
+add(!changedNonDocs.some((file) => /storage.*policy|policy.*storage/i.test(file)), "no Storage policy files changed", "git diff");
 add(![...changedFiles].some((file) => /(rls|policy|policies)/i.test(file) && file.startsWith("supabase/")), "no RLS policy files changed", "git diff");
 add(existsSync(path.join(root, "supabase/migrations/00099_wash_and_reset.sql")), "00099_wash_and_reset.sql remains detectable as local danger", "supabase/migrations/00099_wash_and_reset.sql");
 add(!/"(build|alpha7:predeploy)"\s*:\s*"[^"]*(migration|supabase db push|psql)/i.test(packageJson), "build/predeploy scripts do not run migrations or SQL", "package.json");

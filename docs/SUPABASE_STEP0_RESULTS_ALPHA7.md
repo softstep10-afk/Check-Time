@@ -607,6 +607,12 @@ Recommended fix:
 - Preserve existing upload/open/download behavior and Andrey/Sergey app-level media delete semantics.
 - Do not add a DELETE Storage policy unless explicitly needed and separately guarded.
 
+Prerequisite follow-up prepared locally:
+
+- New direct/private message attachments should use `<org_id>/messages/<recipient_id>/<timestamp>-<safeName>` instead of legacy `messages/<recipient_id>/...`.
+- Existing legacy message attachments remain supported through the stored `messages.attachment.storagePath`; no old objects or message rows are rewritten.
+- After this app change is deployed and manually QA'd, the next owner-approved hardening step is Storage Phase 1 policy tightening.
+
 ## F. Grants Findings
 
 Confirmed:

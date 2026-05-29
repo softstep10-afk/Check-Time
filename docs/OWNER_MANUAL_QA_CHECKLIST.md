@@ -48,6 +48,10 @@ Before manual QA for any new change:
 
 - Manager sends a message to one worker.
 - Manager can send a second message without reload.
+- Manager sends a private/direct message with a PDF attachment.
+- Manager sends a private/direct message with a photo/video attachment.
+- New message attachments open/download and are stored under an org-prefixed path for future Storage hardening.
+- Existing older message attachments still open/download from legacy `messages/...` paths.
 - Manager can send to multiple workers.
 - Manager can send to the whole crew.
 - Message stays in history.
@@ -258,6 +262,7 @@ Live task/message statuses:
 - Project CSV upload works.
 - Task attachments still open.
 - Message attachments still open.
+- Message attachment QA covers both new org-prefixed attachments and any available legacy `messages/...` attachment.
 - Open/download fallback works for unsupported preview formats.
 - iPhone `.mov` video uploads do not break the flow.
 - Files remain linked to the correct project/task/message after read, taken, done, and notification-read actions.

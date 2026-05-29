@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T09:24:02.634Z",
+  "generatedAt": "2026-05-29T07:00:28.797Z",
   "rows": [
     {
       "path": "src/app/api/ai/actions/create-project/route.ts",
@@ -1468,6 +1468,16 @@
       "risk": "confirmed guarded"
     },
     {
+      "path": "src/lib/project-media-library.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
       "path": "src/lib/project-navigation.ts",
       "classification": "read-only",
       "mutationEvidence": [],
@@ -1530,6 +1540,16 @@
     },
     {
       "path": "src/lib/project-schedule.ts",
+      "classification": "read-only",
+      "mutationEvidence": [],
+      "elevatedClientEvidence": [],
+      "authProfileGuardEvidence": [],
+      "orgResourceGuardEvidence": [],
+      "dangerousZone": false,
+      "risk": "confirmed guarded"
+    },
+    {
+      "path": "src/lib/release-diagnostics.ts",
       "classification": "read-only",
       "mutationEvidence": [],
       "elevatedClientEvidence": [],

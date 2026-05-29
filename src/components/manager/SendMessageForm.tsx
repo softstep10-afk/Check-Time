@@ -14,6 +14,7 @@ import {
 } from "@/lib/message-types";
 import { isTaskMessagePriority } from "@/lib/message-state";
 import { buildSafeUploadName } from "@/lib/media-extension";
+import { buildMessageAttachmentStoragePath } from "@/lib/message-attachments";
 import {
   ACCEPT_ALL_UPLOADS,
   inferUploadContentType,
@@ -118,7 +119,13 @@ export function SendMessageForm({
   async function uploadFile(file: File): Promise<MessageAttachment | null> {
     const safeName = buildSafeUploadName(file, "message");
     const displayName = file.name || safeName;
-    const path = `messages/${recipientId}/${Date.now()}-${safeName}`;
+    let path: string;
+    try {
+      path = buildMessageAttachmentStoragePath(orgId, recipientId, safeName);
+    } catch {
+      setError(t("messages.uploadFailed"));
+      return null;
+    }
 
     const { error: uploadErr } = await supabase.storage
       .from("media")
@@ -333,6 +340,12 @@ export function SendMessageForm({
       return;
     }
 
+    if (!orgId || !senderId) {
+      setError(t("messages.sendFailed"));
+      setSending(false);
+      return;
+    }
+
     if (pendingFile) {
       setUploading(true);
       attachment = await uploadFile(pendingFile);
@@ -342,12 +355,6 @@ export function SendMessageForm({
         setSending(false);
         return;
       }
-    }
-
-    if (!orgId || !senderId) {
-      setError(t("messages.sendFailed"));
-      setSending(false);
-      return;
     }
 
     const basePayload = {

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-05-28T09:24:07.200Z",
+  "generatedAt": "2026-05-29T07:00:32.857Z",
   "rows": [
     {
       "category": "material driver-only dropdown",
@@ -14,7 +14,9 @@
         "docs/ALPHA7_DEPLOY_READINESS.md",
         "docs/DRIVER_ROLE_SETUP_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
-        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md",
+        "docs/SUPABASE_STEP0_AUDIT_PACK_ALPHA7.md"
       ],
       "coverageLevel": "covered",
       "recommendedFutureTest": ""
@@ -23,6 +25,7 @@
       "category": "material task server validation",
       "testsFound": [
         "tests/lib/driver-role-setup.test.ts",
+        "tests/lib/manager-owner-critical-path-audit-source.test.ts",
         "tests/lib/material-driver-permissions.test.ts",
         "tests/lib/material-task-route-guard.test.ts"
       ],
@@ -34,6 +37,7 @@
       ],
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MUTATION_SURFACE_MAP.md"
       ],
       "coverageLevel": "covered",
@@ -66,7 +70,8 @@
       "testsFound": [
         "tests/lib/live-status-source.test.ts",
         "tests/lib/message-state.test.ts",
-        "tests/lib/offline-readable-cache-source.test.ts"
+        "tests/lib/offline-readable-cache-source.test.ts",
+        "tests/lib/worker-critical-path-audit-source.test.ts"
       ],
       "sourceFilesFound": [
         "src/app/api/manager/message-tasks/route.ts",
@@ -83,6 +88,10 @@
       ],
       "docsFound": [
         "docs/STAGING_DEPLOYMENT.md",
+        "docs/STORAGE_POLICY_HARDENING_PLAN_ALPHA7.md",
+        "docs/SUPABASE_STEP0_AUDIT_PACK_ALPHA7.md",
+        "docs/SUPABASE_STEP0_RESULTS_ALPHA7.md",
+        "docs/WORKER_MOBILE_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/audit/PHASE1_SCHEMA_GAP.md",
         "docs/audit/PHASE3_CONSENT_OWNER_RLS.md"
       ],
@@ -93,6 +102,7 @@
       "category": "task read/taken/done visibility",
       "testsFound": [
         "tests/lib/live-status-source.test.ts",
+        "tests/lib/manager-owner-critical-path-audit-source.test.ts",
         "tests/lib/task-completion-flow.test.ts",
         "tests/lib/task-notifications.test.ts",
         "tests/lib/task-realtime.test.ts"
@@ -117,13 +127,17 @@
       ],
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
+        "docs/CRITICAL_PATH_SMOKE_ALPHA7.md",
         "docs/DRIVER_ROLE_SETUP_ALPHA7.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
         "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
         "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
-        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md"
       ],
       "coverageLevel": "covered",
       "recommendedFutureTest": ""
@@ -134,7 +148,8 @@
         "tests/lib/material-tasks.test.ts",
         "tests/lib/message-state.test.ts",
         "tests/lib/task-completion-flow.test.ts",
-        "tests/lib/task-notifications.test.ts"
+        "tests/lib/task-notifications.test.ts",
+        "tests/lib/worker-critical-path-audit-source.test.ts"
       ],
       "sourceFilesFound": [
         "src/app/(manager)/archive/projects/[id]/page.tsx",
@@ -166,19 +181,29 @@
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
         "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_NEXT_ACTIONS.md",
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/ALPHA7_STABILIZATION_PLAN.md",
+        "docs/CRITICAL_PATH_SMOKE_ALPHA7.md",
+        "docs/DANGEROUS_ZONES_ALPHA7.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
         "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
         "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
         "docs/OWNER_MANUAL_QA_CHECKLIST.md",
         "docs/PERFORMANCE_BASELINE_ALPHA7.md",
+        "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md",
+        "docs/REALTIME_SYNC_HARDENING_ALPHA7.md",
         "docs/REFRESH_REALTIME_INVENTORY_ALPHA7.md",
+        "docs/REGRESSION_IMPACT_RULES_ALPHA7.md",
         "docs/ROLLBACK_CHECKLIST.md",
         "docs/STAGING_DEPLOYMENT.md",
+        "docs/SUPABASE_STEP0_AUDIT_PACK_ALPHA7.md",
+        "docs/WORKER_MOBILE_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/audit/PHASE3_CONSENT_OWNER_RLS.md"
       ],
       "coverageLevel": "covered",
@@ -198,10 +223,15 @@
       ],
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/CRITICAL_PATH_SMOKE_ALPHA7.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
-        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/REGRESSION_IMPACT_RULES_ALPHA7.md"
       ],
       "coverageLevel": "covered",
       "recommendedFutureTest": ""
@@ -221,11 +251,15 @@
       ],
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
+        "docs/CRITICAL_PATH_SMOKE_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_5_MOBILE_REALTIME_UX.md",
         "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/REGRESSION_IMPACT_RULES_ALPHA7.md",
         "docs/STAGING_DEPLOYMENT.md"
       ],
       "coverageLevel": "covered",
@@ -265,6 +299,7 @@
         "src/types/database.ts"
       ],
       "docsFound": [
+        "docs/SUPABASE_STEP0_RESULTS_ALPHA7.md",
         "docs/audit/PHASE1_SCHEMA_GAP.md"
       ],
       "coverageLevel": "covered",
@@ -336,8 +371,10 @@
       ],
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_PRODUCTION_HARDENING_REPORT.md",
+        "docs/CRITICAL_PATH_SMOKE_ALPHA7.md",
         "docs/DRIVER_ROLE_SETUP_ALPHA7.md",
         "docs/JARVIS_ACTION_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
@@ -345,6 +382,7 @@
         "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
         "docs/OWNER_MANUAL_QA_CHECKLIST.md",
         "docs/SMOKE_TEST_WAVE_AUDIT.md",
+        "docs/SUPABASE_STEP0_AUDIT_PACK_ALPHA7.md",
         "docs/audit/AUDIT_REPORT.md",
         "docs/audit/PHASE1_SCHEMA_GAP.md",
         "docs/permissions.md"
@@ -355,6 +393,7 @@
     {
       "category": "media delete only Andrey/Sergey",
       "testsFound": [
+        "tests/lib/manager-owner-critical-path-audit-source.test.ts",
         "tests/lib/media-delete-permissions.test.ts",
         "tests/lib/media-delete-route-ui.test.ts",
         "tests/lib/media-delete-server.test.ts"
@@ -370,12 +409,23 @@
       ],
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
+        "docs/ALPHA7_FINAL_RELEASE_FREEZE.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/ALPHA7_PRODUCTION_HARDENING_REPORT.md",
+        "docs/DANGEROUS_ZONES_ALPHA7.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/MUTATING_ROUTE_GUARD_AUDIT_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
-        "docs/OWNER_MANUAL_QA_CHECKLIST.md"
+        "docs/OWNER_MANUAL_QA_CHECKLIST.md",
+        "docs/PERFORMANCE_REPORT_ALPHA7.md",
+        "docs/PRODUCTION_READINESS_REPORT.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md",
+        "docs/REGRESSION_IMPACT_RULES_ALPHA7.md",
+        "docs/STORAGE_POLICY_HARDENING_PLAN_ALPHA7.md",
+        "docs/SUPABASE_STEP0_RESULTS_ALPHA7.md"
       ],
       "coverageLevel": "covered",
       "recommendedFutureTest": ""
@@ -383,8 +433,10 @@
     {
       "category": "file upload/open/download",
       "testsFound": [
+        "tests/lib/manager-owner-critical-path-audit-source.test.ts",
         "tests/lib/media-extension.test.ts",
         "tests/lib/media-playback.test.ts",
+        "tests/lib/project-media-library.test.ts",
         "tests/lib/task-attachments-upload.test.ts",
         "tests/lib/upload-limits.test.ts",
         "tests/lib/worker-utils-media-type.test.ts"
@@ -416,16 +468,28 @@
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
         "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/B2_MIGRATION_PLAN.md",
+        "docs/CRITICAL_PATH_SMOKE_ALPHA7.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
         "docs/OVERNIGHT_FIX_PACK_4_PERFORMANCE.md",
         "docs/OVERNIGHT_FIX_PACK_MEDIA_DELETE_PRIVILEGE.md",
         "docs/OWNER_MANUAL_QA_CHECKLIST.md",
         "docs/PERFORMANCE_BASELINE_ALPHA7.md",
+        "docs/PERFORMANCE_REPORT_ALPHA7.md",
+        "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/PRODUCTION_READINESS_REPORT.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md",
         "docs/REFRESH_REALTIME_INVENTORY_ALPHA7.md",
+        "docs/REGRESSION_IMPACT_RULES_ALPHA7.md",
+        "docs/STORAGE_POLICY_HARDENING_PLAN_ALPHA7.md",
+        "docs/SUPABASE_STEP0_AUDIT_PACK_ALPHA7.md",
+        "docs/SUPABASE_STEP0_RESULTS_ALPHA7.md",
+        "docs/WORKER_MOBILE_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/audit/MEDIA_HYGIENE_AUDIT.md"
       ],
       "coverageLevel": "covered",
@@ -439,6 +503,7 @@
         "tests/lib/finance-visibility.test.ts",
         "tests/lib/jarvis-diagnostics.test.ts",
         "tests/lib/manager-utils.test.ts",
+        "tests/lib/project-media-library.test.ts",
         "tests/lib/role-permissions.test.ts",
         "tests/lib/task-realtime.test.ts",
         "tests/lib/worker-utils.test.ts"
@@ -481,7 +546,8 @@
       "testsFound": [
         "tests/lib/ai-assistant-skills.test.ts",
         "tests/lib/annual-report-utils.test.ts",
-        "tests/lib/archive-utils.test.ts"
+        "tests/lib/archive-utils.test.ts",
+        "tests/lib/manager-owner-critical-path-audit-source.test.ts"
       ],
       "sourceFilesFound": [
         "src/app/(manager)/archive/page.tsx",
@@ -503,13 +569,18 @@
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
         "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
+        "docs/ALPHA7_FINAL_RELEASE_FREEZE.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_NEXT_ACTIONS.md",
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/ALPHA7_STABILIZATION_PLAN.md",
         "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
+        "docs/DANGEROUS_ZONES_ALPHA7.md",
         "docs/DRIVER_TIME_PROJECTS_ALPHA7.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/MUTATING_ROUTE_GUARD_AUDIT_ALPHA7.md",
         "docs/MUTATION_SURFACE_MAP.md",
         "docs/OVERNIGHT_FIX_PACK_1.md",
         "docs/OVERNIGHT_FIX_PACK_3_FILE_MEDIA.md",
@@ -520,9 +591,17 @@
         "docs/OVERNIGHT_FIX_PACK_PROJECT_ROUTE_GUARDS.md",
         "docs/OWNER_MANUAL_QA_CHECKLIST.md",
         "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md",
+        "docs/PERFORMANCE_REPORT_ALPHA7.md",
         "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/PRODUCTION_READINESS_REPORT.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md",
+        "docs/REGRESSION_IMPACT_RULES_ALPHA7.md",
         "docs/ROLLBACK_CHECKLIST.md",
-        "docs/SAFETY_GPS_CONSENT_ALPHA7.md"
+        "docs/SAFETY_GPS_CONSENT_ALPHA7.md",
+        "docs/STORAGE_POLICY_HARDENING_PLAN_ALPHA7.md",
+        "docs/SUPABASE_STEP0_AUDIT_PACK_ALPHA7.md",
+        "docs/SUPABASE_STEP0_RESULTS_ALPHA7.md",
+        "docs/WORKER_MOBILE_CRITICAL_PATH_AUDIT_ALPHA7.md"
       ],
       "coverageLevel": "covered",
       "recommendedFutureTest": ""
@@ -545,6 +624,8 @@
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
         "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md",
+        "docs/SUPABASE_STEP0_RESULTS_ALPHA7.md",
         "docs/audit/PHASE1_SCHEMA_GAP.md"
       ],
       "coverageLevel": "covered",
@@ -560,6 +641,7 @@
         "tests/lib/checkout-link.test.ts",
         "tests/lib/consent-audit-ui-source.test.ts",
         "tests/lib/driver-time-projects.test.ts",
+        "tests/lib/final-release-freeze-docs.test.ts",
         "tests/lib/finance-visibility.test.ts",
         "tests/lib/geofence.test.ts",
         "tests/lib/gps-consent-ui.test.ts",
@@ -574,6 +656,7 @@
         "tests/lib/shift-review.test.ts",
         "tests/lib/worker-checkout-action-source.test.ts",
         "tests/lib/worker-clock-metadata.test.ts",
+        "tests/lib/worker-critical-path-audit-source.test.ts",
         "tests/lib/worker-utils.test.ts"
       ],
       "sourceFilesFound": [
@@ -656,14 +739,20 @@
       "docsFound": [
         "docs/ALPHA7_DEFERRED_LOGIC_TASKS.md",
         "docs/ALPHA7_DEPLOY_READINESS.md",
+        "docs/ALPHA7_FINAL_QA_CHECKLIST.md",
+        "docs/ALPHA7_FINAL_RELEASE_FREEZE.md",
         "docs/ALPHA7_LIVE_QA_RUNBOOK.md",
         "docs/ALPHA7_NEXT_ACTIONS.md",
         "docs/ALPHA7_OWNER_STATUS_PACK.md",
         "docs/ALPHA7_PRODUCTION_HARDENING_REPORT.md",
         "docs/ALPHA7_STABILIZATION_PLAN.md",
         "docs/ARCHIVE_TRASH_AUDIT_ALPHA7.md",
+        "docs/CRITICAL_PATH_SMOKE_ALPHA7.md",
+        "docs/DANGEROUS_ZONES_ALPHA7.md",
         "docs/DRIVER_TIME_PROJECTS_ALPHA7.md",
+        "docs/MANAGER_OWNER_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/MATERIALS_DRIVER_WORKFLOW_ALPHA7.md",
+        "docs/MUTATING_ROUTE_GUARD_AUDIT_ALPHA7.md",
         "docs/MUTATION_SURFACE_MAP.md",
         "docs/OFFLINE_FIELD_MODE_ALPHA7.md",
         "docs/OVERNIGHT_FIX_PACK_1.md",
@@ -676,11 +765,19 @@
         "docs/OWNER_MANUAL_QA_CHECKLIST.md",
         "docs/PAYROLL_ARCHIVE_AUDIT_ALPHA7.md",
         "docs/PERFORMANCE_BASELINE_ALPHA7.md",
+        "docs/PERFORMANCE_REPORT_ALPHA7.md",
         "docs/PREDEPLOY_CHECKLIST.md",
+        "docs/PRODUCTION_READINESS_REPORT.md",
+        "docs/PRODUCTION_RISK_AUDIT_ALPHA7.md",
+        "docs/REGRESSION_IMPACT_RULES_ALPHA7.md",
         "docs/ROLLBACK_CHECKLIST.md",
         "docs/SAFETY_GPS_CONSENT_ALPHA7.md",
         "docs/SMOKE_TEST_WAVE_AUDIT.md",
         "docs/STAGING_DEPLOYMENT.md",
+        "docs/STORAGE_POLICY_HARDENING_PLAN_ALPHA7.md",
+        "docs/SUPABASE_STEP0_AUDIT_PACK_ALPHA7.md",
+        "docs/SUPABASE_STEP0_RESULTS_ALPHA7.md",
+        "docs/WORKER_MOBILE_CRITICAL_PATH_AUDIT_ALPHA7.md",
         "docs/audit/AUDIT_REPORT.md",
         "docs/audit/PHASE1_SCHEMA_GAP.md",
         "docs/audit/PHASE3_CONSENT_OWNER_RLS.md",

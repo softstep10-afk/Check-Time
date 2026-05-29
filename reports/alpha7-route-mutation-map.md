@@ -111,12 +111,14 @@ Static local scan only. This report does not call production and does not claim 
 | `src/lib/preview-data.ts` | read-only | no | confirmed guarded | role checks, org/company guard |
 | `src/lib/profile-skills.ts` | read-only | no | confirmed guarded | role checks, profile lookup |
 | `src/lib/project-geocoding.ts` | read-only | no | confirmed guarded | none |
+| `src/lib/project-media-library.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/project-navigation.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/project-planning-attachments.ts` | project sensitive | no | needs manual review | .insert(, org/company guard |
 | `src/lib/project-planning.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/project-public-notes.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/project-save.ts` | project sensitive | no | likely guarded | .insert(, .update(, same-org guard helper, org/company guard |
 | `src/lib/project-schedule.ts` | read-only | no | confirmed guarded | none |
+| `src/lib/release-diagnostics.ts` | read-only | no | confirmed guarded | none |
 | `src/lib/role-permissions.ts` | read-only | yes | confirmed guarded | role checks |
 | `src/lib/roles.ts` | read-only | no | confirmed guarded | role checks |
 | `src/lib/safe-log.ts` | read-only | no | confirmed guarded | role checks |
