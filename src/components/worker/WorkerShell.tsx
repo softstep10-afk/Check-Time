@@ -42,7 +42,7 @@ import {
   writeConsent,
 } from "@/lib/gps-consent";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
-import { validateUploadFile } from "@/lib/upload-limits";
+import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
 import {
   loadOfflineQueue,
   offlineUploadToFile,
@@ -1984,6 +1984,8 @@ export function WorkerShell({
         // less storage path, the manager's signed-URL flow had no hint of
         // the real format, and downloads landed on disk as raw binary.
         const safeName = buildSafeUploadName(file, mode);
+        const displayName = file.name || safeName;
+        const resolvedContentType = inferUploadContentType(file);
         const storagePath = `${shell.profile.org_id}/${targetProjectId}/${today}/${Date.now()}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage
@@ -1997,7 +1999,7 @@ export function WorkerShell({
             // no .mp4). Browsers then play the signed URL as binary →
             // black frame, no audio. Use the browser-detected MIME so the
             // signed URL serves the right Content-Type header.
-            contentType: file.type || undefined,
+            contentType: resolvedContentType,
           });
 
         if (uploadError) {
@@ -2013,9 +2015,9 @@ export function WorkerShell({
             uploaded_by: shell.profile.id,
             media_type: mediaType,
             storage_path: storagePath,
-            filename: file.name,
+            filename: displayName,
             file_size: file.size,
-            mime_type: file.type,
+            mime_type: resolvedContentType,
             caption: caption.trim() || null,
             // before_leave videos are also "checkout proof" videos — the
             // worker just hasn't pressed Clock Out yet. Tagging them with
@@ -2611,6 +2613,8 @@ export function WorkerShell({
         if (!file) continue; // thumb-only, needs re-pick
         const today = new Date().toISOString().slice(0, 10);
         const safeName = buildSafeUploadName(file, item.mode);
+        const displayName = file.name || safeName;
+        const resolvedContentType = inferUploadContentType(file);
         const storagePath = `${item.orgId}/${item.projectId}/${today}/${Date.now()}-${safeName}`;
 
         const { error: uploadError } = await supabase.storage
@@ -2618,7 +2622,7 @@ export function WorkerShell({
           .upload(storagePath, file, {
             upsert: false,
             cacheControl: "3600",
-            contentType: file.type || undefined,
+            contentType: resolvedContentType,
           });
         if (uploadError) continue;
 
@@ -2631,9 +2635,9 @@ export function WorkerShell({
             uploaded_by: item.profileId,
             media_type: queuedMediaType,
             storage_path: storagePath,
-            filename: file.name,
+            filename: displayName,
             file_size: file.size,
-            mime_type: file.type,
+            mime_type: resolvedContentType,
             caption: item.caption || null,
             is_checkout: item.mode === "checkout" || item.mode === "before_leave",
             time_event_id: null,
