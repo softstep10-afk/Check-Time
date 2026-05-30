@@ -155,6 +155,74 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function firstNumber(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numberValue(record[key]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
+function formatMinutes(minutes: number): string {
+  const hours = minutes / 60;
+  return `${minutes} min (${hours.toFixed(2)}h)`;
+}
+
+function buildHourAuditDetail(
+  entry: AuditEntry,
+  locale: "en" | "ru",
+): { summary: string; lines: string[] } | null {
+  if (entry.action !== "worker_hours_adjusted" && entry.action !== "worker_hours_manual_close") {
+    return null;
+  }
+
+  const before = entry.before ?? {};
+  const after = entry.after ?? {};
+  const workerName = stringValue(after.worker_name) ?? stringValue(before.worker_name) ?? "";
+  const beforeMinutes = firstNumber(before, [
+    "before_unpaid_minutes",
+    "unpaid_minutes_before",
+    "unpaid_minutes",
+  ]);
+  const afterMinutes = firstNumber(after, [
+    "after_unpaid_minutes",
+    "unpaid_minutes_after",
+  ]);
+  const adjustMinutes = numberValue(after.adjust_minutes);
+  const reason = stringValue(after.reason) ?? stringValue(before.reason);
+  const labels = locale === "ru"
+    ? {
+        changedBy: "Кто изменил",
+        worker: "Работник",
+        before: "До",
+        after: "После",
+        delta: "Изменение",
+        reason: "Причина",
+      }
+    : {
+        changedBy: "Changed by",
+        worker: "Worker",
+        before: "Before",
+        after: "After",
+        delta: "Delta",
+        reason: "Reason",
+      };
+
+  const lines = [
+    `${labels.changedBy}: ${entry.actorName}`,
+    workerName ? `${labels.worker}: ${workerName}` : "",
+    beforeMinutes !== null ? `${labels.before}: ${formatMinutes(beforeMinutes)}` : "",
+    afterMinutes !== null ? `${labels.after}: ${formatMinutes(afterMinutes)}` : "",
+    adjustMinutes !== null ? `${labels.delta}: ${formatMinutes(adjustMinutes)}` : "",
+    reason ? `${labels.reason}: ${reason}` : "",
+  ].filter(Boolean);
+
+  return {
+    summary: lines.slice(0, 3).join(" · "),
+    lines,
+  };
+}
+
 function humanizeAction(action: string, locale: "en" | "ru"): string {
   return ACTION_LABELS[action]?.[locale] ?? action.replace(/_/g, " ");
 }
@@ -554,6 +622,7 @@ export default function AuditLogPage() {
                   const color = ACTION_COLORS[entry.action] ?? "var(--text-muted)";
                   const expanded = expandedId === entry.id;
                   const after = entry.after ?? {};
+                  const hourAuditDetail = buildHourAuditDetail(entry, locale);
                   const externalPayment = after.external_payment &&
                     typeof after.external_payment === "object" &&
                     !Array.isArray(after.external_payment)
@@ -592,6 +661,11 @@ export default function AuditLogPage() {
                             {payrollSummary}
                           </div>
                         ) : null}
+                        {hourAuditDetail ? (
+                          <div className="mt-1 max-w-[34rem] text-xs leading-5 text-[var(--text-secondary)]">
+                            {hourAuditDetail.summary}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3 pr-3 text-xs text-[var(--text-muted)]">
                         {entry.targetType}{entry.targetId ? `:${entry.targetId.slice(0, 8)}` : ""}
@@ -605,15 +679,22 @@ export default function AuditLogPage() {
                           {expanded ? "−" : "+"}
                         </button>
                         {expanded && (entry.before || entry.after) ? (
-                          <div className="mt-2 space-y-1 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2 font-mono text-[10px] text-[var(--text-muted)]">
+                          <div className="mt-2 space-y-2 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2 text-[10px] text-[var(--text-muted)]">
+                            {hourAuditDetail ? (
+                              <div className="space-y-1 font-sans text-xs leading-5 text-[var(--text-secondary)]">
+                                {hourAuditDetail.lines.map((line) => (
+                                  <div key={line}>{line}</div>
+                                ))}
+                              </div>
+                            ) : null}
                             {entry.before ? (
-                              <div>
+                              <div className="font-mono">
                                 <span className="text-[var(--red)]">- </span>
                                 {JSON.stringify(entry.before, null, 2)}
                               </div>
                             ) : null}
                             {entry.after ? (
-                              <div>
+                              <div className="font-mono">
                                 <span className="text-[var(--green)]">+ </span>
                                 {JSON.stringify(entry.after, null, 2)}
                               </div>

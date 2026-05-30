@@ -3,6 +3,7 @@ import {
   EXTREME_SHIFT_MINUTES,
   WARN_SHIFT_MINUTES,
   deriveShiftReview,
+  buildShiftReviewAckByEventId,
   buildShiftReviewAckEventIds,
   getShiftReviewAck,
   isShiftActionable,
@@ -391,6 +392,7 @@ describe("shift review acknowledgement metadata", () => {
       reviewedEventId: "clock-out-1",
       reviewedAt: "2026-05-13T10:00:00Z",
       reviewedBy: "manager-1",
+      reviewed: true,
     });
   });
 
@@ -419,5 +421,43 @@ describe("shift review acknowledgement metadata", () => {
     ]);
 
     expect([...ids]).toEqual(["clock-out-2"]);
+  });
+
+  it("uses the latest append-only review state for reviewed event ids", () => {
+    const events = [
+      {
+        event_type: "adjust",
+        event_time: "2026-05-13T10:00:00Z",
+        metadata: {
+          shift_review_ack: {
+            status: "long_shift",
+            reviewed_event_id: "clock-out-3",
+            reviewed_at: "2026-05-13T10:00:00Z",
+            reviewed_by: "manager-1",
+            reviewed: true,
+            review_state: "reviewed",
+          },
+        },
+      },
+      {
+        event_type: "adjust",
+        event_time: "2026-05-13T10:15:00Z",
+        metadata: {
+          shift_review_ack: {
+            status: "long_shift",
+            reviewed_event_id: "clock-out-3",
+            reviewed_at: "2026-05-13T10:15:00Z",
+            reviewed_by: "manager-1",
+            reviewed: false,
+            review_state: "needs_review",
+          },
+        },
+      },
+    ];
+
+    const ackById = buildShiftReviewAckByEventId(events);
+
+    expect(ackById.get("clock-out-3")?.reviewed).toBe(false);
+    expect(buildShiftReviewAckEventIds(events).has("clock-out-3")).toBe(false);
   });
 });

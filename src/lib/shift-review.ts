@@ -43,6 +43,8 @@ export interface ShiftReviewAck {
   reviewedAt: string;
   reviewedBy: string | null;
   reviewedEventId: string | null;
+  /** Existing legacy ack events omit this field and therefore mean reviewed. */
+  reviewed: boolean;
 }
 
 export function getShiftReviewAck(metadata: unknown): ShiftReviewAck | null {
@@ -58,21 +60,41 @@ export function getShiftReviewAck(metadata: unknown): ShiftReviewAck | null {
     reviewedAt,
     reviewedBy: typeof ack.reviewed_by === "string" ? ack.reviewed_by : null,
     reviewedEventId: typeof ack.reviewed_event_id === "string" ? ack.reviewed_event_id : null,
+    reviewed:
+      ack.reviewed === false || ack.review_state === "needs_review"
+        ? false
+        : true,
   };
 }
 
 export function isShiftReviewAcknowledged(metadata: unknown): boolean {
-  return getShiftReviewAck(metadata) !== null;
+  return getShiftReviewAck(metadata)?.reviewed === true;
 }
 
-export function buildShiftReviewAckEventIds(
-  events: Array<{ event_type: string; metadata: unknown }>,
-): Set<string> {
-  const ids = new Set<string>();
+export function buildShiftReviewAckByEventId(
+  events: Array<{ event_type: string; metadata: unknown; event_time?: string }>,
+): Map<string, ShiftReviewAck> {
+  const latest = new Map<string, ShiftReviewAck>();
   for (const event of events) {
     if (event.event_type !== "adjust") continue;
     const ack = getShiftReviewAck(event.metadata);
-    if (ack?.reviewedEventId) ids.add(ack.reviewedEventId);
+    if (!ack?.reviewedEventId) continue;
+    const previous = latest.get(ack.reviewedEventId);
+    const previousTime = previous ? Date.parse(previous.reviewedAt) : Number.NEGATIVE_INFINITY;
+    const currentTime = Date.parse(event.event_time ?? ack.reviewedAt);
+    if (!previous || currentTime >= previousTime) {
+      latest.set(ack.reviewedEventId, ack);
+    }
+  }
+  return latest;
+}
+
+export function buildShiftReviewAckEventIds(
+  events: Array<{ event_type: string; metadata: unknown; event_time?: string }>,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const [eventId, ack] of buildShiftReviewAckByEventId(events)) {
+    if (ack.reviewed) ids.add(eventId);
   }
   return ids;
 }

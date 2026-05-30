@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { FullscreenMapWrapper } from "@/components/maps/FullscreenMapWrapper";
 import { ForceCheckoutButton } from "@/components/manager/ForceCheckoutButton";
 import { EventFeed, type FeedEvent } from "@/components/manager/EventFeed";
 import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
@@ -21,7 +20,7 @@ import {
   TRANSFER_GAP_COLOR,
 } from "@/lib/manager-utils";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
-import { formatDurationCompact, formatEventTime, parseGeoPoint } from "@/lib/worker-utils";
+import { formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import {
   GPS_STATUS_COLOR,
@@ -272,37 +271,20 @@ export default async function OverviewPage() {
         requireVideo: profile?.require_video ?? false,
         videoStatus: session.checkoutStatus,
       });
-      return { ...session, review };
+      const reviewed = session.clockOutEventId
+        ? acknowledgedShiftEventIds.has(session.clockOutEventId)
+        : false;
+      return { ...session, review, reviewed };
     })
     .filter((session) => session.review.status !== "normal")
-    .filter((session) => {
-      return session.clockOutEventId
-        ? !acknowledgedShiftEventIds.has(session.clockOutEventId)
-        : true;
-    })
     .sort((left, right) => {
+      if (left.reviewed !== right.reviewed) return left.reviewed ? 1 : -1;
       const statusGap =
         reviewPriorityRank[left.review.status] - reviewPriorityRank[right.review.status];
       if (statusGap !== 0) return statusGap;
       return right.durationMinutes - left.durationMinutes;
     })
     .slice(0, 8);
-
-  const activeWorkerMarkers = onSiteSessions
-    .map((session) => {
-      const clockInEvent = clockInEventsById.get(session.clockInEventId);
-      const point = parseGeoPoint(clockInEvent?.gps_point);
-      if (!point) return null;
-      return {
-        id: session.profileId,
-        name: session.profileName,
-        role: session.profileRole,
-        projectName: session.projectName,
-        lat: point.lat,
-        lng: point.lng,
-      };
-    })
-    .filter((w): w is NonNullable<typeof w> => w !== null);
 
   // ── Project-transfer gap detection ──
   // Today-only scope so the Overview's travel-gaps band shows what's
@@ -342,7 +324,7 @@ export default async function OverviewPage() {
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null),
-    ...closedShiftAlerts.map((session) => {
+    ...closedShiftAlerts.filter((session) => !session.reviewed).map((session) => {
       const reasonLabels = session.review.reasons
         .map((reason) => shiftReviewLabel[reason])
         .join(", ");
@@ -743,6 +725,17 @@ export default async function OverviewPage() {
                       />
                       {shiftReviewLabel[session.review.status]}
                     </span>
+                    <span
+                      className="inline-flex whitespace-nowrap rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                      style={{
+                        background: session.reviewed
+                          ? "rgba(15, 168, 120, 0.14)"
+                          : "rgba(212, 81, 94, 0.14)",
+                        color: session.reviewed ? "var(--green)" : "var(--red)",
+                      }}
+                    >
+                      {session.reviewed ? t("timeline.reviewed") : t("timeline.notReviewed")}
+                    </span>
                     <span className="font-mono text-sm font-bold text-[var(--text-primary)]">
                       {formatDurationCompact(session.durationMinutes)}
                     </span>
@@ -751,6 +744,7 @@ export default async function OverviewPage() {
                         eventId={clockOutEvent.id}
                         managerId={data.manager.id}
                         status={session.review.status}
+                        reviewed={session.reviewed}
                       />
                     ) : null}
                   </div>
@@ -760,21 +754,6 @@ export default async function OverviewPage() {
           </div>
         </section>
       ) : null}
-
-      <section className="surface-card p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("overview.activeSiteMap")}</h2>
-            <p className="mt-1 text-sm text-[var(--text-secondary)]">
-              {t("overview.mapDesc")}
-            </p>
-          </div>
-          <Link href="/projects" className="text-sm font-semibold text-[var(--brand-yellow)]">
-            {t("overview.openProjects")}
-          </Link>
-        </div>
-        <FullscreenMapWrapper projects={projectSummaries} activeWorkers={activeWorkerMarkers} />
-      </section>
 
       {/* ── Currently on site table ── */}
       <section className="surface-card p-4">

@@ -855,13 +855,19 @@ export function TeamMemberPage({
       beforeData: {
         worker_name: profile.name,
         unpaid_minutes: minutesToZero,
+        before_unpaid_minutes: minutesToZero,
+        before_unpaid_hours: Number((minutesToZero / 60).toFixed(2)),
       },
       afterData: {
         worker_name: profile.name,
         project_id: projectId,
         adjust_minutes: -minutesToZero,
+        after_unpaid_minutes: 0,
+        after_unpaid_hours: 0,
         reason,
         kind: "reset_to_zero",
+        changed_by: managerName,
+        changed_by_role: managerRole,
       },
     });
     router.refresh();
@@ -881,6 +887,8 @@ export function TeamMemberPage({
     if (!reason) return;
 
     const signedMinutes = adjustSign === "+" ? Math.round(hours * 60) : -Math.round(hours * 60);
+    const beforeUnpaidMinutes = hourBuckets.unpaidMinutes;
+    const afterUnpaidMinutes = beforeUnpaidMinutes + signedMinutes;
 
     setBusyKey("adjust");
     setMessage("");
@@ -925,13 +933,19 @@ export function TeamMemberPage({
       targetId: profile.id,
       beforeData: {
         worker_name: profile.name,
+        before_unpaid_minutes: beforeUnpaidMinutes,
+        before_unpaid_hours: Number((beforeUnpaidMinutes / 60).toFixed(2)),
       },
       afterData: {
         worker_name: profile.name,
         project_id: projectId,
         adjust_minutes: signedMinutes,
+        after_unpaid_minutes: afterUnpaidMinutes,
+        after_unpaid_hours: Number((afterUnpaidMinutes / 60).toFixed(2)),
         reason,
         show_to_worker: showToWorker,
+        changed_by: managerName,
+        changed_by_role: managerRole,
       },
     });
     router.refresh();

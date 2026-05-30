@@ -11,17 +11,22 @@ export function ShiftReviewAckButton({
   eventId,
   managerId,
   status,
+  reviewed = false,
 }: {
   eventId: string;
   managerId: string;
   status: ShiftReviewStatus;
+  reviewed?: boolean;
 }) {
   const router = useRouter();
   const supabase = createClient();
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const actionColor = SHIFT_REVIEW_COLOR[status] ?? "var(--red)";
+  const nextReviewed = !reviewed;
+  const actionColor = reviewed
+    ? "var(--green)"
+    : SHIFT_REVIEW_COLOR[status] ?? "var(--red)";
 
   async function handleClick() {
     setBusy(true);
@@ -46,13 +51,17 @@ export function ShiftReviewAckButton({
         project_id: data.project_id,
         event_type: "adjust",
         event_time: new Date().toISOString(),
-        notes: "Shift review acknowledged",
+        notes: nextReviewed
+          ? "Shift review marked reviewed"
+          : "Shift review marked needs review",
         metadata: {
           shift_review_ack: {
             status,
             reviewed_event_id: eventId,
             reviewed_at: new Date().toISOString(),
             reviewed_by: managerId,
+            reviewed: nextReviewed,
+            review_state: nextReviewed ? "reviewed" : "needs_review",
           },
         },
       });
@@ -75,11 +84,15 @@ export function ShiftReviewAckButton({
         style={{
           borderColor: actionColor,
           color: actionColor,
-          background: "rgba(212, 81, 94, 0.06)",
+          background: reviewed ? "rgba(15, 168, 120, 0.08)" : "rgba(212, 81, 94, 0.06)",
         }}
       >
         <CheckCircle2 size={13} />
-        {busy ? t("common.saving") : t("shiftReview.markReviewed")}
+        {busy
+          ? t("common.saving")
+          : reviewed
+            ? t("shiftReview.markNeedsReview")
+            : t("shiftReview.reviewedState")}
       </button>
       {error ? (
         <span className="max-w-[240px] text-right text-[10px] text-[var(--red)]">

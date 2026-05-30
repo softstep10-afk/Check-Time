@@ -627,17 +627,19 @@ export const translations = {
   "shiftReview.columnHeader": { en: "Status", ru: "Статус" },
   "shiftReview.tooltipReasons": { en: "Reasons: {list}", ru: "Причины: {list}" },
   "shiftReview.markReviewed": { en: "Mark reviewed", ru: "Отметить проверено" },
+  "shiftReview.reviewedState": { en: "Reviewed", ru: "Проверено" },
+  "shiftReview.markNeedsReview": { en: "Mark needs review", ru: "Требует проверки" },
   "shiftReview.needsReviewCount": {
     en: "{count} active shifts need review",
     ru: "{count} активных смен требуют проверки",
   },
   "shiftReview.closedShiftAlerts": {
-    en: "Closed shifts needing review",
-    ru: "Закрытые смены требуют проверки",
+    en: "Closed shift review queue",
+    ru: "Проверка закрытых смен",
   },
   "shiftReview.closedShiftAlertsDesc": {
-    en: "These shifts are closed but still unsafe for payroll until a manager reviews duration or checkout proof.",
-    ru: "Эти смены закрыты, но для зарплаты их нужно проверить: длительность или видео при выходе выглядят подозрительно.",
+    en: "Review suspicious closed shifts, mark them reviewed, or send them back to needs review if something still looks wrong.",
+    ru: "Проверьте подозрительные закрытые смены, отметьте их как проверенные или верните в «Требует проверки», если что-то не сходится.",
   },
   "shiftReview.openShiftsAlert": {
     en: "Open shifts with warnings",

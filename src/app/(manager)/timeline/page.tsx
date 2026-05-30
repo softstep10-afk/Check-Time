@@ -6,6 +6,7 @@ import { buildManagerSessions, buildTimelineItems } from "@/lib/manager-utils";
 import { formatDateTime, formatDurationCompact } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import {
+  buildShiftReviewAckByEventId,
   buildShiftReviewAckEventIds,
   deriveShiftReview,
   getShiftReviewAck,
@@ -130,12 +131,7 @@ export default async function TimelinePage({
   );
   const eventTypeById = new Map(data.timeEvents.map((event) => [event.id, event.event_type]));
   const acknowledgedShiftEventIds = buildShiftReviewAckEventIds(data.timeEvents);
-  const ackByReviewedEventId = new Map(
-    data.timeEvents
-      .map((event) => getShiftReviewAck(event.metadata))
-      .filter((ack): ack is NonNullable<typeof ack> => Boolean(ack?.reviewedEventId))
-      .map((ack) => [ack.reviewedEventId, ack]),
-  );
+  const ackByReviewedEventId = buildShiftReviewAckByEventId(data.timeEvents);
   for (const session of sessions) {
     for (const eventId of session.eventIds) {
       sessionsByEventId.set(eventId, session);
@@ -304,15 +300,16 @@ export default async function TimelinePage({
               const ack = closeEvent
                 ? ackByReviewedEventId.get(closeEvent.id) ?? getShiftReviewAck(closeEvent.metadata)
                 : null;
+              const reviewed = ack?.reviewed === true;
               const reviewNeedsAction =
                 !session.isOpen &&
                 Boolean(closeEvent) &&
                 review.status !== "normal" &&
-                !ack &&
+                !reviewed &&
                 !acknowledgedShiftEventIds.has(closeEvent?.id ?? "");
               const videoLabel = session.isOpen
                 ? null
-                : videoStatusLabel(session.checkoutStatus, t, Boolean(ack));
+                : videoStatusLabel(session.checkoutStatus, t, reviewed);
 
               return (
                 <article
@@ -354,7 +351,7 @@ export default async function TimelinePage({
                       gpsSuppressed || clockInEvent?.gps_point ? "good" : "warning",
                     )}
                     {videoLabel ? chip(videoLabel, session.checkoutStatus === "pending" ? "warning" : "good") : null}
-                    {ack
+                    {reviewed
                       ? null
                       : review.status === "normal"
                         ? chip(shiftReviewLabel.normal, "good")
@@ -363,15 +360,16 @@ export default async function TimelinePage({
                             review.status === "needs_review" || review.status === "gps_lost" ? "danger" : "warning",
                           )}
                     {reviewNeedsAction ? chip(t("timeline.notReviewed"), "danger") : null}
-                    {ack ? chip(`${t("timeline.reviewed")} ${ack.reviewedAt.slice(0, 10)}`, "good") : null}
+                    {reviewed && ack ? chip(`${t("timeline.reviewed")} ${ack.reviewedAt.slice(0, 10)}`, "good") : null}
                   </div>
 
-                  {reviewNeedsAction && closeEvent ? (
+                  {!session.isOpen && closeEvent && review.status !== "normal" ? (
                     <div className="mt-3 flex justify-end">
                       <ShiftReviewAckButton
                         eventId={closeEvent.id}
                         managerId={data.manager.id}
                         status={review.status}
+                        reviewed={reviewed}
                       />
                     </div>
                   ) : null}
@@ -407,7 +405,8 @@ export default async function TimelinePage({
                 const session = sessionsByEventId.get(item.id) ?? null;
                 const isCloseEvent = item.event_type === "clock_out" || item.event_type === "auto_out";
                 const ack = ackByReviewedEventId.get(item.id) ?? getShiftReviewAck(item.metadata);
-                const videoLabel = videoStatusLabel(item.video_status, t, Boolean(ack));
+                const reviewed = ack?.reviewed === true;
+                const videoLabel = videoStatusLabel(item.video_status, t, reviewed);
                 const profile = profilesById.get(item.profile_id);
                 const clockInEvent = session ? clockInEventsById.get(session.clockInEventId) : null;
                 const gpsSuppressed = session
@@ -427,7 +426,7 @@ export default async function TimelinePage({
                 const reviewNeedsAction =
                   Boolean(review) &&
                   review?.status !== "normal" &&
-                  !ack &&
+                  !reviewed &&
                   !acknowledgedShiftEventIds.has(item.id);
                 const openDuration =
                   session?.isOpen && item.id === session.clockInEventId
@@ -476,7 +475,7 @@ export default async function TimelinePage({
                         gpsSuppressed || item.gps_point ? "good" : "warning",
                       )}
                       {videoLabel ? chip(videoLabel, item.video_status === "pending" ? "warning" : "good") : null}
-                      {review && review.status !== "normal" && !ack
+                      {review && review.status !== "normal" && !reviewed
                         ? chip(
                             shiftReviewLabel[review.status],
                             review.status === "needs_review" || review.status === "gps_lost"
@@ -484,15 +483,19 @@ export default async function TimelinePage({
                               : "warning",
                           )
                         : null}
-                      {ack ? chip(`${t("timeline.reviewed")} ${ack.reviewedAt.slice(0, 10)}`, "good") : null}
+                      {reviewNeedsAction || (ack && !reviewed)
+                        ? chip(t("timeline.notReviewed"), "danger")
+                        : null}
+                      {reviewed && ack ? chip(`${t("timeline.reviewed")} ${ack.reviewedAt.slice(0, 10)}`, "good") : null}
                     </div>
 
-                    {reviewNeedsAction && review ? (
+                    {review && review.status !== "normal" ? (
                       <div className="mt-3 flex justify-end">
                         <ShiftReviewAckButton
                           eventId={item.id}
                           managerId={data.manager.id}
                           status={review.status}
+                          reviewed={reviewed}
                         />
                       </div>
                     ) : null}
