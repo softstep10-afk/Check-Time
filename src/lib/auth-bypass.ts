@@ -1,18 +1,23 @@
 // Preview mode so the app can be browsed without a live session.
 //
-// Controlled by NEXT_PUBLIC_AUTH_BYPASS in local development only.
-// Defaults to FALSE — i.e. real auth is required unless the env var is
-// explicitly the string "true" AND the app is running in `next dev`.
-// Must use the NEXT_PUBLIC_ prefix because several client components
-// branch on this constant; Next.js only inlines NEXT_PUBLIC_* into the
-// browser bundle at build time.
-//
-// Local dev:        add `NEXT_PUBLIC_AUTH_BYPASS=true` to .env.local
-//                   (gitignored) to keep current auto-login UX.
-// Staging / prod:   bypass is forced OFF even if the env var is present.
+// Defaults to FALSE. Local development can opt in with
+// NEXT_PUBLIC_AUTH_BYPASS=true. Hosted non-production deploys need the
+// additional NEXT_PUBLIC_AUTH_BYPASS_ALLOW_NON_PRODUCTION=true flag.
+// Vercel production is always forced back to real auth, even if these
+// public flags are accidentally present.
+const DEPLOY_ENV = process.env.VERCEL_ENV ?? process.env.NEXT_PUBLIC_VERCEL_ENV;
+const IS_VERCEL_DEPLOYMENT = process.env.VERCEL === "1" || Boolean(DEPLOY_ENV);
+const IS_VERCEL_PRODUCTION = DEPLOY_ENV === "production";
+const IS_LOCAL_DEVELOPMENT =
+  process.env.NODE_ENV === "development" && !IS_VERCEL_DEPLOYMENT;
+const IS_EXPLICIT_NON_PRODUCTION_BYPASS =
+  process.env.NEXT_PUBLIC_AUTH_BYPASS_ALLOW_NON_PRODUCTION === "true" &&
+  (DEPLOY_ENV === "preview" || DEPLOY_ENV === "development");
+
 export const AUTH_BYPASS_ENABLED =
-  process.env.NODE_ENV !== "production" &&
-  process.env.NEXT_PUBLIC_AUTH_BYPASS === "true";
+  process.env.NEXT_PUBLIC_AUTH_BYPASS === "true" &&
+  !IS_VERCEL_PRODUCTION &&
+  (IS_LOCAL_DEVELOPMENT || IS_EXPLICIT_NON_PRODUCTION_BYPASS);
 
 /**
  * Hardcoded auth.users / profiles UUID for the seeded demo owner.
