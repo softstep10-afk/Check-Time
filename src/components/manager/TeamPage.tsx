@@ -615,15 +615,15 @@ export function TeamPage({
                     <div className="mt-1 text-xs" style={{ color: "var(--red)" }}>{nameError}</div>
                   ) : null}
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div className="min-w-0">
                     <label
                       htmlFor="team-member-pin"
                       className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]"
                     >
                       {t("team.pinLabel")}
                     </label>
-                    <div className="flex gap-2">
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                       <input
                         id="team-member-pin"
                         name="pin"
@@ -633,12 +633,12 @@ export function TeamPage({
                         placeholder={t("team.pinPlaceholder")}
                         value={pinValue}
                         onChange={(e) => validatePin(e.target.value)}
-                        className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+                        className="min-w-0 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                       />
                       <button
                         type="button"
                         onClick={regeneratePin}
-                        className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 text-xs font-semibold text-[var(--text-primary)]"
+                        className="w-full whitespace-nowrap rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-3 text-xs font-semibold text-[var(--text-primary)] sm:w-auto"
                       >
                         {t("team.newPin")}
                       </button>
@@ -650,7 +650,7 @@ export function TeamPage({
                       <div className="mt-1 text-xs" style={{ color: "var(--red)" }}>{pinError}</div>
                     ) : null}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label
                       htmlFor="team-member-role"
                       className="mb-1 block text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]"

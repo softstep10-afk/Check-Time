@@ -49,4 +49,15 @@ describe("team roster finance cleanup", () => {
     expect(teamPageSource).toContain("href={`/team/${profile.id}#message`}");
     expect(teamPageSource).toContain("handleRemoveProfile(profile)");
   });
+
+  it("keeps the new participant PIN and role controls in separate responsive columns", () => {
+    expect(teamPageSource).toContain('htmlFor="team-member-pin"');
+    expect(teamPageSource).toContain('htmlFor="team-member-role"');
+    expect(teamPageSource).toContain('sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]');
+    expect(teamPageSource).toContain('grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]');
+    expect(teamPageSource).toContain("min-w-0 rounded-[var(--radius-md)]");
+    expect(teamPageSource).toContain("w-full whitespace-nowrap");
+    expect(teamPageSource).toContain("creatableRoleGroups.map");
+    expect(teamPageSource).toContain("handleCreateMember");
+  });
 });
