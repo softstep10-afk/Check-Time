@@ -1,11 +1,7 @@
 import { TeamPage } from "@/components/manager/TeamPage";
 import { getTeamPageData } from "@/lib/manager-data";
 import { buildManagerSessions, buildProfileSummaries } from "@/lib/manager-utils";
-import {
-  ALWAYS_FINANCE_ROLES,
-  fetchFinanceAccessUserIds,
-  hasFinanceAccess,
-} from "@/lib/finance-access";
+import { hasFinanceAccess } from "@/lib/finance-access";
 import { createClient } from "@/lib/supabase/server";
 
 // F5 must reflect newly added/edited workers and live shift state.
@@ -22,11 +18,9 @@ export default async function TeamRoutePage() {
     id: data.manager.id,
     role: data.manager.role,
   });
-  const financeAccessUserIds = await fetchFinanceAccessUserIds(supabase);
   const profileSummaries = buildProfileSummaries(
     data,
     sessions,
-    financeAccessUserIds,
   ).filter((profile) => !profile.deleted_at);
 
   return (
@@ -34,7 +28,6 @@ export default async function TeamRoutePage() {
       initialProfiles={profileSummaries}
       hasAdminProvisioning={Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)}
       hasFinanceAccess={managerHasFinanceAccess}
-      canManageFinanceAccess={ALWAYS_FINANCE_ROLES.has(data.manager.role)}
       managerId={data.manager.id}
       managerRole={data.manager.role}
     />

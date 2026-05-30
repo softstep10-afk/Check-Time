@@ -10,20 +10,8 @@ import type { ManagerProfileSummary } from "@/lib/manager-types";
 import type { UserRole } from "@/types/database";
 import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
-import { toggleUserCapability } from "@/app/(manager)/admin/users/[id]/permissions/actions";
-import { ALWAYS_FINANCE_ROLES } from "@/lib/finance-access";
 import { canCreateTeamRole } from "@/lib/role-permissions";
 import { generateTeamMemberPin, isValidTeamPasscode } from "@/lib/team-member-provisioning";
-
-const currencyFmt = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-});
-
-function earnedAmount(profile: ManagerProfileSummary): number {
-  const hours = profile.weekMinutes / 60;
-  return Math.round(hours * Number(profile.hourly_rate ?? 0) * 100) / 100;
-}
 
 const roleOptions: UserRole[] = [
   "worker",
@@ -69,14 +57,12 @@ export function TeamPage({
   initialProfiles,
   hasAdminProvisioning,
   hasFinanceAccess,
-  canManageFinanceAccess,
   managerId,
   managerRole,
 }: {
   initialProfiles: ManagerProfileSummary[];
   hasAdminProvisioning: boolean;
   hasFinanceAccess: boolean;
-  canManageFinanceAccess: boolean;
   managerId: string;
   managerRole: UserRole;
 }) {
@@ -91,45 +77,7 @@ export function TeamPage({
   const [nameError, setNameError] = useState("");
   const [pinError, setPinError] = useState("");
   const [pinValue, setPinValue] = useState(() => generateTeamMemberPin());
-  // Optimistic override of profile.financeAccess, keyed by profile id.
-  // Successful toggles land in here and stay; router.refresh() repopulates
-  // initialProfiles with the same value, so effectiveFinanceAccess returns
-  // the right answer either way. The map grows at most one entry per
-  // toggled profile per session — negligible for a roster page.
-  const [financeOverrides, setFinanceOverrides] = useState<
-    Record<string, boolean>
-  >({});
   const { t } = useTranslation();
-
-  function effectiveFinanceAccess(profile: ManagerProfileSummary): boolean {
-    if (profile.id in financeOverrides) return financeOverrides[profile.id];
-    return profile.financeAccess;
-  }
-
-  async function handleFinanceToggle(
-    profile: ManagerProfileSummary,
-    next: boolean,
-  ) {
-    if (ALWAYS_FINANCE_ROLES.has(profile.role)) return;
-    if (!canManageFinanceAccess) return;
-    const previous = effectiveFinanceAccess(profile);
-    setFinanceOverrides((prev) => ({ ...prev, [profile.id]: next }));
-    setBusyKey(`finance-${profile.id}`);
-    setMessage("");
-    const result = await toggleUserCapability({
-      userId: profile.id,
-      capability: "finance_access",
-      granted: next,
-    });
-    setBusyKey(null);
-    if (!result.ok) {
-      setFinanceOverrides((prev) => ({ ...prev, [profile.id]: previous }));
-      setMessage(result.message ?? t("team.financeToggleError"));
-      setMessageType("error");
-      return;
-    }
-    router.refresh();
-  }
 
   const visibleProfiles = useMemo(() => {
     let filtered = initialProfiles;
@@ -160,15 +108,11 @@ export function TeamPage({
 
   const totals = useMemo(() => {
     let minutes = 0;
-    let earned = 0;
     for (const p of visibleProfiles) {
       minutes += p.weekMinutes;
-      if (hasFinanceAccess) {
-        earned += earnedAmount(p);
-      }
     }
-    return { minutes, earned: Math.round(earned * 100) / 100 };
-  }, [visibleProfiles, hasFinanceAccess]);
+    return { minutes };
+  }, [visibleProfiles]);
 
   const groupedProfiles = useMemo(() => {
     return ROLE_GROUPS
@@ -179,9 +123,7 @@ export function TeamPage({
       .filter((group) => group.profiles.length > 0);
   }, [visibleProfiles]);
 
-  const showFinanceAccessColumn = canManageFinanceAccess;
-  const rosterColumnCount =
-    4 + (hasFinanceAccess ? 2 : 0) + (showFinanceAccessColumn ? 1 : 0) + 1;
+  const rosterColumnCount = 5;
 
   const inactiveCount = useMemo(
     () => initialProfiles.filter((p) => !p.is_active).length,
@@ -403,15 +345,6 @@ export function TeamPage({
                   <th className="pb-3 pr-3 font-semibold">{t("team.colCategory")}</th>
                   <th className="pb-3 pr-3 font-semibold">{t("team.colStatus")}</th>
                   <th className="pb-3 pr-3 text-right font-semibold">{t("team.colHours")}</th>
-                  {hasFinanceAccess ? (
-                    <>
-                      <th className="pb-3 pr-3 text-right font-semibold">{t("team.colRate")}</th>
-                      <th className="pb-3 pr-3 text-right font-semibold">{t("team.colEarned")}</th>
-                    </>
-                  ) : null}
-                  {showFinanceAccessColumn ? (
-                    <th className="pb-3 pr-3 text-right font-semibold">{t("team.colFinance")}</th>
-                  ) : null}
                   <th className="pb-3 text-right font-semibold">{t("team.colActions")}</th>
                 </tr>
               </thead>
@@ -427,8 +360,6 @@ export function TeamPage({
                       </td>
                     </tr>
                     {group.profiles.map((profile) => {
-                  const earned = earnedAmount(profile);
-                  const rate = Number(profile.hourly_rate ?? 0);
                   return (
                     <tr key={profile.id} className="border-b border-[var(--border-subtle)]">
                       <td className="py-3 pr-3">
@@ -473,48 +404,6 @@ export function TeamPage({
                       <td className="py-3 pr-3 text-right font-mono text-[var(--text-primary)]">
                         {formatDurationCompact(profile.weekMinutes)}
                       </td>
-                      {hasFinanceAccess ? (
-                        <>
-                          <td
-                            className="py-3 pr-3 text-right font-mono"
-                            style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}
-                          >
-                            ${rate.toFixed(2)}
-                          </td>
-                          <td
-                            className="py-3 pr-3 text-right font-mono"
-                            style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}
-                          >
-                            {currencyFmt.format(earned)}
-                          </td>
-                        </>
-                      ) : null}
-                      {showFinanceAccessColumn ? (
-                      <td className="py-3 pr-3 text-right">
-                        {ALWAYS_FINANCE_ROLES.has(profile.role) ? (
-                          <span
-                            className="inline-flex items-center rounded-[var(--radius-pill)] px-2 py-0.5 text-[9px] font-bold uppercase"
-                            style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
-                            title={t("team.financeAlways")}
-                          >
-                            {t("team.financeAlways")}
-                          </span>
-                        ) : (
-                          <input
-                            type="checkbox"
-                            checked={effectiveFinanceAccess(profile)}
-                            onChange={(event) =>
-                              void handleFinanceToggle(profile, event.target.checked)
-                            }
-                            disabled={
-                              !canManageFinanceAccess || busyKey === `finance-${profile.id}`
-                            }
-                            aria-label={t("team.colFinance")}
-                            className="h-4 w-4 cursor-pointer"
-                          />
-                        )}
-                      </td>
-                      ) : null}
                       <td className="py-3 text-right">
                         <div className="inline-flex items-center gap-1">
                           <Link
@@ -568,15 +457,6 @@ export function TeamPage({
                   <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--brand-yellow)" }}>
                     {formatDurationCompact(totals.minutes)}
                   </td>
-                  {hasFinanceAccess ? (
-                    <>
-                      <td className="py-3 pr-3" />
-                      <td className="py-3 pr-3 text-right font-mono font-bold" style={{ color: "var(--green)" }}>
-                        {currencyFmt.format(totals.earned)}
-                      </td>
-                    </>
-                  ) : null}
-                  {showFinanceAccessColumn ? <td className="py-3 pr-3" /> : null}
                   <td className="py-3 pr-3" />
                 </tr>
               </tfoot>
@@ -591,8 +471,6 @@ export function TeamPage({
                   {t(group.labelKey)} · {group.profiles.length}
                 </div>
                 {group.profiles.map((profile) => {
-              const earned = earnedAmount(profile);
-              const rate = Number(profile.hourly_rate ?? 0);
               return (
                 <div
                   key={profile.id}
@@ -640,45 +518,9 @@ export function TeamPage({
                     <span className="font-mono text-[var(--text-primary)]">
                       {formatDurationCompact(profile.weekMinutes)}
                     </span>
-                    {hasFinanceAccess ? (
-                      <>
-                        <span className="font-mono" style={{ color: rate > 0 ? "var(--brand-yellow)" : "var(--text-muted)" }}>
-                          ${rate.toFixed(2)}/h
-                        </span>
-                        <span className="font-mono font-semibold" style={{ color: earned > 0 ? "var(--green)" : "var(--text-muted)" }}>
-                          {currencyFmt.format(earned)}
-                        </span>
-                      </>
-                    ) : null}
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    {showFinanceAccessColumn ? (
-                    ALWAYS_FINANCE_ROLES.has(profile.role) ? (
-                      <span
-                        className="inline-flex items-center rounded-[var(--radius-pill)] px-2 py-0.5 text-[9px] font-bold uppercase"
-                        style={{ background: "rgba(15, 168, 120, 0.16)", color: "var(--green)" }}
-                        title={t("team.financeAlways")}
-                      >
-                        {t("team.colFinance")}: {t("team.financeAlways")}
-                      </span>
-                    ) : (
-                      <label className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[var(--text-secondary)]">
-                        <input
-                          type="checkbox"
-                          checked={effectiveFinanceAccess(profile)}
-                          onChange={(event) =>
-                            void handleFinanceToggle(profile, event.target.checked)
-                          }
-                          disabled={
-                            !canManageFinanceAccess || busyKey === `finance-${profile.id}`
-                          }
-                          className="h-3.5 w-3.5 cursor-pointer"
-                        />
-                        {t("team.colFinance")}
-                      </label>
-                    )
-                    ) : <span />}
+                  <div className="mt-3 flex items-center justify-end gap-2">
                     <div className="inline-flex items-center gap-1">
                     <Link
                       href={`/team/${profile.id}`}
@@ -725,11 +567,6 @@ export function TeamPage({
                 <span className="font-mono font-bold" style={{ color: "var(--brand-yellow)" }}>
                   {formatDurationCompact(totals.minutes)}
                 </span>
-                {hasFinanceAccess ? (
-                  <span className="font-mono font-bold" style={{ color: "var(--green)" }}>
-                    {currencyFmt.format(totals.earned)}
-                  </span>
-                ) : null}
               </div>
             </div>
           </div>
