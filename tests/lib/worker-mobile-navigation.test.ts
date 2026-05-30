@@ -28,10 +28,17 @@ describe("worker mobile navigation layout", () => {
       "/journal",
       "/my-tasks",
       "/schedule",
-      "/hours",
     ]) {
       expect(workerShellSource).toContain(`href: "${href}"`);
     }
+  });
+
+  it("keeps Projects only in the top worker navigation", () => {
+    const projectsMatches = workerShellSource.match(/href: "\/my-projects"/g) ?? [];
+
+    expect(projectsMatches).toHaveLength(1);
+    expect(workerShellSource).not.toContain('href="/my-projects"');
+    expect(workerShellSource).not.toContain("CalendarClock");
   });
 
   it("adds explicit mobile spacing so task and schedule buttons do not visually merge", () => {

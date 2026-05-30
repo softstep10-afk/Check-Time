@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, CheckCircle2, FolderKanban, MapPin, Navigation, ShieldCheck } from "lucide-react";
+import { CheckCircle2, MapPin, Navigation, ShieldCheck } from "lucide-react";
 import { WorkerGpsCheckMap } from "@/components/maps/WorkerGpsCheckMap";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
@@ -269,38 +268,7 @@ export function ClockPage() {
               {t("clock.noProjectsHint")}
             </p>
           </div>
-        ) : (
-          // Worker is off-shift but has allowed projects. Project browsing
-          // and Check In live on the Projects tab now — surface a single
-          // compact CTA that lands on /my-projects.
-          <Link
-            href="/my-projects"
-            className="surface-panel mt-4 flex items-center justify-between gap-3 p-3"
-            style={{
-              borderColor: "rgba(245, 158, 11, 0.35)",
-              background: "rgba(245, 158, 11, 0.08)",
-            }}
-          >
-            <div className="flex items-start gap-2">
-              <FolderKanban size={18} className="mt-0.5 shrink-0" style={{ color: "#f59e0b" }} />
-              <div>
-                <div className="text-sm font-semibold text-[var(--text-primary)]">
-                  {t("clock.chooseProjectTitle")}
-                </div>
-                <p className="mt-0.5 text-xs text-[var(--text-secondary)]">
-                  {t("clock.chooseProjectHint")}
-                </p>
-              </div>
-            </div>
-            <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1 text-[11px] font-semibold"
-              style={{ borderColor: "rgba(245, 158, 11, 0.5)", color: "#f59e0b" }}
-            >
-              {t("clock.goToProjects")}
-              <ArrowRight size={11} />
-            </span>
-          </Link>
-        )}
+        ) : null}
 
         {shell.clockState.isClockedIn ? (
           <div className="mt-4">
