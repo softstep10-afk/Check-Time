@@ -1688,6 +1688,14 @@ function ProjectClockControls({
   const clockedInElsewhere = isClockedIn && currentProjectId !== projectId;
   const startingShift = busyAction === "clock-in" || savingAck;
 
+  useEffect(() => {
+    if (!checkoutOpen || isClockedIn) return;
+    const id = window.setTimeout(() => {
+      setCheckoutOpen(false);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [checkoutOpen, isClockedIn]);
+
   async function handleStart(noGps = false) {
     setAckError(null);
     const shouldSkipGps = gpsNotRequired || noGps;

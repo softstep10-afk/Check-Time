@@ -51,6 +51,13 @@ export function ClockPage() {
     }
     wasClockedInRef.current = shell.clockState.isClockedIn;
   }, [shell.clockState.isClockedIn]);
+  useEffect(() => {
+    if (!checkoutOpen || shell.clockState.isClockedIn) return;
+    const id = window.setTimeout(() => {
+      setCheckoutOpen(false);
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [checkoutOpen, shell.clockState.isClockedIn]);
   const todayIso = new Date().toISOString().slice(0, 10);
   const todaySummary = useMemo(() => {
     const closedToday = shell.sessions.filter(

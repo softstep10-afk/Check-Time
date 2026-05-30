@@ -464,6 +464,7 @@ export function WorkerShell({
   const [, startTransition] = useTransition();
   const [shell, setShell] = useState(initialData);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const clockOutInFlightRef = useRef(false);
   const [banner, setBanner] = useState<BannerState>(null);
   const [lastGpsCheck, setLastGpsCheck] = useState<WorkerGpsCheck | null>(null);
   // GPS-failure prompt shown when getCurrentPosition rejects. Replaces
@@ -899,6 +900,24 @@ export function WorkerShell({
       void supabase.removeChannel(channel);
     };
   }, [supabase, scheduleShellRefresh, shell.profile.id]);
+
+  const clearLocalActiveShiftState = useCallback(() => {
+    setShell((current) => ({
+      ...current,
+      profile: {
+        ...current.profile,
+        current_project: null,
+      },
+      clockState: {
+        ...current.clockState,
+        isClockedIn: false,
+        clockInTime: null,
+        currentProjectId: null,
+        currentProjectName: null,
+        openEventId: null,
+      },
+    }));
+  }, []);
 
   // ── Task notifications (unseen badge + new-task banner) ─────────────
   //
@@ -1592,10 +1611,16 @@ export function WorkerShell({
 
   async function clockOut(options?: ClockOptions) {
     if (!shell.clockState.isClockedIn || !shell.clockState.currentProjectId) {
-      setBanner({ tone: "error", text: "There is no active shift to close." });
+      clearLocalActiveShiftState();
+      setBanner({ tone: "info", text: "Shift is already closed." });
+      router.refresh();
+      return true;
+    }
+    if (clockOutInFlightRef.current) {
       return false;
     }
 
+    clockOutInFlightRef.current = true;
     setBusyAction("clock-out");
     setBanner(null);
 
@@ -1658,6 +1683,7 @@ export function WorkerShell({
       let insertedEvent: TimeEvent | null = null;
       let networkFailed = offlineFromStart;
       let hardError: { message?: string | null } | null = null;
+      let alreadyClosedRemotely = false;
 
       if (!offlineFromStart) {
         try {
@@ -1681,13 +1707,19 @@ export function WorkerShell({
           } | null;
 
           if (!response.ok || !result?.event) {
-            hardError = {
-              message:
-                result?.error ??
-                (response.status === 409
-                  ? "There is no active shift to close."
-                  : "Clock-out failed."),
-            };
+            const responseMessage =
+              result?.error ??
+              (response.status === 409
+                ? "There is no active shift to close."
+                : "Clock-out failed.");
+            if (
+              response.status === 409 &&
+              /no active shift/i.test(responseMessage)
+            ) {
+              alreadyClosedRemotely = true;
+            } else {
+              hardError = { message: responseMessage };
+            }
           } else {
             insertedEvent = result.event;
           }
@@ -1701,6 +1733,13 @@ export function WorkerShell({
 
       if (hardError) {
         throw new Error(hardError.message ?? "Clock-out failed.");
+      }
+
+      if (alreadyClosedRemotely) {
+        clearLocalActiveShiftState();
+        setBanner({ tone: "info", text: "Shift is already closed." });
+        router.refresh();
+        return true;
       }
 
       if (!insertedEvent && networkFailed) {
@@ -1868,6 +1907,7 @@ export function WorkerShell({
       playSound("error");
       return false;
     } finally {
+      clockOutInFlightRef.current = false;
       setBusyAction(null);
     }
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Check, X } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { useTranslation } from "@/lib/i18n";
@@ -25,9 +25,11 @@ export function CheckoutModal({
   const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const fileRef = useRef<HTMLInputElement>(null);
+  const checkoutSubmittingRef = useRef(false);
   const [pickedAt, setPickedAt] = useState<number | null>(null);
   const [checkoutNote, setCheckoutNote] = useState("");
   const [liveRequireVideo, setLiveRequireVideo] = useState<boolean | null>(null);
+  const [submittingCheckout, setSubmittingCheckout] = useState(false);
 
   // A "today's checkout video" is any media row marked is_checkout=true
   // for the current project, captured today.
@@ -43,7 +45,7 @@ export function CheckoutModal({
   const requireVideo = liveRequireVideo ?? shell.profile.require_video;
   const videoSatisfied = !requireVideo || hasVideoToday || pickedAt !== null;
   const uploading = busyAction === "before-leave-video";
-  const checkingOut = busyAction === "clock-out";
+  const checkingOut = busyAction === "clock-out" || submittingCheckout;
   const activeProject = useMemo(
     () =>
       shell.projects.find((project) => project.id === shell.clockState.currentProjectId) ?? null,
@@ -52,11 +54,16 @@ export function CheckoutModal({
   const gpsNotRequired = isDriverTimeProject(activeProject);
   const disabled = !videoSatisfied || uploading || checkingOut;
 
-  function handleClose() {
+  const resetAndClose = useCallback(() => {
     setPickedAt(null);
     setCheckoutNote("");
     onClose();
-  }
+  }, [onClose]);
+
+  const handleClose = useCallback(() => {
+    if (checkoutSubmittingRef.current) return;
+    resetAndClose();
+  }, [resetAndClose]);
 
   useEffect(() => {
     if (!open) {
@@ -87,6 +94,17 @@ export function CheckoutModal({
 
   useEffect(() => {
     if (!open) return;
+    if (shell.clockState.isClockedIn && shell.clockState.currentProjectId) return;
+    resetAndClose();
+  }, [
+    open,
+    resetAndClose,
+    shell.clockState.currentProjectId,
+    shell.clockState.isClockedIn,
+  ]);
+
+  useEffect(() => {
+    if (!open) return;
 
     // ESC keeps the worker checked in — closes the modal without touching
     // sessions or media. Mirrors the Cancel button.
@@ -97,8 +115,7 @@ export function CheckoutModal({
     }
     document.addEventListener("keydown", handleKey);
     return () => document.removeEventListener("keydown", handleKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [handleClose, open]);
 
   if (!open) return null;
 
@@ -111,30 +128,38 @@ export function CheckoutModal({
   }
 
   async function handleCheckOut() {
+    if (disabled || checkoutSubmittingRef.current) return;
+    checkoutSubmittingRef.current = true;
+    setSubmittingCheckout(true);
     // Pass the worker's note so the closing time_event captures it in
     // metadata.checkout_note. The same string is also used as
     // media.caption when a before-leave video is uploaded above —
     // keeping both copies means the manager sees the note whether they
     // open the shift via Day Detail (clock_out row) or open the video
     // (caption under the player).
-    const closed = await clockOut({
-      note: checkoutNote,
-      ...(gpsNotRequired ? { skipGps: true, gpsErrorKind: "unavailable" as const } : {}),
-    });
-    if (closed) {
-      handleClose();
+    try {
+      const closed = await clockOut({
+        note: checkoutNote,
+        ...(gpsNotRequired ? { skipGps: true, gpsErrorKind: "unavailable" as const } : {}),
+      });
+      if (closed) {
+        resetAndClose();
+      }
+    } finally {
+      checkoutSubmittingRef.current = false;
+      setSubmittingCheckout(false);
     }
   }
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto p-3 sm:items-center sm:p-4"
+      className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto p-2 sm:items-center sm:p-4"
       style={{ background: "rgba(0,0,0,0.55)" }}
       onClick={handleClose}
     >
       <div
         data-testid="checkout-modal-panel"
-        className="max-h-[calc(100dvh-1rem)] w-full max-w-[460px] overflow-y-auto rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 pb-0 sm:rounded-[var(--radius-lg)] sm:pb-5"
+        className="min-h-[min(620px,calc(100dvh-0.5rem))] w-full max-w-[640px] rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 pb-0 shadow-2xl sm:min-h-0 sm:rounded-[var(--radius-lg)] sm:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -168,12 +193,12 @@ export function CheckoutModal({
               className="hidden"
               id="before-leave-file"
             />
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:flex sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading}
-                className="inline-flex items-center gap-2 rounded-[var(--radius-sm)] px-3 py-2 text-sm font-semibold"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-semibold sm:w-auto"
                 style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
               >
                 <Camera size={14} />

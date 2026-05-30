@@ -113,8 +113,13 @@ Before manual QA for any new change:
 - Confirm only the active project card shows `На смене здесь` / `Текущая смена`.
 - Open that project and confirm the active shift badge is visible near the top.
 - In the active project, confirm `Завершить смену` is directly visible and reachable on mobile.
+- Confirm the checkout modal does not appear until `Завершить смену` is tapped.
 - Tap `Завершить смену`; the checkout modal opens and the final checkout action remains visible below the notes field.
+- Close/cancel the checkout modal and confirm it stays closed and the worker remains on shift.
+- Reopen checkout and confirm the mobile modal uses the available card width, avoids a tiny inner scroll box, and keeps video upload, notes, and both action buttons reachable.
 - Confirm checkout works with an empty note when video/GPS rules allow it.
+- After successful checkout, confirm the modal closes, the active-shift project state clears, and the modal does not reopen.
+- If the shift was already ended on another tab/device, confirm the modal closes safely after refresh and does not show a fake active shift.
 - If checkout video is required, confirm the video requirement still blocks checkout until video is captured/uploaded.
 - Confirm the worker does not need to leave the project page and return to `Смены` to finish the shift.
 - Add a public project note as a worker.
