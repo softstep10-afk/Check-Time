@@ -23,7 +23,8 @@ describe("worker active project checkout action", () => {
   it("keeps a visible explicit checkout entry point inside the active project flow", () => {
     expect(workerProjectViewSource).toContain("clockedInHere ? (");
     expect(workerProjectViewSource).toContain('data-testid="active-project-checkout-button"');
-    expect(workerProjectViewSource).toContain('onClick={() => setCheckoutOpen(true)}');
+    expect(workerProjectViewSource).toContain("function openCheckoutIfActive()");
+    expect(workerProjectViewSource).toContain("onClick={openCheckoutIfActive}");
     expect(workerProjectViewSource).toContain('t("clock.endShiftCta")');
     expect(workerProjectViewSource).toContain("<CheckoutModal open={checkoutOpen}");
     expect(workerProjectViewSource).toContain("const [checkoutOpen, setCheckoutOpen] = useState(false);");
@@ -42,9 +43,11 @@ describe("worker active project checkout action", () => {
 
   it("keeps the mobile checkout sheet roomy and avoids tiny nested scrolling", () => {
     expect(checkoutModalSource).toContain('data-testid="checkout-modal-panel"');
-    expect(checkoutModalSource).toContain("min-h-[min(620px,calc(100dvh-0.5rem))]");
-    expect(checkoutModalSource).toContain("max-w-[640px]");
-    expect(checkoutModalSource).toContain("fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto");
+    expect(checkoutModalSource).toContain('role="dialog"');
+    expect(checkoutModalSource).toContain('aria-modal="true"');
+    expect(checkoutModalSource).toContain("min-h-[100dvh]");
+    expect(checkoutModalSource).toContain("sm:max-w-[720px]");
+    expect(checkoutModalSource).toContain("fixed inset-0 z-[60] flex items-stretch justify-center overflow-y-auto");
     expect(checkoutModalSource).not.toContain("max-h-[calc(100dvh-1rem)]");
     expect(checkoutModalSource).not.toContain("max-h-[calc(100dvh-0.75rem)]");
     expect(checkoutModalSource).not.toContain("overscroll-contain overflow-y-auto rounded-t");
@@ -56,7 +59,7 @@ describe("worker active project checkout action", () => {
     expect(checkoutModalSource).toContain("min-h-12 w-full");
     expect(checkoutModalSource).toContain('id="before-leave-file"');
     expect(checkoutModalSource).toContain("inline-flex min-h-12 w-full items-center justify-center");
-    expect(checkoutModalSource).toContain("min-h-[88px]");
+    expect(checkoutModalSource).toContain("min-h-[140px] w-full");
   });
 
   it("closes stale checkout UI when the active shift is already gone", () => {
@@ -66,6 +69,8 @@ describe("worker active project checkout action", () => {
     expect(clockPageSource).toContain("if (!checkoutOpen || shell.clockState.isClockedIn) return;");
     expect(workerProjectViewSource).toContain("window.setTimeout(() =>");
     expect(clockPageSource).toContain("window.setTimeout(() =>");
+    expect(workerProjectViewSource).toContain("if (!isClockedIn)");
+    expect(clockPageSource).toContain("if (!shell.clockState.isClockedIn)");
   });
 
   it("prevents duplicate checkout requests and treats already-ended server state as closed", () => {

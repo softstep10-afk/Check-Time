@@ -1696,6 +1696,14 @@ function ProjectClockControls({
     return () => window.clearTimeout(id);
   }, [checkoutOpen, isClockedIn]);
 
+  function openCheckoutIfActive() {
+    if (!isClockedIn) {
+      setCheckoutOpen(false);
+      return;
+    }
+    setCheckoutOpen(true);
+  }
+
   async function handleStart(noGps = false) {
     setAckError(null);
     const shouldSkipGps = gpsNotRequired || noGps;
@@ -1762,7 +1770,7 @@ function ProjectClockControls({
   }
 
   async function handleSwitch() {
-    setCheckoutOpen(true);
+    openCheckoutIfActive();
     // Once the worker confirms in CheckoutModal, the modal calls clockOut()
     // and closes itself. The next render will see isClockedIn=false; the
     // worker can tap Start Shift here. We don't auto-chain into clockIn
@@ -1787,7 +1795,7 @@ function ProjectClockControls({
           </p>
           <button
             type="button"
-            onClick={() => setCheckoutOpen(true)}
+            onClick={openCheckoutIfActive}
             data-testid="active-project-checkout-button"
             className="mt-3 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] px-4 py-3 text-sm font-semibold"
             style={{ background: "var(--red)", color: "white" }}

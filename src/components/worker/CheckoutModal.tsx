@@ -153,13 +153,15 @@ export function CheckoutModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-end justify-center overflow-y-auto p-2 sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-[60] flex items-stretch justify-center overflow-y-auto p-0 sm:items-center sm:p-4"
       style={{ background: "rgba(0,0,0,0.55)" }}
       onClick={handleClose}
     >
       <div
         data-testid="checkout-modal-panel"
-        className="min-h-[min(620px,calc(100dvh-0.5rem))] w-full max-w-[640px] rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 pb-0 shadow-2xl sm:min-h-0 sm:rounded-[var(--radius-lg)] sm:pb-5"
+        className="flex min-h-[100dvh] w-full flex-col border border-[var(--border-default)] bg-[var(--bg-card)] p-4 pb-0 shadow-2xl sm:min-h-0 sm:max-w-[720px] sm:rounded-[var(--radius-lg)] sm:p-5 sm:pb-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -226,20 +228,20 @@ export function CheckoutModal({
           </div>
         ) : null}
 
-        <div className="mt-4">
+        <div className="mt-4 w-full">
           <TextInputWithVoice
             multiline
-            rows={3}
+            rows={5}
             value={checkoutNote}
             onChange={(event) => setCheckoutNote(event.target.value)}
             placeholder={t("clock.checkoutNotePlaceholder")}
-            className="min-h-[88px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            className="min-h-[140px] w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
         </div>
 
         <div
           data-testid="checkout-action-row"
-          className="sticky bottom-0 -mx-5 mt-5 flex flex-col-reverse gap-2 border-t border-[var(--border-default)] bg-[var(--bg-card)] px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-0 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0"
+          className="sticky bottom-0 -mx-4 mt-auto flex flex-col-reverse gap-2 border-t border-[var(--border-default)] bg-[var(--bg-card)] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 sm:static sm:mx-0 sm:mt-5 sm:flex-row sm:justify-end sm:border-0 sm:bg-transparent sm:p-0"
         >
           <button
             type="button"

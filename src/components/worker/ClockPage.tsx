@@ -58,6 +58,14 @@ export function ClockPage() {
     }, 0);
     return () => window.clearTimeout(id);
   }, [checkoutOpen, shell.clockState.isClockedIn]);
+
+  function openCheckoutIfActive() {
+    if (!shell.clockState.isClockedIn) {
+      setCheckoutOpen(false);
+      return;
+    }
+    setCheckoutOpen(true);
+  }
   const todayIso = new Date().toISOString().slice(0, 10);
   const todaySummary = useMemo(() => {
     const closedToday = shell.sessions.filter(
@@ -298,7 +306,7 @@ export function ClockPage() {
           <div className="mt-4">
             <button
               type="button"
-              onClick={() => setCheckoutOpen(true)}
+              onClick={openCheckoutIfActive}
               disabled={busyAction === "clock-out"}
               className="w-full rounded-[var(--radius-md)] text-base font-bold uppercase tracking-[0.08em] disabled:opacity-60"
               style={{
