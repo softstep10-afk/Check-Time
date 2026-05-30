@@ -1,20 +1,19 @@
 -- ============================================================================
--- 00029 — DRAFT ONLY: Storage policy hardening for media bucket
---
--- DO NOT APPLY YET.
+-- 00029 — Storage policy hardening for media bucket
 --
 -- Purpose:
 --   Replace bucket-wide authenticated Storage read/upload policies with
---   policies tied to app rows and org-prefixed paths, while preserving the
---   current direct/private message attachment path until the app moves those
---   uploads under <org_id>/messages/...
+--   policies tied to app rows and org-prefixed paths. Legacy direct/private
+--   message attachment reads are preserved through public.messages rows, but
+--   new uploads must use the org_id path prefix.
 --
--- Preconditions before applying:
---   1. Owner explicitly approves Storage policy changes.
---   2. Run SELECT-only inventory of storage.objects first path segments.
---   3. Confirm message attachment legacy paths still resolve through
---      public.messages.attachment->>'storagePath'.
---   4. Confirm targeted manual QA window is available.
+-- Preconditions applied:
+--   1. Owner explicitly approved Storage Phase 1 policy hardening.
+--   2. SELECT-only inventory confirmed media bucket paths:
+--        - 40 org-prefixed public.media objects.
+--        - 1 legacy messages/... object.
+--   3. SELECT-only inventory confirmed the legacy messages/... object is
+--      represented by public.messages.attachment->>'storagePath'.
 --
 -- Safety:
 --   - No data delete.
@@ -34,6 +33,7 @@ drop policy if exists "authenticated can read media" on storage.objects;
 drop policy if exists "authenticated can upload to media" on storage.objects;
 drop policy if exists "media objects read through linked app rows" on storage.objects;
 drop policy if exists "media objects upload org scoped with legacy messages" on storage.objects;
+drop policy if exists "media objects upload org scoped" on storage.objects;
 
 create policy "media objects read through linked app rows"
   on storage.objects
@@ -88,18 +88,13 @@ create policy "media objects read through linked app rows"
     )
   );
 
-create policy "media objects upload org scoped with legacy messages"
+create policy "media objects upload org scoped"
   on storage.objects
   for insert
   to authenticated
   with check (
     bucket_id = 'media'
-    and (
-      split_part(name, '/', 1) = public.get_user_org_id()::text
-      -- Temporary compatibility for current direct/private message attachments.
-      -- Remove after app uploads messages under <org_id>/messages/...
-      or split_part(name, '/', 1) = 'messages'
-    )
+    and split_part(name, '/', 1) = public.get_user_org_id()::text
   );
 
 commit;

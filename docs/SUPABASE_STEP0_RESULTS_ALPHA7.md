@@ -16,7 +16,10 @@ High-level result:
 - Expected Alpha-7 core public tables present: 19.
 - Expected Alpha-7 core public tables with RLS enabled: 19.
 - Media bucket exists, is private, and has no Storage delete policy.
-- Production has important hardening risks around broad table grants, bucket-wide authenticated Storage read/upload policies, and incomplete Safety Brief signature fields.
+- Original audit found important hardening risks around broad table grants,
+  bucket-wide authenticated Storage read/upload policies, and incomplete Safety
+  Brief signature fields. Post-audit owner-approved Storage Phase 1 hardening
+  replaced the bucket-wide Storage policies with org/app-row scoped policies.
 - No P0 destructive/data-loss finding was confirmed.
 - Do not apply fixes blindly. All recommended fixes need a separate owner-approved hardening task.
 
@@ -613,6 +616,20 @@ Prerequisite follow-up prepared locally:
 - Existing legacy message attachments remain supported through the stored `messages.attachment.storagePath`; no old objects or message rows are rewritten.
 - After this app change is deployed and manually QA'd, the next owner-approved hardening step is Storage Phase 1 policy tightening.
 
+Post-audit Storage Phase 1 update:
+
+- Owner-approved Storage Phase 1 was applied after org-prefixed message
+  attachment paths were deployed.
+- Broad policies `authenticated can read media` and `authenticated can upload
+  to media` were replaced.
+- Active Storage policies are now `media objects read through linked app rows`
+  for SELECT and `media objects upload org scoped` for INSERT.
+- Legacy `messages/...` attachments remain readable through
+  `public.messages.attachment.storagePath`.
+- New Storage uploads must use the authenticated user's org id as the first
+  path segment.
+- No Storage DELETE policy was added; the `media` bucket remains private.
+
 ## F. Grants Findings
 
 Confirmed:
@@ -754,19 +771,27 @@ No P0 blocker was confirmed.
 
 P1 security/hardening blockers before full security signoff:
 
-1. Storage `media` bucket policies allow bucket-wide authenticated read/upload rather than org/path-scoped access.
-2. `anon` and `authenticated` retain very broad table-level write grants; RLS mitigates, but defense-in-depth is weak.
-3. `safety_acknowledgements` lacks typed signature name storage, which is a legal/audit gap for Safety Brief acknowledgements.
+1. `anon` and `authenticated` retain very broad table-level write grants; RLS mitigates, but defense-in-depth is weak.
+2. `safety_acknowledgements` lacks typed signature name storage, which is a legal/audit gap for Safety Brief acknowledgements.
 
 These do not require an emergency blind fix, but they should be addressed before declaring Supabase production security fully hardened.
+
+Closed after original audit:
+
+- Storage `media` bucket policies no longer allow bucket-wide authenticated
+  read/upload; Phase 1 hardening is applied.
 
 ## L. P1 / P2 / P3 Findings
 
 ### P1
 
-- Bucket-wide authenticated Storage read/upload policies on `storage.objects` for `media`.
 - Broad `anon` / `authenticated` write grants across sensitive public/storage tables.
 - Safety Brief acknowledgement table lacks typed signature name.
+
+Closed P1:
+
+- Bucket-wide authenticated Storage read/upload policies on `storage.objects`
+  for `media` were replaced by Storage Phase 1 hardening.
 
 ### P2
 
@@ -781,6 +806,10 @@ These do not require an emergency blind fix, but they should be addressed before
 - Migration audit process needs a repeatable SQL export workflow.
 
 ## M. What Was NOT Changed
+
+The list below describes the original SELECT-only Step 0 audit. A later
+owner-approved Storage Phase 1 task changed Storage policies only; it did not
+delete or move files and did not mutate production table rows.
 
 - No deploy.
 - No app code edits.
@@ -798,7 +827,7 @@ These do not require an emergency blind fix, but they should be addressed before
 - No migrations.
 - No schema changes.
 - No RLS changes.
-- No Storage policy changes.
+- No Storage policy changes during the original Step 0 audit.
 - No payroll data changes.
 - No `time_events` changes.
 - No paid-period changes.
@@ -809,10 +838,11 @@ These do not require an emergency blind fix, but they should be addressed before
 
 Do these as separate owner-approved tasks, in this order:
 
-1. Storage policy hardening:
-   - Design org/path-scoped media object policies.
-   - Preserve existing upload/open/download behavior.
-   - Preserve app-level media delete rules.
+1. Storage policy hardening: completed for Phase 1.
+   - Org/app-row scoped SELECT policy applied.
+   - Org-prefixed INSERT policy applied.
+   - Legacy message attachment read compatibility preserved.
+   - No Storage DELETE policy added.
 
 2. Grants hardening:
    - Build a table privilege matrix.

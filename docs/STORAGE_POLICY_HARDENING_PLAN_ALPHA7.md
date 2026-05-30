@@ -2,7 +2,15 @@
 
 Date: 2026-05-29
 
-Mode: planning only. No SQL was run for this task, no policies were changed, and no production data was touched.
+Status update: Storage Phase 1 was owner-approved and applied after the
+org-prefixed message attachment path change passed QA. The final applied policy
+keeps legacy `messages/...` reads working through `public.messages`, but new
+Storage uploads must use the authenticated user's org id as the first path
+segment.
+
+Original mode: planning only. The later Storage Phase 1 apply ran only the
+policy DDL described below; no files or production table rows were deleted or
+moved.
 
 ## Impact Map
 
@@ -271,18 +279,40 @@ After applying in a controlled window:
 
 ## J. Recommendation
 
-Recommendation: not yet for production apply.
+Recommendation: applied for Phase 1.
 
-Reason:
+Preflight before apply:
 
-- Full org-scoped hardening needs the message attachment path change deployed and production-QA'd first.
-- The current draft Phase 1 policy can be made backward-compatible, but it still leaves a temporary `messages/` upload allowance until the draft is reviewed/updated after this app change.
-- Applying Storage policies is high-impact and should be done in a separate owner-approved hardening window with preflight object-path inventory and targeted manual QA.
+- Current broad policies were exactly `authenticated can read media` and
+  `authenticated can upload to media`.
+- `media` bucket was private: `public=false`.
+- Existing Storage objects: 40 org-prefixed media objects, 1 legacy
+  `messages/...` object.
+- `public.media` rows: 40 total, 40 org-prefixed, 0 leading slash, 0
+  `media/` bucket prefix.
+- Message attachments: 1 legacy `messages/...` storage path, 0 org-prefixed
+  production message attachments observed at apply time.
 
-Recommended sequence:
+Applied behavior:
 
-1. Deploy and manually QA org-prefixed message attachment uploads.
-2. Keep read compatibility for legacy `messages/%` paths.
-3. Review/update the Storage hardening draft so new uploads require org-prefixed paths.
-4. Apply Storage hardening in a controlled owner-approved window.
-5. After legacy message files age out or are normalized, remove any remaining `messages/%` upload compatibility clause.
+1. Removed bucket-wide authenticated Storage read/upload policies.
+2. Added `media objects read through linked app rows`.
+3. Added `media objects upload org scoped`.
+4. Did not add a Storage DELETE policy.
+5. Kept the bucket private.
+
+After-check:
+
+- Active Storage policies are now:
+  - `media objects read through linked app rows` for SELECT.
+  - `media objects upload org scoped` for INSERT.
+- DELETE policies remain absent.
+- `media` bucket remains private with the same size limit and MIME config.
+
+Next recommendation:
+
+1. Run production manual QA for project media, task attachments, new and legacy
+   message attachments, checkout/check-in videos, journal media, and material
+   files.
+2. Keep legacy `messages/...` SELECT compatibility until old message
+   attachments are migrated or intentionally retired.
