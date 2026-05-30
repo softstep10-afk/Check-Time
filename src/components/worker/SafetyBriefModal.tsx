@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { ShieldCheck, X } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import {
+  canConfirmSafetyBrief,
   DEFAULT_SAFETY_RULE_KEYS,
   SAFETY_REFERENCE_KEYS,
 } from "@/lib/safety-acknowledgements";
@@ -43,18 +44,19 @@ export function SafetyBriefModal({
    * NOT have run if errorMessage is set.
    */
   errorMessage?: string | null;
-  onConfirm: () => void;
+  onConfirm: (signedName: string) => void;
   onCancel: () => void;
 }) {
   const { t } = useTranslation();
   const [acknowledged, setAcknowledged] = useState(false);
+  const [signedName, setSignedName] = useState("");
 
-  // Reset the checkbox every time the screen re-opens so a previous
-  // confirm doesn't pre-tick the new prompt.
+  // Reset the local acknowledgement state every time the screen re-opens.
   useEffect(() => {
-    // This effect intentionally resets local acknowledgement state on modal open.
+    if (!open) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (open) setAcknowledged(false);
+    setAcknowledged(false);
+    setSignedName("");
   }, [open]);
 
   // ESC = cancel.
@@ -96,6 +98,8 @@ export function SafetyBriefModal({
   if (typeof document === "undefined") return null;
 
   const rules = ruleKeys ?? DEFAULT_SAFETY_RULE_KEYS;
+  const canConfirm = canConfirmSafetyBrief(acknowledged, signedName) && !busy;
+  const normalizedSignedName = signedName.trim();
 
   // Render through a portal directly to <body> so the brief never gets
   // containing-block trapped by an ancestor's transform / filter /
@@ -238,6 +242,25 @@ export function SafetyBriefModal({
               />
               <span className="leading-5">{t("safety.checkboxLabel")}</span>
             </label>
+            <label className="mt-3 block text-sm font-semibold text-[var(--text-primary)]">
+              {t("safety.signatureLabel")}
+              <input
+                type="text"
+                value={signedName}
+                onInput={(event) => setSignedName(event.currentTarget.value)}
+                disabled={busy}
+                autoComplete="name"
+                placeholder={workerName?.trim() || t("safety.signaturePlaceholder")}
+                className="mt-2 w-full rounded-[var(--radius-sm)] border px-3 py-3 text-base text-[var(--text-primary)] outline-none disabled:opacity-50"
+                style={{
+                  borderColor: "var(--border-default)",
+                  background: "var(--bg-primary)",
+                }}
+              />
+            </label>
+            <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+              {t("safety.signatureHint")}
+            </p>
           </section>
         </div>
       </main>
@@ -271,12 +294,12 @@ export function SafetyBriefModal({
         </button>
         <button
           type="button"
-          onClick={onConfirm}
-          disabled={!acknowledged || busy}
+          onClick={() => onConfirm(normalizedSignedName)}
+          disabled={!canConfirm}
           className="rounded-[var(--radius-sm)] px-4 py-3 text-sm font-semibold disabled:opacity-50"
           style={{
-            background: acknowledged && !busy ? "#f59e0b" : "var(--border-default)",
-            color: acknowledged && !busy ? "var(--text-inverse)" : "var(--text-muted)",
+            background: canConfirm ? "#f59e0b" : "var(--border-default)",
+            color: canConfirm ? "var(--text-inverse)" : "var(--text-muted)",
           }}
         >
           {busy ? t("safety.savingCta") : t("safety.confirmCta")}

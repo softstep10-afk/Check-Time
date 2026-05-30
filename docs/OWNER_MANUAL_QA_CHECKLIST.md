@@ -153,11 +153,11 @@ Before manual QA for any new change:
 - Confirm GPS consent and verify the modal closes only after save succeeds.
 - Reopen/reload same worker for the same consent version; GPS consent is not asked again.
 - Use `Пропустить — начать без передачи` and verify it is recorded as skipped/no-GPS, not accepted GPS consent.
-- Confirm Safety Brief once.
+- Confirm Safety Brief once: checkbox checked plus non-empty typed name enables the button.
 - Start another shift with the same Safety Brief version and verify Safety Brief is not asked repeatedly.
 - Owner/admin opens `Admin -> Audit -> Подписи и согласия`.
 - GPS consent record shows worker, signed name, version, accepted/skipped status, and timestamp.
-- Safety Brief acknowledgement shows worker, version, project/context, and timestamp.
+- Safety Brief acknowledgement shows worker, typed signed name, version, project/context, and timestamp.
 - CSV export from `Подписи и согласия` works.
 
 ## Materials / Driver Workflow

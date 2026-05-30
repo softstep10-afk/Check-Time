@@ -409,6 +409,7 @@ Result:
 
 - `worker_location_consents`: `id`, `org_id`, `worker_id`, `signed_name`, `consented`, `consent_version`, `user_agent`, `ip_address`, `signed_at`.
 - `safety_acknowledgements`: `id`, `org_id`, `worker_id`, `project_id`, `safety_version`, `acknowledged_at`, `check_in_event_id`.
+- Post-hardening verification: `signed_name:text` now exists and is nullable for older rows.
 
 ### Sensitive audit/payroll/time-event counts
 
@@ -506,7 +507,7 @@ with expected(table_name, column_name) as (
     ('worker_location_consents', 'signed_name'),
     ('worker_location_consents', 'consent_version'),
     ('worker_location_consents', 'signed_at'),
-    ('safety_acknowledgements', 'signature_name'),
+    ('safety_acknowledgements', 'signed_name'),
     ('safety_acknowledgements', 'safety_version'),
     ('safety_acknowledgements', 'acknowledged_at'),
     ('pay_periods', 'status'),
@@ -530,20 +531,22 @@ select
 from found;
 ```
 
-Result: missing columns:
+Original Step 0 result before Alpha-7 hardening: missing columns:
 
 - `media.task_id`
 - `messages.read_at`
 - `projects.budget_status`
 - `projects.timeline_status`
-- `safety_acknowledgements.signature_name`
+- `safety_acknowledgements.signed_name`
 
 Follow-up column inventory confirmed:
 
 - `messages` uses `read:boolean`, not `read_at`.
 - `media` has `metadata:jsonb`; task reverse-linking is expected to use `metadata.task_id`.
 - `projects` has `settings:jsonb`, `start_date`, `end_date`, `gps_radius_m`, but no `timeline_status` / `budget_status`.
-- `safety_acknowledgements` has no typed signature name field.
+- At original Step 0 time, `safety_acknowledgements` had no typed signature name field.
+- Alpha-7 safety hardening adds `safety_acknowledgements.signed_name` for new Safety Brief acknowledgements.
+- Production verification after applying `00031_safety_typed_signatures.sql`: 77 total older Safety Brief rows, 0 with `signed_name` yet, and the not-blank check constraint is present for future non-null names.
 
 ## C. Applied Migrations
 
@@ -686,24 +689,24 @@ Confirmed missing expected/legacy columns:
 - `projects.budget_status`
 - `messages.read_at`
 - `media.task_id`
-- `safety_acknowledgements.signature_name`
+- `safety_acknowledgements.signed_name` at original Step 0 time
 
 Interpretation:
 
 - `projects.timeline_status` and `projects.budget_status`: app has optional fallback handling for missing project status columns in `src/lib/project-save.ts`, so this is not currently a release blocker by itself.
 - `messages.read_at`: production uses `messages.read:boolean`; current message status behavior should rely on `read`, not `read_at`.
 - `media.task_id`: production uses `media.metadata:jsonb`; local code links task attachments through `metadata.task_id`.
-- `safety_acknowledgements.signature_name`: important legal/audit gap because Safety Brief records do not store a typed signature name like GPS consent does.
+- `safety_acknowledgements.signed_name`: originally missing; this was an important legal/audit gap because Safety Brief records did not store a typed signature name like GPS consent does.
 
 Risk classification:
 
-- Safety Brief missing typed signature name: P1.
+- Safety Brief missing typed signature name: closed by `00031_safety_typed_signatures.sql` for new acknowledgements.
 - Project optional status columns absent: P2.
 - Message/media alternate schema shape: P2, currently expected if app code uses `read` and `metadata.task_id`.
 
 Recommended fixes:
 
-- Safety Brief signature storage should be handled in a separate owner-approved schema/migration task.
+- Safety Brief signature storage is handled by owner-approved migration `00031_safety_typed_signatures.sql`; existing older rows remain nullable for backward compatibility.
 - Do not add project timeline/budget columns unless the owner wants those fields to become first-class persisted production data.
 
 ## H. Service-Role Risks
@@ -794,9 +797,11 @@ No P0 blocker was confirmed.
 
 P1 security/hardening blockers before full security signoff:
 
-1. `safety_acknowledgements` lacks typed signature name storage, which is a legal/audit gap for Safety Brief acknowledgements.
+No open P1 remains from the Step 0 safety/signature, Storage Phase 1, or grants hardening scope.
 
-These do not require an emergency blind fix, but they should be addressed before declaring Supabase production security fully hardened.
+Closed P1 item:
+
+- `safety_acknowledgements` now stores `signed_name` for new Safety Brief acknowledgements through `00031_safety_typed_signatures.sql`.
 
 Closed after original audit:
 
@@ -811,7 +816,7 @@ Closed after original audit:
 
 ### P1
 
-- Safety Brief acknowledgement table lacks typed signature name.
+- No open P1 remains from typed Safety Brief signature storage after `00031_safety_typed_signatures.sql`.
 
 Closed P1:
 
@@ -884,7 +889,7 @@ Do these as separate owner-approved tasks, in this order:
      residuals and should not be changed blindly.
 
 3. Safety Brief legal signature migration:
-   - Add typed signer name field to `safety_acknowledgements`.
+   - Completed for typed signer name with `safety_acknowledgements.signed_name`.
    - Optionally add user agent/IP fields.
    - Preserve existing 77 acknowledgement rows.
 

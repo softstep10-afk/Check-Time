@@ -1731,7 +1731,7 @@ function ProjectClockControls({
     setSafetyOpen(true);
   }
 
-  async function handleSafetyConfirm() {
+  async function handleSafetyConfirm(signedName: string) {
     // The safety brief is the audit gate: the shift cannot open without
     // a corresponding safety_acknowledgements row. If the insert fails
     // (RLS denial, missing migration, network) we keep the modal open,
@@ -1746,6 +1746,7 @@ function ProjectClockControls({
         workerId: shell.profile.id,
         projectId,
         safetyVersion: DEFAULT_SAFETY_VERSION,
+        signedName,
       });
       if (ackResult.ok) {
         ackOk = true;
@@ -1865,7 +1866,7 @@ function ProjectClockControls({
         workerName={shell.profile.name}
         busy={savingAck}
         errorMessage={ackError}
-        onConfirm={() => void handleSafetyConfirm()}
+        onConfirm={(signedName) => void handleSafetyConfirm(signedName)}
         onCancel={() => {
           if (!savingAck) {
             setAckError(null);

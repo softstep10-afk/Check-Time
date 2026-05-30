@@ -28,10 +28,12 @@
 - Перед показом Safety Brief приложение проверяет, есть ли уже подтверждение этого работника для текущей версии.
 - Если подтверждение уже есть, работника не спрашивают повторно для той же версии.
 - Если версия Safety Brief изменится, работника можно попросить подтвердить заново.
-- Сохраняются существующие поля таблицы:
+- Кнопка подтверждения активна, когда работник поставил галочку и ввел любое непустое имя после trim. Имя работает как электронная подпись Safety Brief.
+- Сохраняются поля таблицы:
   - `org_id`
   - `worker_id`
   - `project_id`
+  - `signed_name`
   - `safety_version`
   - `acknowledged_at`
   - `check_in_event_id`, если он уже заполнен существующей логикой
@@ -51,19 +53,17 @@
 
 Менеджер/работник не получают новый общий доступ к этим записям.
 
+## Schema note
+
+- Миграция `00031_safety_typed_signatures.sql` добавляет `safety_acknowledgements.signed_name`.
+- Поле nullable для обратной совместимости со старыми audit rows.
+- App-level подтверждение требует непустое имя для всех новых Safety Brief acknowledgements.
+
 ## Что не менялось
 
-- SQL не выполнялся.
-- Миграции не создавались.
-- Схема БД не менялась.
+- Существующие Safety Brief записи не переписывались; старые строки могут иметь `signed_name = null`, новые подтверждения пишут typed name.
 - RLS и Storage policies не менялись.
 - GPS tracking, clock-in/out, payroll, shifts и archive/trash не менялись.
-
-## Deferred
-
-Текущая таблица `safety_acknowledgements` не содержит отдельные поля `signed_name`, `user_agent` и `ip_address`. Сейчас Safety Brief хранит работника, проект, версию и timestamp через существующую таблицу. Если владельцу нужны расширенные legal-signature поля именно для Safety Brief, это отдельная owner-approved schema/migration task.
-
-Direct SQL Supabase Step 0 и RLS/Storage verification остаются отдельными заблокированными задачами.
 
 ## Manual QA
 
@@ -74,7 +74,7 @@ Direct SQL Supabase Step 0 и RLS/Storage verification остаются отде
 - Подтвердить согласие.
 - Перезайти тем же работником и убедиться, что для той же версии GPS modal не появляется повторно.
 - Проверить skip/no-GPS: выбрать `Пропустить — начать без передачи`; запись должна быть сохранена как skipped, не как accepted.
-- Подтвердить Safety Brief.
+- Подтвердить Safety Brief: поставить галочку, ввести имя, убедиться что кнопка активируется, и сохранить.
 - Повторно начать смену при той же версии Safety Brief; Safety Brief не должен появляться повторно.
 - Зайти владельцем/админом в `Admin -> Audit -> Подписи и согласия`.
-- Убедиться, что GPS consent и Safety Brief записи видны и CSV экспорт доступен.
+- Убедиться, что GPS consent и Safety Brief записи видны, Safety Brief показывает signed name, и CSV экспорт доступен.

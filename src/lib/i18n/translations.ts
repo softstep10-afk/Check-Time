@@ -599,6 +599,12 @@ export const translations = {
     en: "I have read and understand today's safety rules for this job site.",
     ru: "Я прочитал и понимаю сегодняшние правила безопасности для этого объекта.",
   },
+  "safety.signatureLabel": { en: "Type your full name", ru: "Введите своё полное имя" },
+  "safety.signaturePlaceholder": { en: "Your full name", ru: "Ваше полное имя" },
+  "safety.signatureHint": {
+    en: "This typed name is saved with the safety acknowledgement as your electronic signature.",
+    ru: "Это введённое имя сохраняется вместе с инструктажем как электронная подпись.",
+  },
   "safety.confirmCta": { en: "Confirm and start shift", ru: "Подтвердить и начать смену" },
   "safety.savingCta": { en: "Saving acknowledgement…", ru: "Сохраняем подтверждение…" },
   "safety.cancelCta": { en: "Cancel", ru: "Отмена" },

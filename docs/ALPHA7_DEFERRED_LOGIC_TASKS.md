@@ -341,11 +341,14 @@ Not changed:
 - No Supabase RLS, Storage policies, database schema, or migrations.
 - No production data mutation.
 
-Deferred until separate owner approval:
+Closed in Alpha-7 safety hardening:
 
-- Direct SQL Supabase Step 0.
-- RLS/Storage verification for consent/audit tables.
-- Adding extra `signed_name`, `user_agent`, or `ip_address` columns to `safety_acknowledgements`; current Safety Brief audit uses existing worker/project/version/timestamp fields.
+- `safety_acknowledgements.signed_name` is now the typed worker name/electronic signature for new Safety Brief acknowledgements.
+
+Still deferred until separate owner approval:
+
+- Adding extra `user_agent` or `ip_address` columns to `safety_acknowledgements`.
+- Any additional RLS/Storage verification changes for consent/audit tables beyond the owner-approved hardening already completed.
 
 ## Offline / Weak-Network Field Mode
 

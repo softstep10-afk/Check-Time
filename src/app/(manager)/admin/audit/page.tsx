@@ -323,7 +323,7 @@ export default function AuditLogPage() {
           .limit(100),
         supabase
           .from("safety_acknowledgements")
-          .select("id, worker_id, project_id, safety_version, acknowledged_at, check_in_event_id")
+          .select("id, worker_id, project_id, signed_name, safety_version, acknowledged_at, check_in_event_id")
           .order("acknowledged_at", { ascending: false })
           .limit(100),
       ]);
@@ -382,6 +382,7 @@ export default function AuditLogPage() {
         id: string;
         worker_id: string;
         project_id: string | null;
+        signed_name: string | null;
         safety_version: string;
         acknowledged_at: string;
         check_in_event_id: string | null;
@@ -389,7 +390,10 @@ export default function AuditLogPage() {
         id: row.id,
         type: "safety",
         workerName: profileNameById.get(row.worker_id) ?? row.worker_id.slice(0, 8),
-        signedName: profileNameById.get(row.worker_id) ?? row.worker_id.slice(0, 8),
+        signedName:
+          row.signed_name?.trim() ||
+          profileNameById.get(row.worker_id) ||
+          row.worker_id.slice(0, 8),
         version: row.safety_version,
         status: "acknowledged",
         timestamp: row.acknowledged_at,

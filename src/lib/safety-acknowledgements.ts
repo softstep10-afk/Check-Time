@@ -48,6 +48,7 @@ export interface WriteSafetyAckParams {
   workerId: string;
   projectId: string | null;
   safetyVersion: string;
+  signedName: string;
 }
 
 export type SafetyAckState = "acknowledged" | "unknown";
@@ -67,12 +68,25 @@ export async function readLatestSafetyAck(
   return "acknowledged";
 }
 
+export function normalizeSafetySignedName(signedName: string): string {
+  return signedName.trim().replace(/\s+/g, " ");
+}
+
+export function canConfirmSafetyBrief(acknowledged: boolean, signedName: string): boolean {
+  return acknowledged && normalizeSafetySignedName(signedName).length > 0;
+}
+
 export function buildSafetyAckInsert(params: WriteSafetyAckParams): Record<string, unknown> {
+  const signedName = normalizeSafetySignedName(params.signedName);
+  if (!signedName) {
+    throw new Error("Typed safety signature name is required.");
+  }
   return {
     org_id: params.orgId,
     worker_id: params.workerId,
     project_id: params.projectId,
     safety_version: params.safetyVersion,
+    signed_name: signedName,
   };
 }
 
@@ -92,9 +106,18 @@ export async function writeSafetyAck(
   supabase: SupabaseClient,
   params: WriteSafetyAckParams,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  let insertPayload: Record<string, unknown>;
+  try {
+    insertPayload = buildSafetyAckInsert(params);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Typed safety signature name is required.",
+    };
+  }
   const { data, error } = await supabase
     .from("safety_acknowledgements")
-    .insert(buildSafetyAckInsert(params))
+    .insert(insertPayload)
     .select("id")
     .single<{ id: string }>();
   if (error || !data) {
