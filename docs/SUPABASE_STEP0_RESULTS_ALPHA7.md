@@ -20,6 +20,9 @@ High-level result:
   bucket-wide authenticated Storage read/upload policies, and incomplete Safety
   Brief signature fields. Post-audit owner-approved Storage Phase 1 hardening
   replaced the bucket-wide Storage policies with org/app-row scoped policies.
+- Post-audit owner-approved grants hardening removed anonymous write-like grants
+  and removed unnecessary authenticated `TRUNCATE` / `REFERENCES` / `TRIGGER`
+  grants while preserving authenticated app behavior under RLS.
 - No P0 destructive/data-loss finding was confirmed.
 - Do not apply fixes blindly. All recommended fixes need a separate owner-approved hardening task.
 
@@ -655,6 +658,26 @@ Recommended fix:
 - Revoke only privileges proven unnecessary.
 - Retest login, tasks, messages, media upload/open/download, payroll views, GPS/shift flows, and owner/admin routes.
 
+Post-audit grants hardening update:
+
+- Owner-approved migration `00030_database_grants_hardening.sql` was applied.
+- `anon` write-like grants were revoked on public/storage relations:
+  `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, `TRIGGER`.
+- `authenticated` grants were narrowed by revoking relation privileges the app
+  does not use directly: `TRUNCATE`, `REFERENCES`, `TRIGGER`.
+- `authenticated` SELECT/INSERT/UPDATE/DELETE were preserved because the app
+  still uses RLS-controlled Supabase client writes for owner/manager/worker/driver
+  workflows.
+- Verification after apply showed app-owned public table grant surface closed:
+  `app_anon_write_remaining = 0` and
+  `app_authenticated_restricted_remaining = 0`.
+- Residual explicit grants remain on Supabase-managed/PostGIS reference
+  relations (`geometry_columns`, `geography_columns`, `spatial_ref_sys`) and
+  Storage metadata relations. These are managed by `supabase_admin` /
+  `supabase_storage_admin`, while the SQL Editor session runs as `postgres` and
+  is not a member of those roles. Storage object access remains constrained by
+  the Phase 1 Storage policies.
+
 ## G. Schema Mismatch
 
 Confirmed missing expected/legacy columns:
@@ -771,8 +794,7 @@ No P0 blocker was confirmed.
 
 P1 security/hardening blockers before full security signoff:
 
-1. `anon` and `authenticated` retain very broad table-level write grants; RLS mitigates, but defense-in-depth is weak.
-2. `safety_acknowledgements` lacks typed signature name storage, which is a legal/audit gap for Safety Brief acknowledgements.
+1. `safety_acknowledgements` lacks typed signature name storage, which is a legal/audit gap for Safety Brief acknowledgements.
 
 These do not require an emergency blind fix, but they should be addressed before declaring Supabase production security fully hardened.
 
@@ -780,18 +802,26 @@ Closed after original audit:
 
 - Storage `media` bucket policies no longer allow bucket-wide authenticated
   read/upload; Phase 1 hardening is applied.
+- Broad unnecessary grants were narrowed: anonymous write-like grants removed,
+  authenticated `TRUNCATE` / `REFERENCES` / `TRIGGER` removed.
+- Residual managed extension/storage metadata grants are tracked separately and
+  should not be force-revoked without Supabase-supported role access.
 
 ## L. P1 / P2 / P3 Findings
 
 ### P1
 
-- Broad `anon` / `authenticated` write grants across sensitive public/storage tables.
 - Safety Brief acknowledgement table lacks typed signature name.
 
 Closed P1:
 
 - Bucket-wide authenticated Storage read/upload policies on `storage.objects`
   for `media` were replaced by Storage Phase 1 hardening.
+- Broad unnecessary `anon` / `authenticated` grants were reduced by grants
+  hardening. Authenticated RLS-controlled SELECT/INSERT/UPDATE/DELETE remain by
+  design for current app behavior.
+- App-owned public tables now report zero anonymous write-like grants and zero
+  authenticated `TRUNCATE` / `REFERENCES` / `TRIGGER` grants.
 
 ### P2
 
@@ -807,9 +837,10 @@ Closed P1:
 
 ## M. What Was NOT Changed
 
-The list below describes the original SELECT-only Step 0 audit. A later
-owner-approved Storage Phase 1 task changed Storage policies only; it did not
-delete or move files and did not mutate production table rows.
+The list below describes the original SELECT-only Step 0 audit. Later
+owner-approved hardening tasks changed Storage policies and database grants
+only; they did not delete or move files and did not mutate production table
+rows.
 
 - No deploy.
 - No app code edits.
@@ -845,10 +876,12 @@ Do these as separate owner-approved tasks, in this order:
    - No Storage DELETE policy added.
 
 2. Grants hardening:
-   - Build a table privilege matrix.
-   - Revoke unnecessary `anon` write grants first where safe.
-   - Then reduce `authenticated` write grants only where RLS/app behavior remains covered.
-   - Run full media/task/message/shift/payroll smoke after each step.
+   - Completed for the unnecessary broad grant surface found in Step 0.
+   - Anonymous write-like grants removed.
+   - Authenticated `TRUNCATE` / `REFERENCES` / `TRIGGER` removed.
+   - Authenticated app-required RLS-controlled privileges preserved.
+   - Managed PostGIS/Storage metadata grants remain as platform-controlled
+     residuals and should not be changed blindly.
 
 3. Safety Brief legal signature migration:
    - Add typed signer name field to `safety_acknowledgements`.
