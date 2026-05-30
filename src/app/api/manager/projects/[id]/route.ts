@@ -59,7 +59,6 @@ export async function DELETE(
       .from("projects")
       .update({
         deleted_at: deletedAt,
-        status: "archived",
       })
       .eq("id", id)
       .eq("org_id", profile.org_id);
@@ -82,7 +81,6 @@ export async function DELETE(
         deleted_at: existingProject.deleted_at,
       },
       afterData: {
-        status: "archived",
         deleted_at: deletedAt,
       },
     });

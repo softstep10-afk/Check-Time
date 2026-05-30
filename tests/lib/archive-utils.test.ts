@@ -7,6 +7,8 @@ import {
   filterPayrollArchiveByDateRange,
   getActiveOperationalMedia,
   getActiveOperationalTasks,
+  isActiveProjectForOperations,
+  isArchivedProject,
   NO_PROJECT_SPLIT_FILTER,
 } from "@/lib/archive-utils";
 import { getOverviewStats } from "@/lib/manager-utils";
@@ -240,10 +242,14 @@ describe("archive helpers", () => {
     const trashedProject = project({
       id: "trash",
       name: "Trash",
-      status: "archived",
+      status: "active",
       deleted_at: "2026-03-02T00:00:00Z",
     });
     const archived = project({ id: "archived", name: "Archived", status: "archived" });
+
+    expect(isArchivedProject(archived)).toBe(true);
+    expect(isArchivedProject(trashedProject)).toBe(false);
+    expect(isActiveProjectForOperations(trashedProject)).toBe(false);
 
     const archiveRows = buildArchivedProjectRows({
       projects: [trashedProject, archived],
