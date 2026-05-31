@@ -11,6 +11,7 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
 export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
 export type MediaType = 'photo' | 'video' | 'pdf' | 'document';
 export type PayrollStatus = 'draft' | 'confirmed' | 'exported' | 'paid';
+export type ClientStatus = 'active' | 'inactive';
 
 // ---- Core entities ----
 
@@ -93,6 +94,36 @@ export interface ProjectAssignment {
   project_id: string;
   profile_id: string;
   assigned_at: string;
+}
+
+export interface BusinessClient {
+  id: string;
+  org_id: string;
+  name: string;
+  status: ClientStatus;
+  primary_contact_name: string | null;
+  primary_contact_phone: string | null;
+  primary_contact_email: string | null;
+  address: string | null;
+  internal_note: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClientContact {
+  id: string;
+  org_id: string;
+  client_id: string;
+  name: string;
+  title: string | null;
+  phone: string | null;
+  email: string | null;
+  is_primary: boolean;
+  status: ClientStatus;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TimeEvent {
