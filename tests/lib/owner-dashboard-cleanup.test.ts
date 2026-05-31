@@ -94,14 +94,22 @@ describe("closed-shift review acknowledgement", () => {
     // The band/rows only stay red while unreviewed work remains; reviewed
     // rows are de-emphasised toward green and excluded from the count.
     expect(overviewSource).toContain("const unreviewedClosedCount = closedShiftAlerts.filter");
-    expect(overviewSource).toContain("(session) => !session.reviewed,");
+    expect(overviewSource).toContain("isShiftReviewRiskActive(session.review, session.reviewAck)");
     expect(overviewSource).toContain("const hasUnreviewedClosed = unreviewedClosedCount > 0;");
     expect(overviewSource).toContain("hasUnreviewedClosed");
     // reviewed rows turn green instead of red
     expect(overviewSource).toContain("session.reviewed");
     expect(overviewSource).toContain('"rgba(15, 168, 120, 0.22)"');
+    expect(overviewSource).toContain("shiftReview.reviewedByAt");
     // the explicit reversible reviewed flag stays wired to the ack button
     expect(overviewSource).toContain("reviewed={session.reviewed}");
+  });
+
+  it("keeps reviewed closed shifts out of the Command Center owner risk queue", () => {
+    expect(commandCenterSource).toContain("export const revalidate = 0;");
+    expect(commandCenterSource).toContain("buildShiftReviewAckByEventId(data.timeEvents)");
+    expect(commandCenterSource).toContain("reviewAck");
+    expect(commandCenterSource).toContain("isShiftReviewRiskActive(session.review, session.reviewAck)");
   });
 
   it("opens the best work context: project detail first, worker page as fallback", () => {

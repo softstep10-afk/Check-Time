@@ -43,6 +43,7 @@ export function ShiftReviewAckButton({
       return;
     }
 
+    const reviewedAt = new Date().toISOString();
     const { error: insertError } = await supabase
       .from("time_events")
       .insert({
@@ -50,7 +51,7 @@ export function ShiftReviewAckButton({
         profile_id: data.profile_id,
         project_id: data.project_id,
         event_type: "adjust",
-        event_time: new Date().toISOString(),
+        event_time: reviewedAt,
         notes: nextReviewed
           ? "Shift review marked reviewed"
           : "Shift review marked needs review",
@@ -58,7 +59,7 @@ export function ShiftReviewAckButton({
           shift_review_ack: {
             status,
             reviewed_event_id: eventId,
-            reviewed_at: new Date().toISOString(),
+            reviewed_at: reviewedAt,
             reviewed_by: managerId,
             reviewed: nextReviewed,
             review_state: nextReviewed ? "reviewed" : "needs_review",

@@ -20,7 +20,7 @@ import {
   TRANSFER_GAP_COLOR,
 } from "@/lib/manager-utils";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
-import { formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
+import { formatDateTime, formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import {
   GPS_STATUS_COLOR,
@@ -36,8 +36,10 @@ import {
 } from "@/lib/gps-freshness";
 import {
   SHIFT_REVIEW_COLOR,
+  buildShiftReviewAckByEventId,
   buildShiftReviewAckEventIds,
   deriveShiftReview,
+  isShiftReviewRiskActive,
   type ShiftReview,
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
@@ -50,10 +52,10 @@ import {
 import { getDisplayOrgName } from "@/lib/brand";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 
-// 0 = force-dynamic. F5 must always fetch the current state of time_events,
+// F5 and router.refresh() must always fetch the current state of time_events,
 // projects, tasks, media; OverviewLiveIndicator still pushes router.refresh()
 // for passive updates between manual reloads.
-export const revalidate = 15;
+export const revalidate = 0;
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -141,6 +143,8 @@ export default async function OverviewPage() {
       .map((e) => [e.id, e]),
   );
   const acknowledgedShiftEventIds = buildShiftReviewAckEventIds(data.timeEvents);
+  const shiftReviewAckByEventId = buildShiftReviewAckByEventId(data.timeEvents);
+  const reviewerNameById = new Map(data.profiles.map((profile) => [profile.id, profile.name]));
   const onSiteSessions = activeSessions
     .filter((s) => s.isOpen)
     .map((session) => {
@@ -273,7 +277,13 @@ export default async function OverviewPage() {
       const reviewed = session.clockOutEventId
         ? acknowledgedShiftEventIds.has(session.clockOutEventId)
         : false;
-      return { ...session, review, reviewed };
+      const reviewAck = session.clockOutEventId
+        ? shiftReviewAckByEventId.get(session.clockOutEventId) ?? null
+        : null;
+      const reviewerName = reviewAck?.reviewedBy
+        ? reviewerNameById.get(reviewAck.reviewedBy) ?? null
+        : null;
+      return { ...session, review, reviewAck, reviewed, reviewerName };
     })
     .filter((session) => session.review.status !== "normal")
     .sort((left, right) => {
@@ -290,8 +300,8 @@ export default async function OverviewPage() {
   // suspicious shift is marked reviewed the zone calms down (still listed for
   // the record, but no longer alarming). This count never includes reviewed
   // shifts, mirroring how reviewed shifts are excluded from the risk queue.
-  const unreviewedClosedCount = closedShiftAlerts.filter(
-    (session) => !session.reviewed,
+  const unreviewedClosedCount = closedShiftAlerts.filter((session) =>
+    isShiftReviewRiskActive(session.review, session.reviewAck)
   ).length;
   const hasUnreviewedClosed = unreviewedClosedCount > 0;
 
@@ -333,7 +343,9 @@ export default async function OverviewPage() {
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null),
-    ...closedShiftAlerts.filter((session) => !session.reviewed).map((session) => {
+    ...closedShiftAlerts.filter((session) =>
+      isShiftReviewRiskActive(session.review, session.reviewAck)
+    ).map((session) => {
       const reasonLabels = session.review.reasons
         .map((reason) => shiftReviewLabel[reason])
         .join(", ");
@@ -710,6 +722,11 @@ export default async function OverviewPage() {
               const shiftContextHref = session.projectId
                 ? `/projects/${session.projectId}`
                 : `/team/${session.profileId}`;
+              const reviewedByText = session.reviewAck?.reviewed === true
+                ? t("shiftReview.reviewedByAt")
+                    .replace("{name}", session.reviewerName ?? session.reviewAck.reviewedBy ?? t("tasks.unknown"))
+                    .replace("{time}", formatDateTime(session.reviewAck.reviewedAt))
+                : null;
               return (
                 <article
                   key={session.id}
@@ -754,6 +771,11 @@ export default async function OverviewPage() {
                       {" · "}
                       {reasonLabels}
                     </Link>
+                    {reviewedByText ? (
+                      <div className="mt-1 text-[11px] font-semibold text-[var(--green)]">
+                        {reviewedByText}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span

@@ -19,10 +19,18 @@ describe("review queue and audit clarity source guards", () => {
   });
 
   it("stores review queue state as an explicit reversible metadata flag", () => {
+    expect(ackButton).toContain("const reviewedAt = new Date().toISOString()");
+    expect(ackButton).toContain("event_time: reviewedAt");
+    expect(ackButton).toContain("reviewed_at: reviewedAt");
     expect(ackButton).toContain("reviewed: nextReviewed");
     expect(ackButton).toContain("review_state: nextReviewed ? \"reviewed\" : \"needs_review\"");
     expect(overviewPage).toContain("reviewed={session.reviewed}");
     expect(timelinePage).toContain("reviewed={reviewed}");
+  });
+
+  it("forces dashboard refreshes to read fresh review acknowledgements", () => {
+    expect(overviewPage).toContain("export const revalidate = 0;");
+    expect(ackButton).toContain("router.refresh()");
   });
 
   it("records manual hour audit before and after values without changing payroll math", () => {

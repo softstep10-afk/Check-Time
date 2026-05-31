@@ -99,6 +99,13 @@ export function buildShiftReviewAckEventIds(
   return ids;
 }
 
+export function isShiftReviewRiskActive(
+  review: Pick<ShiftReview, "status">,
+  ack?: Pick<ShiftReviewAck, "reviewed"> | null,
+): boolean {
+  return review.status !== "normal" && ack?.reviewed !== true;
+}
+
 /**
  * Active shift becomes "long" at 12h. The Phase-1 product brief calls
  * anything over a normal workday a hint to follow up; 12h is the same

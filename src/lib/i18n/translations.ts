@@ -635,6 +635,7 @@ export const translations = {
   "shiftReview.tooltipReasons": { en: "Reasons: {list}", ru: "Причины: {list}" },
   "shiftReview.markReviewed": { en: "Mark reviewed", ru: "Отметить проверено" },
   "shiftReview.reviewedState": { en: "Reviewed", ru: "Проверено" },
+  "shiftReview.reviewedByAt": { en: "Reviewed by {name} · {time}", ru: "Проверил {name} · {time}" },
   "shiftReview.markNeedsReview": { en: "Mark needs review", ru: "Требует проверки" },
   "shiftReview.needsReviewCount": {
     en: "{count} active shifts need review",

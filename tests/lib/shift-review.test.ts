@@ -7,6 +7,7 @@ import {
   buildShiftReviewAckEventIds,
   getShiftReviewAck,
   isShiftActionable,
+  isShiftReviewRiskActive,
   shiftDurationSeverity,
 } from "@/lib/shift-review";
 import type { GpsFreshness } from "@/lib/gps-freshness";
@@ -459,5 +460,43 @@ describe("shift review acknowledgement metadata", () => {
 
     expect(ackById.get("clock-out-3")?.reviewed).toBe(false);
     expect(buildShiftReviewAckEventIds(events).has("clock-out-3")).toBe(false);
+  });
+
+  it("keeps an unreviewed suspicious closed shift in the active risk queue", () => {
+    const review = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: EXTREME_SHIFT_MINUTES + 30,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+
+    expect(review.status).toBe("needs_review");
+    expect(isShiftReviewRiskActive(review, null)).toBe(true);
+  });
+
+  it("removes a reviewed suspicious closed shift from the active risk queue", () => {
+    const review = deriveShiftReview({
+      isOpen: false,
+      durationMinutes: EXTREME_SHIFT_MINUTES + 30,
+      hadGpsAtClockIn: true,
+      gpsFreshness: null,
+      requireVideo: false,
+      videoStatus: "not_required",
+    });
+    const ack = getShiftReviewAck({
+      shift_review_ack: {
+        status: "needs_review",
+        reviewed_event_id: "clock-out-4",
+        reviewed_at: "2026-05-13T10:00:00Z",
+        reviewed_by: "manager-1",
+        reviewed: true,
+        review_state: "reviewed",
+      },
+    });
+
+    expect(review.status).toBe("needs_review");
+    expect(isShiftReviewRiskActive(review, ack)).toBe(false);
   });
 });

@@ -18,7 +18,13 @@ import { getProjectsPageData } from "@/lib/manager-data";
 import { buildManagerSessions, isOpenTask } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
 import { deriveGpsFreshness, formatGpsAge, GPS_FRESHNESS_COLOR, type GpsFreshness, type GpsFreshnessStatus } from "@/lib/gps-freshness";
-import { deriveShiftReview, SHIFT_REVIEW_COLOR, type ShiftReviewStatus } from "@/lib/shift-review";
+import {
+  buildShiftReviewAckByEventId,
+  deriveShiftReview,
+  isShiftReviewRiskActive,
+  SHIFT_REVIEW_COLOR,
+  type ShiftReviewStatus,
+} from "@/lib/shift-review";
 import { collectTaskReferencedMediaIds } from "@/lib/task-media-hydration";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
 import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
@@ -29,7 +35,7 @@ import { formatDurationCompact } from "@/lib/worker-utils";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { TaskPriority } from "@/types/database";
 
-export const revalidate = 15;
+export const revalidate = 0;
 const COMMAND_CENTER_PREVIEW_LIMIT = 6;
 const COMMAND_CENTER_RECENT_MESSAGE_LIMIT = 3;
 
@@ -250,6 +256,7 @@ export default async function CommandCenterPage() {
   const profilesById = new Map(data.profiles.map((profile) => [profile.id, profile.name]));
   const profileRecordById = new Map(data.profiles.map((profile) => [profile.id, profile]));
   const clockInEventsById = new Map(data.timeEvents.map((event) => [event.id, event]));
+  const shiftReviewAckByEventId = buildShiftReviewAckByEventId(data.timeEvents);
 
   const crew = data.profiles
     .filter((profile) => !profile.deleted_at && profile.is_active)
@@ -355,9 +362,12 @@ export default async function CommandCenterPage() {
         requireVideo: profile?.require_video ?? false,
         videoStatus: session.checkoutStatus,
       });
-      return { ...session, review };
+      const reviewAck = session.clockOutEventId
+        ? shiftReviewAckByEventId.get(session.clockOutEventId) ?? null
+        : null;
+      return { ...session, review, reviewAck };
     })
-    .filter((session) => session.review.status !== "normal")
+    .filter((session) => isShiftReviewRiskActive(session.review, session.reviewAck))
     .sort((left, right) => {
       const statusGap = riskRank[left.review.status] - riskRank[right.review.status];
       if (statusGap !== 0) return statusGap;
