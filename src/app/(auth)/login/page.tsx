@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
+import { formatLoginStampTime } from "@/lib/login-time";
 
 const MIN_PASSCODE_LENGTH = 4;
 const MAX_PASSCODE_LENGTH = 12;
@@ -19,6 +20,7 @@ export default function Page() {
   const [statusText, setStatusText] = useState(() => t("login.enterYourPin"));
   const [userName, setUserName] = useState("");
   const [clockText, setClockText] = useState("");
+  const [stampTime, setStampTime] = useState("");
   const locked = phase !== "idle";
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -107,6 +109,7 @@ export default function Page() {
       }
 
       // Success
+      setStampTime(formatLoginStampTime(new Date(), t));
       setPhase("success");
       setUserName(
         typeof payload.name === "string" && payload.name.trim()
@@ -173,12 +176,6 @@ export default function Page() {
     if (phase === "success") return "login-status ok";
     return "login-status neutral";
   };
-
-  const now = new Date();
-  const h = now.getHours() % 12 || 12;
-  const ap = now.getHours() >= 12 ? "PM" : "AM";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const stampTime = `${t("login.clockedInAt")} ${h}:${pad(now.getMinutes())} ${ap}`;
 
   return (
     <>

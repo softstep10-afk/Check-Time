@@ -32,7 +32,7 @@ import {
 } from "@/lib/worker-utils";
 import type { ProjectAddressGeocodeResult } from "@/lib/project-geocoding";
 import type { ManagerProjectSummary } from "@/lib/manager-types";
-import { normalizeStoragePath } from "@/lib/task-attachments";
+import { getSignableStoragePath } from "@/lib/task-attachments";
 import {
   deriveProjectScheduleHealth,
   formatProjectCountdown,
@@ -250,23 +250,27 @@ function ClientTonePicker({
   );
 }
 
-function useThumbnailUrl(storagePath: string): string | null {
+function useThumbnailUrl(storagePath: string | null | undefined): string | null {
   const supabase = useMemo(() => createClient(), []);
-  const [url, setUrl] = useState<string | null>(null);
+  const normalizedPath = useMemo(() => getSignableStoragePath(storagePath), [storagePath]);
+  const [signed, setSigned] = useState<{ path: string; url: string } | null>(null);
   useEffect(() => {
+    if (!normalizedPath) return;
+
     let cancelled = false;
     void (async () => {
-      const normalized = normalizeStoragePath(storagePath);
       const { data } = await supabase.storage
         .from("media")
-        .createSignedUrl(normalized, 3600);
-      if (!cancelled) setUrl(data?.signedUrl ?? null);
+        .createSignedUrl(normalizedPath, 3600);
+      if (!cancelled && data?.signedUrl) {
+        setSigned({ path: normalizedPath, url: data.signedUrl });
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [supabase, storagePath]);
-  return url;
+  }, [supabase, normalizedPath]);
+  return signed?.path === normalizedPath ? signed.url : null;
 }
 
 function ProjectThumb({
@@ -278,7 +282,7 @@ function ProjectThumb({
 }) {
   const isPhoto = item.media_type === "photo";
   const isVideo = item.media_type === "video";
-  const url = useThumbnailUrl(isPhoto ? item.storage_path : "");
+  const url = useThumbnailUrl(isPhoto ? item.storage_path : null);
   return (
     <button
       type="button"

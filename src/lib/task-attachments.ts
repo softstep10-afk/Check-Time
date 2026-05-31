@@ -238,3 +238,14 @@ export function normalizeStoragePath(raw: string): string {
   if (p.startsWith("media/")) p = p.slice("media/".length);
   return p;
 }
+
+export function getSignableStoragePath(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) return null;
+
+  const normalized = normalizeStoragePath(trimmed);
+  if (!normalized || normalized.endsWith("/")) return null;
+  return normalized;
+}
