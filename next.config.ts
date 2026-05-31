@@ -1,8 +1,43 @@
+import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+
+function safeEnv(...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function safeGit(command: string): string | undefined {
+  try {
+    const value = execSync(command, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return value || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const buildCommitSha =
+  safeEnv("VERCEL_GIT_COMMIT_SHA", "GIT_COMMIT_SHA", "COMMIT_SHA", "GITHUB_SHA") ??
+  safeGit("git rev-parse HEAD");
+const buildCommitRef =
+  safeEnv("VERCEL_GIT_COMMIT_REF", "GIT_BRANCH", "BRANCH", "GITHUB_REF_NAME") ??
+  safeGit("git rev-parse --abbrev-ref HEAD");
+const buildDeploymentUrl = safeEnv("VERCEL_URL", "NEXT_PUBLIC_VERCEL_URL");
+const buildDeployEnvironment = safeEnv("VERCEL_ENV", "DEPLOY_ENV", "NODE_ENV");
+const buildTime = safeEnv("APP_BUILD_TIME", "NEXT_BUILD_TIME") ?? new Date().toISOString();
 
 const nextConfig: NextConfig = {
   env: {
-    APP_BUILD_TIME: process.env.APP_BUILD_TIME ?? new Date().toISOString(),
+    APP_BUILD_COMMIT_SHA: buildCommitSha ?? "",
+    APP_BUILD_COMMIT_REF: buildCommitRef ?? "",
+    APP_BUILD_TIME: buildTime,
+    APP_DEPLOY_ENV: buildDeployEnvironment ?? "",
+    APP_DEPLOYMENT_URL: buildDeploymentUrl ?? "",
   },
   experimental: {
     viewTransition: true,
