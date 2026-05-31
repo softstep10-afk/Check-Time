@@ -90,19 +90,20 @@ describe("closed-shift review acknowledgement", () => {
     expect(buildShiftReviewAckEventIds(events).has("co-1")).toBe(false);
   });
 
-  it("drives the overview risk zone off the unreviewed count, not the raw list", () => {
-    // The band/rows only stay red while unreviewed work remains; reviewed
-    // rows are de-emphasised toward green and excluded from the count.
-    expect(overviewSource).toContain("const unreviewedClosedCount = closedShiftAlerts.filter");
+  it("uses the overview closed-shift block as an active review queue, not history", () => {
+    // Reviewed rows leave the Overview queue entirely; Timeline keeps the
+    // history/reversal surface.
+    expect(overviewSource).toContain("const closedShiftReviewCandidates = activeSessions");
+    expect(overviewSource).toContain("const closedShiftReviewQueue = closedShiftReviewCandidates.filter");
+    expect(overviewSource).toContain("const closedShiftAlerts = closedShiftReviewQueue.slice(0, 8);");
+    expect(overviewSource).toContain("const unreviewedClosedCount = closedShiftReviewQueue.length;");
     expect(overviewSource).toContain("isShiftReviewRiskActive(session.review, session.reviewAck)");
     expect(overviewSource).toContain("const hasUnreviewedClosed = unreviewedClosedCount > 0;");
-    expect(overviewSource).toContain("hasUnreviewedClosed");
-    // reviewed rows turn green instead of red
-    expect(overviewSource).toContain("session.reviewed");
-    expect(overviewSource).toContain('"rgba(15, 168, 120, 0.22)"');
-    expect(overviewSource).toContain("shiftReview.reviewedByAt");
+    expect(overviewSource).toContain('t("shiftReview.closedShiftQueueEmpty")');
+    expect(overviewSource).not.toContain("if (left.reviewed !== right.reviewed)");
     // the explicit reversible reviewed flag stays wired to the ack button
     expect(overviewSource).toContain("reviewed={session.reviewed}");
+    expect(readSource("src/app/(manager)/timeline/page.tsx")).toContain("reviewed && ack");
   });
 
   it("keeps reviewed closed shifts out of the Command Center owner risk queue", () => {

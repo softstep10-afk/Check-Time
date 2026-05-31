@@ -259,7 +259,7 @@ export default async function OverviewPage() {
     (r) => r.status === "needs_review",
   ).length;
 
-  const closedShiftAlerts = activeSessions
+  const closedShiftReviewCandidates = activeSessions
     .filter((session) => !session.isOpen)
     .map((session) => {
       const profile = profilesByIdForReview.get(session.profileId);
@@ -287,22 +287,19 @@ export default async function OverviewPage() {
     })
     .filter((session) => session.review.status !== "normal")
     .sort((left, right) => {
-      if (left.reviewed !== right.reviewed) return left.reviewed ? 1 : -1;
       const statusGap =
         reviewPriorityRank[left.review.status] - reviewPriorityRank[right.review.status];
       if (statusGap !== 0) return statusGap;
       return right.durationMinutes - left.durationMinutes;
-    })
-    .slice(0, 8);
-
-  // Closed-shift alerts that the owner has NOT yet acknowledged. The band and
-  // each row only stay red while real unreviewed work remains; once every
-  // suspicious shift is marked reviewed the zone calms down (still listed for
-  // the record, but no longer alarming). This count never includes reviewed
-  // shifts, mirroring how reviewed shifts are excluded from the risk queue.
-  const unreviewedClosedCount = closedShiftAlerts.filter((session) =>
+    });
+  const closedShiftReviewQueue = closedShiftReviewCandidates.filter((session) =>
     isShiftReviewRiskActive(session.review, session.reviewAck)
-  ).length;
+  );
+  const closedShiftAlerts = closedShiftReviewQueue.slice(0, 8);
+
+  // The Overview block is a queue, not history: once a suspicious closed shift
+  // has a reviewed ack, it leaves this list and stays visible in Timeline.
+  const unreviewedClosedCount = closedShiftReviewQueue.length;
   const hasUnreviewedClosed = unreviewedClosedCount > 0;
 
   // ── Project-transfer gap detection ──
@@ -678,34 +675,34 @@ export default async function OverviewPage() {
         </div>
       </section>
 
-      {closedShiftAlerts.length > 0 ? (
-        <section
-          className="rounded-[var(--radius-lg)] border p-4"
-          style={{
-            background: hasUnreviewedClosed
-              ? "rgba(212, 81, 94, 0.06)"
-              : "rgba(15, 168, 120, 0.05)",
-            borderColor: hasUnreviewedClosed
-              ? "rgba(212, 81, 94, 0.24)"
-              : "rgba(15, 168, 120, 0.22)",
-          }}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2
-                className="text-lg font-bold"
-                style={{ color: hasUnreviewedClosed ? "var(--red)" : "var(--green)" }}
-              >
-                {t("shiftReview.closedShiftAlerts")}
-              </h2>
-              <p className="mt-1 text-sm text-[var(--text-secondary)]">
-                {t("shiftReview.closedShiftAlertsDesc")}
-              </p>
-            </div>
-            <Link href="/payroll" className="text-sm font-semibold text-[var(--brand-yellow)]">
-              {t("payroll.title")}
-            </Link>
+      <section
+        className="rounded-[var(--radius-lg)] border p-4"
+        style={{
+          background: hasUnreviewedClosed
+            ? "rgba(212, 81, 94, 0.06)"
+            : "rgba(15, 168, 120, 0.05)",
+          borderColor: hasUnreviewedClosed
+            ? "rgba(212, 81, 94, 0.24)"
+            : "rgba(15, 168, 120, 0.22)",
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2
+              className="text-lg font-bold"
+              style={{ color: hasUnreviewedClosed ? "var(--red)" : "var(--green)" }}
+            >
+              {t("shiftReview.closedShiftAlerts")}
+            </h2>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
+              {t("shiftReview.closedShiftAlertsDesc")}
+            </p>
           </div>
+          <Link href="/payroll" className="text-sm font-semibold text-[var(--brand-yellow)]">
+            {t("payroll.title")}
+          </Link>
+        </div>
+        {closedShiftAlerts.length > 0 ? (
           <div className="mt-4 space-y-2">
             {closedShiftAlerts.map((session) => {
               const reasonLabels = session.review.reasons
@@ -823,8 +820,19 @@ export default async function OverviewPage() {
               );
             })}
           </div>
-        </section>
-      ) : null}
+        ) : (
+          <div
+            className="mt-4 rounded-[var(--radius-md)] border px-3 py-3 text-sm font-semibold"
+            style={{
+              borderColor: "rgba(15, 168, 120, 0.22)",
+              color: "var(--green)",
+              background: "rgba(15, 168, 120, 0.08)",
+            }}
+          >
+            {t("shiftReview.closedShiftQueueEmpty")}
+          </div>
+        )}
+      </section>
 
       {/* ── Currently on site table ── */}
       <section className="surface-card p-4">

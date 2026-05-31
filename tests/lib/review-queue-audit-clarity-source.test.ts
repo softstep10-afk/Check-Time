@@ -33,6 +33,15 @@ describe("review queue and audit clarity source guards", () => {
     expect(ackButton).toContain("router.refresh()");
   });
 
+  it("keeps the dashboard review queue active-only while Timeline keeps reviewed history", () => {
+    expect(overviewPage).toContain("const closedShiftReviewQueue = closedShiftReviewCandidates.filter");
+    expect(overviewPage).toContain("isShiftReviewRiskActive(session.review, session.reviewAck)");
+    expect(overviewPage).toContain("const closedShiftAlerts = closedShiftReviewQueue.slice(0, 8);");
+    expect(overviewPage).toContain("shiftReview.closedShiftQueueEmpty");
+    expect(timelinePage).toContain("reviewed && ack");
+    expect(timelinePage).toContain("ShiftReviewAckButton");
+  });
+
   it("records manual hour audit before and after values without changing payroll math", () => {
     expect(teamMemberPage).toContain("before_unpaid_minutes");
     expect(teamMemberPage).toContain("after_unpaid_minutes");

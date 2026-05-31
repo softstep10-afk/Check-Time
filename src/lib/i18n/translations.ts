@@ -649,6 +649,10 @@ export const translations = {
     en: "Review suspicious closed shifts, mark them reviewed, or send them back to needs review if something still looks wrong.",
     ru: "Проверьте подозрительные закрытые смены, отметьте их как проверенные или верните в «Требует проверки», если что-то не сходится.",
   },
+  "shiftReview.closedShiftQueueEmpty": {
+    en: "All suspicious closed shifts are reviewed.",
+    ru: "Все подозрительные закрытые смены проверены.",
+  },
   "shiftReview.openShiftsAlert": {
     en: "Open shifts with warnings",
     ru: "Открытые смены с предупреждениями",
