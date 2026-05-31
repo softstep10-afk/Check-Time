@@ -3,6 +3,7 @@ import {
   countdownParts,
   deriveProjectScheduleHealth,
   formatProjectCountdown,
+  parseProjectScheduleDate,
 } from "@/lib/project-schedule";
 
 describe("project schedule health", () => {
@@ -52,5 +53,14 @@ describe("project schedule health", () => {
   it("formats countdown as days and hours", () => {
     expect(countdownParts(25 * 60 * 60 * 1000)).toEqual({ days: 1, hours: 1 });
     expect(formatProjectCountdown({ remainingMs: 25 * 60 * 60 * 1000, overdueMs: null }, "ru")).toBe("1д 1ч");
+  });
+
+  it("parses date-only project schedule boundaries in UTC for hydration-safe cards", () => {
+    expect(parseProjectScheduleDate("2026-05-01", "start")?.toISOString()).toBe(
+      "2026-05-01T00:00:00.000Z",
+    );
+    expect(parseProjectScheduleDate("2026-05-31", "end")?.toISOString()).toBe(
+      "2026-05-31T23:59:59.999Z",
+    );
   });
 });

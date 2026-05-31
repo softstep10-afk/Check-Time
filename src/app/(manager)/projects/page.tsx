@@ -25,6 +25,7 @@ export default async function ProjectsRoutePage() {
     <ProjectsPage
       initialProjects={activeProjectSummaries}
       hasFinanceAccess={managerHasFinanceAccess}
+      renderTimeIso={new Date().toISOString()}
     />
   );
 }

@@ -51,11 +51,11 @@ const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 type ActivityState = "live" | "open" | "stale" | "inactive";
 type ClientTone = "green" | "yellow" | "red";
 
-function activityState(project: ManagerProjectSummary): ActivityState {
+function activityState(project: ManagerProjectSummary, now: Date): ActivityState {
   if (project.status !== "active") return "inactive";
   if (project.onSiteWorkerCount > 0) return "live";
   if (!project.lastActivityTime) return "stale";
-  const ageMs = Date.now() - new Date(project.lastActivityTime).getTime();
+  const ageMs = now.getTime() - new Date(project.lastActivityTime).getTime();
   return ageMs > STALE_THRESHOLD_MS ? "stale" : "open";
 }
 
@@ -110,11 +110,16 @@ function scheduleHealthLabel(
   return "on track";
 }
 
-function projectSchedulePriorityRank(project: ManagerProjectSummary): number {
+function parseProjectRenderTime(value: string): Date {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) ? parsed : new Date(0);
+}
+
+function projectSchedulePriorityRank(project: ManagerProjectSummary, now: Date): number {
   const health = deriveProjectScheduleHealth({
     startDate: project.start_date,
     endDate: project.end_date,
-  });
+  }, now);
   if (health.tone === "red") return 0;
   if (health.tone === "yellow") return 1;
   return 2;
@@ -567,13 +572,16 @@ function applyPastedCoordinatePair(
 export function ProjectsPage({
   initialProjects,
   hasFinanceAccess,
+  renderTimeIso,
 }: {
   initialProjects: ManagerProjectSummary[];
   hasFinanceAccess: boolean;
+  renderTimeIso: string;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { t, locale } = useTranslation();
+  const renderTime = useMemo(() => parseProjectRenderTime(renderTimeIso), [renderTimeIso]);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [showCreatePanel, setShowCreatePanel] = useState(false);
@@ -625,8 +633,8 @@ export function ProjectsPage({
       // activity: urgent schedule first (red -> yellow -> green/no deadline),
       // then live/on-site activity, then most-recent.
       sorted.sort((a, b) => {
-        const aScheduleRank = projectSchedulePriorityRank(a);
-        const bScheduleRank = projectSchedulePriorityRank(b);
+        const aScheduleRank = projectSchedulePriorityRank(a, renderTime);
+        const bScheduleRank = projectSchedulePriorityRank(b, renderTime);
         if (aScheduleRank !== bScheduleRank) return aScheduleRank - bScheduleRank;
         const aScore =
           a.onSiteWorkerCount > 0 ? 2 : a.lastActivityTime ? 1 : 0;
@@ -643,7 +651,7 @@ export function ProjectsPage({
       });
     }
     return sorted;
-  }, [initialProjects, statusFilter, sortBy, searchQuery, hasFinanceAccess]);
+  }, [initialProjects, statusFilter, sortBy, searchQuery, hasFinanceAccess, renderTime]);
   const projectsMissingCoordinatesCount = useMemo(() => {
     return initialProjects.filter(
       (project) => !project.hasValidSiteCoordinates && !isDriverTimeProject(project),
@@ -1612,13 +1620,13 @@ export function ProjectsPage({
 
       <section className="grid gap-4 xl:grid-cols-2">
         {visibleProjects.map((project) => {
-          const state = activityState(project);
+          const state = activityState(project, renderTime);
           const driverTimeProject = isDriverTimeProject(project);
           const hasSiteCoordinates = project.hasValidSiteCoordinates;
           const scheduleHealth = deriveProjectScheduleHealth({
             startDate: project.start_date,
             endDate: project.end_date,
-          });
+          }, renderTime);
           const scheduleStyle = projectScheduleToneStyle(scheduleHealth.tone);
           const hasSchedule = Boolean(project.start_date || project.end_date);
           const scheduleLabel = scheduleHealthLabel(locale, scheduleHealth.state);

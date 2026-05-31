@@ -27,14 +27,19 @@ export interface ProjectScheduleHealth {
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
-function parseDateOnly(value: string | null | undefined, endOfDay = false): Date | null {
+export function parseProjectScheduleDate(
+  value: string | null | undefined,
+  boundary: "start" | "end" = "start",
+): Date | null {
   if (!value) return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (!match) return null;
   const [, year, month, day] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  const date =
+    boundary === "end"
+      ? new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 23, 59, 59, 999))
+      : new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 0, 0, 0, 0));
   if (Number.isNaN(date.getTime())) return null;
-  if (endOfDay) date.setHours(23, 59, 59, 999);
   return date;
 }
 
@@ -42,8 +47,8 @@ export function deriveProjectScheduleHealth(
   input: ProjectScheduleInput,
   now = new Date(),
 ): ProjectScheduleHealth {
-  const startAt = parseDateOnly(input.startDate, false);
-  const endAt = parseDateOnly(input.endDate, true);
+  const startAt = parseProjectScheduleDate(input.startDate, "start");
+  const endAt = parseProjectScheduleDate(input.endDate, "end");
 
   if (!startAt && !endAt) {
     return {
