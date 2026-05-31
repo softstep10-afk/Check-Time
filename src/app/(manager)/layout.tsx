@@ -43,6 +43,7 @@ const mobileNav: Array<{ href: string; icon: JarvisIconName; labelKey: Translati
   { href: "/overview", icon: "overview", labelKey: "manager.navOverview" },
   { href: "/command-center", icon: "command", labelKey: "manager.navCommandCenter" },
   { href: "/projects", icon: "projects", labelKey: "manager.navProjects" },
+  { href: "/clients", icon: "profile", labelKey: "manager.navClients" },
   { href: "/team", icon: "team", labelKey: "manager.navTeam" },
   { href: "/tasks", icon: "tasks", labelKey: "common.tasks" },
   { href: "/schedule", icon: "schedule", labelKey: "nav.schedule" },

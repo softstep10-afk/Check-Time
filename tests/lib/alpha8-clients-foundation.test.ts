@@ -71,14 +71,17 @@ describe("Alpha-8 clients route and UI foundation", () => {
     expect(dataSource).toContain("requireManagerContext");
   });
 
-  it("adds a desktop manager nav entry and realtime refresh tables", () => {
+  it("adds desktop and mobile manager nav entries plus realtime refresh tables", () => {
     expect(layoutSource).toContain('href: "/clients"');
     expect(layoutSource).toContain('labelKey: "manager.navClients"');
+    expect(layoutSource).toContain('{ href: "/clients", icon: "profile", labelKey: "manager.navClients" }');
+    expect(layoutSource.indexOf('{ href: "/projects", icon: "projects", labelKey: "manager.navProjects" }'))
+      .toBeLessThan(layoutSource.indexOf('{ href: "/clients", icon: "profile", labelKey: "manager.navClients" }'));
     expect(layoutSource).toContain('clients: ["clients", "client_contacts", "audit_log"]');
     expect(layoutSource).toContain('pathname.startsWith("/clients")');
   });
 
-  it("keeps the client list free of money, payroll, GPS, and margin columns", () => {
+  it("keeps the client list free of money, payroll, GPS, margin, portal, and AI columns", () => {
     const clientUi = `${listPageSource}\n${detailPageSource}`.toLowerCase();
     expect(clientUi).not.toContain("payroll");
     expect(clientUi).not.toContain("gps");
@@ -86,15 +89,29 @@ describe("Alpha-8 clients route and UI foundation", () => {
     expect(clientUi).not.toContain("invoice");
     expect(clientUi).not.toContain("estimate");
     expect(clientUi).not.toContain("payment");
+    expect(clientUi).not.toContain("client portal");
+    expect(clientUi).not.toContain("jarvis");
+    expect(clientUi).not.toContain('href="/ai"');
   });
 
-  it("renders the required client detail tabs and project placeholder", () => {
+  it("renders the required client detail tabs, project placeholder, and distinct empty states", () => {
     expect(detailPageSource).toContain('"clients.overview"');
     expect(detailPageSource).toContain('"clients.contacts"');
     expect(detailPageSource).toContain('"clients.projects"');
     expect(detailPageSource).toContain('"clients.notes"');
     expect(detailPageSource).toContain('"clients.activity"');
     expect(detailPageSource).toContain('t("clients.projectPlaceholder")');
+    expect(detailPageSource).toContain('t("clients.noNotes")');
+    expect(detailPageSource).toContain('t("clients.noActivity")');
+    expect(detailPageSource).not.toContain('client.internal_note ?? t("clients.noActivity")');
+  });
+
+  it("labels overview metadata as a record while keeping the real Activity tab", () => {
+    expect(detailPageSource).toContain('t("clients.record")');
+    expect(detailPageSource).toContain('t("clients.createdAt")');
+    expect(detailPageSource).toContain('t("clients.updatedAt")');
+    expect(detailPageSource).not.toContain('<h2 className="text-lg font-bold text-[var(--text-primary)]">{t("clients.activity")}</h2>');
+    expect(detailPageSource).toContain('{ id: "activity", labelKey: "clients.activity" }');
   });
 
   it("writes client audit events through the existing audit helper", () => {
