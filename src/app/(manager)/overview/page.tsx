@@ -107,7 +107,6 @@ export default async function OverviewPage() {
   const stats = getOverviewStats(data, activeSessions, projectSummaries, profileSummaries, {
     includeFinancials: managerHasFinanceAccess,
   });
-  const liveProfiles = profileSummaries.filter((profile) => profile.isOnSite).slice(0, 6);
   const urgentTasks = [...activeTasks]
     .filter(isOpenTask)
     .sort((left, right) => {
@@ -285,6 +284,16 @@ export default async function OverviewPage() {
       return right.durationMinutes - left.durationMinutes;
     })
     .slice(0, 8);
+
+  // Closed-shift alerts that the owner has NOT yet acknowledged. The band and
+  // each row only stay red while real unreviewed work remains; once every
+  // suspicious shift is marked reviewed the zone calms down (still listed for
+  // the record, but no longer alarming). This count never includes reviewed
+  // shifts, mirroring how reviewed shifts are excluded from the risk queue.
+  const unreviewedClosedCount = closedShiftAlerts.filter(
+    (session) => !session.reviewed,
+  ).length;
+  const hasUnreviewedClosed = unreviewedClosedCount > 0;
 
   // ── Project-transfer gap detection ──
   // Today-only scope so the Overview's travel-gaps band shows what's
@@ -661,13 +670,20 @@ export default async function OverviewPage() {
         <section
           className="rounded-[var(--radius-lg)] border p-4"
           style={{
-            background: "rgba(212, 81, 94, 0.06)",
-            borderColor: "rgba(212, 81, 94, 0.24)",
+            background: hasUnreviewedClosed
+              ? "rgba(212, 81, 94, 0.06)"
+              : "rgba(15, 168, 120, 0.05)",
+            borderColor: hasUnreviewedClosed
+              ? "rgba(212, 81, 94, 0.24)"
+              : "rgba(15, 168, 120, 0.22)",
           }}
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold" style={{ color: "var(--red)" }}>
+              <h2
+                className="text-lg font-bold"
+                style={{ color: hasUnreviewedClosed ? "var(--red)" : "var(--green)" }}
+              >
                 {t("shiftReview.closedShiftAlerts")}
               </h2>
               <p className="mt-1 text-sm text-[var(--text-secondary)]">
@@ -686,42 +702,75 @@ export default async function OverviewPage() {
               const clockOutEvent = session.clockOutEventId
                 ? clockOutEventsById.get(session.clockOutEventId)
                 : null;
+              // Best-available work context for a flagged closed shift.
+              // Closed shifts are time-based (clock in/out) and do not carry a
+              // task id, and there is no standalone shift-detail route, so the
+              // richest available context is the project detail page. Fall back
+              // to the worker/team page only if a project id is missing.
+              const shiftContextHref = session.projectId
+                ? `/projects/${session.projectId}`
+                : `/team/${session.profileId}`;
               return (
                 <article
                   key={session.id}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-2.5"
                   style={{
-                    borderColor: "rgba(212, 81, 94, 0.22)",
+                    borderColor: session.reviewed
+                      ? "rgba(15, 168, 120, 0.22)"
+                      : "rgba(212, 81, 94, 0.22)",
                     background: "rgba(15, 17, 23, 0.62)",
+                    opacity: session.reviewed ? 0.72 : 1,
                   }}
                 >
-                  <div className="min-w-0">
+                  {/* Clickable shift summary. The worker name opens the team
+                      member page (who / why flagged); the project name and the
+                      time·reason line open the project detail (where / which
+                      object). Sibling links — not nested — so the acknowledge
+                      button beside them stays valid. */}
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
                         href={`/team/${session.profileId}`}
                         className="text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--brand-yellow)]"
+                        title={t("overview.openTeam")}
                       >
                         {session.profileName}
                       </Link>
-                      <span className="text-xs text-[var(--text-secondary)]">
+                      <Link
+                        href={shiftContextHref}
+                        className="text-xs text-[var(--text-secondary)] hover:text-[var(--brand-yellow)]"
+                        title={t("common.openProject")}
+                      >
                         {session.projectName}
-                      </span>
+                      </Link>
                     </div>
-                    <div className="mt-1 text-xs text-[var(--text-muted)]">
+                    <Link
+                      href={shiftContextHref}
+                      className="mt-1 block text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                      title={t("common.openProject")}
+                    >
                       {formatEventTime(session.clockInTime)}
                       {clockOutEvent ? ` - ${formatEventTime(clockOutEvent.event_time)}` : ""}
                       {" · "}
                       {reasonLabels}
-                    </div>
+                    </Link>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">
                     <span
                       className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
-                      style={{ color: SHIFT_REVIEW_COLOR[session.review.status] }}
+                      style={{
+                        color: session.reviewed
+                          ? "var(--text-muted)"
+                          : SHIFT_REVIEW_COLOR[session.review.status],
+                      }}
                     >
                       <span
                         className="inline-block h-2 w-2 rounded-full"
-                        style={{ background: SHIFT_REVIEW_COLOR[session.review.status] }}
+                        style={{
+                          background: session.reviewed
+                            ? "var(--text-muted)"
+                            : SHIFT_REVIEW_COLOR[session.review.status],
+                        }}
                       />
                       {shiftReviewLabel[session.review.status]}
                     </span>
@@ -1048,48 +1097,11 @@ export default async function OverviewPage() {
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="surface-card p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("overview.liveCrew")}</h2>
-            <Link href="/team" className="text-sm font-semibold text-[var(--brand-yellow)]">
-              {t("overview.openTeam")}
-            </Link>
-          </div>
-          <div className="mt-4 space-y-3">
-            {liveProfiles.length === 0 ? (
-              <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-                {t("overview.nobodyClockedIn")}
-              </div>
-            ) : (
-              liveProfiles.map((profile) => (
-                <Link
-                  key={profile.id}
-                  href={`/team/${profile.id}`}
-                  className="block rounded-[var(--radius-md)] border border-[var(--border-default)] p-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-[var(--text-primary)]">{profile.name}</div>
-                      <div className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">
-                        {profile.role}
-                      </div>
-                    </div>
-                    <div className="text-sm font-semibold text-[var(--brand-yellow)]">
-                      {profile.currentSessionMinutes === null
-                        ? t("common.live")
-                        : formatDurationCompact(profile.currentSessionMinutes)}
-                    </div>
-                  </div>
-                  <div className="mt-3 text-sm text-[var(--text-secondary)]">
-                    {profile.currentProjectName ?? t("common.projectNotResolved")}
-                  </div>
-                </Link>
-              ))
-            )}
-          </div>
-        </div>
-
+      {/* The detailed "Currently on site" table above is the single source
+          of who is on site now. The old condensed "Live crew" card here was a
+          second, lower-information copy of the same roster, so it has been
+          removed; the urgent-task queue now spans the full width. */}
+      <section>
         <div className="surface-card p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("overview.urgentQueue")}</h2>

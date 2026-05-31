@@ -1,16 +1,9 @@
 import Link from "next/link";
 import {
-  Bot,
-  CalendarDays,
   CheckCircle2,
-  ClipboardCheck,
-  FolderKanban,
   MapPin,
   MessageSquare,
   RadioTower,
-  Sparkles,
-  Users,
-  Wallet,
   AlertTriangle,
 } from "lucide-react";
 import { BulkMessageComposer } from "@/components/manager/BulkMessageComposer";
@@ -22,7 +15,7 @@ import {
   isTaskInActiveOperations,
 } from "@/lib/archive-utils";
 import { getProjectsPageData } from "@/lib/manager-data";
-import { buildManagerSessions, buildProjectSummaries, isOpenTask } from "@/lib/manager-utils";
+import { buildManagerSessions, isOpenTask } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
 import { deriveGpsFreshness, formatGpsAge, GPS_FRESHNESS_COLOR, type GpsFreshness, type GpsFreshnessStatus } from "@/lib/gps-freshness";
 import { deriveShiftReview, SHIFT_REVIEW_COLOR, type ShiftReviewStatus } from "@/lib/shift-review";
@@ -191,94 +184,29 @@ const riskRank: Record<ShiftReviewStatus, number> = {
   normal: 6,
 };
 
-function aiPromptHref(prompt: string) {
-  return `/ai?prompt=${encodeURIComponent(prompt)}`;
-}
-
-type JarvisAuditRow = {
-  id: string;
-  action: string;
-  actor_name: string | null;
-  target_type: string | null;
-  target_id: string | null;
-  after_data: Record<string, unknown> | null;
-  created_at: string;
-};
-
-function readAuditString(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function firstPreparedAction(after: Record<string, unknown>) {
-  const actions = Array.isArray(after.actions) ? after.actions : [];
-  const first = actions.find((item) => item && typeof item === "object" && !Array.isArray(item));
-  return first && typeof first === "object" && !Array.isArray(first)
-    ? first as Record<string, unknown>
-    : null;
-}
-
-function jarvisAuditText(row: JarvisAuditRow, locale: "en" | "ru") {
-  const after = row.after_data ?? {};
-  const preparedAction = row.action === "jarvis_action_prepared" ? firstPreparedAction(after) : null;
-  const preparedPayload =
-    preparedAction?.payload && typeof preparedAction.payload === "object" && !Array.isArray(preparedAction.payload)
-      ? preparedAction.payload as Record<string, unknown>
-      : {};
-  const preparedKind = readAuditString(preparedAction?.kind);
-  const preparedLabel = readAuditString(preparedAction?.label);
-  const questionPreview = readAuditString(after.questionPreview);
-
-  if (preparedAction) {
-    const target =
-      readAuditString(preparedPayload.title) ??
-      readAuditString(preparedPayload.name) ??
-      readAuditString(preparedPayload.text) ??
-      preparedLabel ??
-      preparedKind ??
-      row.target_id ??
-      row.action;
-    const detail = questionPreview
-      ? `${locale === "ru" ? "Запрос" : "Request"}: ${questionPreview}`
-      : locale === "ru"
-        ? "Ожидает проверки владельцем."
-        : "Waiting for owner review.";
-    return {
-      title: preparedLabel ?? `${locale === "ru" ? "Подготовлено" : "Prepared"}: ${target}`,
-      detail,
-    };
-  }
-
-  const title =
-    readAuditString(after.title) ??
-    readAuditString(after.recipientName) ??
-    readAuditString(after.projectName) ??
-    row.target_id ??
-    row.target_type ??
-    row.action;
-  return {
-    title,
-    detail: row.actor_name ? `${locale === "ru" ? "Кто" : "By"}: ${row.actor_name}` : row.action.replace(/_/g, " "),
-  };
-}
-
+// metricCard renders a single dashboard stat. An optional `href` makes the
+// whole card a navigation link to the matching list page so the owner can act
+// on a number instead of just reading it. Routes are existing pages only.
 function metricCard({
   label,
   value,
   detail,
   tone = "neutral",
+  href,
 }: {
   label: string;
   value: string | number;
   detail: string;
   tone?: "neutral" | "warning" | "good";
+  href?: string;
 }) {
   const color =
     tone === "warning" ? "#f59e0b" :
     tone === "good" ? "var(--green)" :
     "var(--text-primary)";
 
-  return (
-    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+  const inner = (
+    <>
       <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
         {label}
       </div>
@@ -288,30 +216,24 @@ function metricCard({
       <div className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
         {detail}
       </div>
-    </div>
+    </>
   );
-}
 
-function quickLink({
-  href,
-  icon: Icon,
-  label,
-}: {
-  href: string;
-  icon: typeof FolderKanban;
-  label: string;
-}) {
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4 transition hover:border-[var(--brand-yellow)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+      >
+        {inner}
+      </Link>
+    );
+  }
+
   return (
-    <Link
-      href={href}
-      className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--brand-yellow)]"
-    >
-      <span className="inline-flex items-center gap-2">
-        <Icon size={16} className="text-[var(--brand-yellow)]" />
-        {label}
-      </span>
-      <span className="text-[var(--brand-yellow)]">-&gt;</span>
-    </Link>
+    <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+      {inner}
+    </div>
   );
 }
 
@@ -323,9 +245,6 @@ export default async function CommandCenterPage() {
   const activeProjects = getActiveOperationalProjects(data.projects);
   const activeProjectIds = buildActiveProjectIdSet(data.projects);
   const sessions = buildManagerSessions(data).filter((session) => activeProjectIds.has(session.projectId));
-  const projectSummaries = buildProjectSummaries(data, sessions, {
-    includeFinancials: data.manager.role === "owner" || data.manager.role === "admin",
-  });
   const projectsById = new Map(data.projects.map((project) => [project.id, project.name]));
   const projectRecordById = new Map(data.projects.map((project) => [project.id, project]));
   const profilesById = new Map(data.profiles.map((profile) => [profile.id, profile.name]));
@@ -527,62 +446,6 @@ export default async function CommandCenterPage() {
   const ownerAttentionItems = [...liveRisks, ...closedShiftIssues];
   const visibleOwnerAttentionItems = ownerAttentionItems.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
   const visibleDispatchTasks = dispatchTasks.slice(0, COMMAND_CENTER_PREVIEW_LIMIT);
-  const inactiveActiveProjects = projectSummaries
-    .filter((project) => project.status === "active")
-    .filter((project) => project.onSiteWorkerCount === 0 && project.openTaskCount > 0)
-    .slice(0, 4);
-  let jarvisAuditRows: JarvisAuditRow[] = [];
-  try {
-    const { data: auditRows, error: auditError } = await supabase
-      .from("audit_log")
-      .select("id, action, actor_name, target_type, target_id, after_data, created_at")
-      .order("created_at", { ascending: false })
-      .limit(24);
-    if (!auditError && auditRows) {
-      jarvisAuditRows = (auditRows as JarvisAuditRow[])
-        .filter(
-          (row) =>
-            (row.action.startsWith("jarvis_") && row.action !== "jarvis_ai_usage") ||
-            row.action === "task_claimed" ||
-            row.action === "project_moved_to_trash",
-        )
-        .slice(0, 6);
-    }
-  } catch {
-    jarvisAuditRows = [];
-  }
-  const aiNextActions = [
-    ...liveRisks.slice(0, 3).map((worker) => ({
-      id: `ai-live-${worker.id}`,
-      title:
-        locale === "ru"
-          ? `Подготовить follow-up для ${worker.profileName}`
-          : `Prepare follow-up for ${worker.profileName}`,
-      detail: `${worker.projectName} · ${formatDurationCompact(worker.durationMinutes)} · ${shiftReviewLabel[worker.review.status]}`,
-      prompt:
-        locale === "ru"
-          ? `Jarvis, посмотри смену ${worker.profileName} на проекте ${worker.projectName}. Подготовь мне сообщение или задачу, если нужно вмешаться.`
-          : `Jarvis, review ${worker.profileName}'s shift on ${worker.projectName}. Prepare a message or task if I should intervene.`,
-    })),
-    ...unassignedTasks.slice(0, 2).map((task) => ({
-      id: `ai-task-${task.id}`,
-      title: locale === "ru" ? "Предложить исполнителя задачи" : "Suggest task assignee",
-      detail: `${task.title} · ${task.projectName ?? text.noProject}`,
-      prompt:
-        locale === "ru"
-          ? `Jarvis, предложи лучшего исполнителя для задачи "${task.title}"${task.projectName ? ` на проекте ${task.projectName}` : ""}.`
-          : `Jarvis, suggest the best assignee for task "${task.title}"${task.projectName ? ` on ${task.projectName}` : ""}.`,
-    })),
-    ...inactiveActiveProjects.slice(0, 2).map((project) => ({
-      id: `ai-project-${project.id}`,
-      title: locale === "ru" ? "Проверить проект без людей" : "Review project with no crew",
-      detail: `${project.name} · ${project.openTaskCount} ${text.openTasks.toLowerCase()}`,
-      prompt:
-        locale === "ru"
-          ? `Jarvis, проверь проект ${project.name}. На нем нет людей, но есть открытые задачи. Что мне сделать дальше?`
-          : `Jarvis, review ${project.name}. No one is on site but it has open tasks. What should I do next?`,
-    })),
-  ].slice(0, 6);
   const renderLiveWorkerCard = (worker: (typeof liveWorkers)[number]) => {
     const reviewColor = SHIFT_REVIEW_COLOR[worker.review.status];
     const gpsColor = GPS_FRESHNESS_COLOR[worker.freshness.status];
@@ -748,22 +611,10 @@ export default async function CommandCenterPage() {
               </Link>
             </div>
           </section>
-
-          <section className="surface-card p-4">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{text.quickControls}</h2>
-            <div className="mt-4 grid gap-2">
-              {quickLink({ href: "/projects", icon: FolderKanban, label: text.openProjects })}
-              {quickLink({ href: "/team", icon: Users, label: text.openTeam })}
-              {quickLink({ href: "/schedule", icon: CalendarDays, label: text.openSchedule })}
-              {quickLink({ href: "/payroll", icon: Wallet, label: text.openPayroll })}
-              {quickLink({ href: "/tasks", icon: ClipboardCheck, label: text.openTaskBoard })}
-              {quickLink({ href: "/ai", icon: Bot, label: text.openAi })}
-            </div>
-          </section>
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
+      <section>
         <div className="surface-card p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -803,95 +654,6 @@ export default async function CommandCenterPage() {
             </details>
           ) : null}
         </div>
-
-        <div className="space-y-5">
-          <section className="surface-card p-3" data-testid="jarvis-next-actions-compact">
-            <div className="flex items-start gap-2.5">
-              <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                style={{ background: "rgba(105, 231, 255, 0.1)" }}
-              >
-                <Sparkles size={15} className="text-[var(--ai-cyan-bright)]" />
-              </span>
-              <div>
-                <h2 className="text-base font-bold text-[var(--text-primary)]">
-                  {text.aiNext}
-                </h2>
-                <p className="mt-0.5 text-[11px] leading-4 text-[var(--text-secondary)]">
-                  AI suggests → owner approves → system writes → audit records.
-                </p>
-              </div>
-            </div>
-            <div className="mt-3 space-y-1.5">
-              {aiNextActions.length === 0 ? (
-                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-2.5 text-xs text-[var(--text-secondary)]">
-                  {locale === "ru" ? "Jarvis сейчас не видит срочных действий." : "Jarvis does not see urgent actions right now."}
-                </div>
-              ) : (
-                aiNextActions.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={aiPromptHref(item.prompt)}
-                    className="block rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-2 transition hover:border-[var(--ai-cyan)]"
-                  >
-                    <div className="truncate text-xs font-semibold text-[var(--text-primary)]">
-                      {item.title}
-                    </div>
-                    <div className="mt-0.5 line-clamp-1 text-[11px] leading-4 text-[var(--text-secondary)]">
-                      {item.detail}
-                    </div>
-                    <div className="mt-1 text-[11px] font-semibold text-[var(--ai-cyan-bright)]">
-                      {text.askJarvis} -&gt;
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </section>
-
-          <section className="surface-card p-4">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">
-              {text.actionLedger}
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">
-              AI prepares → owner confirms → server writes → audit_log stores the result.
-            </p>
-            <div className="mt-4 space-y-2">
-              {jarvisAuditRows.length === 0 ? (
-                <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
-                  {text.noJarvisActions}
-                </div>
-              ) : (
-                jarvisAuditRows.map((row) => {
-                  const auditText = jarvisAuditText(row, locale);
-                  return (
-                    <div
-                      key={row.id}
-                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-[var(--text-primary)]">
-                            {row.action.replace(/_/g, " ")}
-                          </div>
-                          <div className="mt-1 truncate text-xs text-[var(--text-secondary)]">
-                            {auditText.title}
-                          </div>
-                          <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-[var(--text-muted)]">
-                            {auditText.detail}
-                          </div>
-                        </div>
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                          {row.created_at.slice(0, 16).replace("T", " ")}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-        </div>
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -900,23 +662,27 @@ export default async function CommandCenterPage() {
           value: openTasks.length,
           detail: text.taskPulseDesc,
           tone: openTasks.length > 0 ? "warning" : "good",
+          href: "/tasks",
         })}
         {metricCard({
           label: text.urgentTasks,
           value: priorityTasks.length,
           detail: text.noPriorityTasks,
           tone: priorityTasks.length > 0 ? "warning" : "good",
+          href: "/tasks",
         })}
         {metricCard({
           label: text.unassigned,
           value: unassignedTasks.length,
           detail: text.noAssignee,
           tone: unassignedTasks.length > 0 ? "warning" : "good",
+          href: "/tasks",
         })}
         {metricCard({
           label: text.activeProjects,
           value: activeProjects.length,
           detail: text.openProjects,
+          href: "/projects",
         })}
       </section>
 

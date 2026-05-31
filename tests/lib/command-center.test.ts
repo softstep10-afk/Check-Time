@@ -120,18 +120,30 @@ describe("Command Center layout limits", () => {
     expect(bulkComposerSource).toContain(".limit(historyLimit)");
   });
 
-  it("renders Jarvis next actions in a compact card style without removing actions", () => {
-    expect(commandCenterSource).toContain('data-testid="jarvis-next-actions-compact"');
-    expect(commandCenterSource).toContain('<section className="surface-card p-3"');
-    expect(commandCenterSource).toContain("line-clamp-1 text-[11px]");
-    expect(commandCenterSource).toContain("aiNextActions.map");
-    expect(commandCenterSource).toContain("href={aiPromptHref(item.prompt)}");
+  it("removes the Jarvis next-actions and action-ledger blocks from the main board", () => {
+    // Owner-dashboard cleanup: Jarvis widgets no longer clutter the Command
+    // Center. Audit data itself is untouched — only this read-only display is
+    // gone (recommended follow-up: surface it on the dedicated /ai page).
+    expect(commandCenterSource).not.toContain('data-testid="jarvis-next-actions-compact"');
+    expect(commandCenterSource).not.toContain("aiNextActions");
+    expect(commandCenterSource).not.toContain("aiPromptHref");
+    expect(commandCenterSource).not.toContain("jarvisAuditRows");
+    expect(commandCenterSource).not.toContain("{text.actionLedger}");
+  });
+
+  it("removes the duplicate quick-actions block now that the left nav covers it", () => {
+    expect(commandCenterSource).not.toContain("{text.quickControls}");
+    expect(commandCenterSource).not.toContain("quickLink(");
+  });
+
+  it("makes the four stat cards clickable to existing list pages", () => {
+    expect(commandCenterSource).toContain('href: "/tasks"');
+    expect(commandCenterSource).toContain('href: "/projects"');
+    expect(commandCenterSource).toContain("if (href) {");
   });
 
   it("keeps protected Command Center blocks mounted", () => {
     for (const token of [
-      "{text.aiNext}",
-      "{text.actionLedger}",
       "BulkMessageComposer",
       "ManagerTasksPage",
       "{text.openProjects}",

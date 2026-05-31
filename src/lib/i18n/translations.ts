@@ -120,6 +120,7 @@ export const translations = {
   "common.generalTask": { en: "General task", ru: "Общая задача" },
   "common.projectNotResolved": { en: "Project not resolved", ru: "Проект не определён" },
   "nav.quick": { en: "Quick navigation", ru: "Быстрая навигация" },
+  "nav.back": { en: "Back", ru: "Назад" },
 
   // ── Manager Layout ──
   "manager.dashboard": { en: "Manager Dashboard", ru: "Панель менеджера" },

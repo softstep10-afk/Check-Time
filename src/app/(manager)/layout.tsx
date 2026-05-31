@@ -13,6 +13,7 @@ import { JarvisDock } from "@/components/manager/JarvisDock";
 import { ManagerWorkAlertBell } from "@/components/manager/ManagerWorkAlertBell";
 import { JarvisIcon, type JarvisIconName } from "@/components/shared/JarvisIcons";
 import { JarvisOrb } from "@/components/shared/JarvisOrb";
+import { AppBackButton } from "@/components/shared/AppBackButton";
 
 type SidebarItem =
   | { section: string; sectionKey: TranslationKey; ownerOnly?: boolean }
@@ -418,6 +419,7 @@ export default function ManagerLayout({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <AppBackButton />
             <LanguageSwitcher />
             <button
               onClick={handleLogout}
@@ -427,6 +429,14 @@ export default function ManagerLayout({
             </button>
           </div>
         </header>
+
+        {/* Desktop-only top-right back control. The mobile back control lives
+            in the sticky header above; this slim bar keeps a global "back" in
+            the top-right corner on wide screens without disturbing the page
+            content or the persistent sidebar. */}
+        <div className="hidden items-center justify-end border-b border-[var(--border-default)] px-5 py-2 md:flex">
+          <AppBackButton />
+        </div>
 
         {AUTH_BYPASS_ENABLED && isOwnerUser ? (
           <div
