@@ -319,11 +319,11 @@ export function ClientDetailPage({ client }: { client: ClientDetail }) {
             </dl>
           </div>
           <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
-            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("clients.record")}</h2>
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("clients.activity")}</h2>
             <dl className="mt-3 space-y-2 text-sm">
               <div><dt className="text-xs font-semibold uppercase text-[var(--text-muted)]">{t("clients.status")}</dt><dd className="text-[var(--text-primary)]">{client.status}</dd></div>
-              <div><dt className="text-xs font-semibold uppercase text-[var(--text-muted)]">{t("clients.createdAt")}</dt><dd className="text-[var(--text-primary)]">{formatDate(client.created_at)}</dd></div>
-              <div><dt className="text-xs font-semibold uppercase text-[var(--text-muted)]">{t("clients.updatedAt")}</dt><dd className="text-[var(--text-primary)]">{formatDate(client.updated_at)}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-[var(--text-muted)]">Created</dt><dd className="text-[var(--text-primary)]">{formatDate(client.created_at)}</dd></div>
+              <div><dt className="text-xs font-semibold uppercase text-[var(--text-muted)]">Updated</dt><dd className="text-[var(--text-primary)]">{formatDate(client.updated_at)}</dd></div>
             </dl>
           </div>
         </section>
@@ -377,7 +377,7 @@ export function ClientDetailPage({ client }: { client: ClientDetail }) {
 
       {activeTab === "notes" ? (
         <section className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4 text-sm leading-6 text-[var(--text-secondary)]">
-          {client.internal_note ?? t("clients.noNotes")}
+          {client.internal_note ?? t("clients.noActivity")}
         </section>
       ) : null}
 
