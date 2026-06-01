@@ -24,6 +24,7 @@ const sidebarItems: SidebarItem[] = [
   { href: "/overview", icon: "overview", label: "Overview", labelKey: "manager.navOverview" },
   { href: "/command-center", icon: "command", label: "Command Center", labelKey: "manager.navCommandCenter" },
   { href: "/projects", icon: "projects", label: "Projects", labelKey: "manager.navProjects" },
+  { href: "/clients", icon: "profile", label: "Clients", labelKey: "manager.navClients" },
   { href: "/team", icon: "team", label: "Team", labelKey: "manager.navTeam" },
   { section: "Work", sectionKey: "manager.sectionWork" },
   { href: "/tasks", icon: "tasks", label: "Tasks", labelKey: "common.tasks" },
@@ -42,6 +43,7 @@ const mobileNav: Array<{ href: string; icon: JarvisIconName; labelKey: Translati
   { href: "/overview", icon: "overview", labelKey: "manager.navOverview" },
   { href: "/command-center", icon: "command", labelKey: "manager.navCommandCenter" },
   { href: "/projects", icon: "projects", labelKey: "manager.navProjects" },
+  { href: "/clients", icon: "profile", labelKey: "manager.navClients" },
   { href: "/team", icon: "team", labelKey: "manager.navTeam" },
   { href: "/tasks", icon: "tasks", labelKey: "common.tasks" },
   { href: "/schedule", icon: "schedule", labelKey: "nav.schedule" },
@@ -62,6 +64,7 @@ const managerRefreshTables = {
     "project_assignments",
   ],
   projects: ["projects", "tasks", "time_events", "media", "project_assignments", "project_exclusions"],
+  clients: ["clients", "client_contacts", "audit_log"],
   team: [
     "profiles",
     "tasks",
@@ -98,6 +101,7 @@ function getManagerRealtimeTables(pathname: string | null): string[] {
     return managerRefreshTables.projects.filter((table) => table !== "tasks");
   }
   if (pathname.startsWith("/projects")) return [...managerRefreshTables.projects];
+  if (pathname.startsWith("/clients")) return [...managerRefreshTables.clients];
   if (pathname.startsWith("/team")) return [...managerRefreshTables.team];
   if (pathname.startsWith("/payroll") || pathname.startsWith("/reports/annual")) return [...managerRefreshTables.payroll];
   if (pathname.startsWith("/admin/settings") || pathname.startsWith("/settings")) return [...managerRefreshTables.settings];
