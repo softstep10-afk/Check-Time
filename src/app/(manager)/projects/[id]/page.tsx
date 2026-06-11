@@ -20,7 +20,11 @@ import { hasFinanceAccess } from "@/lib/finance-access";
 import { canDeleteMediaEverywhereServer } from "@/lib/server/media-delete-permissions";
 import { readMaterialDriverProfileIdsFromEnv } from "@/lib/server/material-driver-config";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
-import type { Media } from "@/types/database";
+import {
+  buildProjectClientOptions,
+  buildProjectClientSummary,
+} from "@/lib/client-project-links";
+import type { BusinessClient, ClientContact, Media, ProjectClient } from "@/types/database";
 
 export default async function ProjectDetailRoutePage({
   params,
@@ -47,6 +51,50 @@ export default async function ProjectDetailRoutePage({
   if (project.status === "archived") {
     redirect(`/archive/projects/${project.id}`);
   }
+
+  const [projectClientLinksResult, clientsResult, clientContactsResult] = await Promise.all([
+    supabase
+      .from("project_clients")
+      .select("*")
+      .eq("org_id", data.manager.org_id)
+      .eq("project_id", id)
+      .eq("status", "active")
+      .order("linked_at", { ascending: false })
+      .limit(1)
+      .returns<ProjectClient[]>(),
+    supabase
+      .from("clients")
+      .select("*")
+      .eq("org_id", data.manager.org_id)
+      .order("name", { ascending: true })
+      .returns<BusinessClient[]>(),
+    supabase
+      .from("client_contacts")
+      .select("*")
+      .eq("org_id", data.manager.org_id)
+      .order("is_primary", { ascending: false })
+      .order("name", { ascending: true })
+      .returns<ClientContact[]>(),
+  ]);
+
+  if (projectClientLinksResult.error) {
+    throw new Error(`Project client link query failed: ${projectClientLinksResult.error.message}`);
+  }
+  if (clientsResult.error) {
+    throw new Error(`Clients query failed: ${clientsResult.error.message}`);
+  }
+  if (clientContactsResult.error) {
+    throw new Error(`Client contacts query failed: ${clientContactsResult.error.message}`);
+  }
+
+  const clients = clientsResult.data ?? [];
+  const clientContacts = clientContactsResult.data ?? [];
+  const projectClient = buildProjectClientSummary({
+    link: projectClientLinksResult.data?.[0] ?? null,
+    clients,
+    contacts: clientContacts,
+  });
+  const clientOptions = buildProjectClientOptions(clients, clientContacts);
 
   const assignments = data.assignments.filter((assignment) => assignment.project_id === id);
   const assignedIds = new Set(assignments.map((assignment) => assignment.profile_id));
@@ -240,6 +288,8 @@ export default async function ProjectDetailRoutePage({
       hasFinanceAccess={managerHasFinanceAccess}
       canDeleteMedia={canDeleteMediaEverywhereServer(data.manager)}
       configuredMaterialDriverIds={configuredMaterialDriverIds}
+      projectClient={projectClient}
+      clientOptions={clientOptions}
     />
   );
 }

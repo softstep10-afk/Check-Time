@@ -1,4 +1,5 @@
 import type { BusinessClient, ClientContact, ClientStatus } from "@/types/database";
+import type { ClientProjectListItem, ClientProjectOption } from "@/lib/client-project-links";
 
 export type ClientSavePayload = Pick<
   BusinessClient,
@@ -34,6 +35,8 @@ export interface ClientListItem extends BusinessClient {
 
 export interface ClientDetail extends BusinessClient {
   contacts: ClientContact[];
+  projects: ClientProjectListItem[];
+  projectOptions: ClientProjectOption[];
   activity: ClientActivity[];
 }
 

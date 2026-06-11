@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus } from "lucide-react";
+import { ExternalLink, Link2, Plus, Search } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import type { ClientDetail } from "@/lib/client-directory";
 import type { TranslationKey } from "@/lib/i18n";
@@ -214,12 +215,52 @@ export function ClientDetailPage({ client }: { client: ClientDetail }) {
   const [activeTab, setActiveTab] = useState<ClientTab>("overview");
   const [editing, setEditing] = useState(false);
   const [showContactForm, setShowContactForm] = useState(false);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [projectQuery, setProjectQuery] = useState("");
+  const [projectLinkBusyId, setProjectLinkBusyId] = useState<string | null>(null);
   const [deactivationPending, startDeactivation] = useTransition();
   const [error, setError] = useState("");
+  const visibleProjectOptions = useMemo(() => {
+    const needle = projectQuery.trim().toLowerCase();
+    return client.projectOptions.filter((option) => !needle || option.searchText.includes(needle));
+  }, [client.projectOptions, projectQuery]);
 
   function refreshAfterSave() {
     setEditing(false);
     setShowContactForm(false);
+    setShowProjectPicker(false);
+    setProjectQuery("");
+    router.refresh();
+  }
+
+  async function linkClientToProject(option: ClientDetail["projectOptions"][number]) {
+    if (client.status !== "active") return;
+    const replacing = Boolean(option.activeClientId);
+    if (
+      replacing &&
+      !window.confirm(t("clients.linkProjectConfirm").replace("{project}", option.name))
+    ) {
+      return;
+    }
+
+    setError("");
+    setProjectLinkBusyId(option.id);
+    const response = await fetch(`/api/manager/projects/${option.id}/client`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId: client.id, replace: replacing }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      setError(payload?.error ?? t("clients.saveFailed"));
+      setProjectLinkBusyId(null);
+      return;
+    }
+
+    setProjectLinkBusyId(null);
+    setShowProjectPicker(false);
+    setProjectQuery("");
     router.refresh();
   }
 
@@ -370,8 +411,108 @@ export function ClientDetailPage({ client }: { client: ClientDetail }) {
       ) : null}
 
       {activeTab === "projects" ? (
-        <section className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-secondary)]">
-          {t("clients.projectPlaceholder")}
+        <section className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("clients.projects")}</h2>
+            <button
+              type="button"
+              onClick={() => setShowProjectPicker((value) => !value)}
+              disabled={client.status !== "active"}
+              className="button-base button-secondary px-3 py-2 text-sm disabled:opacity-50"
+            >
+              <Link2 size={16} />
+              {t("clients.linkProject")}
+            </button>
+          </div>
+          {client.status !== "active" ? (
+            <div className="mt-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-secondary)]">
+              {t("clients.inactiveCannotLinkProjects")}
+            </div>
+          ) : null}
+          {showProjectPicker && client.status === "active" ? (
+            <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-2.5 text-[var(--text-muted)]" size={16} />
+                <span className="sr-only">{t("clients.searchProjects")}</span>
+                <input
+                  value={projectQuery}
+                  onChange={(event) => setProjectQuery(event.target.value)}
+                  placeholder={t("clients.searchProjects")}
+                  className="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-card)] py-2 pl-9 pr-3 text-sm text-[var(--text-primary)]"
+                />
+              </label>
+              <div className="mt-3 grid gap-2">
+                {visibleProjectOptions.length === 0 ? (
+                  <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 text-sm text-[var(--text-secondary)]">
+                    {t("clients.noProjectOptions")}
+                  </div>
+                ) : (
+                  visibleProjectOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => void linkClientToProject(option)}
+                      disabled={projectLinkBusyId === option.id}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 text-left transition hover:border-[var(--brand-yellow)] disabled:opacity-50"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-semibold text-[var(--text-primary)]">{option.name}</div>
+                        <span className="text-xs font-semibold text-[var(--brand-yellow)]">
+                          {option.activeClientName ? t("clients.replaceProjectClient") : t("clients.linkProject")}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                        {option.address ?? t("common.noAddressSet")}
+                      </div>
+                      {option.activeClientName ? (
+                        <div className="mt-1 text-xs text-[var(--text-muted)]">
+                          {t("clients.projectAlreadyLinkedTo").replace("{name}", option.activeClientName)}
+                        </div>
+                      ) : null}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-3">
+            {client.projects.length === 0 ? (
+              <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-4 text-sm text-[var(--text-secondary)]">
+                {t("clients.noLinkedProjects")}
+              </div>
+            ) : (
+              client.projects.map((project) => (
+                <div key={project.linkId} className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/projects/${project.id}`}
+                          className="font-semibold text-[var(--text-primary)] hover:text-[var(--brand-yellow)]"
+                        >
+                          {project.name}
+                        </Link>
+                        <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.14)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--brand-yellow)]">
+                          {project.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-sm text-[var(--text-secondary)]">
+                        {project.address ?? t("common.noAddressSet")}
+                      </div>
+                    </div>
+                    <Link
+                      href={`/projects/${project.id}`}
+                      className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)]"
+                    >
+                      <ExternalLink size={13} />
+                      {t("clients.openProject")}
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </section>
       ) : null}
 

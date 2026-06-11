@@ -160,7 +160,9 @@ export const translations = {
   "clients.noContacts": { en: "No contacts yet.", ru: "Контактов пока нет." },
   "clients.noNotes": { en: "No notes yet.", ru: "Заметок пока нет." },
   "clients.noActivity": { en: "No activity recorded yet.", ru: "Активность пока не записана." },
+  "clients.noLinkedProjects": { en: "No projects linked yet.", ru: "Проекты пока не привязаны" },
   "clients.openClient": { en: "Open client", ru: "Открыть клиента" },
+  "clients.openProject": { en: "Open project", ru: "Открыть проект" },
   "clients.status": { en: "Status", ru: "Статус" },
   "clients.record": { en: "Record", ru: "Запись" },
   "clients.createdAt": { en: "Created", ru: "Создано" },
@@ -172,6 +174,22 @@ export const translations = {
   "clients.notes": { en: "Notes", ru: "Заметки" },
   "clients.activity": { en: "Activity", ru: "Активность" },
   "clients.addContact": { en: "Add contact", ru: "Добавить контакт" },
+  "clients.linkProject": { en: "Link project", ru: "Привязать проект" },
+  "clients.searchProjects": { en: "Search projects", ru: "Поиск проектов" },
+  "clients.noProjectOptions": { en: "No projects available.", ru: "Нет доступных проектов." },
+  "clients.projectAlreadyLinkedTo": {
+    en: "Currently linked to {name}",
+    ru: "Сейчас привязан к {name}",
+  },
+  "clients.replaceProjectClient": { en: "Replace client", ru: "Сменить клиента" },
+  "clients.linkProjectConfirm": {
+    en: "Replace the current client on {project}?",
+    ru: "Сменить текущего клиента у проекта «{project}»?",
+  },
+  "clients.inactiveCannotLinkProjects": {
+    en: "Inactive clients cannot be linked to new projects.",
+    ru: "Неактивных клиентов нельзя привязывать к новым проектам.",
+  },
   "clients.contactName": { en: "Contact name", ru: "Имя контакта" },
   "clients.contactTitle": { en: "Title", ru: "Должность" },
   "clients.phone": { en: "Phone", ru: "Телефон" },
@@ -190,6 +208,26 @@ export const translations = {
   "clients.contactSaveFailed": { en: "Could not save contact.", ru: "Не удалось сохранить контакт." },
   "clients.nameRequired": { en: "Client name is required.", ru: "Название клиента обязательно." },
   "clients.contactNameRequired": { en: "Contact name is required.", ru: "Имя контакта обязательно." },
+
+  // ── Project client link ──
+  "projectClient.title": { en: "Client", ru: "Клиент" },
+  "projectClient.none": { en: "No client linked", ru: "Клиент не привязан" },
+  "projectClient.link": { en: "Link client", ru: "Привязать клиента" },
+  "projectClient.change": { en: "Change", ru: "Сменить" },
+  "projectClient.unlink": { en: "Unlink", ru: "Отвязать" },
+  "projectClient.searchClients": { en: "Search active clients", ru: "Поиск активных клиентов" },
+  "projectClient.noActiveClients": { en: "No active clients available.", ru: "Нет доступных активных клиентов." },
+  "projectClient.changeConfirm": {
+    en: "Replace {name} on this project?",
+    ru: "Сменить клиента «{name}» у этого проекта?",
+  },
+  "projectClient.unlinkConfirm": {
+    en: "Unlink {name} from this project?",
+    ru: "Отвязать клиента «{name}» от этого проекта?",
+  },
+  "projectClient.linked": { en: "Client linked.", ru: "Клиент привязан." },
+  "projectClient.changed": { en: "Client changed.", ru: "Клиент изменён." },
+  "projectClient.unlinked": { en: "Client unlinked.", ru: "Клиент отвязан." },
 
   // ── Login ──
   "login.brand": { en: "CHECK-TIME", ru: "CHECK-TIME" },

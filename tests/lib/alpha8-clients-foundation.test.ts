@@ -77,7 +77,7 @@ describe("Alpha-8 clients route and UI foundation", () => {
     expect(layoutSource).toContain('{ href: "/clients", icon: "profile", labelKey: "manager.navClients" }');
     expect(layoutSource.indexOf('{ href: "/projects", icon: "projects", labelKey: "manager.navProjects" }'))
       .toBeLessThan(layoutSource.indexOf('{ href: "/clients", icon: "profile", labelKey: "manager.navClients" }'));
-    expect(layoutSource).toContain('clients: ["clients", "client_contacts", "audit_log"]');
+    expect(layoutSource).toContain('clients: ["clients", "client_contacts", "project_clients", "audit_log"]');
     expect(layoutSource).toContain('pathname.startsWith("/clients")');
   });
 
@@ -94,13 +94,15 @@ describe("Alpha-8 clients route and UI foundation", () => {
     expect(clientUi).not.toContain('href="/ai"');
   });
 
-  it("renders the required client detail tabs, project placeholder, and distinct empty states", () => {
+  it("renders the required client detail tabs and distinct empty states", () => {
     expect(detailPageSource).toContain('"clients.overview"');
     expect(detailPageSource).toContain('"clients.contacts"');
     expect(detailPageSource).toContain('"clients.projects"');
     expect(detailPageSource).toContain('"clients.notes"');
     expect(detailPageSource).toContain('"clients.activity"');
-    expect(detailPageSource).toContain('t("clients.projectPlaceholder")');
+    expect(detailPageSource).toContain('t("clients.noLinkedProjects")');
+    expect(detailPageSource).toContain('t("clients.linkProject")');
+    expect(detailPageSource).not.toContain('t("clients.projectPlaceholder")');
     expect(detailPageSource).toContain('t("clients.noNotes")');
     expect(detailPageSource).toContain('t("clients.noActivity")');
     expect(detailPageSource).not.toContain('client.internal_note ?? t("clients.noActivity")');
@@ -231,11 +233,12 @@ describe("Alpha-8 clients validation helpers", () => {
 });
 
 describe("Alpha-8 project map update", () => {
-  it("records Phase 1A scope and exclusions without changing production deploy", () => {
+  it("records Phase 1A scope, deployment, and exclusions", () => {
     expect(docsMapSource).toContain("Alpha-8 Phase 1A — Clients Foundation");
     expect(docsMapSource).toContain("project_clients UI");
     expect(docsMapSource).toContain("estimates");
     expect(docsMapSource).toContain("client portal");
-    expect(docsMapSource).toContain("production deploy unchanged: dpl_6dj9WMuDmbzJHxB7MDsc2aVC6KFy");
+    expect(docsMapSource).toContain("production deploy: dpl_4XBmujHLybrcCgXWqBLaHTM8fbYz");
+    expect(docsMapSource).toContain("production commit: 5f605ddde9d33e77fd0349f09b6f01ca0170ab2d");
   });
 });

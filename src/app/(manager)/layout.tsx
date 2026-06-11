@@ -63,8 +63,8 @@ const managerRefreshTables = {
     "audit_log",
     "project_assignments",
   ],
-  projects: ["projects", "tasks", "time_events", "media", "project_assignments", "project_exclusions"],
-  clients: ["clients", "client_contacts", "audit_log"],
+  projects: ["projects", "tasks", "time_events", "media", "project_assignments", "project_exclusions", "project_clients"],
+  clients: ["clients", "client_contacts", "project_clients", "audit_log"],
   team: [
     "profiles",
     "tasks",

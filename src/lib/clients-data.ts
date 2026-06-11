@@ -8,9 +8,13 @@ import {
   type ClientDetail,
   type ClientListItem,
 } from "@/lib/client-directory";
+import {
+  buildClientLinkedProjects,
+  buildClientProjectOptions,
+} from "@/lib/client-project-links";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
-import type { BusinessClient, ClientContact } from "@/types/database";
+import type { BusinessClient, ClientContact, Project, ProjectClient } from "@/types/database";
 
 type AuditRow = {
   id: string;
@@ -57,7 +61,14 @@ export const getClientDetailData = cache(async (clientId: string): Promise<Clien
   const supabase = await createClient();
   const { profile } = await requireManagerContext(supabase);
 
-  const [clientResult, contactsResult, activityResult] = await Promise.all([
+  const [
+    clientResult,
+    contactsResult,
+    activityResult,
+    projectsResult,
+    projectLinksResult,
+    clientsResult,
+  ] = await Promise.all([
     supabase
       .from("clients")
       .select("*")
@@ -81,10 +92,32 @@ export const getClientDetailData = cache(async (clientId: string): Promise<Clien
       .order("created_at", { ascending: false })
       .limit(20)
       .returns<AuditRow[]>(),
+    supabase
+      .from("projects")
+      .select("*")
+      .eq("org_id", profile.org_id)
+      .order("name", { ascending: true })
+      .returns<Project[]>(),
+    supabase
+      .from("project_clients")
+      .select("*")
+      .eq("org_id", profile.org_id)
+      .eq("status", "active")
+      .order("linked_at", { ascending: false })
+      .returns<ProjectClient[]>(),
+    supabase
+      .from("clients")
+      .select("*")
+      .eq("org_id", profile.org_id)
+      .order("name", { ascending: true })
+      .returns<BusinessClient[]>(),
   ]);
 
   assertNoError(clientResult.error, "Client query failed");
   assertNoError(contactsResult.error, "Client contacts query failed");
+  assertNoError(projectsResult.error, "Projects query failed");
+  assertNoError(projectLinksResult.error, "Project client links query failed");
+  assertNoError(clientsResult.error, "Clients query failed");
 
   if (!clientResult.data) notFound();
 
@@ -100,6 +133,17 @@ export const getClientDetailData = cache(async (clientId: string): Promise<Clien
   return {
     ...clientResult.data,
     contacts: contactsResult.data ?? [],
+    projects: buildClientLinkedProjects({
+      clientId,
+      links: projectLinksResult.data ?? [],
+      projects: projectsResult.data ?? [],
+    }),
+    projectOptions: buildClientProjectOptions({
+      currentClientId: clientId,
+      projects: projectsResult.data ?? [],
+      activeLinks: projectLinksResult.data ?? [],
+      clients: clientsResult.data ?? [],
+    }),
     activity,
   };
 });
