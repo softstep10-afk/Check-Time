@@ -15,7 +15,11 @@ import {
   Play,
   Plus,
   Receipt as ReceiptIcon,
+  Search,
+  Link2,
   Trash2,
+  Unlink,
+  UserRound,
   X,
 } from "lucide-react";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
@@ -117,6 +121,10 @@ import {
   type ShiftReviewStatus,
 } from "@/lib/shift-review";
 import { selectMediaPlayback } from "@/lib/media-playback";
+import type {
+  ProjectClientOption,
+  ProjectClientSummary,
+} from "@/lib/client-project-links";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -415,6 +423,8 @@ export function ProjectDetailPage({
   hasFinanceAccess,
   canDeleteMedia,
   configuredMaterialDriverIds,
+  projectClient,
+  clientOptions,
 }: {
   orgId: string;
   managerId: string;
@@ -435,6 +445,8 @@ export function ProjectDetailPage({
   hasFinanceAccess: boolean;
   canDeleteMedia: boolean;
   configuredMaterialDriverIds?: string[];
+  projectClient: ProjectClientSummary | null;
+  clientOptions: ProjectClientOption[];
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -450,6 +462,8 @@ export function ProjectDetailPage({
   const [addressLookup, setAddressLookup] = useState<AddressLookupState | null>(null);
   const [addressLookupError, setAddressLookupError] = useState("");
   const [showAddWorker, setShowAddWorker] = useState(false);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
+  const [clientQuery, setClientQuery] = useState("");
   const [removeAssignmentId, setRemoveAssignmentId] = useState<string | null>(null);
   const [pendingDeleteTaskId, setPendingDeleteTaskId] = useState<string | null>(null);
   // Local optimistic copy of the task list. Soft-deletes drop the row
@@ -767,6 +781,13 @@ export function ProjectDetailPage({
   const [message, setMessage] = useState("");
   const site = project.siteCoordinates;
   const { t, locale } = useTranslation();
+  const visibleClientOptions = useMemo(() => {
+    const needle = clientQuery.trim().toLowerCase();
+    return clientOptions.filter((option) => {
+      if (option.id === projectClient?.id) return false;
+      return !needle || option.searchText.includes(needle);
+    });
+  }, [clientOptions, clientQuery, projectClient?.id]);
   const taskCounts = useMemo(() => {
     let active = 0;
     let completed = 0;
@@ -841,6 +862,66 @@ export function ProjectDetailPage({
     setAddressLookup(null);
     setAddressLookupError("");
     setGeocodingAddress(false);
+  }
+
+  async function handleLinkProjectClient(clientId: string) {
+    const replacing = Boolean(projectClient && projectClient.id !== clientId);
+    if (
+      replacing &&
+      projectClient &&
+      !window.confirm(t("projectClient.changeConfirm").replace("{name}", projectClient.name))
+    ) {
+      return;
+    }
+
+    setBusyKey(`project-client-${clientId}`);
+    setMessage("");
+    const response = await fetch(`/api/manager/projects/${project.id}/client`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clientId, replace: replacing }),
+    });
+
+    if (!response.ok) {
+      const failure = await readRouteFailure(response);
+      setMessage(failure.error);
+      setBusyKey(null);
+      return;
+    }
+
+    setBusyKey(null);
+    setClientPickerOpen(false);
+    setClientQuery("");
+    setMessage(t(replacing ? "projectClient.changed" : "projectClient.linked"));
+    router.refresh();
+  }
+
+  async function handleUnlinkProjectClient() {
+    if (!projectClient) return;
+    if (!window.confirm(t("projectClient.unlinkConfirm").replace("{name}", projectClient.name))) {
+      return;
+    }
+
+    setBusyKey("project-client-unlink");
+    setMessage("");
+    const response = await fetch(`/api/manager/projects/${project.id}/client`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "unlink" }),
+    });
+
+    if (!response.ok) {
+      const failure = await readRouteFailure(response);
+      setMessage(failure.error);
+      setBusyKey(null);
+      return;
+    }
+
+    setBusyKey(null);
+    setClientPickerOpen(false);
+    setClientQuery("");
+    setMessage(t("projectClient.unlinked"));
+    router.refresh();
   }
 
   function fillCurrentLocation() {
@@ -1661,6 +1742,154 @@ export function ProjectDetailPage({
             <Pencil size={12} /> {site ? t("common.edit") : t("projects.fixCoordinates")}
           </button>
         </div>
+      </section>
+
+      <section className="surface-card p-4" data-testid="project-client-card">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <UserRound size={18} className="text-[var(--brand-yellow)]" />
+              <h2 className="text-lg font-bold text-[var(--text-primary)]">
+                {t("projectClient.title")}
+              </h2>
+            </div>
+            {!projectClient ? (
+              <p className="mt-2 text-sm text-[var(--text-secondary)]">
+                {t("projectClient.none")}
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/clients/${projectClient.id}`}
+                    className="text-lg font-bold text-[var(--text-primary)] hover:text-[var(--brand-yellow)]"
+                  >
+                    {projectClient.name}
+                  </Link>
+                  <span
+                    className="rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em]"
+                    style={{
+                      background:
+                        projectClient.status === "active"
+                          ? "rgba(15, 168, 120, 0.14)"
+                          : "rgba(107, 114, 128, 0.18)",
+                      color:
+                        projectClient.status === "active"
+                          ? "var(--green)"
+                          : "var(--text-muted)",
+                    }}
+                  >
+                    {projectClient.status === "active" ? t("common.active") : t("common.inactive")}
+                  </span>
+                </div>
+                <dl className="grid gap-2 text-sm sm:grid-cols-3">
+                  <div>
+                    <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      {t("clients.primaryContactName")}
+                    </dt>
+                    <dd className="text-[var(--text-primary)]">
+                      {projectClient.primaryContactName ?? "-"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      {t("clients.primaryContactPhone")}
+                    </dt>
+                    <dd className="text-[var(--text-primary)]">
+                      {projectClient.primaryContactPhone ?? "-"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-muted)]">
+                      {t("clients.primaryContactEmail")}
+                    </dt>
+                    <dd className="break-words text-[var(--text-primary)]">
+                      {projectClient.primaryContactEmail ?? "-"}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {projectClient ? (
+              <Link
+                href={`/clients/${projectClient.id}`}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
+              >
+                <ExternalLink size={13} />
+                {t("clients.openClient")}
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setClientPickerOpen((value) => !value)}
+              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold"
+              style={{ borderColor: "var(--brand-yellow)", color: "var(--brand-yellow)" }}
+            >
+              <Link2 size={13} />
+              {projectClient ? t("projectClient.change") : t("projectClient.link")}
+            </button>
+            {projectClient ? (
+              <button
+                type="button"
+                onClick={() => void handleUnlinkProjectClient()}
+                disabled={busyKey === "project-client-unlink"}
+                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{ borderColor: "var(--red)", color: "var(--red)" }}
+              >
+                <Unlink size={13} />
+                {t("projectClient.unlink")}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {clientPickerOpen ? (
+          <div className="mt-4 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-2.5 text-[var(--text-muted)]" size={16} />
+              <span className="sr-only">{t("projectClient.searchClients")}</span>
+              <input
+                value={clientQuery}
+                onChange={(event) => setClientQuery(event.target.value)}
+                placeholder={t("projectClient.searchClients")}
+                className="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--bg-card)] py-2 pl-9 pr-3 text-sm text-[var(--text-primary)]"
+              />
+            </label>
+            <div className="mt-3 grid gap-2">
+              {visibleClientOptions.length === 0 ? (
+                <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 text-sm text-[var(--text-secondary)]">
+                  {t("projectClient.noActiveClients")}
+                </div>
+              ) : (
+                visibleClientOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => void handleLinkProjectClient(option.id)}
+                    disabled={busyKey === `project-client-${option.id}`}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 text-left transition hover:border-[var(--brand-yellow)] disabled:opacity-50"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-semibold text-[var(--text-primary)]">{option.name}</div>
+                      <span className="text-xs font-semibold text-[var(--brand-yellow)]">
+                        {projectClient ? t("projectClient.change") : t("projectClient.link")}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--text-secondary)]">
+                      {option.primaryContactName ?? option.primaryContactPhone ?? option.primaryContactEmail ?? t("clients.noContacts")}
+                    </div>
+                    <div className="mt-1 text-xs text-[var(--text-muted)]">
+                      {option.address ?? t("common.noAddressSet")}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : null}
       </section>
 
       {/* ── Stats (first content after header) ── */}

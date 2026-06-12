@@ -12,6 +12,7 @@ export type TaskStatus = 'pending' | 'in_progress' | 'done' | 'cancelled';
 export type MediaType = 'photo' | 'video' | 'pdf' | 'document';
 export type PayrollStatus = 'draft' | 'confirmed' | 'exported' | 'paid';
 export type ClientStatus = 'active' | 'inactive';
+export type ProjectClientStatus = 'active' | 'inactive';
 
 // ---- Core entities ----
 
@@ -122,6 +123,20 @@ export interface ClientContact {
   email: string | null;
   is_primary: boolean;
   status: ClientStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectClient {
+  id: string;
+  org_id: string;
+  project_id: string;
+  client_id: string;
+  status: ProjectClientStatus;
+  linked_by: string | null;
+  linked_at: string;
+  unlinked_by: string | null;
+  unlinked_at: string | null;
   created_at: string;
   updated_at: string;
 }
