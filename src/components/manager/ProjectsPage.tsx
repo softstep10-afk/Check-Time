@@ -1211,6 +1211,33 @@ export function ProjectsPage({
         </div>
       ) : null}
 
+      <section
+        className="surface-card p-3"
+        data-testid="manager-project-search-panel"
+      >
+        <label className="block text-xs font-semibold text-[var(--text-muted)]">
+          <span>{t("projects.searchLabel")}</span>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={t("projects.searchPlaceholder")}
+              inputMode="search"
+              className="min-w-[260px] flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
+            />
+            {searchInput ? (
+              <button
+                type="button"
+                onClick={() => setSearchInput("")}
+                className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-2 text-sm font-semibold text-[var(--text-secondary)]"
+              >
+                {t("common.clear")}
+              </button>
+            ) : null}
+          </div>
+        </label>
+      </section>
+
       {projectsMissingCoordinatesCount > 0 ? (
         <section
           className="rounded-[var(--radius-lg)] border px-4 py-3"
@@ -1605,12 +1632,6 @@ export function ProjectsPage({
           <option value="week">{t("projects.sortWeek")}</option>
           {hasFinanceAccess ? <option value="cost">{t("projects.sortCost")}</option> : null}
         </select>
-        <input
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder={t("projects.searchPlaceholder")}
-          className="min-w-[180px] flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none"
-        />
         <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
           {t("projects.shownCount")
             .replace("{shown}", String(visibleProjects.length))

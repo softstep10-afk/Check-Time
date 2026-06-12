@@ -70,6 +70,49 @@ const OWNER_ADMIN_ROLES = new Set<UserRole>(["owner", "admin"]);
 
 type WorkerMediaRow = Media & { projectName: string | null };
 
+type WorkerMediaFolderKey =
+  | "checkout"
+  | "checkin"
+  | "video"
+  | "photo"
+  | "document"
+  | "receipt"
+  | "other";
+
+const WORKER_MEDIA_FOLDER_ORDER: WorkerMediaFolderKey[] = [
+  "checkout",
+  "checkin",
+  "video",
+  "photo",
+  "document",
+  "receipt",
+  "other",
+];
+
+const WORKER_MEDIA_FOLDER_LABELS: Record<WorkerMediaFolderKey, TranslationKey> = {
+  checkout: "teamMember.checkoutVideos",
+  checkin: "teamMember.checkinVideos",
+  video: "teamMember.journalVideos",
+  photo: "teamMember.journalPhotos",
+  document: "teamMember.journalDocuments",
+  receipt: "teamMember.journalReceipts",
+  other: "teamMember.journalOther",
+};
+
+function getWorkerMediaFolderKey(entry: WorkerMediaRow): WorkerMediaFolderKey {
+  const metadata = (entry.metadata ?? null) as Record<string, unknown> | null;
+  const kind = metadata?.kind;
+  const category = metadata?.category;
+
+  if (entry.media_type === "video" && entry.is_checkout) return "checkout";
+  if (entry.media_type === "video" && kind === "before_work") return "checkin";
+  if (kind === "receipt" || category === "receipt") return "receipt";
+  if (entry.media_type === "photo") return "photo";
+  if (entry.media_type === "video") return "video";
+  if (entry.media_type === "pdf" || entry.media_type === "document") return "document";
+  return "other";
+}
+
 type DailyTotal = {
   date: string;
   minutes: number;
@@ -281,16 +324,23 @@ export function TeamMemberPage({
   }, [media]);
 
   const mediaSections = useMemo(() => {
-    const checkoutVideos = media.filter(
-      (entry) => entry.media_type === "video" && entry.is_checkout,
+    const byFolder = new Map<WorkerMediaFolderKey, WorkerMediaRow[]>(
+      WORKER_MEDIA_FOLDER_ORDER.map((key) => [key, []]),
     );
-    const otherUploads = media.filter(
-      (entry) => !(entry.media_type === "video" && entry.is_checkout),
-    );
-    return [
-      { key: "checkout", label: t("teamMember.checkoutVideos"), items: checkoutVideos },
-      { key: "other", label: t("teamMember.otherUploads"), items: otherUploads },
-    ].filter((section) => section.items.length > 0);
+
+    for (const entry of media) {
+      const key = getWorkerMediaFolderKey(entry);
+      byFolder.get(key)?.push(entry);
+    }
+
+    return WORKER_MEDIA_FOLDER_ORDER.map((key) => ({
+      key,
+      label: t(WORKER_MEDIA_FOLDER_LABELS[key]),
+      items: (byFolder.get(key) ?? []).sort(
+        (left, right) =>
+          new Date(right.created_at).getTime() - new Date(left.created_at).getTime(),
+      ),
+    })).filter((section) => section.items.length > 0);
   }, [media, t]);
 
   const latestClosure = useMemo(
@@ -2829,11 +2879,19 @@ export function TeamMemberPage({
                 {t("teamMember.noJournal")}
               </div>
             ) : (
-              mediaSections.map((section) => (
-                <div key={section.key} className="space-y-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-                    {section.label}
-                  </div>
+              mediaSections.map((section, sectionIndex) => (
+                <details
+                  key={section.key}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.28)] p-3"
+                  open={sectionIndex === 0}
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                    <span>{section.label}</span>
+                    <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.12)] px-2 py-0.5 text-[var(--brand-yellow)]">
+                      {section.items.length}
+                    </span>
+                  </summary>
+                  <div className="mt-3 space-y-2">
                   {section.items.map((entry) => (
                     <div
                       key={entry.id}
@@ -2933,7 +2991,8 @@ export function TeamMemberPage({
                   ) : null}
                     </div>
                   ))}
-                </div>
+                  </div>
+                </details>
               ))
             )}
           </div>

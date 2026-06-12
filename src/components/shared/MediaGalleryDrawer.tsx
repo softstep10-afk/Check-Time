@@ -27,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { useTranslation } from "@/lib/i18n";
+import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { selectMediaPlayback } from "@/lib/media-playback";
 import { normalizeStoragePath } from "@/lib/task-attachments";
 import {
@@ -71,6 +71,46 @@ export interface ProjectOption {
 
 const PAGE_SIZE = 24;
 const TYPE_OPTIONS: GalleryMediaTypeFilter[] = ["all", "photo", "video", "pdf", "receipt"];
+
+type GalleryMediaFolderKey =
+  | "checkout"
+  | "checkin"
+  | "video"
+  | "photo"
+  | "document"
+  | "receipt"
+  | "other";
+
+const GALLERY_MEDIA_FOLDER_ORDER: GalleryMediaFolderKey[] = [
+  "checkout",
+  "checkin",
+  "video",
+  "photo",
+  "document",
+  "receipt",
+  "other",
+];
+
+const GALLERY_MEDIA_FOLDER_LABELS: Record<GalleryMediaFolderKey, TranslationKey> = {
+  checkout: "gallery.folder.checkoutVideos",
+  checkin: "gallery.folder.checkinVideos",
+  video: "gallery.folder.videos",
+  photo: "gallery.folder.photos",
+  document: "gallery.folder.documents",
+  receipt: "gallery.folder.receipts",
+  other: "gallery.folder.other",
+};
+
+function galleryMediaFolderKey(item: GalleryItem): GalleryMediaFolderKey {
+  const category = categorizeMedia(item);
+  if (category === "checkout") return "checkout";
+  if (category === "checkin") return "checkin";
+  if (category === "receipt") return "receipt";
+  if (item.media_type === "video") return "video";
+  if (item.media_type === "photo") return "photo";
+  if (item.media_type === "pdf" || item.media_type === "document") return "document";
+  return "other";
+}
 
 function categoryBadgeStyle(category: MediaCategory): {
   background: string;
@@ -187,6 +227,20 @@ function MediaGalleryDrawerBody({
     () => paginateGalleryItems(filteredItems, pageSize),
     [filteredItems, pageSize],
   );
+  const groupedSliceItems = useMemo(() => {
+    const groups = new Map<GalleryMediaFolderKey, GalleryItem[]>(
+      GALLERY_MEDIA_FOLDER_ORDER.map((key) => [key, []]),
+    );
+
+    for (const item of slice.items) {
+      groups.get(galleryMediaFolderKey(item))?.push(item);
+    }
+
+    return GALLERY_MEDIA_FOLDER_ORDER.map((key) => ({
+      key,
+      items: groups.get(key) ?? [],
+    })).filter((group) => group.items.length > 0);
+  }, [slice.items]);
 
   const viewerItem = viewerId
     ? filteredItems.find((it) => it.id === viewerId) ?? null
@@ -349,15 +403,29 @@ function MediaGalleryDrawerBody({
               {t("gallery.empty")}
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-              {slice.items.map((item) => (
-                <GalleryTile
-                  key={item.id}
-                  item={item}
-                  supabase={supabase}
-                  onSelect={() => setViewerId(item.id)}
-                  onDownload={() => void downloadItem(item, supabase, ctx, t)}
-                />
+            <div className="space-y-5" data-testid="media-gallery-folder-list">
+              {groupedSliceItems.map((group) => (
+                <section key={group.key} className="space-y-2" data-gallery-folder={group.key}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                      {t(GALLERY_MEDIA_FOLDER_LABELS[group.key])}
+                    </h3>
+                    <span className="rounded-[var(--radius-pill)] bg-[rgba(191,162,52,0.12)] px-2 py-0.5 text-[10px] font-bold text-[var(--brand-yellow)]">
+                      {group.items.length}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {group.items.map((item) => (
+                      <GalleryTile
+                        key={item.id}
+                        item={item}
+                        supabase={supabase}
+                        onSelect={() => setViewerId(item.id)}
+                        onDownload={() => void downloadItem(item, supabase, ctx, t)}
+                      />
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}

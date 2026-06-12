@@ -25,24 +25,26 @@ const originalEnv = new Map<string, string | undefined>(
   ENV_KEYS.map((key) => [key, process.env[key]]),
 );
 
+const mutableEnv = process.env as Record<string, string | undefined>;
+
 function setProductionEnv() {
   for (const key of ENV_KEYS) {
-    delete process.env[key];
+    delete mutableEnv[key];
   }
-  process.env.NODE_ENV = "production";
-  process.env.NEXT_PUBLIC_AUTH_BYPASS = "true";
-  process.env.NEXT_PUBLIC_AUTH_BYPASS_ALLOW_NON_PRODUCTION = "true";
-  process.env.VERCEL = "1";
-  process.env.VERCEL_ENV = "production";
+  mutableEnv.NODE_ENV = "production";
+  mutableEnv.NEXT_PUBLIC_AUTH_BYPASS = "true";
+  mutableEnv.NEXT_PUBLIC_AUTH_BYPASS_ALLOW_NON_PRODUCTION = "true";
+  mutableEnv.VERCEL = "1";
+  mutableEnv.VERCEL_ENV = "production";
 }
 
 function restoreEnv() {
   for (const key of ENV_KEYS) {
     const value = originalEnv.get(key);
     if (value === undefined) {
-      delete process.env[key];
+      delete mutableEnv[key];
     } else {
-      process.env[key] = value;
+      mutableEnv[key] = value;
     }
   }
 }

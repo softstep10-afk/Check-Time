@@ -13,12 +13,14 @@ const originalEnv = new Map<string, string | undefined>(
   ENV_KEYS.map((key) => [key, process.env[key]]),
 );
 
+const mutableEnv = process.env as Record<string, string | undefined>;
+
 function setEnv(values: Partial<Record<(typeof ENV_KEYS)[number], string>>) {
   for (const key of ENV_KEYS) {
-    delete process.env[key];
+    delete mutableEnv[key];
   }
   for (const [key, value] of Object.entries(values)) {
-    process.env[key] = value;
+    mutableEnv[key] = value;
   }
 }
 
@@ -26,9 +28,9 @@ function restoreEnv() {
   for (const key of ENV_KEYS) {
     const value = originalEnv.get(key);
     if (value === undefined) {
-      delete process.env[key];
+      delete mutableEnv[key];
     } else {
-      process.env[key] = value;
+      mutableEnv[key] = value;
     }
   }
 }

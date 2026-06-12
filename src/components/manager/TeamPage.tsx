@@ -307,7 +307,7 @@ export function TeamPage({
                 {visibleProfiles.length} {t("team.profiles")}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-end gap-2">
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
@@ -324,12 +324,28 @@ export function TeamPage({
                   </optgroup>
                 ))}
               </select>
-              <TextInputWithVoice
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={t("team.searchTeam")}
-                className="min-w-[180px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs text-[var(--text-primary)] outline-none"
-              />
+              <label className="min-w-[240px] flex-1 text-xs font-semibold text-[var(--text-muted)]">
+                <span>{t("team.searchTeamHelp")}</span>
+                <div className="mt-1 flex gap-2">
+                  <TextInputWithVoice
+                    id="team-roster-search"
+                    inputMode="search"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder={t("team.searchTeam")}
+                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs text-[var(--text-primary)] outline-none"
+                  />
+                  {query ? (
+                    <button
+                      type="button"
+                      onClick={() => setQuery("")}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+                    >
+                      {t("common.clear")}
+                    </button>
+                  ) : null}
+                </div>
+              </label>
             </div>
           </div>
 
