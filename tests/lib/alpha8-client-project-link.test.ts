@@ -291,9 +291,12 @@ describe("Alpha-8 Phase 1B docs map", () => {
     expect(docsMapSource).toContain("Alpha-8 Phase 1B — Client Project Link");
     expect(docsMapSource).toContain("Storage model selected: additive `project_clients` table");
     expect(docsMapSource).toContain("DB migration 00033 manually applied in production Supabase by owner");
-    expect(docsMapSource).toContain("`project_clients` table verified: exists, row count = 0, RLS enabled");
+    expect(docsMapSource).toContain(
+      "`project_clients` table verified: exists, row count = 0 at migration time, RLS enabled",
+    );
     expect(docsMapSource).toContain("Phase 1B code integrated into `fix/postdeploy-qa-audit-patches`");
-    expect(docsMapSource).toContain("Production deploy pending after preview QA and owner approval");
+    expect(docsMapSource).toContain("Production deployed: dpl_79ucDxQb79GAs2bYUhVYeUYo7LUZ");
+    expect(docsMapSource).toContain("Production commit: 25f336d1ca61f6e058aebd2e4dadfe247a4182ab");
     expect(docsMapSource).toContain("Migration history not repaired; do not run `supabase db push`");
     expect(docsMapSource).toContain("No Project Finance Folder yet");
     for (const exclusion of [

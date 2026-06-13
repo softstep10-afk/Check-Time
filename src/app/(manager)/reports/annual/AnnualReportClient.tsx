@@ -5,8 +5,9 @@ import { Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { summarizeAnnualPaidPayroll } from "@/lib/annual-report-utils";
 import { useTranslation } from "@/lib/i18n";
+import { SAFE_PROFILE_SELECT, type SafeProfile } from "@/lib/profile-selects";
 import type { PayrollArchiveSummary } from "@/lib/archive-utils";
-import type { Profile, Project, TimeEvent, Media } from "@/types/database";
+import type { Project, TimeEvent, Media } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
 
 // ── Types ──
@@ -61,7 +62,7 @@ export function AnnualReportClient({
   const [loading, setLoading] = useState(true);
 
   // Data
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<SafeProfile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [events, setEvents] = useState<TimeEvent[]>([]);
   const [receipts, setReceipts] = useState<Media[]>([]);
@@ -80,7 +81,7 @@ export function AnnualReportClient({
       const yearEnd = `${year}-12-31T23:59:59`;
 
       const [profilesRes, projectsRes, eventsRes, receiptsRes, visitsRes] = await Promise.all([
-        supabase.from("profiles").select("*"),
+        supabase.from("profiles").select(SAFE_PROFILE_SELECT).returns<SafeProfile[]>(),
         supabase.from("projects").select("*"),
         supabase.from("time_events").select("*").gte("event_time", yearStart).lte("event_time", yearEnd),
         supabase.from("media").select("*").eq("metadata->>category", "receipt").is("deleted_at", null).gte("created_at", yearStart).lte("created_at", yearEnd),
@@ -88,7 +89,7 @@ export function AnnualReportClient({
         supabase.from("store_visits").select("*").gte("entered_at", yearStart).lte("entered_at", yearEnd),
       ]);
 
-      setProfiles((profilesRes.data as Profile[]) ?? []);
+      setProfiles(profilesRes.data ?? []);
       setProjects((projectsRes.data as Project[]) ?? []);
       setEvents((eventsRes.data as TimeEvent[]) ?? []);
       setReceipts((receiptsRes.data as Media[]) ?? []);

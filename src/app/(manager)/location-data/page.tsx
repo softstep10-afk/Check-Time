@@ -5,7 +5,7 @@ import { Download, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { DateField } from "@/components/shared/DateField";
-import type { Profile } from "@/types/database";
+import { SAFE_PROFILE_SELECT, type SafeProfile } from "@/lib/profile-selects";
 import { haversineMeters } from "@/lib/worker-utils";
 
 type LocationPointRow = {
@@ -21,7 +21,7 @@ type LocationPointRow = {
 };
 
 type MileageSummary = {
-  profile: Profile;
+  profile: SafeProfile;
   miles: number;
   pings: number;
   firstSeen: string | null;
@@ -81,7 +81,7 @@ function formatDateTime(value: string | null, locale: string): string {
 
 function buildMileageSummaries(
   points: LocationPointRow[],
-  profiles: Profile[],
+  profiles: SafeProfile[],
 ): MileageSummary[] {
   const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
   const pointsByWorker = new Map<string, LocationPointRow[]>();
@@ -138,7 +138,7 @@ function buildMileageSummaries(
 export default function LocationDataPage() {
   const supabase = useMemo(() => createClient(), []);
   const { t, locale } = useTranslation();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<SafeProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPoints, setLoadingPoints] = useState(true);
   const [points, setPoints] = useState<LocationPointRow[]>([]);
@@ -154,10 +154,11 @@ export default function LocationDataPage() {
     async function load() {
       const { data } = await supabase
         .from("profiles")
-        .select("*")
+        .select(SAFE_PROFILE_SELECT)
         .is("deleted_at", null)
-        .order("name");
-      setProfiles((data as Profile[]) ?? []);
+        .order("name")
+        .returns<SafeProfile[]>();
+      setProfiles(data ?? []);
       setLoading(false);
     }
     void load();

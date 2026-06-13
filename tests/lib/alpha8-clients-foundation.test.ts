@@ -235,7 +235,8 @@ describe("Alpha-8 clients validation helpers", () => {
 describe("Alpha-8 project map update", () => {
   it("records Phase 1A scope, deployment, and exclusions", () => {
     expect(docsMapSource).toContain("Alpha-8 Phase 1A — Clients Foundation");
-    expect(docsMapSource).toContain("project_clients UI");
+    expect(docsMapSource).toContain("Manual migration 00032 applied: clients / client_contacts");
+    expect(docsMapSource).toContain("Clients Foundation code restored to main");
     expect(docsMapSource).toContain("estimates");
     expect(docsMapSource).toContain("client portal");
     expect(docsMapSource).toContain("production deploy: dpl_4XBmujHLybrcCgXWqBLaHTM8fbYz");

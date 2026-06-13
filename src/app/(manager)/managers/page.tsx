@@ -6,14 +6,14 @@ import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/worker-utils";
 import { isValidTeamPasscode } from "@/lib/team-member-provisioning";
-import type { Profile } from "@/types/database";
+import { SAFE_PROFILE_SELECT, type SafeProfile } from "@/lib/profile-selects";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 
 export default function ManagersPage() {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const { t } = useTranslation();
-  const [managers, setManagers] = useState<Profile[]>([]);
+  const [managers, setManagers] = useState<SafeProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -21,13 +21,14 @@ export default function ManagersPage() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function loadManagers() {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .in("role", ["owner", "admin", "manager", "supervisor"])
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true });
-    setManagers((data as Profile[]) ?? []);
+      const { data } = await supabase
+        .from("profiles")
+        .select(SAFE_PROFILE_SELECT)
+        .in("role", ["owner", "admin", "manager", "supervisor"])
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .returns<SafeProfile[]>();
+    setManagers(data ?? []);
     setLoading(false);
   }
 

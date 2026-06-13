@@ -4,6 +4,7 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { buildPreviewWorkerShellData } from "@/lib/preview-data";
+import { SAFE_PROFILE_SELECT } from "@/lib/profile-selects";
 import { createClient } from "@/lib/supabase/server";
 import { buildWorkerSessions, deriveClockState, deriveWorkerSummary, enrichProjects } from "@/lib/worker-utils";
 import {
@@ -59,7 +60,7 @@ export const getWorkerShellData = cache(async (): Promise<WorkerShellData> => {
     openDeliveryTasksResult,
     mediaResult,
   ] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).single<Profile>(),
+    supabase.from("profiles").select(SAFE_PROFILE_SELECT).eq("id", user.id).single<Profile>(),
     supabase
       .from("project_assignments")
       .select("project_id, assigned_at")

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { readOptionalUuid, readRequiredUuid } from "@/lib/server/id-guards";
+import { SAFE_PROFILE_SELECT, type SafeProfile } from "@/lib/profile-selects";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import type { Profile, UserRole } from "@/types/database";
+import type { UserRole } from "@/types/database";
 
 type ScheduleKind =
   | "client_meeting"
@@ -92,9 +93,9 @@ async function getCalendarActor() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("*")
+    .select(SAFE_PROFILE_SELECT)
     .eq("id", user.id)
-    .single<Profile>();
+    .single<SafeProfile>();
 
   if (error || !profile) {
     return { error: NextResponse.json({ error: "Profile not found" }, { status: 404 }) };

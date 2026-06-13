@@ -6,6 +6,7 @@ import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
 import { buildPayrollActionAuditPayload } from "@/lib/payroll-audit-utils";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
+import { PROFILE_WITH_RATE_SELECT } from "@/lib/profile-selects";
 import {
   buildShiftReviewAckEventIds,
   deriveShiftReview,
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
       await Promise.all([
-        supabase.from("profiles").select("*").returns<Profile[]>(),
+        supabase.from("profiles").select(PROFILE_WITH_RATE_SELECT).returns<Profile[]>(),
         supabase.from("projects").select("*").returns<Project[]>(),
         supabase
           .from("time_events")

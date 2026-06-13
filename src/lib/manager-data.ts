@@ -6,6 +6,11 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { buildPreviewManagerWorkspaceData } from "@/lib/preview-data";
 import { createClient } from "@/lib/supabase/server";
 import { isManagerRole } from "@/lib/manager-utils";
+import { hasFinanceAccess } from "@/lib/finance-access";
+import {
+  PROFILE_WITH_RATE_SELECT,
+  SAFE_PROFILE_SELECT,
+} from "@/lib/profile-selects";
 import type { PayPeriodItemRow, PayPeriodRow } from "@/lib/archive-utils";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import type {
@@ -48,7 +53,7 @@ export async function requireManagerContext(supabase: ServerSupabase) {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select(SAFE_PROFILE_SELECT)
     .eq("id", user.id)
     .single<Profile>();
 
@@ -106,7 +111,7 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
     Promise.all([
       supabase
         .from("profiles")
-        .select("*")
+        .select(SAFE_PROFILE_SELECT)
         .order("name", { ascending: true })
         .returns<Profile[]>(),
       supabase
@@ -292,7 +297,11 @@ export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData>
   const since14d = isoDaysAgo(14);
 
   const dataPromise = Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(SAFE_PROFILE_SELECT)
+      .order("name", { ascending: true })
+      .returns<Profile[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("project_assignments")
@@ -368,7 +377,11 @@ export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
     payrollClosuresResult,
     payPeriodsResult,
   ] = await Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(SAFE_PROFILE_SELECT)
+      .order("name", { ascending: true })
+      .returns<Profile[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("project_assignments")
@@ -468,14 +481,22 @@ export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
  * media and payroll.
  */
 export const getTeamPageData = cache(async (): Promise<ManagerWorkspaceData> => {
-  const resolved = await resolveDeferredContextOrPreview();
+  const resolved = await resolveContextOrPreview();
   if (resolved.preview) return resolved.preview;
-  const { supabase, contextPromise } = resolved;
+  const { supabase, context } = resolved;
+  const includeProfileRates = await hasFinanceAccess(supabase, {
+    id: context.profile.id,
+    role: context.profile.role,
+  });
 
   const since14d = isoDaysAgo(14);
 
   const dataPromise = Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(includeProfileRates ? PROFILE_WITH_RATE_SELECT : SAFE_PROFILE_SELECT)
+      .order("name", { ascending: true })
+      .returns<Profile[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("project_assignments")
@@ -502,7 +523,7 @@ export const getTeamPageData = cache(async (): Promise<ManagerWorkspaceData> => 
       .range(0, 49)
       .returns<StoreVisit[]>(),
   ]);
-  const [context, pageResults] = await Promise.all([contextPromise, dataPromise]);
+  const pageResults = await dataPromise;
   const [profilesResult, projectsResult, assignmentsResult, tasksResult, timeEventsResult, storeVisitsResult] =
     pageResults;
 
@@ -536,12 +557,23 @@ export const getPayrollPageData = cache(async (): Promise<ManagerWorkspaceData> 
   const resolved = await resolveContextOrPreview();
   if (resolved.preview) return resolved.preview;
   const { supabase, context } = resolved;
+  const allowed = await hasFinanceAccess(supabase, {
+    id: context.profile.id,
+    role: context.profile.role,
+  });
+  if (!allowed) {
+    redirect("/overview");
+  }
 
   const since90d = isoDaysAgo(90);
 
   const [profilesResult, projectsResult, timeEventsResult, payrollRunsResult, closuresResult] =
     await Promise.all([
-      supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+      supabase
+        .from("profiles")
+        .select(PROFILE_WITH_RATE_SELECT)
+        .order("name", { ascending: true })
+        .returns<Profile[]>(),
       supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
       supabase
         .from("time_events")
@@ -595,7 +627,11 @@ export const getTimelinePageData = cache(async (): Promise<ManagerWorkspaceData>
   const { supabase, contextPromise } = resolved;
 
   const dataPromise = Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(SAFE_PROFILE_SELECT)
+      .order("name", { ascending: true })
+      .returns<Profile[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("time_events")

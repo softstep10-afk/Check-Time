@@ -19,6 +19,7 @@ import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationA
 import { createClient } from "@/lib/supabase/client";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
 import { useTranslation } from "@/lib/i18n";
+import { SAFE_PROFILE_SELECT, type SafeProfile } from "@/lib/profile-selects";
 import {
   deriveProjectScheduleHealth,
   formatProjectCountdown,
@@ -31,7 +32,7 @@ import {
 } from "@/lib/material-tasks";
 import { parseGeoPoint } from "@/lib/worker-utils";
 import type { WorkerGeoPoint } from "@/lib/worker-types";
-import type { Profile, Project, Task, UserRole } from "@/types/database";
+import type { Project, Task, UserRole } from "@/types/database";
 
 type ScheduleKind =
   | "client_meeting"
@@ -549,10 +550,10 @@ export default function SchedulePageClient() {
   const text = TEXT[locale];
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const realtimePendingWhileHiddenRef = useRef(false);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<SafeProfile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
+  const [currentProfile, setCurrentProfile] = useState<SafeProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"item" | "dates" | "delivery" | null>(null);
   const [notice, setNotice] = useState("");
@@ -604,18 +605,22 @@ export default function SchedulePageClient() {
     } = await supabase.auth.getUser();
 
     const profileQuery = user
-      ? supabase.from("profiles").select("*").eq("id", user.id).maybeSingle<Profile>()
+      ? supabase
+          .from("profiles")
+          .select(SAFE_PROFILE_SELECT)
+          .eq("id", user.id)
+          .maybeSingle<SafeProfile>()
       : Promise.resolve({ data: null, error: null });
 
     const [profileRes, profilesRes, projectsRes, tasksRes] = await Promise.all([
       profileQuery,
       supabase
         .from("profiles")
-        .select("*")
+        .select(SAFE_PROFILE_SELECT)
         .is("deleted_at", null)
         .order("role", { ascending: true })
         .order("name", { ascending: true })
-        .returns<Profile[]>(),
+        .returns<SafeProfile[]>(),
       supabase
         .from("projects")
         .select("*")

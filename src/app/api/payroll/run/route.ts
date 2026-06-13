@@ -3,6 +3,7 @@ import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
+import { PROFILE_WITH_RATE_SELECT } from "@/lib/profile-selects";
 import {
   buildShiftReviewAckEventIds,
   deriveShiftReview,
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
       await Promise.all([
-        supabase.from("profiles").select("*").returns<Profile[]>(),
+        supabase.from("profiles").select(PROFILE_WITH_RATE_SELECT).returns<Profile[]>(),
         supabase.from("projects").select("*").returns<Project[]>(),
         supabase
           .from("time_events")
