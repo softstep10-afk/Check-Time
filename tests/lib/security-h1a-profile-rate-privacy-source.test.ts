@@ -81,7 +81,7 @@ describe("Security H1A/H1B profile rate privacy source guards", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps the hourly_rate selector centralized in the finance-gated profile rate module", () => {
+  it("keeps hourly_rate reads behind the H1C finance RPC path", () => {
     const safeSelectBlock = profileSelectsSource.slice(
       profileSelectsSource.indexOf("export const SAFE_PROFILE_SELECT"),
       profileSelectsSource.indexOf("export type SafeProfile"),
@@ -89,20 +89,36 @@ describe("Security H1A/H1B profile rate privacy source guards", () => {
 
     expect(safeSelectBlock).not.toContain("hourly_rate");
     expect(profileSelectsSource).not.toContain("PROFILE_WITH_RATE_SELECT");
-    expect(profileRatesSource).toContain("PROFILE_WITH_RATE_SELECT");
+    expect(profileRatesSource).not.toContain("PROFILE_WITH_RATE_SELECT");
+    expect(profileRatesSource).toContain("PROFILE_RATES_RPC");
+    expect(profileRatesSource).toContain("get_profile_rates_for_finance");
+    expect(profileRatesSource).toContain(".rpc(PROFILE_RATES_RPC)");
+    expect(profileRatesSource).not.toContain('.from("profiles")');
     expect(profileRatesSource).toContain("hourly_rate");
     expect(profileRatesSource).toContain("resolveProfileRateAccess");
     expect(profileRatesSource).toContain("hasFinanceAccess");
-    expect(profileRatesSource.indexOf("hasFinanceAccess")).toBeLessThan(
-      profileRatesSource.indexOf(".select(PROFILE_WITH_RATE_SELECT)"),
-    );
 
     const offenders = srcFiles.filter((file) => {
       if (file === "src/lib/profile-rates.ts") return false;
-      return readSource(file).includes("PROFILE_WITH_RATE_SELECT");
+      const source = readSource(file);
+      return source.includes("PROFILE_WITH_RATE_SELECT") || source.includes("PROFILE_RATES_RPC");
     });
 
     expect(offenders).toEqual([]);
+  });
+
+  it("keeps the H1C candidate migration non-destructive and explicit about rate grants", () => {
+    const migrationSource = readSource("supabase/migrations/00034_security_h1c_rate_privacy.sql");
+
+    expect(migrationSource).toContain("CANDIDATE MIGRATION SQL");
+    expect(migrationSource).toContain("DO NOT RUN");
+    expect(migrationSource).toContain("create or replace function public.get_profile_rates_for_finance()");
+    expect(migrationSource).toContain("security definer");
+    expect(migrationSource).toContain("set search_path = public");
+    expect(migrationSource).toContain("public.has_finance_access()");
+    expect(migrationSource).toContain("revoke select on table public.profiles from authenticated");
+    expect(migrationSource).toContain("grant select (");
+    expect(migrationSource).not.toMatch(/\b(drop|delete|truncate)\b/i);
   });
 
   it("keeps known non-finance profile loaders on the safe profile select", () => {
