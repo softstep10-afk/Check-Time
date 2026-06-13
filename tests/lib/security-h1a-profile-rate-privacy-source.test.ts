@@ -107,18 +107,27 @@ describe("Security H1A/H1B profile rate privacy source guards", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps the H1C candidate migration non-destructive and explicit about rate grants", () => {
-    const migrationSource = readSource("supabase/migrations/00034_security_h1c_rate_privacy.sql");
+  it("keeps the H1C candidate migrations staged and non-destructive", () => {
+    const rpcMigrationSource = readSource("supabase/migrations/00034_security_h1c_rate_rpc.sql");
+    const grantsMigrationSource = readSource(
+      "supabase/migrations/00035_security_h1c_profile_column_grants.sql",
+    );
 
-    expect(migrationSource).toContain("CANDIDATE MIGRATION SQL");
-    expect(migrationSource).toContain("DO NOT RUN");
-    expect(migrationSource).toContain("create or replace function public.get_profile_rates_for_finance()");
-    expect(migrationSource).toContain("security definer");
-    expect(migrationSource).toContain("set search_path = public");
-    expect(migrationSource).toContain("public.has_finance_access()");
-    expect(migrationSource).toContain("revoke select on table public.profiles from authenticated");
-    expect(migrationSource).toContain("grant select (");
-    expect(migrationSource).not.toMatch(/\b(drop|delete|truncate)\b/i);
+    expect(rpcMigrationSource).toContain("CANDIDATE MIGRATION SQL");
+    expect(rpcMigrationSource).toContain("DO NOT RUN");
+    expect(rpcMigrationSource).toContain("additive");
+    expect(rpcMigrationSource).toContain("create or replace function public.get_profile_rates_for_finance()");
+    expect(rpcMigrationSource).toContain("security definer");
+    expect(rpcMigrationSource).toContain("set search_path = public");
+    expect(rpcMigrationSource).toContain("public.has_finance_access()");
+    expect(rpcMigrationSource).not.toContain("revoke select on table public.profiles");
+
+    expect(grantsMigrationSource).toContain("CANDIDATE MIGRATION SQL");
+    expect(grantsMigrationSource).toContain("DO NOT RUN");
+    expect(grantsMigrationSource).toContain("after:");
+    expect(grantsMigrationSource).toContain("revoke select on table public.profiles from authenticated");
+    expect(grantsMigrationSource).toContain("grant select (");
+    expect(`${rpcMigrationSource}\n${grantsMigrationSource}`).not.toMatch(/\b(drop|delete|truncate)\b/i);
   });
 
   it("keeps known non-finance profile loaders on the safe profile select", () => {

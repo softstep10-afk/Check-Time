@@ -1,11 +1,12 @@
 -- ============================================================================
--- Security Hotfix H1C: DB-level profiles.hourly_rate protection
+-- Security Hotfix H1C-1: finance-gated rate RPC
 --
 -- CANDIDATE MIGRATION SQL — DO NOT RUN WITHOUT DB-0 GATE AND OWNER APPROVAL.
 --
 -- Production migration history is not repaired. Do not run `supabase db push`.
--- Apply manually only after H1C code is deployed to read rates through
--- public.get_profile_rates_for_finance(), then run the verification pack.
+-- This first candidate step is additive. Apply manually only after DB-0 Gate
+-- and owner approval. It must exist before deploying app code that reads rates
+-- through public.get_profile_rates_for_finance().
 -- ============================================================================
 
 create or replace function public.get_profile_rates_for_finance()
@@ -67,28 +68,3 @@ $$;
 revoke all on function public.get_profile_rates_for_finance() from public;
 revoke all on function public.get_profile_rates_for_finance() from anon;
 grant execute on function public.get_profile_rates_for_finance() to authenticated;
-
--- Convert direct profile reads to explicit safe column grants. RLS still limits
--- rows by org; column grants prevent ordinary authenticated clients from
--- selecting compensation/PIN fields directly.
-revoke select on table public.profiles from anon;
-revoke select on table public.profiles from authenticated;
-
-grant select (
-  id,
-  org_id,
-  name,
-  role,
-  color,
-  is_active,
-  require_video,
-  language,
-  settings,
-  last_clock_in,
-  current_project,
-  created_at,
-  updated_at,
-  deleted_at,
-  notif_mode,
-  project_access_mode
-) on table public.profiles to authenticated;

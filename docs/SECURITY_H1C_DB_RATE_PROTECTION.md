@@ -23,7 +23,10 @@ This is safer than moving `hourly_rate` into a new compensation table during H1C
 
 ## H1C Candidate Migration SQL
 
-File: `supabase/migrations/00034_security_h1c_rate_privacy.sql`
+Files:
+
+- `supabase/migrations/00034_security_h1c_rate_rpc.sql`: additive RPC creation. Must exist before app code that reads rates through RPC is deployed.
+- `supabase/migrations/00035_security_h1c_profile_column_grants.sql`: enforcement grant change. Apply only after the RPC exists, H1C app code is deployed, and owner/finance rate screens are verified through RPC.
 
 Do not apply it with `supabase db push`. Production migration history is not repaired. Use manual exact SQL only after DB-0 Gate and owner approval.
 
@@ -53,9 +56,18 @@ where routine_schema = 'public'
 
 - Worker/non-finance session: `profiles.select("id,name")` succeeds only inside own RLS scope; `profiles.select("hourly_rate")` fails with column permission denial.
 - Worker/non-finance session: `rpc("get_profile_rates_for_finance")` fails with `profile_rate_access_denied`.
-- Owner/admin/finance session: `rpc("get_profile_rates_for_finance")` returns safe profile fields plus `hourly_rate`.
+- After 00034: owner/admin/finance session `rpc("get_profile_rates_for_finance")` returns safe profile fields plus `hourly_rate`.
+- After 00035: worker/non-finance direct `profiles.select("hourly_rate")` fails with column permission denial.
 - Payroll page opens for finance/owner.
 - Payroll preview/export/run still uses the H1B helper path and does not change payroll math.
+
+## Safe Rollout Order
+
+1. Apply 00034 manually after DB-0 Gate. This is additive.
+2. Deploy H1C app code that uses `get_profile_rates_for_finance`.
+3. Verify owner/finance team and payroll rate screens read through RPC.
+4. Apply 00035 manually after DB-0 Gate to revoke direct profile compensation/PIN reads.
+5. Run H1D role verification.
 
 ## Rollback
 
