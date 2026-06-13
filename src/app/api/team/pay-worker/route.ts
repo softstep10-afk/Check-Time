@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAuditServer } from "@/lib/audit-server";
-import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
 import { buildPayrollActionAuditPayload } from "@/lib/payroll-audit-utils";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
-import { PROFILE_WITH_RATE_SELECT } from "@/lib/profile-selects";
+import {
+  loadProfilesWithRatesForFinance,
+  resolveProfileRateAccess,
+} from "@/lib/profile-rates";
 import {
   buildShiftReviewAckEventIds,
   deriveShiftReview,
@@ -16,7 +18,6 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   PayrollClosure,
   PayrollRun,
-  Profile,
   Project,
   TimeEvent,
 } from "@/types/database";
@@ -35,12 +36,12 @@ export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { profile: manager, org } = await requireManagerContext(supabase);
-    const allowed = await hasFinanceAccess(supabase, {
+    const profileRateAccess = await resolveProfileRateAccess(supabase, {
       id: manager.id,
       role: manager.role,
     });
 
-    if (!allowed) {
+    if (!profileRateAccess.allowed) {
       return NextResponse.json(
         { error: "Finance access is required to pay a worker." },
         { status: 403 },
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
       await Promise.all([
-        supabase.from("profiles").select(PROFILE_WITH_RATE_SELECT).returns<Profile[]>(),
+        loadProfilesWithRatesForFinance(supabase, profileRateAccess),
         supabase.from("projects").select("*").returns<Project[]>(),
         supabase
           .from("time_events")

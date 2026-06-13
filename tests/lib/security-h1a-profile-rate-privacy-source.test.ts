@@ -30,6 +30,7 @@ function walkSourceFiles(dir: string): string[] {
 
 const srcFiles = walkSourceFiles("src");
 const profileSelectsSource = readSource("src/lib/profile-selects.ts");
+const profileRatesSource = readSource("src/lib/profile-rates.ts");
 
 const hourlyRateAllowlist = new Set([
   "src/app/api/team/create/route.ts",
@@ -39,15 +40,16 @@ const hourlyRateAllowlist = new Set([
   "src/components/manager/TeamPage.tsx",
   "src/lib/manager-utils.ts",
   "src/lib/preview-data.ts",
+  "src/lib/profile-rates.ts",
   "src/lib/profile-selects.ts",
   "src/types/database.ts",
 ]);
 
-describe("Security H1A profile rate privacy source guards", () => {
+describe("Security H1A/H1B profile rate privacy source guards", () => {
   it("keeps the safe profile DTO free of compensation and PIN fields", () => {
     const safeSelectBlock = profileSelectsSource.slice(
       profileSelectsSource.indexOf("export const SAFE_PROFILE_SELECT"),
-      profileSelectsSource.indexOf("export const PROFILE_WITH_RATE_SELECT"),
+      profileSelectsSource.indexOf("export type SafeProfile"),
     );
 
     expect(safeSelectBlock).toContain('"id"');
@@ -79,6 +81,30 @@ describe("Security H1A profile rate privacy source guards", () => {
     expect(offenders).toEqual([]);
   });
 
+  it("keeps the hourly_rate selector centralized in the finance-gated profile rate module", () => {
+    const safeSelectBlock = profileSelectsSource.slice(
+      profileSelectsSource.indexOf("export const SAFE_PROFILE_SELECT"),
+      profileSelectsSource.indexOf("export type SafeProfile"),
+    );
+
+    expect(safeSelectBlock).not.toContain("hourly_rate");
+    expect(profileSelectsSource).not.toContain("PROFILE_WITH_RATE_SELECT");
+    expect(profileRatesSource).toContain("PROFILE_WITH_RATE_SELECT");
+    expect(profileRatesSource).toContain("hourly_rate");
+    expect(profileRatesSource).toContain("resolveProfileRateAccess");
+    expect(profileRatesSource).toContain("hasFinanceAccess");
+    expect(profileRatesSource.indexOf("hasFinanceAccess")).toBeLessThan(
+      profileRatesSource.indexOf(".select(PROFILE_WITH_RATE_SELECT)"),
+    );
+
+    const offenders = srcFiles.filter((file) => {
+      if (file === "src/lib/profile-rates.ts") return false;
+      return readSource(file).includes("PROFILE_WITH_RATE_SELECT");
+    });
+
+    expect(offenders).toEqual([]);
+  });
+
   it("keeps known non-finance profile loaders on the safe profile select", () => {
     for (const file of [
       "src/lib/worker-data.ts",
@@ -102,12 +128,27 @@ describe("Security H1A profile rate privacy source guards", () => {
       "src/lib/manager-data.ts",
     ]) {
       const source = readSource(file);
-      expect(source).toContain("hasFinanceAccess");
-      expect(source).toContain("PROFILE_WITH_RATE_SELECT");
-      expect(source.indexOf("hasFinanceAccess")).toBeLessThan(
-        source.indexOf("PROFILE_WITH_RATE_SELECT"),
+      expect(source).toContain("resolveProfileRateAccess");
+      expect(source).toContain("loadProfilesWithRatesForFinance");
+      expect(source.indexOf("profileRateAccess")).toBeLessThan(
+        source.indexOf("loadProfilesWithRatesForFinance(supabase"),
       );
     }
+  });
+
+  it("keeps worker, client, and non-finance surfaces from importing the rate helper", () => {
+    const forbiddenImportFiles = srcFiles.filter((file) => {
+      if (file === "src/lib/profile-rates.ts") return false;
+      const isForbiddenSurface =
+        file.includes("/worker/") ||
+        file.includes("/clients") ||
+        file.includes("/client") ||
+        file.includes("Worker") ||
+        file.includes("Client");
+      return isForbiddenSurface && readSource(file).includes("@/lib/profile-rates");
+    });
+
+    expect(forbiddenImportFiles).toEqual([]);
   });
 
   it("keeps team create/update hourly_rate writes on existing server API paths only", () => {

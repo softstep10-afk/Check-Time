@@ -6,9 +6,11 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { buildPreviewManagerWorkspaceData } from "@/lib/preview-data";
 import { createClient } from "@/lib/supabase/server";
 import { isManagerRole } from "@/lib/manager-utils";
-import { hasFinanceAccess } from "@/lib/finance-access";
 import {
-  PROFILE_WITH_RATE_SELECT,
+  loadProfilesWithRatesForFinance,
+  resolveProfileRateAccess,
+} from "@/lib/profile-rates";
+import {
   SAFE_PROFILE_SELECT,
 } from "@/lib/profile-selects";
 import type { PayPeriodItemRow, PayPeriodRow } from "@/lib/archive-utils";
@@ -484,19 +486,22 @@ export const getTeamPageData = cache(async (): Promise<ManagerWorkspaceData> => 
   const resolved = await resolveContextOrPreview();
   if (resolved.preview) return resolved.preview;
   const { supabase, context } = resolved;
-  const includeProfileRates = await hasFinanceAccess(supabase, {
+  const profileRateAccess = await resolveProfileRateAccess(supabase, {
     id: context.profile.id,
     role: context.profile.role,
   });
 
   const since14d = isoDaysAgo(14);
+  const profilesPromise = profileRateAccess.allowed
+    ? loadProfilesWithRatesForFinance(supabase, profileRateAccess, { orderByName: true })
+    : supabase
+        .from("profiles")
+        .select(SAFE_PROFILE_SELECT)
+        .order("name", { ascending: true })
+        .returns<Profile[]>();
 
   const dataPromise = Promise.all([
-    supabase
-      .from("profiles")
-      .select(includeProfileRates ? PROFILE_WITH_RATE_SELECT : SAFE_PROFILE_SELECT)
-      .order("name", { ascending: true })
-      .returns<Profile[]>(),
+    profilesPromise,
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("project_assignments")
@@ -557,11 +562,11 @@ export const getPayrollPageData = cache(async (): Promise<ManagerWorkspaceData> 
   const resolved = await resolveContextOrPreview();
   if (resolved.preview) return resolved.preview;
   const { supabase, context } = resolved;
-  const allowed = await hasFinanceAccess(supabase, {
+  const profileRateAccess = await resolveProfileRateAccess(supabase, {
     id: context.profile.id,
     role: context.profile.role,
   });
-  if (!allowed) {
+  if (!profileRateAccess.allowed) {
     redirect("/overview");
   }
 
@@ -569,11 +574,7 @@ export const getPayrollPageData = cache(async (): Promise<ManagerWorkspaceData> 
 
   const [profilesResult, projectsResult, timeEventsResult, payrollRunsResult, closuresResult] =
     await Promise.all([
-      supabase
-        .from("profiles")
-        .select(PROFILE_WITH_RATE_SELECT)
-        .order("name", { ascending: true })
-        .returns<Profile[]>(),
+      loadProfilesWithRatesForFinance(supabase, profileRateAccess, { orderByName: true }),
       supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
       supabase
         .from("time_events")

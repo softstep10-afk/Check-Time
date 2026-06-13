@@ -19,7 +19,4 @@ export const SAFE_PROFILE_SELECT = [
   "project_access_mode",
 ].join(", ");
 
-export const PROFILE_WITH_RATE_SELECT = `${SAFE_PROFILE_SELECT}, hourly_rate`;
-
 export type SafeProfile = Omit<Profile, "hourly_rate" | "pin_hash">;
-export type ProfileWithRate = SafeProfile & Pick<Profile, "hourly_rate">;

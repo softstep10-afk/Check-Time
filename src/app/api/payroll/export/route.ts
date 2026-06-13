@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
-import { hasFinanceAccess } from "@/lib/finance-access";
 import { getDisplayOrgName } from "@/lib/brand";
 import { requireManagerContext } from "@/lib/manager-data";
-import { PROFILE_WITH_RATE_SELECT } from "@/lib/profile-selects";
+import {
+  loadProfilesWithRatesForFinance,
+  resolveProfileRateAccess,
+} from "@/lib/profile-rates";
 import { createClient } from "@/lib/supabase/server";
 import type {
   PayrollClosure,
-  Profile,
   Project,
   TimeEvent,
 } from "@/types/database";
@@ -22,11 +23,11 @@ function assertNoError(error: { message: string } | null, label: string) {
 async function loadPreview(periodEnd?: string) {
   const supabase = await createClient();
   const { profile, org } = await requireManagerContext(supabase);
-  const allowed = await hasFinanceAccess(supabase, {
+  const profileRateAccess = await resolveProfileRateAccess(supabase, {
     id: profile.id,
     role: profile.role,
   });
-  if (!allowed) {
+  if (!profileRateAccess.allowed) {
     return {
       error: NextResponse.json(
         { error: "Finance access is required to export payroll." },
@@ -37,7 +38,7 @@ async function loadPreview(periodEnd?: string) {
 
   const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
     await Promise.all([
-      supabase.from("profiles").select(PROFILE_WITH_RATE_SELECT).returns<Profile[]>(),
+      loadProfilesWithRatesForFinance(supabase, profileRateAccess),
       supabase.from("projects").select("*").returns<Project[]>(),
       supabase
         .from("time_events")
