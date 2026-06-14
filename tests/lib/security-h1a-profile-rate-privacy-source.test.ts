@@ -48,8 +48,8 @@ const hourlyRateAllowlist = new Set([
 describe("Security H1A/H1B profile rate privacy source guards", () => {
   it("keeps the safe profile DTO free of compensation and PIN fields", () => {
     const safeSelectBlock = profileSelectsSource.slice(
-      profileSelectsSource.indexOf("export const SAFE_PROFILE_SELECT"),
-      profileSelectsSource.indexOf("export type SafeProfile"),
+      profileSelectsSource.indexOf("export const SAFE_PROFILE_COLUMNS"),
+      profileSelectsSource.indexOf("export const PROFILE_WITH_RATE_COLUMNS"),
     );
 
     expect(safeSelectBlock).toContain('"id"');
@@ -64,7 +64,7 @@ describe("Security H1A/H1B profile rate privacy source guards", () => {
     const offenders = srcFiles.flatMap((file) => {
       const source = readSource(file);
       const matches =
-        source.match(/\.from\(["']profiles["']\)(?:(?!\.from\().)*?\.select\(["']\*["']\)/gs) ??
+        source.match(/\.from\(["']profiles["']\)(?:(?!\.from\()[\s\S])*?\.select\(["']\*["']\)/g) ??
         [];
       return matches.map((match) => `${file}: ${match.replace(/\s+/g, " ")}`);
     });
@@ -81,16 +81,23 @@ describe("Security H1A/H1B profile rate privacy source guards", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps the hourly_rate selector centralized in the finance-gated profile rate module", () => {
+  it("keeps the hourly_rate selector backed by the shared no-PIN column list", () => {
     const safeSelectBlock = profileSelectsSource.slice(
+      profileSelectsSource.indexOf("export const SAFE_PROFILE_COLUMNS"),
+      profileSelectsSource.indexOf("export const PROFILE_WITH_RATE_COLUMNS"),
+    );
+    const rateColumnsBlock = profileSelectsSource.slice(
+      profileSelectsSource.indexOf("export const PROFILE_WITH_RATE_COLUMNS"),
       profileSelectsSource.indexOf("export const SAFE_PROFILE_SELECT"),
-      profileSelectsSource.indexOf("export type SafeProfile"),
     );
 
     expect(safeSelectBlock).not.toContain("hourly_rate");
-    expect(profileSelectsSource).not.toContain("PROFILE_WITH_RATE_SELECT");
+    expect(rateColumnsBlock).toContain('"hourly_rate"');
+    expect(rateColumnsBlock).not.toContain("pin_hash");
+    expect(profileSelectsSource).toContain("PROFILE_WITH_RATE_SELECT");
     expect(profileRatesSource).toContain("PROFILE_WITH_RATE_SELECT");
-    expect(profileRatesSource).toContain("hourly_rate");
+    expect(profileRatesSource).not.toContain("const PROFILE_WITH_RATE_SELECT");
+    expect(profileRatesSource).not.toContain("SAFE_PROFILE_SELECT}, hourly_rate");
     expect(profileRatesSource).toContain("resolveProfileRateAccess");
     expect(profileRatesSource).toContain("hasFinanceAccess");
     expect(profileRatesSource.indexOf("hasFinanceAccess")).toBeLessThan(
@@ -98,7 +105,9 @@ describe("Security H1A/H1B profile rate privacy source guards", () => {
     );
 
     const offenders = srcFiles.filter((file) => {
-      if (file === "src/lib/profile-rates.ts") return false;
+      if (file === "src/lib/profile-rates.ts" || file === "src/lib/profile-selects.ts") {
+        return false;
+      }
       return readSource(file).includes("PROFILE_WITH_RATE_SELECT");
     });
 
