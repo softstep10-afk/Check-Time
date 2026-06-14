@@ -35,7 +35,6 @@ import { canUseDriverMaterialView } from "@/lib/material-driver-permissions";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { splitWorkerProjectTasks } from "@/lib/task-notifications";
 import {
-  buildMaterialTaskMetadata,
   getMaterialTaskNeededDate,
   getMaterialTaskUrgency,
   hasDriverSeenMaterialTask,
@@ -2098,38 +2097,22 @@ function WorkerMaterialsList({
     setOrderError("");
     const orderId = createClientUuid();
     const trimmedOrderNote = orderNote.trim();
-    const urgency: MaterialTaskUrgency =
-      orderPriority === "urgent" || orderPriority === "high" ? "urgent" : "normal";
-    const { error } = await supabase
-      .from("tasks")
-      .insert(materialRows.map((row) => ({
-        org_id: orgId,
-        project_id: projectId,
-        assigned_to: null,
-        assigned_by: profileId,
-        title: row.name,
-        description: null,
+    const response = await fetch("/api/worker/material-orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId,
+        rows: materialRows,
         priority: orderPriority,
-        status: "pending",
-        due_date: null,
-        metadata: buildMaterialTaskMetadata({
-          materialName: row.name,
-          urgency,
-          neededDate: null,
-          requestedBy: profileId,
-          driverUserId: null,
-          projectId,
-          quantity: row.quantity,
-          unit: row.unit,
-          orderId,
-          orderNote: trimmedOrderNote || null,
-          orderSize: materialRows.length,
-        }),
-      })));
+        orderId,
+        orderNote: trimmedOrderNote || null,
+      }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
     setSavingOrder(false);
 
-    if (error) {
-      setOrderError(error.message);
+    if (!response.ok) {
+      setOrderError(payload.error ?? t("common.errorTryAgain"));
       return;
     }
 
@@ -2265,11 +2248,17 @@ function WorkerMaterialsList({
         receipt_id: receipt?.id ?? null,
         receipt_attached_by: receipt ? profileId : null,
       };
-      const { error } = await supabase
-        .from("tasks")
-        .update({ status: "done", completed_at: now, metadata })
-        .eq("id", deliveryTarget.id);
-      if (error) throw new Error(error.message);
+      const response = await fetch("/api/worker/task-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          taskId: deliveryTarget.id,
+          nextStatus: "done",
+          updatePayload: { status: "done", completed_at: now, metadata },
+        }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? t("common.errorTryAgain"));
       setDeliveryTarget(null);
       setDeliveryFile(null);
       await refreshMaterials();
@@ -2289,12 +2278,18 @@ function WorkerMaterialsList({
     delete metadata.delivered_at;
     delete metadata.receipt_id;
     delete metadata.receipt_attached_by;
-    const { error } = await supabase
-      .from("tasks")
-      .update({ status: "pending", completed_at: null, metadata })
-      .eq("id", item.id);
-    if (error) {
-      setOrderError(error.message);
+    const response = await fetch("/api/worker/task-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        taskId: item.id,
+        nextStatus: "pending",
+        updatePayload: { status: "pending", completed_at: null, metadata },
+      }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) {
+      setOrderError(payload.error ?? t("common.errorTryAgain"));
       return;
     }
     await refreshMaterials();

@@ -2392,14 +2392,19 @@ export function WorkerShell({
         return false;
       }
 
-      const { error } = await supabase
-        .from("tasks")
-        .update(updatePayload)
-        .eq("id", taskId);
-
-      if (error) {
-        throw new Error(error.message);
+      const response = await fetch("/api/worker/task-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, nextStatus, updatePayload }),
+      });
+      const responsePayload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        task?: Task;
+      };
+      if (!response.ok) {
+        throw new Error(responsePayload.error ?? "Task update failed.");
       }
+      const serverTask = responsePayload.task ?? null;
 
       setShell((current) => ({
         ...current,
@@ -2410,10 +2415,11 @@ export function WorkerShell({
 
           return {
             ...task,
-            status: nextStatus,
-            completed_at: completedAt,
-            completed_by: nextStatus === "done" ? current.profile.id : null,
-            metadata: nextMetadata ?? task.metadata,
+            status: serverTask?.status ?? nextStatus,
+            completed_at: serverTask?.completed_at ?? completedAt,
+            completed_by:
+              serverTask?.completed_by ?? (nextStatus === "done" ? current.profile.id : null),
+            metadata: serverTask?.metadata ?? nextMetadata ?? task.metadata,
           };
         }),
       }));
@@ -2564,29 +2570,24 @@ export function WorkerShell({
           }
 
           if (item.kind === "task_status") {
-            const { data: existing } = await supabase
-              .from("tasks")
-              .select("id, status, completed_at")
-              .eq("id", item.payload.taskId)
-              .maybeSingle<{ id: string; status: TaskStatus; completed_at: string | null }>();
-            if (
-              existing &&
-              existing.status === item.payload.nextStatus &&
-              (item.payload.nextStatus !== "done" || Boolean(existing.completed_at))
-            ) {
-              setOfflineActionQueue(removeOfflineFieldAction(item.id));
-              continue;
+            const response = await fetch("/api/worker/task-status", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                taskId: item.payload.taskId,
+                nextStatus: item.payload.nextStatus,
+                updatePayload: item.payload.updatePayload,
+              }),
+            });
+            const payload = (await response.json().catch(() => ({}))) as {
+              error?: string;
+              task?: Task;
+            };
+            if (!response.ok) {
+              throw new Error(payload.error ?? "Task update failed.");
             }
-
-            const { data: updated, error } = await supabase
-              .from("tasks")
-              .update(item.payload.updatePayload)
-              .eq("id", item.payload.taskId)
-              .select("*")
-              .maybeSingle<Task>();
-            if (error) throw new Error(error.message);
-            if (updated) {
-              mergeVisibleRealtimeTask(updated);
+            if (payload.task) {
+              mergeVisibleRealtimeTask(payload.task);
             }
             setOfflineActionQueue(removeOfflineFieldAction(item.id));
             setBanner({ tone: "success", text: t("worker.fieldActionSynced") });
