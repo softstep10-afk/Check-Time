@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
+import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
 import {
   formatDateTime,
   formatDurationCompact,
@@ -14,7 +15,7 @@ import {
 import { useTranslation } from "@/lib/i18n";
 
 export function HoursPage() {
-  const { shell, muted, toggleMute } = useWorkerShell();
+  const { shell, shellDataStatus, muted, toggleMute } = useWorkerShell();
   const { t } = useTranslation();
   const groupedSessions = shell.sessions.reduce<Map<string, typeof shell.sessions>>(
     (groups, session) => {
@@ -67,6 +68,10 @@ export function HoursPage() {
       }),
     [shell.adjustments, latestClosureMs],
   );
+
+  if (shellDataStatus === "loading") {
+    return <WorkerSectionSkeleton label="Loading worker hours" />;
+  }
 
   return (
     <div className="space-y-4">

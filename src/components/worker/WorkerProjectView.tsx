@@ -23,6 +23,7 @@ import {
 import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
+import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
 import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
 import { buildSafeUploadName } from "@/lib/media-extension";
 import {
@@ -1672,7 +1673,7 @@ function ProjectClockControls({
   projectName: string;
   gpsNotRequired: boolean;
 }) {
-  const { shell, busyAction, clockIn } = useWorkerShell();
+  const { shell, shellDataStatus, busyAction, clockIn } = useWorkerShell();
   const { t } = useTranslation();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -1695,6 +1696,10 @@ function ProjectClockControls({
     }, 0);
     return () => window.clearTimeout(id);
   }, [checkoutOpen, isClockedIn]);
+
+  if (shellDataStatus !== "ready") {
+    return <WorkerSectionSkeleton label="Loading project clock controls" />;
+  }
 
   function openCheckoutIfActive() {
     if (!isClockedIn) {

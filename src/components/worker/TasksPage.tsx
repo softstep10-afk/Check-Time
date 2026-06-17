@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Eye, Play } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
+import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
 import { useTranslation } from "@/lib/i18n";
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
@@ -48,7 +49,7 @@ type TaskFilter = "all" | "mine" | "urgent" | "today";
 type ProjectFilter = string;
 
 export function TasksPage() {
-  const { shell, busyAction, updateTaskStatus, markTasksSeen, isOnline, queueTaskClaim } = useWorkerShell();
+  const { shell, shellDataStatus, busyAction, updateTaskStatus, markTasksSeen, isOnline, queueTaskClaim } = useWorkerShell();
   const { t } = useTranslation();
   const [bumpedTaskId, setBumpedTaskId] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskFilter>("all");
@@ -98,8 +99,9 @@ export function TasksPage() {
   // re-renders during the visit must not push the marker forward
   // before the worker has a chance to look at the list.
   useEffect(() => {
+    if (shellDataStatus !== "ready") return;
     markTasksSeen();
-  }, [markTasksSeen]);
+  }, [markTasksSeen, shellDataStatus]);
 
   useEffect(() => {
     setCachedTasksSnapshot(loadOfflineSnapshot(cacheActor, "worker-tasks"));
@@ -600,6 +602,10 @@ export function TasksPage() {
         </div>
       </button>
     );
+  }
+
+  if (shellDataStatus === "loading") {
+    return <WorkerSectionSkeleton label="Loading worker tasks" />;
   }
 
   return (

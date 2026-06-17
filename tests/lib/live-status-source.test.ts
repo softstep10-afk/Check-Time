@@ -42,7 +42,7 @@ describe("live task and message status source paths", () => {
     expect(workerShellSource).toContain('event: "UPDATE"');
     expect(workerShellSource).toContain("setShell((current) => ({");
     expect(workerShellSource).toContain("status: nextStatus");
-    expect(workerShellSource).toContain("scheduleShellRefresh(1800)");
+    expect(workerShellSource).toContain("scheduleShellDataRefresh(1800)");
   });
 
   it("merges manager sent-message read updates without dropping history", () => {

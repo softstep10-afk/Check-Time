@@ -6,6 +6,7 @@ import { CheckCircle2, MapPin, Navigation, ShieldCheck } from "lucide-react";
 import { WorkerGpsCheckMap } from "@/components/maps/WorkerGpsCheckMap";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
 import { CheckoutModal } from "@/components/worker/CheckoutModal";
+import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
 import {
   formatDateTime,
   formatDurationCompact,
@@ -18,6 +19,7 @@ export function ClockPage() {
   const router = useRouter();
   const {
     shell,
+    shellDataStatus,
     activeSeconds,
     busyAction,
     lastGpsCheck,
@@ -80,6 +82,10 @@ export function ClockPage() {
   const gpsTone =
     showGpsCheck && lastGpsCheck.withinFence === false ? "danger" : "success";
   const { t } = useTranslation();
+
+  if (shellDataStatus !== "ready") {
+    return <WorkerSectionSkeleton label="Loading worker clock" />;
+  }
 
   if (justCheckedOut && lastClosedSession) {
     const startIso = lastClosedSession.clockInTime;

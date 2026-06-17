@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, ExternalLink, FileVideo2, Trash2, UploadCloud } from "lucide-react";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
+import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
 import { formatDateTime } from "@/lib/worker-utils";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
@@ -51,7 +52,7 @@ function revokePendingUploads(files: PendingUpload[]) {
 }
 
 export function JournalPage() {
-  const { shell, busyAction, uploadMedia } = useWorkerShell();
+  const { shell, shellDataStatus, busyAction, uploadMedia } = useWorkerShell();
   const { t } = useTranslation();
   const journalInputRef = useRef<HTMLInputElement | null>(null);
   const journalPhotoRef = useRef<HTMLInputElement | null>(null);
@@ -200,6 +201,10 @@ export function JournalPage() {
       }
       return current.filter((file) => file.id !== fileId);
     });
+  }
+
+  if (shellDataStatus === "loading") {
+    return <WorkerSectionSkeleton label="Loading worker journal" />;
   }
 
   return (

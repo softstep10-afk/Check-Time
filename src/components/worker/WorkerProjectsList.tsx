@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, ClipboardList, MapPin, Navigation, NavigationOff } from "lucide-react";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
+import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
 import { OfflineCacheEmptyState, OfflineCacheNotice } from "@/components/worker/OfflineCacheNotice";
 import { useTranslation } from "@/lib/i18n";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
@@ -25,7 +26,7 @@ const STATUS_COLORS: Record<ProjectStatus, { bg: string; color: string }> = {
 };
 
 export function WorkerProjectsList() {
-  const { shell, isOnline } = useWorkerShell();
+  const { shell, shellDataStatus, isOnline } = useWorkerShell();
   const { t } = useTranslation();
   const cacheActor = useMemo(
     () => ({ actorId: shell.profile.id, orgId: shell.profile.org_id }),
@@ -61,6 +62,10 @@ export function WorkerProjectsList() {
     }
     return map;
   }, [shell.tasks]);
+
+  if (shellDataStatus === "loading") {
+    return <WorkerSectionSkeleton label="Loading worker projects" />;
+  }
 
   return (
     <div className="space-y-4">

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logAudit } from "@/lib/audit";
@@ -141,6 +141,14 @@ type BannerState = {
   text: string;
 } | null;
 
+type ShellDataStatus = "loading" | "ready" | "error";
+
+type WorkerShellDataResponse = {
+  shell?: WorkerShellData;
+  error?: string;
+  redirectTo?: string;
+};
+
 function checkoutLinkResponseHasProof(body: unknown): boolean {
   if (!body || typeof body !== "object") return false;
   const value = body as { linked?: unknown; mediaIds?: unknown };
@@ -185,6 +193,7 @@ type TaskNotificationRow = {
 
 type WorkerShellContextValue = {
   shell: WorkerShellData;
+  shellDataStatus: ShellDataStatus;
   activeSeconds: number;
   busyAction: string | null;
   banner: BannerState;
@@ -460,8 +469,8 @@ export function WorkerShell({
   const router = useRouter();
   const pathname = usePathname();
   const supabase = useMemo(() => createClient(), []);
-  const [, startTransition] = useTransition();
   const [shell, setShell] = useState(initialData);
+  const [shellDataStatus, setShellDataStatus] = useState<ShellDataStatus>("loading");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const clockOutInFlightRef = useRef(false);
   const [banner, setBanner] = useState<BannerState>(null);
@@ -485,55 +494,11 @@ export function WorkerShell({
   const shellRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shellRefreshPendingWhileHiddenRef = useRef(false);
   const shellRefreshLastRunRef = useRef(0);
-
-  const scheduleShellRefresh = useCallback(
-    (minDelayMs = 1400) => {
-      if (document.visibilityState !== "visible") {
-        shellRefreshPendingWhileHiddenRef.current = true;
-        return;
-      }
-      if (shellRefreshTimerRef.current) return;
-      if (isLiveRefreshBlocked()) {
-        shellRefreshTimerRef.current = setTimeout(() => {
-          shellRefreshTimerRef.current = null;
-          scheduleShellRefresh(minDelayMs);
-        }, 2500);
-        return;
-      }
-      const elapsed = Date.now() - shellRefreshLastRunRef.current;
-      const delay = Math.max(minDelayMs, 3500 - elapsed);
-      shellRefreshTimerRef.current = setTimeout(() => {
-        shellRefreshTimerRef.current = null;
-        shellRefreshLastRunRef.current = Date.now();
-        startTransition(() => router.refresh());
-      }, delay);
-    },
-    [router, startTransition],
-  );
+  const shellDataRequestRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.visibilityState !== "visible" || !shellRefreshPendingWhileHiddenRef.current) {
-        return;
-      }
-      shellRefreshPendingWhileHiddenRef.current = false;
-      scheduleShellRefresh();
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      if (shellRefreshTimerRef.current) {
-        clearTimeout(shellRefreshTimerRef.current);
-        shellRefreshTimerRef.current = null;
-      }
-      shellRefreshPendingWhileHiddenRef.current = false;
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [scheduleShellRefresh]);
 
   // ── Sound mute state ──
   // Source of truth: profiles.notif_mode (Wave 7 migration 00009).
@@ -548,11 +513,18 @@ export function WorkerShell({
   const audioUnlocked = useRef(false);
 
   useEffect(() => {
-    const fromProfile = (initialData.profile as { notif_mode?: string | null }).notif_mode;
-    if (fromProfile === "silent" || fromProfile === "sound") return;
+    const fromProfile = (shell.profile as { notif_mode?: string | null }).notif_mode;
+    if (fromProfile === "silent") {
+      setMuted(true);
+      return;
+    }
+    if (fromProfile === "sound") {
+      setMuted(false);
+      return;
+    }
     const stored = localStorage.getItem("check-time-muted");
     setMuted(stored === "true");
-  }, [initialData.profile]);
+  }, [shell.profile]);
 
   const toggleMute = useCallback(() => {
     setMuted((prev) => {
@@ -630,6 +602,108 @@ export function WorkerShell({
       window.removeEventListener(OFFLINE_FIELD_ACTIONS_CHANGED_EVENT, refreshQueuedActions);
     };
   }, []);
+
+  const applyFullShellData = useCallback((fullData: WorkerShellData) => {
+    const uploadQueue = loadOfflineQueue();
+    const eventQueue = loadOfflineEventQueue();
+    const fieldActionQueue = loadOfflineFieldActionQueue();
+
+    setOfflineQueue(uploadQueue);
+    setOfflineEventQueue(eventQueue);
+    setOfflineActionQueue(fieldActionQueue);
+    setShell(applyQueuedEventsToShell(fullData, eventQueue));
+    setShellDataStatus("ready");
+  }, []);
+
+  const refreshShellData = useCallback(
+    (reason = "manual") => {
+      if (shellDataRequestRef.current) return shellDataRequestRef.current;
+
+      const request = (async () => {
+        try {
+          const response = await fetch("/api/worker/shell-data", {
+            cache: "no-store",
+            headers: { Accept: "application/json" },
+          });
+          const body = (await response.json().catch(() => null)) as WorkerShellDataResponse | null;
+
+          if (response.status === 401) {
+            router.replace("/login");
+            return;
+          }
+
+          if (response.status === 403 && body?.redirectTo) {
+            router.replace(body.redirectTo);
+            return;
+          }
+
+          if (!response.ok || !body?.shell) {
+            throw new Error(body?.error ?? `Shell data request failed with HTTP ${response.status}`);
+          }
+
+          applyFullShellData(body.shell);
+        } catch (error) {
+          console.warn(`[worker-shell] shell data refresh failed (${reason}):`, error);
+          setShellDataStatus((current) => (current === "ready" ? "ready" : "error"));
+        } finally {
+          shellDataRequestRef.current = null;
+        }
+      })();
+
+      shellDataRequestRef.current = request;
+      return request;
+    },
+    [applyFullShellData, router],
+  );
+
+  const scheduleShellDataRefresh = useCallback(
+    (minDelayMs = 1400) => {
+      if (document.visibilityState !== "visible") {
+        shellRefreshPendingWhileHiddenRef.current = true;
+        return;
+      }
+      if (shellRefreshTimerRef.current) return;
+      if (isLiveRefreshBlocked()) {
+        shellRefreshTimerRef.current = setTimeout(() => {
+          shellRefreshTimerRef.current = null;
+          scheduleShellDataRefresh(minDelayMs);
+        }, 2500);
+        return;
+      }
+      const elapsed = Date.now() - shellRefreshLastRunRef.current;
+      const delay = Math.max(minDelayMs, 3500 - elapsed);
+      shellRefreshTimerRef.current = setTimeout(() => {
+        shellRefreshTimerRef.current = null;
+        shellRefreshLastRunRef.current = Date.now();
+        void refreshShellData("scheduled");
+      }, delay);
+    },
+    [refreshShellData],
+  );
+
+  useEffect(() => {
+    void refreshShellData("initial");
+  }, [refreshShellData]);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible" || !shellRefreshPendingWhileHiddenRef.current) {
+        return;
+      }
+      shellRefreshPendingWhileHiddenRef.current = false;
+      scheduleShellDataRefresh();
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      if (shellRefreshTimerRef.current) {
+        clearTimeout(shellRefreshTimerRef.current);
+        shellRefreshTimerRef.current = null;
+      }
+      shellRefreshPendingWhileHiddenRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [scheduleShellDataRefresh]);
 
   // ── Online/offline listeners ─────────────────────────────────────────
   useEffect(() => {
@@ -862,23 +936,13 @@ export function WorkerShell({
     setShowConsentModal(false);
   }
 
-  useEffect(() => {
-    setShell(initialData);
-  }, [initialData]);
-
   // ── Profile-change realtime subscription ──────────────────────────────
   // The worker's `shell.profile.require_video` (and other profile flags)
-  // are loaded once when the layout server-renders. Without this listener,
+  // are refreshed through the shell-data API. Without this listener,
   // a manager toggling "Require checkout video" off would not propagate to
   // a worker who's already on /clock — the worker keeps the stale value
   // until they hard-refresh, so they'd still be gated by the modal even
   // though the DB row says require_video=false.
-  //
-  // On an UPDATE to this worker's own profiles row, call router.refresh()
-  // to re-run the (worker) layout server-side; that hands new initialData
-  // to the shell, the existing setShell(initialData) effect above wires it
-  // into state, and CheckoutModal reads the fresh require_video on its
-  // next render. Mirrors the manager-side OverviewLiveIndicator pattern.
   useEffect(() => {
     const channel = supabase
       .channel(`worker-profile-${shell.profile.id}`)
@@ -891,14 +955,14 @@ export function WorkerShell({
           filter: `id=eq.${shell.profile.id}`,
         },
         () => {
-          scheduleShellRefresh();
+          scheduleShellDataRefresh();
         },
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, scheduleShellRefresh, shell.profile.id]);
+  }, [supabase, scheduleShellDataRefresh, shell.profile.id]);
 
   const clearLocalActiveShiftState = useCallback(() => {
     setShell((current) => ({
@@ -1127,7 +1191,7 @@ export function WorkerShell({
           if (!row) return;
           mergeVisibleRealtimeTask(row);
           notifyVisibleTask(row);
-          scheduleShellRefresh(1800);
+          scheduleShellDataRefresh(1800);
         },
       )
       .on(
@@ -1149,7 +1213,7 @@ export function WorkerShell({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, notifyVisibleTask, mergeVisibleRealtimeTask, scheduleShellRefresh, shell.profile.id]);
+  }, [supabase, notifyVisibleTask, mergeVisibleRealtimeTask, scheduleShellDataRefresh, shell.profile.id]);
 
   useEffect(() => {
     const channel = supabase
@@ -1162,7 +1226,7 @@ export function WorkerShell({
           table: "time_events",
           filter: `profile_id=eq.${shell.profile.id}`,
         },
-        () => scheduleShellRefresh(),
+        () => scheduleShellDataRefresh(),
       )
       .on(
         "postgres_changes",
@@ -1172,7 +1236,7 @@ export function WorkerShell({
           table: "media",
           filter: `uploaded_by=eq.${shell.profile.id}`,
         },
-        () => scheduleShellRefresh(),
+        () => scheduleShellDataRefresh(),
       )
       .on(
         "postgres_changes",
@@ -1182,7 +1246,7 @@ export function WorkerShell({
           table: "project_assignments",
           filter: `profile_id=eq.${shell.profile.id}`,
         },
-        () => scheduleShellRefresh(),
+        () => scheduleShellDataRefresh(),
       )
       .on(
         "postgres_changes",
@@ -1192,7 +1256,7 @@ export function WorkerShell({
           table: "project_exclusions",
           filter: `profile_id=eq.${shell.profile.id}`,
         },
-        () => scheduleShellRefresh(),
+        () => scheduleShellDataRefresh(),
       )
       .on(
         "postgres_changes",
@@ -1202,18 +1266,18 @@ export function WorkerShell({
           table: "payroll_closures",
           filter: `profile_id=eq.${shell.profile.id}`,
         },
-        () => scheduleShellRefresh(),
+        () => scheduleShellDataRefresh(),
       )
-      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => scheduleShellRefresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, () => scheduleShellDataRefresh())
       .subscribe();
 
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, scheduleShellRefresh, shell.profile.id]);
+  }, [supabase, scheduleShellDataRefresh, shell.profile.id]);
 
   useEffect(() => {
-    if (!mounted || !isOnline) return;
+    if (!mounted || !isOnline || shellDataStatus !== "ready") return;
     let stopped = false;
 
     async function pollNewTasks() {
@@ -1250,7 +1314,7 @@ export function WorkerShell({
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [isOnline, mounted, notifyVisibleTask, shell.profile.org_id, supabase]);
+  }, [isOnline, mounted, notifyVisibleTask, shell.profile.org_id, shellDataStatus, supabase]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1598,7 +1662,7 @@ export function WorkerShell({
         setShowConsentModal(true);
       }
 
-      router.refresh();
+      void refreshShellData("clock-in");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Clock-in failed.";
       setBanner({ tone: "error", text: message });
@@ -1612,7 +1676,7 @@ export function WorkerShell({
     if (!shell.clockState.isClockedIn || !shell.clockState.currentProjectId) {
       clearLocalActiveShiftState();
       setBanner({ tone: "info", text: "Shift is already closed." });
-      router.refresh();
+      void refreshShellData("clock-out-already-closed");
       return true;
     }
     if (clockOutInFlightRef.current) {
@@ -1737,7 +1801,7 @@ export function WorkerShell({
       if (alreadyClosedRemotely) {
         clearLocalActiveShiftState();
         setBanner({ tone: "info", text: "Shift is already closed." });
-        router.refresh();
+        void refreshShellData("clock-out-already-closed-remote");
         return true;
       }
 
@@ -1898,7 +1962,7 @@ export function WorkerShell({
             : "Clocked out.",
       });
       playSound("clock-out");
-      router.refresh();
+      void refreshShellData("clock-out");
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Clock-out failed.";
@@ -2208,7 +2272,7 @@ export function WorkerShell({
               ? t("journal.startVideoUploaded")
               : `${selectedFiles.length} journal ${selectedFiles.length === 1 ? "item" : "items"} saved.`,
       });
-      router.refresh();
+      void refreshShellData("media-upload");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Upload failed.";
       setBanner({ tone: "error", text: message });
@@ -2455,7 +2519,7 @@ export function WorkerShell({
               : null,
         },
       });
-      scheduleShellRefresh(1800);
+      scheduleShellDataRefresh(1800);
       return true;
     } catch (error) {
       if (
@@ -2706,11 +2770,11 @@ export function WorkerShell({
         const remaining = removeOfflineUpload(item.id);
         setOfflineQueue(remaining);
       }
-      router.refresh();
+      void refreshShellData("offline-drain");
     } finally {
       setDraining(false);
     }
-  }, [mergeVisibleRealtimeTask, router, shell.profile.id, supabase, t]);
+  }, [mergeVisibleRealtimeTask, refreshShellData, shell.profile.id, supabase, t]);
 
   const offlineActionPendingCount = countPendingOfflineFieldActions(offlineActionQueue);
 
@@ -2738,6 +2802,7 @@ export function WorkerShell({
 
   const value: WorkerShellContextValue = {
     shell,
+    shellDataStatus,
     activeSeconds,
     busyAction,
     banner,
