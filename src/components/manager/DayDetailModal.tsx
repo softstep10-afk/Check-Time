@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ModalBackdrop } from "@/components/shared/ModalBackdrop";
 import {
   CheckCircle2,
   Camera,
@@ -366,10 +367,10 @@ export function DayDetailModal({
   });
 
   return (
-    <div
+    <ModalBackdrop
       className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center"
       style={{ background: "rgba(0,0,0,0.55)" }}
-      onClick={onClose}
+      onClose={onClose}
     >
       <div
         className="max-h-[85vh] w-full max-w-[520px] overflow-hidden rounded-t-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] sm:rounded-[var(--radius-lg)]"
@@ -525,10 +526,10 @@ export function DayDetailModal({
       </div>
 
       {previewMedia ? (
-        <div
+        <ModalBackdrop
           className="fixed inset-0 z-[70] flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.7)" }}
-          onClick={closePreview}
+          onClose={closePreview}
         >
           <div
             className="w-full max-w-[860px] max-h-[90vh] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4"
@@ -622,7 +623,7 @@ export function DayDetailModal({
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {previewLoading && !previewMedia ? (
@@ -634,6 +635,6 @@ export function DayDetailModal({
           {t("common.loading")}
         </div>
       ) : null}
-    </div>
+    </ModalBackdrop>
   );
 }

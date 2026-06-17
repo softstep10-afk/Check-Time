@@ -7,6 +7,7 @@ import { FolderKanban, User, ClipboardCheck, Receipt, Trash2, X } from "lucide-r
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/worker-utils";
+import { ModalBackdrop } from "@/components/shared/ModalBackdrop";
 
 type TrashItem = {
   id: string;
@@ -333,12 +334,12 @@ export default function TrashPage() {
       </section>
 
       {confirmEmptyAll ? (
-        <div
+        <ModalBackdrop
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={() => setConfirmEmptyAll(false)}
+          onClose={() => setConfirmEmptyAll(false)}
         >
           <div
             className="surface-card w-full max-w-[440px] p-4"
@@ -380,7 +381,7 @@ export default function TrashPage() {
               </button>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </div>
   );

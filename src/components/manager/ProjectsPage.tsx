@@ -9,6 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import { Copy, Check, Plus, Pencil, Trash2, X, FileText, Play } from "lucide-react";
+import { ModalBackdrop } from "@/components/shared/ModalBackdrop";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { DateField } from "@/components/shared/DateField";
@@ -1923,10 +1924,10 @@ export function ProjectsPage({
       </section>
 
       {editingProject ? (
-        <div
+        <ModalBackdrop
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={closeEditProject}
+          onClose={closeEditProject}
         >
           <div
             className="surface-card w-full max-w-[700px] max-h-[90vh] overflow-y-auto p-4"
@@ -2276,17 +2277,17 @@ export function ProjectsPage({
               </div>
             </form>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {removeConfirmId ? (() => {
         const removeTarget = initialProjects.find((p) => p.id === removeConfirmId);
         if (!removeTarget) return null;
         return (
-          <div
+          <ModalBackdrop
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
             style={{ background: "rgba(0,0,0,0.5)" }}
-            onClick={() => setRemoveConfirmId(null)}
+            onClose={() => setRemoveConfirmId(null)}
           >
             <div
               className="surface-card w-full max-w-[420px] p-4"
@@ -2349,7 +2350,7 @@ export function ProjectsPage({
                 </button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         );
       })() : null}
     </div>

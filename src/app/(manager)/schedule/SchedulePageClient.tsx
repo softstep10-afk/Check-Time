@@ -15,6 +15,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import { ModalBackdrop } from "@/components/shared/ModalBackdrop";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { createClient } from "@/lib/supabase/client";
 import { isLiveRefreshBlocked } from "@/lib/client-interaction";
@@ -1558,10 +1559,10 @@ export default function SchedulePageClient() {
       </section>
 
       {selectedDay ? (
-        <div
+        <ModalBackdrop
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 pb-28 pt-3 sm:items-center sm:p-4"
           style={{ background: "rgba(0,0,0,0.58)" }}
-          onClick={() => setSelectedDay(null)}
+          onClose={() => setSelectedDay(null)}
         >
           <div
             data-live-refresh-blocker="true"
@@ -1693,14 +1694,14 @@ export default function SchedulePageClient() {
               </section>
             </div>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {selectedEntry ? (
-        <div
+        <ModalBackdrop
           className="fixed inset-0 z-[60] flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.62)" }}
-          onClick={() => setSelectedEntry(null)}
+          onClose={() => setSelectedEntry(null)}
         >
           <div
             data-live-refresh-blocker="true"
@@ -1808,7 +1809,7 @@ export default function SchedulePageClient() {
               </div>
             ) : null}
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
     </div>
   );

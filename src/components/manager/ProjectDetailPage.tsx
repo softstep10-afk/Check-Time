@@ -18,6 +18,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { ModalBackdrop } from "@/components/shared/ModalBackdrop";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { DateField } from "@/components/shared/DateField";
 import { CollapsibleSection } from "@/components/shared/CollapsibleSection";
@@ -3055,9 +3056,9 @@ export function ProjectDetailPage({
       />
 
       {taskComposerOpen ? (
-        <div
+        <ModalBackdrop
           className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 sm:items-center"
-          onClick={() => setTaskComposerOpen(false)}
+          onClose={() => setTaskComposerOpen(false)}
         >
           <div
             className="surface-card w-full max-w-[720px] max-h-[90vh] overflow-y-auto p-4"
@@ -3170,14 +3171,14 @@ export function ProjectDetailPage({
               </button>
             </form>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
 
       {showEditModal ? (
-        <div
+        <ModalBackdrop
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={closeEditModal}
+          onClose={closeEditModal}
         >
           <div
             className="surface-card w-full max-w-[700px] max-h-[90vh] overflow-y-auto p-4"
@@ -3474,7 +3475,7 @@ export function ProjectDetailPage({
               </div>
             </form>
           </div>
-        </div>
+        </ModalBackdrop>
       ) : null}
       <MediaViewerModal
         item={mediaViewerItem}
@@ -4244,9 +4245,9 @@ function MaterialsSection({
       </div>
     </CollapsibleSection>
     {addMaterialOpen ? (
-      <div
+      <ModalBackdrop
         className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 sm:items-center"
-        onClick={closeAddMaterialModal}
+        onClose={closeAddMaterialModal}
         role="dialog"
         aria-modal="true"
       >
@@ -4477,12 +4478,12 @@ function MaterialsSection({
             </div>
           </form>
         </div>
-      </div>
+      </ModalBackdrop>
     ) : null}
     {deliveryTarget ? (
-      <div
+      <ModalBackdrop
         className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60 p-4 sm:items-center"
-        onClick={closeDeliveryModal}
+        onClose={closeDeliveryModal}
         role="dialog"
         aria-modal="true"
       >
@@ -4548,7 +4549,7 @@ function MaterialsSection({
             </button>
           </div>
         </div>
-      </div>
+      </ModalBackdrop>
     ) : null}
     <MediaViewerModal
       item={receiptViewerItem}
@@ -5163,9 +5164,9 @@ function ReceiptsSection({
       ) : null}
     </CollapsibleSection>
     {receiptUploadOpen ? (
-      <div
+      <ModalBackdrop
         className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-4 sm:items-center"
-        onClick={() => {
+        onClose={() => {
           setReceiptUploadOpen(false);
           setReceiptUploadError("");
         }}
@@ -5312,7 +5313,7 @@ function ReceiptsSection({
             </button>
           </form>
         </div>
-      </div>
+      </ModalBackdrop>
     ) : null}
     </>
   );

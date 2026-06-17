@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Archive, CalendarDays, Download, FolderKanban, Lock, Search, Wallet, X } from "lucide-react";
 import { DateField } from "@/components/shared/DateField";
+import { ModalBackdrop } from "@/components/shared/ModalBackdrop";
 import { useTranslation } from "@/lib/i18n";
 import {
   filterArchivedProjectsByDateRange,
@@ -667,12 +668,12 @@ export function ArchivePage({
           ? text.sourcePayrollLineItems
           : text.sourcePayPeriodItems;
         return (
-          <div
+          <ModalBackdrop
             role="dialog"
             aria-modal="true"
             className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
             style={{ background: "rgba(0, 0, 0, 0.72)" }}
-            onClick={() => setSelectedPayrollPeriod(null)}
+            onClose={() => setSelectedPayrollPeriod(null)}
           >
             <div
               className="max-h-[90vh] w-full max-w-[840px] overflow-y-auto rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-5 shadow-2xl"
@@ -847,7 +848,7 @@ export function ArchivePage({
                 </button>
               </div>
             </div>
-          </div>
+          </ModalBackdrop>
         );
       })() : null}
     </div>
