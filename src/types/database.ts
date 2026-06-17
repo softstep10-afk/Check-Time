@@ -52,6 +52,13 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface ProfileRate {
+  profile_id: string;
+  org_id: string;
+  hourly_rate: number | null;
+  updated_at: string;
+}
+
 export interface ProjectExclusion {
   id: string;
   org_id: string;

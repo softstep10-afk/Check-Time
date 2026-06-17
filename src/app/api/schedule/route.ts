@@ -37,6 +37,8 @@ const DELIVERY_CLAIM_ROLES = new Set<UserRole>([
   "owner",
 ]);
 
+type CalendarActorProfile = Pick<Profile, "id" | "org_id" | "role">;
+
 function isScheduleKind(value: unknown): value is ScheduleKind {
   return (
     value === "client_meeting" ||
@@ -92,9 +94,9 @@ async function getCalendarActor() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, org_id, role")
     .eq("id", user.id)
-    .single<Profile>();
+    .single<CalendarActorProfile>();
 
   if (error || !profile) {
     return { error: NextResponse.json({ error: "Profile not found" }, { status: 404 }) };

@@ -9,10 +9,14 @@ import {
   isShiftActionable,
 } from "@/lib/shift-review";
 import { createClient } from "@/lib/supabase/server";
+import {
+  hydrateProfilesWithRates,
+  PROFILE_SELECT_WITHOUT_RATE,
+  type ProfileWithoutRate,
+} from "@/lib/profile-rates";
 import type {
   PayrollClosure,
   PayrollRun,
-  Profile,
   Project,
   TimeEvent,
 } from "@/types/database";
@@ -46,7 +50,10 @@ export async function POST(request: NextRequest) {
 
     const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
       await Promise.all([
-        supabase.from("profiles").select("*").returns<Profile[]>(),
+        supabase
+          .from("profiles")
+          .select(PROFILE_SELECT_WITHOUT_RATE)
+          .returns<ProfileWithoutRate[]>(),
         supabase.from("projects").select("*").returns<Project[]>(),
         supabase
           .from("time_events")
@@ -67,10 +74,16 @@ export async function POST(request: NextRequest) {
     assertNoError(timeEventsResult.error, "Time events query failed");
     assertNoError(closuresResult.error, "Payroll closures query failed");
 
+    const profiles = await hydrateProfilesWithRates(
+      supabase,
+      profilesResult.data ?? [],
+      true,
+    );
+
     const workspace: ManagerWorkspaceData = {
       manager: profile,
       org,
-      profiles: profilesResult.data ?? [],
+      profiles,
       projects: projectsResult.data ?? [],
       assignments: [],
       tasks: [],

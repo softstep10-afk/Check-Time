@@ -6,6 +6,14 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { buildPreviewManagerWorkspaceData } from "@/lib/preview-data";
 import { createClient } from "@/lib/supabase/server";
 import { isManagerRole } from "@/lib/manager-utils";
+import { hasFinanceAccess } from "@/lib/finance-access";
+import {
+  hydrateProfilesWithRates,
+  PROFILE_SELECT_WITHOUT_RATE,
+  profilesWithoutRates,
+  withNullProfileRate,
+  type ProfileWithoutRate,
+} from "@/lib/profile-rates";
 import type { PayPeriodItemRow, PayPeriodRow } from "@/lib/archive-utils";
 import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import type {
@@ -48,9 +56,9 @@ export async function requireManagerContext(supabase: ServerSupabase) {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select(PROFILE_SELECT_WITHOUT_RATE)
     .eq("id", user.id)
-    .single<Profile>();
+    .single<ProfileWithoutRate>();
 
   assertNoError(profileError, "Manager profile query failed");
 
@@ -58,14 +66,16 @@ export async function requireManagerContext(supabase: ServerSupabase) {
     redirect("/login");
   }
 
-  if (!isManagerRole(profile.role)) {
+  const profileWithNullRate = withNullProfileRate(profile);
+
+  if (!isManagerRole(profileWithNullRate.role)) {
     redirect("/clock");
   }
 
   const { data: org, error: orgError } = await supabase
     .from("organizations")
     .select("*")
-    .eq("id", profile.org_id)
+    .eq("id", profileWithNullRate.org_id)
     .single<Organization>();
 
   assertNoError(orgError, "Organization query failed");
@@ -74,7 +84,7 @@ export async function requireManagerContext(supabase: ServerSupabase) {
     throw new Error("Organization not found.");
   }
 
-  return { user, profile, org };
+  return { user, profile: profileWithNullRate, org };
 }
 
 type ManagerContext = Awaited<ReturnType<typeof requireManagerContext>>;
@@ -106,9 +116,9 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
     Promise.all([
       supabase
         .from("profiles")
-        .select("*")
+        .select(PROFILE_SELECT_WITHOUT_RATE)
         .order("name", { ascending: true })
-        .returns<Profile[]>(),
+        .returns<ProfileWithoutRate[]>(),
       supabase
         .from("projects")
         .select("*")
@@ -184,10 +194,20 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
   assertNoError(payrollRunsResult.error, "Payroll runs query failed");
   assertNoError(closuresResult.error, "Payroll closures query failed");
 
+  const canReadRates = await hasFinanceAccess(supabase, {
+    id: context.profile.id,
+    role: context.profile.role,
+  });
+  const profiles = await hydrateProfilesWithRates(
+    supabase,
+    profilesResult.data ?? [],
+    canReadRates,
+  );
+
   return {
     manager: context.profile,
     org: context.org,
-    profiles: profilesResult.data ?? [],
+    profiles,
     projects: projectsResult.data ?? [],
     assignments: assignmentsResult.data ?? [],
     tasks: tasksResult.data ?? [],
@@ -292,7 +312,11 @@ export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData>
   const since14d = isoDaysAgo(14);
 
   const dataPromise = Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(PROFILE_SELECT_WITHOUT_RATE)
+      .order("name", { ascending: true })
+      .returns<ProfileWithoutRate[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("project_assignments")
@@ -329,10 +353,20 @@ export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData>
   assertNoError(mediaResult.error, "Media query failed");
   assertNoError(timeEventsResult.error, "Time events query failed");
 
+  const canReadRates = await hasFinanceAccess(supabase, {
+    id: context.profile.id,
+    role: context.profile.role,
+  });
+  const profiles = await hydrateProfilesWithRates(
+    supabase,
+    profilesResult.data ?? [],
+    canReadRates,
+  );
+
   return {
     manager: context.profile,
     org: context.org,
-    profiles: profilesResult.data ?? [],
+    profiles,
     projects: projectsResult.data ?? [],
     assignments: assignmentsResult.data ?? [],
     tasks: tasksResult.data ?? [],
@@ -368,7 +402,11 @@ export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
     payrollClosuresResult,
     payPeriodsResult,
   ] = await Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(PROFILE_SELECT_WITHOUT_RATE)
+      .order("name", { ascending: true })
+      .returns<ProfileWithoutRate[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("project_assignments")
@@ -431,6 +469,16 @@ export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
   assertNoError(payrollClosuresResult.error, "Payroll closures query failed");
   assertNoError(payPeriodsResult.error, "Pay periods query failed");
 
+  const canReadRates = await hasFinanceAccess(supabase, {
+    id: context.profile.id,
+    role: context.profile.role,
+  });
+  const profiles = await hydrateProfilesWithRates(
+    supabase,
+    profilesResult.data ?? [],
+    canReadRates,
+  );
+
   const periodIds = (payPeriodsResult.data ?? []).map((period) => period.id);
   const payPeriodItemsResult = periodIds.length > 0
     ? await supabase
@@ -447,7 +495,7 @@ export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
   return {
     manager: context.profile,
     org: context.org,
-    profiles: profilesResult.data ?? [],
+    profiles,
     projects: projectsResult.data ?? [],
     assignments: assignmentsResult.data ?? [],
     tasks: tasksResult.data ?? [],
@@ -475,7 +523,11 @@ export const getTeamPageData = cache(async (): Promise<ManagerWorkspaceData> => 
   const since14d = isoDaysAgo(14);
 
   const dataPromise = Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(PROFILE_SELECT_WITHOUT_RATE)
+      .order("name", { ascending: true })
+      .returns<ProfileWithoutRate[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("project_assignments")
@@ -512,10 +564,20 @@ export const getTeamPageData = cache(async (): Promise<ManagerWorkspaceData> => 
   assertNoError(tasksResult.error, "Tasks query failed");
   assertNoError(timeEventsResult.error, "Time events query failed");
 
+  const canReadRates = await hasFinanceAccess(supabase, {
+    id: context.profile.id,
+    role: context.profile.role,
+  });
+  const profiles = await hydrateProfilesWithRates(
+    supabase,
+    profilesResult.data ?? [],
+    canReadRates,
+  );
+
   return {
     manager: context.profile,
     org: context.org,
-    profiles: profilesResult.data ?? [],
+    profiles,
     projects: projectsResult.data ?? [],
     assignments: assignmentsResult.data ?? [],
     tasks: tasksResult.data ?? [],
@@ -541,7 +603,11 @@ export const getPayrollPageData = cache(async (): Promise<ManagerWorkspaceData> 
 
   const [profilesResult, projectsResult, timeEventsResult, payrollRunsResult, closuresResult] =
     await Promise.all([
-      supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+      supabase
+        .from("profiles")
+        .select(PROFILE_SELECT_WITHOUT_RATE)
+        .order("name", { ascending: true })
+        .returns<ProfileWithoutRate[]>(),
       supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
       supabase
         .from("time_events")
@@ -570,10 +636,20 @@ export const getPayrollPageData = cache(async (): Promise<ManagerWorkspaceData> 
   assertNoError(payrollRunsResult.error, "Payroll runs query failed");
   assertNoError(closuresResult.error, "Payroll closures query failed");
 
+  const canReadRates = await hasFinanceAccess(supabase, {
+    id: context.profile.id,
+    role: context.profile.role,
+  });
+  const profiles = await hydrateProfilesWithRates(
+    supabase,
+    profilesResult.data ?? [],
+    canReadRates,
+  );
+
   return {
     manager: context.profile,
     org: context.org,
-    profiles: profilesResult.data ?? [],
+    profiles,
     projects: projectsResult.data ?? [],
     assignments: [],
     tasks: [],
@@ -595,7 +671,11 @@ export const getTimelinePageData = cache(async (): Promise<ManagerWorkspaceData>
   const { supabase, contextPromise } = resolved;
 
   const dataPromise = Promise.all([
-    supabase.from("profiles").select("*").order("name", { ascending: true }).returns<Profile[]>(),
+    supabase
+      .from("profiles")
+      .select(PROFILE_SELECT_WITHOUT_RATE)
+      .order("name", { ascending: true })
+      .returns<ProfileWithoutRate[]>(),
     supabase.from("projects").select("*").order("name", { ascending: true }).returns<Project[]>(),
     supabase
       .from("time_events")
@@ -614,7 +694,7 @@ export const getTimelinePageData = cache(async (): Promise<ManagerWorkspaceData>
   return {
     manager: context.profile,
     org: context.org,
-    profiles: profilesResult.data ?? [],
+    profiles: profilesWithoutRates(profilesResult.data ?? []),
     projects: projectsResult.data ?? [],
     assignments: [],
     tasks: [],

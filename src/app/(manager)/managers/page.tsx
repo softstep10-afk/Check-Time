@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { formatDateTime } from "@/lib/worker-utils";
 import { isValidTeamPasscode } from "@/lib/team-member-provisioning";
+import {
+  PROFILE_SELECT_WITHOUT_RATE,
+  profilesWithoutRates,
+  type ProfileWithoutRate,
+} from "@/lib/profile-rates";
 import type { Profile } from "@/types/database";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 
@@ -23,11 +28,12 @@ export default function ManagersPage() {
   async function loadManagers() {
     const { data } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_SELECT_WITHOUT_RATE)
       .in("role", ["owner", "admin", "manager", "supervisor"])
       .is("deleted_at", null)
-      .order("created_at", { ascending: true });
-    setManagers((data as Profile[]) ?? []);
+      .order("created_at", { ascending: true })
+      .returns<ProfileWithoutRate[]>();
+    setManagers(profilesWithoutRates(data ?? []));
     setLoading(false);
   }
 

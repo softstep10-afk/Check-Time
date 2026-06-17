@@ -5,6 +5,11 @@ import { Download, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { DateField } from "@/components/shared/DateField";
+import {
+  PROFILE_SELECT_WITHOUT_RATE,
+  profilesWithoutRates,
+  type ProfileWithoutRate,
+} from "@/lib/profile-rates";
 import type { Profile } from "@/types/database";
 import { haversineMeters } from "@/lib/worker-utils";
 
@@ -154,10 +159,11 @@ export default function LocationDataPage() {
     async function load() {
       const { data } = await supabase
         .from("profiles")
-        .select("*")
+        .select(PROFILE_SELECT_WITHOUT_RATE)
         .is("deleted_at", null)
-        .order("name");
-      setProfiles((data as Profile[]) ?? []);
+        .order("name")
+        .returns<ProfileWithoutRate[]>();
+      setProfiles(profilesWithoutRates(data ?? []));
       setLoading(false);
     }
     void load();

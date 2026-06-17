@@ -32,6 +32,12 @@ import {
 } from "@/lib/material-tasks";
 import { parseGeoPoint } from "@/lib/worker-utils";
 import type { WorkerGeoPoint } from "@/lib/worker-types";
+import {
+  PROFILE_SELECT_WITHOUT_RATE,
+  profilesWithoutRates,
+  withNullProfileRate,
+  type ProfileWithoutRate,
+} from "@/lib/profile-rates";
 import type { Profile, Project, Task, UserRole } from "@/types/database";
 
 type ScheduleKind =
@@ -605,18 +611,22 @@ export default function SchedulePageClient() {
     } = await supabase.auth.getUser();
 
     const profileQuery = user
-      ? supabase.from("profiles").select("*").eq("id", user.id).maybeSingle<Profile>()
+      ? supabase
+          .from("profiles")
+          .select(PROFILE_SELECT_WITHOUT_RATE)
+          .eq("id", user.id)
+          .maybeSingle<ProfileWithoutRate>()
       : Promise.resolve({ data: null, error: null });
 
     const [profileRes, profilesRes, projectsRes, tasksRes] = await Promise.all([
       profileQuery,
       supabase
         .from("profiles")
-        .select("*")
+        .select(PROFILE_SELECT_WITHOUT_RATE)
         .is("deleted_at", null)
         .order("role", { ascending: true })
         .order("name", { ascending: true })
-        .returns<Profile[]>(),
+        .returns<ProfileWithoutRate[]>(),
       supabase
         .from("projects")
         .select("*")
@@ -639,8 +649,8 @@ export default function SchedulePageClient() {
     }
 
     const loadedProjects = projectsRes.data ?? [];
-    setCurrentProfile(profileRes.data ?? null);
-    setProfiles(profilesRes.data ?? []);
+    setCurrentProfile(profileRes.data ? withNullProfileRate(profileRes.data) : null);
+    setProfiles(profilesWithoutRates(profilesRes.data ?? []));
     setProjects(loadedProjects);
     setTasks(tasksRes.data ?? []);
     setProjectForm((prev) => {

@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { summarizeAnnualPaidPayroll } from "@/lib/annual-report-utils";
 import { useTranslation } from "@/lib/i18n";
 import type { PayrollArchiveSummary } from "@/lib/archive-utils";
+import {
+  PROFILE_SELECT_WITHOUT_RATE,
+  profilesWithoutRates,
+  type ProfileWithoutRate,
+} from "@/lib/profile-rates";
 import type { Profile, Project, TimeEvent, Media } from "@/types/database";
 import type { StoreVisit } from "@/lib/store-types";
 
@@ -80,7 +85,7 @@ export function AnnualReportClient({
       const yearEnd = `${year}-12-31T23:59:59`;
 
       const [profilesRes, projectsRes, eventsRes, receiptsRes, visitsRes] = await Promise.all([
-        supabase.from("profiles").select("*"),
+        supabase.from("profiles").select(PROFILE_SELECT_WITHOUT_RATE).returns<ProfileWithoutRate[]>(),
         supabase.from("projects").select("*"),
         supabase.from("time_events").select("*").gte("event_time", yearStart).lte("event_time", yearEnd),
         supabase.from("media").select("*").eq("metadata->>category", "receipt").is("deleted_at", null).gte("created_at", yearStart).lte("created_at", yearEnd),
@@ -88,7 +93,7 @@ export function AnnualReportClient({
         supabase.from("store_visits").select("*").gte("entered_at", yearStart).lte("entered_at", yearEnd),
       ]);
 
-      setProfiles((profilesRes.data as Profile[]) ?? []);
+      setProfiles(profilesWithoutRates(profilesRes.data ?? []));
       setProjects((projectsRes.data as Project[]) ?? []);
       setEvents((eventsRes.data as TimeEvent[]) ?? []);
       setReceipts((receiptsRes.data as Media[]) ?? []);

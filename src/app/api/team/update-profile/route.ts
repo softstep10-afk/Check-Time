@@ -9,6 +9,7 @@ import {
 import { readRequiredUuid } from "@/lib/server/id-guards";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { upsertProfileRate } from "@/lib/profile-rates";
 import type { Profile, UserRole } from "@/types/database";
 
 type TargetProfile = Pick<
@@ -123,9 +124,6 @@ export async function POST(request: NextRequest) {
     };
 
     if (name) updates.name = name;
-    if (canSetFinancials && !roleIsOwnerAdmin) {
-      updates.hourly_rate = hourlyRate;
-    }
 
     const { data: updated, error: updateError } = await adminClient
       .from("profiles")
@@ -144,6 +142,18 @@ export async function POST(request: NextRequest) {
         { error: "Profile update did not persist." },
         { status: 500 },
       );
+    }
+
+    if (canSetFinancials && !roleIsOwnerAdmin) {
+      const { error: rateError } = await upsertProfileRate(adminClient, {
+        profileId: targetProfile.id,
+        orgId: actor.org_id,
+        hourlyRate,
+      });
+
+      if (rateError) {
+        return NextResponse.json({ error: rateError.message }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ ok: true, profile: updated });

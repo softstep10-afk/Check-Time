@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { requireManagerContext } from "@/lib/manager-data";
 import { canCreateTeamRole, isTeamAssignableRole } from "@/lib/role-permissions";
+import { upsertProfileRate } from "@/lib/profile-rates";
 import { createClient } from "@/lib/supabase/server";
 import { buildTeamMemberEmail, isValidTeamPasscode } from "@/lib/team-member-provisioning";
 
@@ -105,7 +106,6 @@ export async function POST(request: NextRequest) {
       role,
       pin_hash: pinHash,
       require_video: requireVideo,
-      hourly_rate: hourlyRate,
       is_active: true,
       language: "en",
       color: "#BFA234",
@@ -132,6 +132,18 @@ export async function POST(request: NextRequest) {
         { error: profileInsertError.message },
         { status: 500 },
       );
+    }
+
+    if (canSetFinancials) {
+      const { error: rateError } = await upsertProfileRate(adminClient, {
+        profileId: userResult.user.id,
+        orgId: profile.org_id,
+        hourlyRate,
+      });
+
+      if (rateError) {
+        return NextResponse.json({ error: rateError.message }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ ok: true, name, pin });

@@ -4,9 +4,13 @@ import { hasFinanceAccess } from "@/lib/finance-access";
 import { getDisplayOrgName } from "@/lib/brand";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
+import {
+  hydrateProfilesWithRates,
+  PROFILE_SELECT_WITHOUT_RATE,
+  type ProfileWithoutRate,
+} from "@/lib/profile-rates";
 import type {
   PayrollClosure,
-  Profile,
   Project,
   TimeEvent,
 } from "@/types/database";
@@ -36,7 +40,10 @@ async function loadPreview(periodEnd?: string) {
 
   const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
     await Promise.all([
-      supabase.from("profiles").select("*").returns<Profile[]>(),
+      supabase
+        .from("profiles")
+        .select(PROFILE_SELECT_WITHOUT_RATE)
+        .returns<ProfileWithoutRate[]>(),
       supabase.from("projects").select("*").returns<Project[]>(),
       supabase
         .from("time_events")
@@ -57,10 +64,16 @@ async function loadPreview(periodEnd?: string) {
   assertNoError(timeEventsResult.error, "Time events query failed");
   assertNoError(closuresResult.error, "Payroll closures query failed");
 
+  const profiles = await hydrateProfilesWithRates(
+    supabase,
+    profilesResult.data ?? [],
+    true,
+  );
+
   const workspace: ManagerWorkspaceData = {
     manager: profile,
     org,
-    profiles: profilesResult.data ?? [],
+    profiles,
     projects: projectsResult.data ?? [],
     assignments: [],
     tasks: [],
