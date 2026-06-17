@@ -7,7 +7,7 @@ const doc = readFileSync(
   "utf8",
 );
 
-const sqlBlocks = [...doc.matchAll(/```sql\n([\s\S]*?)```/g)].map((match) => match[1]);
+const sqlBlocks = [...doc.matchAll(/```sql\r?\n([\s\S]*?)```/g)].map((match) => match[1]);
 
 describe("Supabase Step 0 audit pack", () => {
   it("covers the required read-only Supabase audit surfaces", () => {
