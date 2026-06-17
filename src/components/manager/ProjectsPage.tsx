@@ -28,6 +28,7 @@ import {
   assessDeviceLocationAccuracy,
   type DeviceLocationAssessment,
   formatDurationCompact,
+  haversineMeters,
   isValidGeoPoint,
   parseCoordinateInputPair,
 } from "@/lib/worker-utils";
@@ -48,6 +49,8 @@ import type {
 } from "@/types/database";
 
 const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
+const ADDRESS_GEOCODE_DEBOUNCE_MS = 700;
+const ADDRESS_COORDINATE_MISMATCH_THRESHOLD_METERS = 75;
 
 type ActivityState = "live" | "open" | "stale" | "inactive";
 type ClientTone = "green" | "yellow" | "red";
@@ -71,6 +74,28 @@ type TFn = (key: import("@/lib/i18n").TranslationKey) => string;
 type AddressLookupState = ProjectAddressGeocodeResult & {
   requestedAddress: string;
 };
+
+function normalizeLookupAddress(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function addressLookupMatchesCurrentAddress(
+  lookup: AddressLookupState | null,
+  address: string,
+): lookup is AddressLookupState {
+  const normalizedAddress = normalizeLookupAddress(address);
+  return (
+    Boolean(lookup) &&
+    normalizedAddress.length > 0 &&
+    normalizeLookupAddress(lookup?.requestedAddress ?? "") === normalizedAddress
+  );
+}
+
+function formatDistanceMeters(value: number): string {
+  if (!Number.isFinite(value)) return "";
+  if (value >= 1000) return `${(value / 1000).toFixed(1)} km`;
+  return `${Math.round(value)} m`;
+}
 
 function getClientTone(project: ManagerProjectSummary): ClientTone {
   const value = project.settings?.client_tone;
@@ -597,10 +622,14 @@ export function ProjectsPage({
   const [editDriverTimeProject, setEditDriverTimeProject] = useState(false);
   const [createDeviceLocation, setCreateDeviceLocation] = useState<DeviceLocationAssessment | null>(null);
   const [editDeviceLocation, setEditDeviceLocation] = useState<DeviceLocationAssessment | null>(null);
+  const [createAddressInput, setCreateAddressInput] = useState("");
+  const [editAddressInput, setEditAddressInput] = useState("");
   const [createAddressLookup, setCreateAddressLookup] = useState<AddressLookupState | null>(null);
   const [editAddressLookup, setEditAddressLookup] = useState<AddressLookupState | null>(null);
   const [createAddressLookupError, setCreateAddressLookupError] = useState("");
   const [editAddressLookupError, setEditAddressLookupError] = useState("");
+  const [createCoordinateOverrideWarning, setCreateCoordinateOverrideWarning] = useState("");
+  const [editCoordinateOverrideWarning, setEditCoordinateOverrideWarning] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused" | "completed">("active");
   const [sortBy, setSortBy] = useState<"activity" | "name" | "week" | "cost">("activity");
   const [searchInput, setSearchInput] = useState("");
@@ -672,8 +701,10 @@ export function ProjectsPage({
     setCreateCoordinatesConfirmed(false);
     setCreateDriverTimeProject(false);
     setCreateDeviceLocation(null);
+    setCreateAddressInput("");
     setCreateAddressLookup(null);
     setCreateAddressLookupError("");
+    setCreateCoordinateOverrideWarning("");
     setShowCreatePanel(true);
   }
 
@@ -682,8 +713,10 @@ export function ProjectsPage({
     setCreateCoordinatesConfirmed(false);
     setCreateDriverTimeProject(false);
     setCreateDeviceLocation(null);
+    setCreateAddressInput("");
     setCreateAddressLookup(null);
     setCreateAddressLookupError("");
+    setCreateCoordinateOverrideWarning("");
     setGeocodingTarget((current) => (current === "create" ? null : current));
   }
 
@@ -697,11 +730,13 @@ export function ProjectsPage({
   }
 
   function openEditProject(projectId: string) {
+    const project = initialProjects.find((item) => item.id === projectId) ?? null;
     setEditCoordinatesConfirmed(false);
     setEditDeviceLocation(null);
+    setEditAddressInput(project?.address ?? "");
     setEditAddressLookup(null);
     setEditAddressLookupError("");
-    const project = initialProjects.find((item) => item.id === projectId) ?? null;
+    setEditCoordinateOverrideWarning("");
     setEditDriverTimeProject(isDriverTimeProject(project));
     setEditingProjectId(projectId);
   }
@@ -711,9 +746,85 @@ export function ProjectsPage({
     setEditCoordinatesConfirmed(false);
     setEditDriverTimeProject(false);
     setEditDeviceLocation(null);
+    setEditAddressInput("");
     setEditAddressLookup(null);
     setEditAddressLookupError("");
+    setEditCoordinateOverrideWarning("");
     setGeocodingTarget((current) => (current === "edit" ? null : current));
+  }
+
+  function readCoordinateRefs(
+    latRef: React.RefObject<HTMLInputElement | null>,
+    lngRef: React.RefObject<HTMLInputElement | null>,
+  ) {
+    const coordinates = parseCoordinateInputPair(latRef.current?.value ?? "", lngRef.current?.value ?? "", {
+      allowBlank: true,
+    });
+    return coordinates.point;
+  }
+
+  function getAddressCoordinateOverrideWarning(
+    address: string,
+    lookup: AddressLookupState | null,
+    point: { lat: number; lng: number } | null,
+  ) {
+    if (!point || !addressLookupMatchesCurrentAddress(lookup, address)) {
+      return "";
+    }
+
+    const distanceMeters = haversineMeters(point, { lat: lookup.lat, lng: lookup.lng });
+    if (distanceMeters <= ADDRESS_COORDINATE_MISMATCH_THRESHOLD_METERS) {
+      return "";
+    }
+
+    return t("projects.addressCoordinateOverrideWarning").replace(
+      "{distance}",
+      formatDistanceMeters(distanceMeters),
+    );
+  }
+
+  function handleCreateAddressChange(value: string) {
+    setCreateAddressInput(value);
+    setCreateAddressLookup(null);
+    setCreateAddressLookupError("");
+    setCreateCoordinateOverrideWarning("");
+    setCreateCoordinatesConfirmed(false);
+  }
+
+  function handleEditAddressChange(value: string) {
+    setEditAddressInput(value);
+    setEditAddressLookup(null);
+    setEditAddressLookupError("");
+    setEditCoordinateOverrideWarning("");
+    setEditCoordinatesConfirmed(false);
+  }
+
+  function handleCreateCoordinateOverride(options: { keepDeviceLocation?: boolean } = {}) {
+    setCreateCoordinatesConfirmed(false);
+    if (!options.keepDeviceLocation) {
+      setCreateDeviceLocation(null);
+    }
+    setCreateAddressLookupError("");
+    const point = readCoordinateRefs(createLatRef, createLngRef);
+    const warning = getAddressCoordinateOverrideWarning(createAddressInput, createAddressLookup, point);
+    setCreateCoordinateOverrideWarning(warning);
+    if (!createAddressInput.trim() || !addressLookupMatchesCurrentAddress(createAddressLookup, createAddressInput)) {
+      setCreateAddressLookup(null);
+    }
+  }
+
+  function handleEditCoordinateOverride(options: { keepDeviceLocation?: boolean } = {}) {
+    setEditCoordinatesConfirmed(false);
+    if (!options.keepDeviceLocation) {
+      setEditDeviceLocation(null);
+    }
+    setEditAddressLookupError("");
+    const point = readCoordinateRefs(editLatRef, editLngRef);
+    const warning = getAddressCoordinateOverrideWarning(editAddressInput, editAddressLookup, point);
+    setEditCoordinateOverrideWarning(warning);
+    if (!editAddressInput.trim() || !addressLookupMatchesCurrentAddress(editAddressLookup, editAddressInput)) {
+      setEditAddressLookup(null);
+    }
   }
 
   function fillCurrentLocation(
@@ -784,6 +895,7 @@ export function ProjectsPage({
     targetLngRef: React.RefObject<HTMLInputElement | null>,
     setDeviceLocation: Dispatch<SetStateAction<DeviceLocationAssessment | null>>,
     clearConfirmation: () => void,
+    onAddressResolved: (address: string) => void,
   ) {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       setMessage(t("projects.locationUnavailable"));
@@ -828,6 +940,7 @@ export function ProjectsPage({
             if (addressEl instanceof HTMLInputElement) {
               addressEl.value = formatted;
             }
+            onAddressResolved(formatted);
           }
         } catch (err) {
           setMessage(err instanceof Error ? err.message : t("projects.locationUnavailable"));
@@ -858,6 +971,7 @@ export function ProjectsPage({
     clearConfirmation: () => void,
     setAddressLookup: Dispatch<SetStateAction<AddressLookupState | null>>,
     setAddressLookupError: Dispatch<SetStateAction<string>>,
+    setCoordinateOverrideWarning: Dispatch<SetStateAction<string>>,
   ) {
     const form = formRef.current;
     if (!form) {
@@ -869,12 +983,14 @@ export function ProjectsPage({
     if (!address) {
       setAddressLookup(null);
       setAddressLookupError(t("projects.addressLookupAddressRequired"));
+      setCoordinateOverrideWarning("");
       setMessage(t("projects.addressLookupAddressRequired"));
       return;
     }
 
     setGeocodingTarget(mode);
     setAddressLookupError("");
+    setCoordinateOverrideWarning("");
     setMessage("");
 
     try {
@@ -888,6 +1004,7 @@ export function ProjectsPage({
         setAddressLookup(null);
         const failure = await readRouteFailure(response);
         setAddressLookupError(failure.error);
+        setCoordinateOverrideWarning("");
         setMessage(failure.error);
         return;
       }
@@ -905,7 +1022,13 @@ export function ProjectsPage({
       if (!isValidGeoPoint(point)) {
         setAddressLookup(null);
         setAddressLookupError(t("projects.locationInvalid"));
+        setCoordinateOverrideWarning("");
         setMessage(t("projects.locationInvalid"));
+        return;
+      }
+
+      const currentAddress = new FormData(form).get("address")?.toString().trim() ?? "";
+      if (normalizeLookupAddress(currentAddress) !== normalizeLookupAddress(address)) {
         return;
       }
 
@@ -914,6 +1037,7 @@ export function ProjectsPage({
       setDeviceLocation(null);
       clearConfirmation();
       setAddressLookupError("");
+      setCoordinateOverrideWarning("");
       setAddressLookup({
         requestedAddress: address,
         formattedAddress:
@@ -927,10 +1051,145 @@ export function ProjectsPage({
       setAddressLookup(null);
       const nextError = error instanceof Error ? error.message : t("common.errorTryAgain");
       setAddressLookupError(nextError);
+      setCoordinateOverrideWarning("");
       setMessage(nextError);
     } finally {
       setGeocodingTarget(null);
     }
+  }
+
+  function lookupCreateAddressIfNeeded() {
+    const address = createAddressInput.trim();
+    if (!address || addressLookupMatchesCurrentAddress(createAddressLookup, address) || geocodingTarget === "create") {
+      return;
+    }
+
+    void fillCoordinatesFromAddress(
+      "create",
+      createFormRef,
+      createLatRef,
+      createLngRef,
+      setCreateDeviceLocation,
+      () => setCreateCoordinatesConfirmed(false),
+      setCreateAddressLookup,
+      setCreateAddressLookupError,
+      setCreateCoordinateOverrideWarning,
+    );
+  }
+
+  function lookupEditAddressIfNeeded() {
+    const address = editAddressInput.trim();
+    if (!address || addressLookupMatchesCurrentAddress(editAddressLookup, address) || geocodingTarget === "edit") {
+      return;
+    }
+
+    void fillCoordinatesFromAddress(
+      "edit",
+      editFormRef,
+      editLatRef,
+      editLngRef,
+      setEditDeviceLocation,
+      () => setEditCoordinatesConfirmed(false),
+      setEditAddressLookup,
+      setEditAddressLookupError,
+      setEditCoordinateOverrideWarning,
+    );
+  }
+
+  useEffect(() => {
+    const address = createAddressInput.trim();
+    if (
+      !showCreatePanel ||
+      !address ||
+      createAddressLookupError ||
+      addressLookupMatchesCurrentAddress(createAddressLookup, address)
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(lookupCreateAddressIfNeeded, ADDRESS_GEOCODE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [showCreatePanel, createAddressInput, createAddressLookup, createAddressLookupError, geocodingTarget]);
+
+  useEffect(() => {
+    const address = editAddressInput.trim();
+    if (
+      !editingProjectId ||
+      !address ||
+      editAddressLookupError ||
+      addressLookupMatchesCurrentAddress(editAddressLookup, address)
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(lookupEditAddressIfNeeded, ADDRESS_GEOCODE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [editingProjectId, editAddressInput, editAddressLookup, editAddressLookupError, geocodingTarget]);
+
+  function requireCurrentAddressLookup({
+    form,
+    address,
+    driverTimeProject,
+    lookup,
+    setAddressLookupError,
+    setCoordinateOverrideWarning,
+  }: {
+    form: HTMLFormElement;
+    address: string;
+    driverTimeProject: boolean;
+    lookup: AddressLookupState | null;
+    setAddressLookupError: Dispatch<SetStateAction<string>>;
+    setCoordinateOverrideWarning: Dispatch<SetStateAction<string>>;
+  }) {
+    if (driverTimeProject || !address.trim() || addressLookupMatchesCurrentAddress(lookup, address)) {
+      return true;
+    }
+
+    const error = t("projects.addressLookupRequiredBeforeSave");
+    setAddressLookupError(error);
+    setCoordinateOverrideWarning("");
+    setMessage(error);
+    form.reportValidity();
+    return false;
+  }
+
+  function validateAddressCoordinateOverride({
+    form,
+    address,
+    driverTimeProject,
+    lookup,
+    point,
+    coordinatesConfirmed,
+    setCoordinateOverrideWarning,
+  }: {
+    form: HTMLFormElement;
+    address: string;
+    driverTimeProject: boolean;
+    lookup: AddressLookupState | null;
+    point: { lat: number; lng: number } | null;
+    coordinatesConfirmed: boolean;
+    setCoordinateOverrideWarning: Dispatch<SetStateAction<string>>;
+  }) {
+    if (driverTimeProject || !address.trim()) {
+      setCoordinateOverrideWarning("");
+      return true;
+    }
+
+    if (!point) {
+      setMessage(t("projects.coordsRequired"));
+      form.reportValidity();
+      return false;
+    }
+
+    const warning = getAddressCoordinateOverrideWarning(address, lookup, point);
+    setCoordinateOverrideWarning(warning);
+    if (!warning || coordinatesConfirmed) {
+      return true;
+    }
+
+    setMessage(t("projects.addressCoordinateOverrideConfirmRequired"));
+    form.reportValidity();
+    return false;
   }
 
   async function handleCreateProject(event: React.FormEvent<HTMLFormElement>) {
@@ -959,6 +1218,19 @@ export function ProjectsPage({
       return;
     }
 
+    if (
+      !requireCurrentAddressLookup({
+        form,
+        address,
+        driverTimeProject,
+        lookup: createAddressLookup,
+        setAddressLookupError: setCreateAddressLookupError,
+        setCoordinateOverrideWarning: setCreateCoordinateOverrideWarning,
+      })
+    ) {
+      return;
+    }
+
     // Coordinates are now required: without them the worker-side
     // geofence has nothing to check against and anyone can clock in
     // from anywhere on this project. Refuse the insert before it
@@ -978,6 +1250,19 @@ export function ProjectsPage({
     if (!driverTimeProject && !coordinates.point) {
       setMessage(t("projects.coordsRequired"));
       form.reportValidity();
+      return;
+    }
+    if (
+      !validateAddressCoordinateOverride({
+        form,
+        address,
+        driverTimeProject,
+        lookup: createAddressLookup,
+        point: coordinates.point,
+        coordinatesConfirmed: createCoordinatesConfirmed,
+        setCoordinateOverrideWarning: setCreateCoordinateOverrideWarning,
+      })
+    ) {
       return;
     }
     if (!driverTimeProject && !createCoordinatesConfirmed) {
@@ -1056,6 +1341,19 @@ export function ProjectsPage({
       return;
     }
 
+    if (
+      !requireCurrentAddressLookup({
+        form: event.currentTarget,
+        address,
+        driverTimeProject,
+        lookup: editAddressLookup,
+        setAddressLookupError: setEditAddressLookupError,
+        setCoordinateOverrideWarning: setEditCoordinateOverrideWarning,
+      })
+    ) {
+      return;
+    }
+
     const coordinates = parseCoordinateInputPair(formData.get("lat"), formData.get("lng"), {
       allowBlank: driverTimeProject || existingProject?.hasValidSiteCoordinates || false,
     });
@@ -1066,6 +1364,19 @@ export function ProjectsPage({
           : t("projects.coordsRequired"),
       );
       event.currentTarget.reportValidity();
+      return;
+    }
+    if (
+      !validateAddressCoordinateOverride({
+        form: event.currentTarget,
+        address,
+        driverTimeProject,
+        lookup: editAddressLookup,
+        point: coordinates.point,
+        coordinatesConfirmed: editCoordinatesConfirmed,
+        setCoordinateOverrideWarning: setEditCoordinateOverrideWarning,
+      })
+    ) {
       return;
     }
     if (!driverTimeProject && !editCoordinatesConfirmed) {
@@ -1303,12 +1614,10 @@ export function ProjectsPage({
           <div className="md:col-span-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.2)] p-3">
             <TextInputWithVoice
               name="address"
+              value={createAddressInput}
               placeholder={t("common.address")}
-              onChange={() => {
-                setCreateAddressLookup(null);
-                setCreateAddressLookupError("");
-                setCreateCoordinatesConfirmed(false);
-              }}
+              onChange={(event) => handleCreateAddressChange(event.currentTarget.value)}
+              onBlur={lookupCreateAddressIfNeeded}
               className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
             <div className="mt-3 flex flex-wrap gap-2">
@@ -1322,6 +1631,10 @@ export function ProjectsPage({
                     createLngRef,
                     setCreateDeviceLocation,
                     () => setCreateCoordinatesConfirmed(false),
+                    (address) => {
+                      handleCreateAddressChange(address);
+                      handleCreateCoordinateOverride({ keepDeviceLocation: true });
+                    },
                   )
                 }
                 disabled={reverseLookupTarget === "create"}
@@ -1344,6 +1657,7 @@ export function ProjectsPage({
                     () => setCreateCoordinatesConfirmed(false),
                     setCreateAddressLookup,
                     setCreateAddressLookupError,
+                    setCreateCoordinateOverrideWarning,
                   )
                 }
                 disabled={geocodingTarget === "create"}
@@ -1385,6 +1699,18 @@ export function ProjectsPage({
                 </div>
               </div>
             ) : null}
+            {createCoordinateOverrideWarning ? (
+              <div
+                className="mt-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm font-semibold"
+                style={{
+                  borderColor: "rgba(245, 158, 11, 0.35)",
+                  background: "rgba(245, 158, 11, 0.08)",
+                  color: "#f59e0b",
+                }}
+              >
+                {createCoordinateOverrideWarning}
+              </div>
+            ) : null}
           </div>
           {hasFinanceAccess ? (
             <input
@@ -1414,18 +1740,10 @@ export function ProjectsPage({
               required={!createDriverTimeProject}
               onPaste={(event) =>
                 applyPastedCoordinatePair(event, createLatRef.current, createLngRef.current, () => {
-                  setCreateCoordinatesConfirmed(false);
-                  setCreateDeviceLocation(null);
-                  setCreateAddressLookup(null);
-                  setCreateAddressLookupError("");
+                  handleCreateCoordinateOverride();
                 })
               }
-              onChange={() => {
-                setCreateCoordinatesConfirmed(false);
-                setCreateDeviceLocation(null);
-                setCreateAddressLookup(null);
-                setCreateAddressLookupError("");
-              }}
+              onChange={() => handleCreateCoordinateOverride()}
               placeholder={t("projects.latitude")}
               className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
             />
@@ -1437,7 +1755,7 @@ export function ProjectsPage({
                   createLngRef,
                   setCreateDeviceLocation,
                   () => setCreateCoordinatesConfirmed(false),
-                  () => setCreateAddressLookup(null),
+                  () => handleCreateCoordinateOverride({ keepDeviceLocation: true }),
                   () => setCreateAddressLookupError(""),
                 )
               }
@@ -1458,18 +1776,10 @@ export function ProjectsPage({
             required={!createDriverTimeProject}
             onPaste={(event) =>
               applyPastedCoordinatePair(event, createLatRef.current, createLngRef.current, () => {
-                setCreateCoordinatesConfirmed(false);
-                setCreateDeviceLocation(null);
-                setCreateAddressLookup(null);
-                setCreateAddressLookupError("");
+                handleCreateCoordinateOverride();
               })
             }
-            onChange={() => {
-              setCreateCoordinatesConfirmed(false);
-              setCreateDeviceLocation(null);
-              setCreateAddressLookup(null);
-              setCreateAddressLookupError("");
-            }}
+            onChange={() => handleCreateCoordinateOverride()}
             placeholder={t("projects.longitude")}
             className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
           />
@@ -1982,13 +2292,10 @@ export function ProjectsPage({
               <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[rgba(15,17,23,0.2)] p-3">
                 <TextInputWithVoice
                   name="address"
-                  defaultValue={editingProject.address ?? ""}
+                  value={editAddressInput}
                   placeholder={t("common.address")}
-                  onChange={() => {
-                    setEditAddressLookup(null);
-                    setEditAddressLookupError("");
-                    setEditCoordinatesConfirmed(false);
-                  }}
+                  onChange={(event) => handleEditAddressChange(event.currentTarget.value)}
+                  onBlur={lookupEditAddressIfNeeded}
                   className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
                 />
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -2002,6 +2309,10 @@ export function ProjectsPage({
                         editLngRef,
                         setEditDeviceLocation,
                         () => setEditCoordinatesConfirmed(false),
+                        (address) => {
+                          handleEditAddressChange(address);
+                          handleEditCoordinateOverride({ keepDeviceLocation: true });
+                        },
                       )
                     }
                     disabled={reverseLookupTarget === "edit"}
@@ -2024,6 +2335,7 @@ export function ProjectsPage({
                         () => setEditCoordinatesConfirmed(false),
                         setEditAddressLookup,
                         setEditAddressLookupError,
+                        setEditCoordinateOverrideWarning,
                       )
                     }
                     disabled={geocodingTarget === "edit"}
@@ -2063,6 +2375,18 @@ export function ProjectsPage({
                       {t("projects.latitude")}: {editAddressLookup.lat.toFixed(6)} · {t("projects.longitude")}:{" "}
                       {editAddressLookup.lng.toFixed(6)}
                     </div>
+                  </div>
+                ) : null}
+                {editCoordinateOverrideWarning ? (
+                  <div
+                    className="mt-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm font-semibold"
+                    style={{
+                      borderColor: "rgba(245, 158, 11, 0.35)",
+                      background: "rgba(245, 158, 11, 0.08)",
+                      color: "#f59e0b",
+                    }}
+                  >
+                    {editCoordinateOverrideWarning}
                   </div>
                 ) : null}
               </div>
@@ -2111,18 +2435,10 @@ export function ProjectsPage({
                     required={!editDriverTimeProject && !editingProject.hasValidSiteCoordinates}
                     onPaste={(event) =>
                       applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
-                        setEditCoordinatesConfirmed(false);
-                        setEditDeviceLocation(null);
-                        setEditAddressLookup(null);
-                        setEditAddressLookupError("");
+                        handleEditCoordinateOverride();
                       })
                     }
-                    onChange={() => {
-                      setEditCoordinatesConfirmed(false);
-                      setEditDeviceLocation(null);
-                      setEditAddressLookup(null);
-                      setEditAddressLookupError("");
-                    }}
+                    onChange={() => handleEditCoordinateOverride()}
                     defaultValue={editingSite?.lat ?? ""}
                     placeholder={t("projects.latitude")}
                     className="flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"
@@ -2135,7 +2451,7 @@ export function ProjectsPage({
                         editLngRef,
                         setEditDeviceLocation,
                         () => setEditCoordinatesConfirmed(false),
-                        () => setEditAddressLookup(null),
+                        () => handleEditCoordinateOverride({ keepDeviceLocation: true }),
                         () => setEditAddressLookupError(""),
                       )
                     }
@@ -2156,18 +2472,10 @@ export function ProjectsPage({
                   required={!editDriverTimeProject && !editingProject.hasValidSiteCoordinates}
                   onPaste={(event) =>
                     applyPastedCoordinatePair(event, editLatRef.current, editLngRef.current, () => {
-                      setEditCoordinatesConfirmed(false);
-                      setEditDeviceLocation(null);
-                      setEditAddressLookup(null);
-                      setEditAddressLookupError("");
+                      handleEditCoordinateOverride();
                     })
                   }
-                  onChange={() => {
-                    setEditCoordinatesConfirmed(false);
-                    setEditDeviceLocation(null);
-                    setEditAddressLookup(null);
-                    setEditAddressLookupError("");
-                  }}
+                  onChange={() => handleEditCoordinateOverride()}
                   defaultValue={editingSite?.lng ?? ""}
                   placeholder={t("projects.longitude")}
                   className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none"

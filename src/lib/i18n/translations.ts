@@ -335,6 +335,18 @@ export const translations = {
   "gpsStatus.noFence": { en: "No fence", ru: "Нет геозоны" },
   "projects.addressLookupMatched": { en: "Matched address", ru: "Найденный адрес" },
   "projects.addressLookupAddressRequired": { en: "Type an address before looking up GPS coordinates.", ru: "Введите адрес перед поиском GPS-координат." },
+  "projects.addressLookupRequiredBeforeSave": {
+    en: "Look up this address before saving so the project GPS point belongs to the current address.",
+    ru: "Перед сохранением найдите GPS по этому адресу, чтобы точка объекта относилась к текущему адресу.",
+  },
+  "projects.addressCoordinateOverrideWarning": {
+    en: "These coordinates are {distance} from the looked-up address. Save only if this is an intentional override.",
+    ru: "Эти координаты в {distance} от найденного адреса. Сохраняйте только если это осознанное переопределение.",
+  },
+  "projects.addressCoordinateOverrideConfirmRequired": {
+    en: "Confirm these coordinates before saving this address with an explicit GPS override.",
+    ru: "Подтвердите координаты перед сохранением адреса с явным GPS-переопределением.",
+  },
   "projects.deviceLocationAccuracy": { en: "Device GPS accuracy: {meters} m.", ru: "Точность GPS этого устройства: {meters} м." },
   "projects.deviceLocationAccuracyUnavailable": { en: "Device GPS accuracy unavailable.", ru: "Точность GPS этого устройства недоступна." },
   "projects.deviceLocationAccuracyWarning": { en: "This device location may not be accurate enough for a job site geofence.", ru: "Это местоположение устройства может быть недостаточно точным для геозоны объекта." },
