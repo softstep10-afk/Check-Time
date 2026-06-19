@@ -77,6 +77,7 @@ import { filterMaterialTakerProfiles } from "@/lib/material-driver-permissions";
 import {
   formatProjectPublicNoteTime,
   readProjectPublicNotes,
+  type ProjectPublicNote,
 } from "@/lib/project-public-notes";
 import {
   countProjectMediaCategories,
@@ -458,6 +459,13 @@ export function ProjectDetailPage({
   // router.refresh repopulates from the server.
   const [taskList, setTaskList] = useState<Task[]>(tasks);
   const [projectNotesSettings, setProjectNotesSettings] = useState(project.settings);
+  const [projectPublicNotes, setProjectPublicNotes] = useState<ProjectPublicNote[]>(() =>
+    readProjectPublicNotes(project.settings),
+  );
+  const [projectNoteDraft, setProjectNoteDraft] = useState("");
+  const [projectNoteBusy, setProjectNoteBusy] = useState(false);
+  const [projectNoteMessage, setProjectNoteMessage] =
+    useState<{ kind: "ok" | "err"; text: string } | null>(null);
   useEffect(() => {
     setTaskList((current) =>
       keepStableListIfUnchanged(current, tasks, managerProjectTaskFingerprint),
@@ -466,6 +474,9 @@ export function ProjectDetailPage({
   useEffect(() => {
     setProjectNotesSettings(project.settings);
   }, [project.settings]);
+  useEffect(() => {
+    setProjectPublicNotes(readProjectPublicNotes(projectNotesSettings));
+  }, [projectNotesSettings]);
   useEffect(() => {
     const channel = supabase
       .channel(`manager-project-tasks-${project.id}`)
@@ -631,10 +642,6 @@ export function ProjectDetailPage({
       all: counts.all,
     };
   }, [projectMediaItems]);
-  const projectPublicNotes = useMemo(
-    () => readProjectPublicNotes(projectNotesSettings),
-    [projectNotesSettings],
-  );
   const [projectMediaTileUrls, setProjectMediaTileUrls] = useState<Map<string, string>>(new Map());
   const [projectMediaTileFailedIds, setProjectMediaTileFailedIds] = useState<Set<string>>(new Set());
 
@@ -1156,6 +1163,55 @@ export function ProjectDetailPage({
     setRemoveAssignmentId(null);
     setMessage(t("projectDetail.assignmentRemoved"));
     router.refresh();
+  }
+
+  async function handleAddProjectPublicNote(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = projectNoteDraft.trim();
+    if (!text) {
+      setProjectNoteMessage({ kind: "err", text: t("projectNotes.required") });
+      return;
+    }
+
+    setProjectNoteBusy(true);
+    setProjectNoteMessage(null);
+
+    try {
+      const response = await fetch("/api/worker/project-notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectId: project.id, text }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        note?: ProjectPublicNote;
+        notes?: ProjectPublicNote[];
+      };
+
+      if (!response.ok) {
+        setProjectNoteMessage({
+          kind: "err",
+          text: payload.error ?? t("projectNotes.saveFailed"),
+        });
+        return;
+      }
+
+      if (Array.isArray(payload.notes)) {
+        setProjectPublicNotes(payload.notes);
+      } else if (payload.note) {
+        setProjectPublicNotes((current) => [payload.note as ProjectPublicNote, ...current]);
+      }
+      setProjectNoteDraft("");
+      setProjectNoteMessage({ kind: "ok", text: t("projectNotes.added") });
+      router.refresh();
+    } catch (error) {
+      setProjectNoteMessage({
+        kind: "err",
+        text: error instanceof Error ? error.message : t("projectNotes.saveFailed"),
+      });
+    } finally {
+      setProjectNoteBusy(false);
+    }
   }
 
   async function handleCreateTask(event: React.FormEvent<HTMLFormElement>) {
@@ -1727,6 +1783,38 @@ export function ProjectDetailPage({
             {t("projectNotes.newBadge")} · {projectPublicNotes.length}
           </span>
         </div>
+        {project.status !== "archived" ? (
+          <form className="mt-3 space-y-2" onSubmit={(event) => void handleAddProjectPublicNote(event)}>
+            <textarea
+              value={projectNoteDraft}
+              onChange={(event) => setProjectNoteDraft(event.target.value)}
+              placeholder={t("projectNotes.placeholder")}
+              maxLength={2000}
+              disabled={projectNoteBusy}
+              className="min-h-[86px] w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none disabled:opacity-60"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="submit"
+                disabled={projectNoteBusy || !projectNoteDraft.trim()}
+                className="button-base button-primary px-3 py-2 text-xs disabled:opacity-60"
+              >
+                {projectNoteBusy ? t("common.saving") : t("projectNotes.add")}
+              </button>
+              {projectNoteMessage ? (
+                <span
+                  role={projectNoteMessage.kind === "err" ? "alert" : "status"}
+                  className="text-xs font-semibold"
+                  style={{
+                    color: projectNoteMessage.kind === "ok" ? "var(--green)" : "var(--red)",
+                  }}
+                >
+                  {projectNoteMessage.text}
+                </span>
+              ) : null}
+            </div>
+          </form>
+        ) : null}
         {projectPublicNotes.length === 0 ? (
           <div className="mt-3 surface-panel p-3 text-sm text-[var(--text-secondary)]">
             {t("projectNotes.empty")}
