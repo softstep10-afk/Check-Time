@@ -2504,10 +2504,10 @@ function WorkerMaterialsList({
         aria-modal="true"
       >
         <div
-          className="surface-card max-h-[90vh] w-full max-w-[860px] overflow-y-auto p-4"
+          className="surface-card flex max-h-[90vh] w-full max-w-[860px] flex-col p-0"
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 px-4 pt-4">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">
               {t("materials.addItem")}
             </h2>
@@ -2522,115 +2522,117 @@ function WorkerMaterialsList({
               <X size={14} />
             </button>
           </div>
-          {orderError ? (
-            <div className="mt-3 rounded-[var(--radius-md)] bg-red-500/10 px-3 py-2 text-xs font-semibold text-[var(--red)]">
-              {orderError}
-            </div>
-          ) : null}
-          <form className="mt-4 grid gap-4" onSubmit={handleAddOrder}>
-            <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
-              <select
-                value={orderPriority}
-                onChange={(event) => setOrderPriority(event.target.value as TaskPriority)}
-                aria-label={t("messages.priority")}
-                className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-              >
-                <option value="urgent">{t("materials.urgent")}</option>
-                <option value="medium">{t("materials.soon")}</option>
-                <option value="low">{t("materials.notUrgent")}</option>
-              </select>
-              <TextInputWithVoice
-                multiline
-                rows={2}
-                value={orderNote}
-                onChange={(event) => setOrderNote(event.target.value)}
-                placeholder={t("materials.orderNote")}
-                className="min-h-[82px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-              />
-            </div>
-            <div className="space-y-2">
-              {orderRows.map((row) => (
-                <div
-                  key={row.id}
-                  className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 sm:grid-cols-[minmax(0,1fr)_120px_minmax(180px,260px)_36px]"
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+            {orderError ? (
+              <div className="mt-3 rounded-[var(--radius-md)] bg-red-500/10 px-3 py-2 text-xs font-semibold text-[var(--red)]">
+                {orderError}
+              </div>
+            ) : null}
+            <form className="mt-4 grid gap-4" onSubmit={handleAddOrder}>
+              <div className="grid gap-3 sm:grid-cols-[180px_minmax(0,1fr)]">
+                <select
+                  value={orderPriority}
+                  onChange={(event) => setOrderPriority(event.target.value as TaskPriority)}
+                  aria-label={t("messages.priority")}
+                  className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
                 >
-                  <TextInputWithVoice
-                    value={row.name}
-                    onChange={(event) => updateOrderRow(row.id, { name: event.target.value })}
-                    placeholder={t("materials.name")}
-                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    value={row.quantity}
-                    onChange={(event) => updateOrderRow(row.id, { quantity: event.target.value })}
-                    placeholder={t("materials.quantity")}
-                    className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-                    style={MATERIAL_INPUT_STYLE}
-                  />
-                  <div className="flex min-w-0 gap-2">
-                    <select
-                      value={row.unit}
-                      onChange={(event) =>
-                        updateOrderRow(row.id, { unit: event.target.value as MaterialUnitValue })
-                      }
-                      className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-                      style={MATERIAL_INPUT_STYLE}
-                    >
-                      {MATERIAL_UNIT_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value} style={MATERIAL_OPTION_STYLE}>
-                          {t(option.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-                    {row.unit === "other" ? (
-                      <input
-                        value={row.customUnit}
-                        onChange={(event) =>
-                          updateOrderRow(row.id, { customUnit: event.target.value })
-                        }
-                        placeholder={t("materials.unitOther")}
-                        className="w-28 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
-                        style={MATERIAL_INPUT_STYLE}
-                      />
-                    ) : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeOrderRow(row.id)}
-                    aria-label={t("common.remove")}
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)]"
+                  <option value="urgent">{t("materials.urgent")}</option>
+                  <option value="medium">{t("materials.soon")}</option>
+                  <option value="low">{t("materials.notUrgent")}</option>
+                </select>
+                <TextInputWithVoice
+                  multiline
+                  rows={2}
+                  value={orderNote}
+                  onChange={(event) => setOrderNote(event.target.value)}
+                  placeholder={t("materials.orderNote")}
+                  className="min-h-[82px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                />
+              </div>
+              <div className="space-y-2">
+                {orderRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 sm:grid-cols-[minmax(0,1fr)_120px_minmax(180px,260px)_36px]"
                   >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={addOrderRow}
-                className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-semibold"
-                style={{
-                  borderColor: "rgba(191, 162, 52, 0.4)",
-                  color: "var(--brand-yellow)",
-                }}
-              >
-                <Plus size={14} />
-                {t("materials.addPosition")}
-              </button>
-              <button
-                type="submit"
-                disabled={!hasNamedOrderRow || savingOrder}
-                className="button-base button-primary disabled:opacity-50"
-              >
-                {savingOrder ? t("common.saving") : t("materials.saveOrder")}
-              </button>
-            </div>
-          </form>
+                    <TextInputWithVoice
+                      value={row.name}
+                      onChange={(event) => updateOrderRow(row.id, { name: event.target.value })}
+                      placeholder={t("materials.name")}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={row.quantity}
+                      onChange={(event) => updateOrderRow(row.id, { quantity: event.target.value })}
+                      placeholder={t("materials.quantity")}
+                      className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                      style={MATERIAL_INPUT_STYLE}
+                    />
+                    <div className="flex min-w-0 gap-2">
+                      <select
+                        value={row.unit}
+                        onChange={(event) =>
+                          updateOrderRow(row.id, { unit: event.target.value as MaterialUnitValue })
+                        }
+                        className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                        style={MATERIAL_INPUT_STYLE}
+                      >
+                        {MATERIAL_UNIT_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value} style={MATERIAL_OPTION_STYLE}>
+                            {t(option.labelKey)}
+                          </option>
+                        ))}
+                      </select>
+                      {row.unit === "other" ? (
+                        <input
+                          value={row.customUnit}
+                          onChange={(event) =>
+                            updateOrderRow(row.id, { customUnit: event.target.value })
+                          }
+                          placeholder={t("materials.unitOther")}
+                          className="w-28 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2.5 text-sm text-[var(--text-primary)] outline-none"
+                          style={MATERIAL_INPUT_STYLE}
+                        />
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeOrderRow(row.id)}
+                      aria-label={t("common.remove")}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)]"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={addOrderRow}
+                  className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-2 text-sm font-semibold"
+                  style={{
+                    borderColor: "rgba(191, 162, 52, 0.4)",
+                    color: "var(--brand-yellow)",
+                  }}
+                >
+                  <Plus size={14} />
+                  {t("materials.addPosition")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={!hasNamedOrderRow || savingOrder}
+                  className="button-base button-primary disabled:opacity-50"
+                >
+                  {savingOrder ? t("common.saving") : t("materials.saveOrder")}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     ) : null}

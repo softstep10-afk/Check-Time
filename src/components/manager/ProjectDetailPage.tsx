@@ -4252,10 +4252,10 @@ function MaterialsSection({
         aria-modal="true"
       >
         <div
-          className="surface-card max-h-[90vh] w-full max-w-[860px] overflow-y-auto p-4"
+          className="surface-card flex max-h-[90vh] w-full max-w-[860px] flex-col p-0"
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3 px-4 pt-4">
             <h2 className="text-lg font-bold text-[var(--text-primary)]">
               {t("materials.addItem")}
             </h2>
@@ -4270,6 +4270,7 @@ function MaterialsSection({
               <X size={14} />
             </button>
           </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
           {orderError ? (
             <div className="mt-3 rounded-[var(--radius-md)] bg-red-500/10 px-3 py-2 text-xs font-semibold text-[var(--red)]">
               {orderError}
@@ -4477,6 +4478,7 @@ function MaterialsSection({
               </button>
             </div>
           </form>
+          </div>
         </div>
       </ModalBackdrop>
     ) : null}
