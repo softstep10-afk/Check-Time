@@ -26,7 +26,7 @@ import {
   toSupabasePoint,
 } from "@/lib/worker-utils";
 import { buildSafeUploadName } from "@/lib/media-extension";
-import { Timer, Camera, ClipboardCheck, FolderKanban, CalendarDays } from "lucide-react";
+import { Timer, History, Camera, ClipboardCheck, FolderKanban, CalendarDays } from "lucide-react";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
 import { NotificationBell } from "@/components/worker/NotificationBell";
@@ -96,6 +96,7 @@ import {
 
 const navItems = [
   { href: "/clock", icon: Timer, label: "Clock", labelKey: "worker.navClock" as TranslationKey },
+  { href: "/hours", icon: History, label: "Hours", labelKey: "worker.navHours" as TranslationKey },
   { href: "/my-projects", icon: FolderKanban, label: "Projects", labelKey: "worker.navProjects" as TranslationKey },
   { href: "/journal", icon: Camera, label: "Journal", labelKey: "worker.navJournal" as TranslationKey },
   { href: "/my-tasks", icon: ClipboardCheck, label: "Tasks", labelKey: "worker.navTasks" as TranslationKey },
