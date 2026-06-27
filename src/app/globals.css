@@ -147,6 +147,26 @@ a:hover {
   color: var(--brand-gold);
 }
 
+.nav-touch-only {
+  display: none;
+}
+
+.nav-pointer-only {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .nav-touch-only {
+    display: flex;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nav-pointer-only {
+    display: inline-flex;
+  }
+}
+
 button:hover,
 a:hover,
 [role="button"]:hover,

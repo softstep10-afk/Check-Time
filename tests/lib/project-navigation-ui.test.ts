@@ -6,6 +6,7 @@ const source = readFileSync(
   resolve(process.cwd(), "src/components/shared/ProjectNavigationActions.tsx"),
   "utf8",
 );
+const globals = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
 
 describe("project navigation mobile action", () => {
   it("keeps mobile navigation to system app choice plus copy only", () => {
@@ -23,10 +24,19 @@ describe("project navigation mobile action", () => {
     expect(source).not.toContain('t("projects.openOtherNavigationApp")');
   });
 
-  it("keeps compact project navigation below lg and full desktop actions at lg", () => {
-    expect(source).toContain("lg:hidden");
-    expect(source.match(/hidden lg:inline-flex/g)).toHaveLength(5);
+  it("splits compact and full project navigation by input type instead of width", () => {
+    expect(source).toContain("nav-touch-only w-full flex-wrap items-center gap-1.5");
+    expect(source.match(/nav-pointer-only/g)).toHaveLength(5);
+    expect(source).not.toContain("lg:hidden");
+    expect(source).not.toContain("hidden lg:inline-flex");
     expect(source).not.toContain("hidden sm:inline-flex");
     expect(source).not.toContain("sm:hidden");
+
+    expect(globals).toContain(".nav-touch-only");
+    expect(globals).toContain(".nav-pointer-only");
+    expect(globals).toContain("@media (hover: none), (pointer: coarse)");
+    expect(globals).toContain("@media (hover: hover) and (pointer: fine)");
+    expect(globals).toContain(".nav-touch-only {\n    display: flex;");
+    expect(globals).toContain(".nav-pointer-only {\n    display: inline-flex;");
   });
 });

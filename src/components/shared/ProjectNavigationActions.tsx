@@ -87,7 +87,7 @@ export function ProjectNavigationActions({
       onKeyDown={(event) => event.stopPropagation()}
       aria-label={t("projects.navigationActions")}
     >
-      <div className="flex w-full flex-wrap items-center gap-1.5 lg:hidden">
+      <div className="nav-touch-only w-full flex-wrap items-center gap-1.5">
         <button
           type="button"
           onClick={handleMobileGo}
@@ -118,7 +118,7 @@ export function ProjectNavigationActions({
         href={googleUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className={`${linkClass} hidden lg:inline-flex`}
+        className={`${linkClass} nav-pointer-only`}
         style={{
           borderColor: "rgba(191, 162, 52, 0.55)",
           background: "rgba(191, 162, 52, 0.16)",
@@ -132,7 +132,7 @@ export function ProjectNavigationActions({
         href={appleUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className={`${linkClass} hidden lg:inline-flex`}
+        className={`${linkClass} nav-pointer-only`}
         style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
       >
         <MapPin size={12} />
@@ -142,7 +142,7 @@ export function ProjectNavigationActions({
         href={googleUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className={`${linkClass} hidden lg:inline-flex`}
+        className={`${linkClass} nav-pointer-only`}
         style={{ borderColor: "var(--border-default)", color: "var(--text-primary)" }}
       >
         <MapPin size={12} />
@@ -151,7 +151,7 @@ export function ProjectNavigationActions({
       <button
         type="button"
         onClick={() => void shareForTesla()}
-        className={`${buttonClass} hidden lg:inline-flex`}
+        className={`${buttonClass} nav-pointer-only`}
         style={{ borderColor: "rgba(59, 130, 246, 0.4)", color: "var(--blue)" }}
       >
         {copied === "tesla" ? <Check size={12} /> : <Share2 size={12} />}
@@ -160,7 +160,7 @@ export function ProjectNavigationActions({
       <button
         type="button"
         onClick={() => void copyDestination("destination")}
-        className={`${buttonClass} hidden lg:inline-flex`}
+        className={`${buttonClass} nav-pointer-only`}
         style={{
           borderColor: copied === "destination" ? "rgba(15, 168, 120, 0.4)" : "var(--border-default)",
           color: copied === "destination" ? "var(--green)" : "var(--text-secondary)",
