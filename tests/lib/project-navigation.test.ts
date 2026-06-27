@@ -1,29 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildAppleMapsDirectionsUrl,
-  clearProjectNavigationPreference,
+  buildGeoNavigationUrl,
   buildProjectAddressCopyText,
   buildGoogleMapsDirectionsUrl,
   buildProjectNavigationShareText,
   getProjectNavigationDestination,
-  isProjectNavigationApp,
-  PROJECT_NAVIGATION_PREFERENCE_KEY,
-  readProjectNavigationPreference,
-  writeProjectNavigationPreference,
 } from "@/lib/project-navigation";
-
-function memoryStorage(initial: Record<string, string> = {}) {
-  const values = new Map(Object.entries(initial));
-  return {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => {
-      values.set(key, value);
-    },
-    removeItem: (key: string) => {
-      values.delete(key);
-    },
-  };
-}
 
 describe("project navigation actions", () => {
   it("prefers high-precision coordinates over address text", () => {
@@ -119,28 +102,41 @@ describe("project navigation actions", () => {
     );
   });
 
-  it("defines a local mobile navigation preference without server storage", () => {
-    expect(PROJECT_NAVIGATION_PREFERENCE_KEY).toBe("projectNavigationPreferredApp");
-    expect(isProjectNavigationApp("apple")).toBe(true);
-    expect(isProjectNavigationApp("google")).toBe(true);
-    expect(isProjectNavigationApp("tesla")).toBe(true);
-    expect(isProjectNavigationApp("copy")).toBe(true);
-    expect(isProjectNavigationApp("sanya")).toBe(false);
+  it("builds Android geo navigation URLs from coordinates", () => {
+    const destination = getProjectNavigationDestination({
+      siteCoordinates: { lat: 47.307322, lng: -122.228453 },
+    });
+
+    expect(destination).not.toBeNull();
+    expect(buildGeoNavigationUrl(destination!, {
+      projectName: "Kitchen Remodel",
+      userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8)",
+    })).toBe(
+      "geo:47.307322,-122.228453?q=47.307322%2C-122.228453(Kitchen%20Remodel)",
+    );
   });
 
-  it("stores and clears the chosen navigation default locally", () => {
-    const storage = memoryStorage();
+  it("builds Android geo navigation URLs from addresses", () => {
+    const destination = getProjectNavigationDestination({
+      address: "1400 1st Ave, Seattle, WA",
+      siteCoordinates: null,
+    });
 
-    expect(readProjectNavigationPreference(storage)).toBeNull();
-    writeProjectNavigationPreference(storage, "apple");
-    expect(readProjectNavigationPreference(storage)).toBe("apple");
-    writeProjectNavigationPreference(storage, "google");
-    expect(readProjectNavigationPreference(storage)).toBe("google");
-    writeProjectNavigationPreference(storage, "tesla");
-    expect(readProjectNavigationPreference(storage)).toBe("tesla");
-    writeProjectNavigationPreference(storage, "copy");
-    expect(readProjectNavigationPreference(storage)).toBe("copy");
-    clearProjectNavigationPreference(storage);
-    expect(readProjectNavigationPreference(storage)).toBeNull();
+    expect(destination).not.toBeNull();
+    expect(buildGeoNavigationUrl(destination!, {
+      userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8)",
+    })).toBe("geo:0,0?q=1400%201st%20Ave%2C%20Seattle%2C%20WA");
+  });
+
+  it("uses universal Apple Maps links for iOS system navigation", () => {
+    const destination = getProjectNavigationDestination({
+      siteCoordinates: { lat: 47.307322, lng: -122.228453 },
+    });
+
+    expect(destination).not.toBeNull();
+    expect(buildGeoNavigationUrl(destination!, {
+      projectName: "Kitchen Remodel",
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+    })).toBe("https://maps.apple.com/?q=47.307322%2C-122.228453");
   });
 });

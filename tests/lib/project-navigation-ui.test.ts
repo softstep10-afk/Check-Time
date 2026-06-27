@@ -8,25 +8,25 @@ const source = readFileSync(
 );
 
 describe("project navigation mobile action", () => {
-  it("keeps a mobile Поехать choice flow with local preference storage", () => {
+  it("keeps mobile navigation to system app choice plus copy only", () => {
     expect(source).toContain('t("projects.goMobile")');
-    expect(source).toContain('handleMobileChoice("apple")');
-    expect(source).toContain('handleMobileChoice("google")');
-    expect(source).toContain('handleMobileChoice("tesla")');
-    expect(source).toContain('handleMobileChoice("copy")');
-    expect(source).toContain("writeProjectNavigationPreference(window.localStorage, app)");
-    expect(source).toContain("readProjectNavigationPreference(window.localStorage)");
-    expect(source).toContain("clearProjectNavigationPreference(window.localStorage)");
-    expect(source).toContain("saveChoiceAsDefault");
-    expect(source).toContain('t("projects.useNavigationByDefault")');
-    expect(source).toContain('t("projects.openOtherNavigationApp")');
+    expect(source).toContain("window.location.href = buildGeoNavigationUrl(navigationDestination");
     expect(source).toContain('t("projects.copyDestination")');
     expect(source).toContain("buildProjectAddressCopyText");
     expect(source).toContain('kind === "tesla" ? shareText : addressCopyText');
+    expect(source).not.toContain("handleMobileChoice");
+    expect(source).not.toContain("writeProjectNavigationPreference");
+    expect(source).not.toContain("readProjectNavigationPreference");
+    expect(source).not.toContain("clearProjectNavigationPreference");
+    expect(source).not.toContain("saveChoiceAsDefault");
+    expect(source).not.toContain('t("projects.useNavigationByDefault")');
+    expect(source).not.toContain('t("projects.openOtherNavigationApp")');
   });
 
-  it("keeps desktop map actions hidden from mobile-only preference buttons", () => {
-    expect(source).toContain("hidden sm:inline-flex");
-    expect(source).toContain("sm:hidden");
+  it("keeps compact project navigation below lg and full desktop actions at lg", () => {
+    expect(source).toContain("lg:hidden");
+    expect(source.match(/hidden lg:inline-flex/g)).toHaveLength(5);
+    expect(source).not.toContain("hidden sm:inline-flex");
+    expect(source).not.toContain("sm:hidden");
   });
 });

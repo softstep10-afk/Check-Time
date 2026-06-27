@@ -382,7 +382,7 @@ export const translations = {
   "projects.openDetail": { en: "Open detail", ru: "Подробности" },
   "projects.navigationActions": { en: "Project navigation actions", ru: "Навигация к объекту" },
   "projects.goNow": { en: "Go", ru: "В путь" },
-  "projects.goMobile": { en: "Drive", ru: "Поехать" },
+  "projects.goMobile": { en: "Route", ru: "Маршрут" },
   "projects.changeNavigationApp": { en: "Change app", ru: "Сменить приложение" },
   "projects.openOtherNavigationApp": { en: "Open another way", ru: "Открыть другим способом" },
   "projects.useNavigationByDefault": { en: "Always use this by default", ru: "Открывать так по умолчанию" },

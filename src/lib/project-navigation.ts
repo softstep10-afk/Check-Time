@@ -6,44 +6,6 @@ export type ProjectNavigationDestination = {
   source: "coordinates" | "address";
 };
 
-export const PROJECT_NAVIGATION_PREFERENCE_KEY = "projectNavigationPreferredApp";
-
-export const PROJECT_NAVIGATION_APPS = ["apple", "google", "tesla", "copy"] as const;
-
-export type ProjectNavigationApp = (typeof PROJECT_NAVIGATION_APPS)[number];
-
-export function isProjectNavigationApp(value: unknown): value is ProjectNavigationApp {
-  return (
-    typeof value === "string" &&
-    (PROJECT_NAVIGATION_APPS as readonly string[]).includes(value)
-  );
-}
-
-type NavigationPreferenceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
-
-export function readProjectNavigationPreference(
-  storage: NavigationPreferenceStorage | null | undefined,
-): ProjectNavigationApp | null {
-  if (!storage) return null;
-  const stored = storage.getItem(PROJECT_NAVIGATION_PREFERENCE_KEY);
-  return isProjectNavigationApp(stored) ? stored : null;
-}
-
-export function writeProjectNavigationPreference(
-  storage: NavigationPreferenceStorage | null | undefined,
-  app: ProjectNavigationApp,
-): void {
-  if (!storage) return;
-  storage.setItem(PROJECT_NAVIGATION_PREFERENCE_KEY, app);
-}
-
-export function clearProjectNavigationPreference(
-  storage: NavigationPreferenceStorage | null | undefined,
-): void {
-  if (!storage) return;
-  storage.removeItem(PROJECT_NAVIGATION_PREFERENCE_KEY);
-}
-
 export function getProjectNavigationDestination(input: {
   address?: string | null;
   siteCoordinates?: WorkerGeoPoint | null;
@@ -90,6 +52,35 @@ export function buildGoogleMapsDirectionsUrl(destination: ProjectNavigationDesti
 
 export function buildAppleMapsDirectionsUrl(destination: ProjectNavigationDestination): string {
   return `https://maps.apple.com/?daddr=${encodeURIComponent(destination.query)}`;
+}
+
+export function buildGeoNavigationUrl(
+  destination: ProjectNavigationDestination,
+  options: {
+    projectName?: string | null;
+    userAgent?: string | null;
+  } = {},
+): string {
+  const userAgent =
+    options.userAgent ??
+    (typeof navigator === "undefined" ? "" : navigator.userAgent);
+  const isIos =
+    /\b(iPad|iPhone|iPod)\b/i.test(userAgent) ||
+    (/\bMacintosh\b/i.test(userAgent) && /\bMobile\b/i.test(userAgent));
+
+  if (isIos) {
+    return `https://maps.apple.com/?q=${encodeURIComponent(destination.query)}`;
+  }
+
+  if (destination.source === "coordinates") {
+    const projectName = options.projectName?.trim();
+    const geoQuery = projectName
+      ? `${destination.query}(${projectName})`
+      : destination.query;
+    return `geo:${destination.query}?q=${encodeURIComponent(geoQuery)}`;
+  }
+
+  return `geo:0,0?q=${encodeURIComponent(destination.query)}`;
 }
 
 export function buildProjectNavigationShareText(input: {
