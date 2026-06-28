@@ -39,10 +39,31 @@ describe("mobile project card and task action UX", () => {
     expect(workerProjectsSource).toContain("href={`/project/${project.id}`}");
     expect(workerProjectsSource).toContain("absolute inset-0 z-[1]");
     expect(workerProjectsSource).toContain("pointer-events-none relative z-[2]");
-    expect(workerProjectsSource).toContain("relative z-[3] mt-3");
+    expect(workerProjectsSource).toContain("relative z-[3] mt-2");
     expect(workerProjectsSource).toContain("openCachedProject()");
     expect(workerProjectsSource).not.toContain("onPointerUp={(event) => {");
     expect(workerProjectsSource).not.toContain("PROJECT_CARD_CLICK_SUPPRESSION_MS");
+  });
+
+  it("keeps worker project cards minimal: title, active-shift badge, and navigation only", () => {
+    expect(workerProjectsSource).toContain("space-y-1.5");
+    expect(workerProjectsSource).toContain("p-2.5 transition hover:border-[var(--brand-yellow)]");
+    expect(workerProjectsSource).toContain("clockedInHere ? (");
+    expect(workerProjectsSource).toContain("workerProject.activeShiftHere");
+    expect(workerProjectsSource).toContain("<ProjectNavigationActions");
+    expect(workerProjectsSource).not.toContain("ArrowRight");
+    expect(workerProjectsSource).not.toContain("ClipboardList");
+    expect(workerProjectsSource).not.toContain("MapPin");
+    expect(workerProjectsSource).not.toContain("NavigationOff");
+    expect(workerProjectsSource).not.toContain("STATUS_COLORS");
+    expect(workerProjectsSource).not.toContain("isDriverTimeProject");
+    expect(workerProjectsSource).not.toContain("isEffectiveOpenTask");
+    expect(workerProjectsSource).not.toContain("readProjectPublicNotes");
+    expect(workerProjectsSource).not.toContain("taskCount");
+    expect(workerProjectsSource).not.toContain("publicNotesCount");
+    expect(workerProjectsSource).not.toContain("worker.projectTasks");
+    expect(workerProjectsSource).not.toContain("projectNotes.newBadge");
+    expect(workerProjectsSource).not.toContain("project.status");
   });
 
   it("makes manager project cards use a native full-card link instead of touch gesture hacks", () => {
