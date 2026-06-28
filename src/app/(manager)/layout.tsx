@@ -449,48 +449,13 @@ export default function ManagerLayout({
 
         <ManagerQuickNav items={visibleMobileNav} pathname={pathname} />
 
-        <main className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        <main className="flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)] md:pb-0">
             {children}
         </main>
       </div>
 
       {isManagerUser ? <JarvisDock /> : null}
       {isManagerUser ? <ManagerWorkAlertBell /> : null}
-
-      <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50"
-        style={{
-          background: "linear-gradient(180deg, rgba(18,28,44,0.98), rgba(8,13,22,0.98))",
-          borderTop: "1px solid rgba(105, 231, 255, 0.14)",
-        }}
-      >
-        <div className="flex justify-around items-center py-1.5 pb-3">
-          {visibleMobileNav.map((item) => {
-            const active = pathname === item.href || pathname?.startsWith(item.href + "/");
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex min-w-[48px] flex-col items-center gap-0.5 rounded-[var(--radius-md)] px-2 py-1.5"
-                style={{
-                  color: active ? "var(--ai-cyan-bright)" : "var(--text-muted)",
-                  background: active ? "rgba(105, 231, 255, 0.08)" : "none",
-                  border: "none",
-                }}
-              >
-                {item.icon === "jarvis" ? (
-                  <JarvisOrb size="xs" state={active ? "notification" : "idle"} />
-                ) : (
-                  <JarvisIcon name={item.icon} size={22} active={active} />
-                )}
-                <span className="text-[9px] font-semibold uppercase tracking-wide">
-                  {t(item.labelKey)}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
     </div>
   );
 }
