@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { X } from "lucide-react";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
 import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
@@ -32,11 +33,23 @@ export function WorkerProjectsList() {
       projectReceipts: unknown[];
     }> | null>(null);
   const [offlineOpenMessage, setOfflineOpenMessage] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState("");
 
   const projects =
     !isOnline && shell.projects.length === 0 && cachedProjectsSnapshot?.payload.projects
       ? cachedProjectsSnapshot.payload.projects
       : shell.projects;
+  const normalizedSearchQuery = searchInput.trim().toLowerCase();
+  const filteredProjects = useMemo(() => {
+    if (!normalizedSearchQuery) return projects;
+
+    return projects.filter((project) => {
+      return (
+        project.name.toLowerCase().includes(normalizedSearchQuery) ||
+        (project.address ?? "").toLowerCase().includes(normalizedSearchQuery)
+      );
+    });
+  }, [projects, normalizedSearchQuery]);
   const offlineNoticeSavedAt =
     !isOnline && cachedProjectsSnapshot?.savedAt ? cachedProjectsSnapshot.savedAt : null;
 
@@ -60,7 +73,33 @@ export function WorkerProjectsList() {
         </section>
       ) : (
         <section className="space-y-1.5">
-          {projects.map((project) => {
+          <div className="sticky top-0 z-20 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
+            <div className="relative">
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder={t("projects.searchPlaceholder")}
+                className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 pr-10 text-sm text-[var(--text-primary)] outline-none"
+              />
+              {searchInput ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput("")}
+                  aria-label={t("common.clear")}
+                  className="absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] transition hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--text-primary)]"
+                >
+                  <X size={15} />
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {filteredProjects.length === 0 ? (
+            <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-secondary)]">
+              {t("projects.noSearchMatches")}
+            </div>
+          ) : null}
+          {filteredProjects.map((project) => {
             const clockedInHere =
               shell.clockState.isClockedIn &&
               shell.clockState.currentProjectId === project.id;
