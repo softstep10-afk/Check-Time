@@ -633,22 +633,16 @@ export function ProjectsPage({
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "paused" | "completed">("active");
   const [sortBy, setSortBy] = useState<"activity" | "name" | "week" | "cost">("activity");
   const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-
-  // Debounce the live search 300ms so typing doesn't thrash the filter.
-  useEffect(() => {
-    const id = setTimeout(() => setSearchQuery(searchInput.trim().toLowerCase()), 300);
-    return () => clearTimeout(id);
-  }, [searchInput]);
+  const normalizedSearchQuery = searchInput.trim().toLowerCase();
 
   const visibleProjects = useMemo(() => {
     let list = initialProjects;
     if (statusFilter !== "all") list = list.filter((p) => p.status === statusFilter);
-    if (searchQuery) {
+    if (normalizedSearchQuery) {
       list = list.filter((p) => {
         return (
-          p.name.toLowerCase().includes(searchQuery) ||
-          (p.address ?? "").toLowerCase().includes(searchQuery)
+          p.name.toLowerCase().includes(normalizedSearchQuery) ||
+          (p.address ?? "").toLowerCase().includes(normalizedSearchQuery)
         );
       });
     }
@@ -681,7 +675,7 @@ export function ProjectsPage({
       });
     }
     return sorted;
-  }, [initialProjects, statusFilter, sortBy, searchQuery, hasFinanceAccess, renderTime]);
+  }, [initialProjects, statusFilter, sortBy, normalizedSearchQuery, hasFinanceAccess, renderTime]);
   const projectsMissingCoordinatesCount = useMemo(() => {
     return initialProjects.filter(
       (project) => !project.hasValidSiteCoordinates && !isDriverTimeProject(project),
@@ -1876,7 +1870,7 @@ export function ProjectsPage({
         ) : null}
       </section>
 
-      <section className="flex flex-wrap items-center gap-3">
+      <section className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
         <div className="flex flex-wrap gap-1.5">
           {(
             [
@@ -1916,12 +1910,25 @@ export function ProjectsPage({
           <option value="week">{t("projects.sortWeek")}</option>
           {hasFinanceAccess ? <option value="cost">{t("projects.sortCost")}</option> : null}
         </select>
-        <input
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder={t("projects.searchPlaceholder")}
-          className="min-w-[180px] flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none"
-        />
+        <div className="relative min-w-[220px] flex-1">
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={t("projects.searchPlaceholder")}
+            className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 pr-9 text-xs text-[var(--text-primary)] outline-none"
+          />
+          {searchInput ? (
+            <button
+              type="button"
+              onClick={() => setSearchInput("")}
+              aria-label={t("common.clear")}
+              className="absolute right-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[var(--radius-sm)] text-[var(--text-muted)] transition hover:bg-[rgba(255,255,255,0.06)] hover:text-[var(--text-primary)]"
+            >
+              <X size={14} />
+            </button>
+          ) : null}
+        </div>
         <div className="text-[10px] uppercase tracking-[0.14em] text-[var(--text-muted)]">
           {t("projects.shownCount")
             .replace("{shown}", String(visibleProjects.length))
@@ -1930,6 +1937,11 @@ export function ProjectsPage({
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
+        {visibleProjects.length === 0 && normalizedSearchQuery ? (
+          <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-secondary)] xl:col-span-2">
+            {t("projects.noSearchMatches")}
+          </div>
+        ) : null}
         {visibleProjects.map((project) => {
           const state = activityState(project, renderTime);
           const driverTimeProject = isDriverTimeProject(project);

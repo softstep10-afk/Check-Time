@@ -1285,6 +1285,7 @@ export const translations = {
   "projects.sortWeek": { en: "By hours (week)", ru: "По часам (неделя)" },
   "projects.sortCost": { en: "By cost", ru: "По стоимости" },
   "projects.searchPlaceholder": { en: "Search name or address…", ru: "Поиск по имени или адресу…" },
+  "projects.noSearchMatches": { en: "No projects match this search.", ru: "Проекты по этому поиску не найдены." },
   "projects.shownCount": { en: "Shown {shown} of {total}", ru: "Показано {shown} из {total}" },
   "team.addWorkerCta": { en: "Add Worker", ru: "Добавить рабочего" },
   "team.showInactive": { en: "Show inactive ({n})", ru: "Показать неактивных ({n})" },

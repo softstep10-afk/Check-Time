@@ -6,7 +6,10 @@ const source = readFileSync(
   resolve(process.cwd(), "src/components/shared/ProjectNavigationActions.tsx"),
   "utf8",
 );
-const globals = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
+const globals = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8").replace(
+  /\r\n/g,
+  "\n",
+);
 
 describe("project navigation mobile action", () => {
   it("keeps mobile navigation to system app choice plus copy only", () => {
