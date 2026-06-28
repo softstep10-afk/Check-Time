@@ -1540,6 +1540,7 @@ export const translations = {
   "uploads.tooLargePdf": { en: "PDF is over the 50 MB limit.", ru: "PDF больше 50 МБ — лимит превышен." },
   "uploads.tooLargeDocument": { en: "Document is over the 100 MB limit.", ru: "Документ больше 100 МБ — лимит превышен." },
   "uploads.unsupportedType": { en: "{kind} type isn't supported. Use JPEG/PNG/WebP/HEIC/GIF, MP4/MOV/WebM, PDF, Word, Excel, or CSV.", ru: "Тип {kind} не поддерживается. Допустимы: JPEG/PNG/WebP/HEIC/GIF, MP4/MOV/WebM, PDF, Word, Excel или CSV." },
+  "uploads.gallery": { en: "Gallery", ru: "Галерея" },
   "uploads.camera": { en: "Camera", ru: "Камера" },
   "uploads.media": { en: "Media", ru: "Медиа" },
   "uploads.files": { en: "Files", ru: "Файлы" },

@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { Camera, FileText, Images } from "lucide-react";
+import { Camera, FileText, Image as ImageIcon, Images, Video } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import { ACCEPT_ALL_UPLOADS } from "@/lib/upload-limits";
 
@@ -22,17 +22,46 @@ export function UploadSourceButtons({
   dataTestIdPrefix = "upload-source",
 }: UploadSourceButtonsProps) {
   const { t } = useTranslation();
+  const [showGalleryChoices, setShowGalleryChoices] = useState(false);
+  const galleryImageInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryVideoInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
-  const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const filesInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryChoicesId = `${dataTestIdPrefix}-gallery-choices`;
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     onFiles(event.target.files);
     event.currentTarget.value = "";
+    setShowGalleryChoices(false);
+  }
+
+  function openInput(input: HTMLInputElement | null) {
+    setShowGalleryChoices(false);
+    input?.click();
   }
 
   return (
     <div className={className}>
+      <input
+        ref={galleryImageInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        disabled={disabled}
+        data-testid={`${dataTestIdPrefix}-gallery-image-input`}
+        onChange={handleChange}
+        className="sr-only"
+      />
+      <input
+        ref={galleryVideoInputRef}
+        type="file"
+        accept="video/*"
+        multiple
+        disabled={disabled}
+        data-testid={`${dataTestIdPrefix}-gallery-video-input`}
+        onChange={handleChange}
+        className="sr-only"
+      />
       <input
         ref={cameraInputRef}
         type="file"
@@ -40,16 +69,6 @@ export function UploadSourceButtons({
         capture="environment"
         disabled={disabled}
         data-testid={`${dataTestIdPrefix}-camera-input`}
-        onChange={handleChange}
-        className="sr-only"
-      />
-      <input
-        ref={mediaInputRef}
-        type="file"
-        accept="image/*,video/*"
-        multiple
-        disabled={disabled}
-        data-testid={`${dataTestIdPrefix}-media-input`}
         onChange={handleChange}
         className="sr-only"
       />
@@ -67,7 +86,19 @@ export function UploadSourceButtons({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => cameraInputRef.current?.click()}
+        onClick={() => setShowGalleryChoices((current) => !current)}
+        aria-expanded={showGalleryChoices}
+        aria-controls={galleryChoicesId}
+        data-testid={`${dataTestIdPrefix}-gallery-button`}
+        className={buttonClassName}
+      >
+        <Images size={14} />
+        {t("uploads.gallery")}
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => openInput(cameraInputRef.current)}
         data-testid={`${dataTestIdPrefix}-camera-button`}
         className={buttonClassName}
       >
@@ -77,23 +108,38 @@ export function UploadSourceButtons({
       <button
         type="button"
         disabled={disabled}
-        onClick={() => mediaInputRef.current?.click()}
-        data-testid={`${dataTestIdPrefix}-media-button`}
-        className={buttonClassName}
-      >
-        <Images size={14} />
-        {t("uploads.media")}
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => filesInputRef.current?.click()}
+        onClick={() => openInput(filesInputRef.current)}
         data-testid={`${dataTestIdPrefix}-files-button`}
         className={buttonClassName}
       >
         <FileText size={14} />
         {t("uploads.files")}
       </button>
+
+      {showGalleryChoices ? (
+        <div id={galleryChoicesId} data-testid={galleryChoicesId} className="col-span-3 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => openInput(galleryImageInputRef.current)}
+            data-testid={`${dataTestIdPrefix}-gallery-image-button`}
+            className={buttonClassName}
+          >
+            <ImageIcon size={14} />
+            {t("gallery.typePhotos")}
+          </button>
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => openInput(galleryVideoInputRef.current)}
+            data-testid={`${dataTestIdPrefix}-gallery-video-button`}
+            className={buttonClassName}
+          >
+            <Video size={14} />
+            {t("gallery.typeVideos")}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

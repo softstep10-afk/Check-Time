@@ -25,12 +25,17 @@ describe("task attachment upload surfaces", () => {
     expect(uploaderSource).toContain("uploadTaskAttachment");
     expect(uploadSourceButtonsSource).toContain("ACCEPT_ALL_UPLOADS");
     expect(uploadSourceButtonsSource).toContain('accept="image/*"');
+    expect(uploadSourceButtonsSource).toContain('accept="video/*"');
     expect(uploadSourceButtonsSource).toContain('capture="environment"');
-    expect(uploadSourceButtonsSource).toContain('accept="image/*,video/*"');
+    expect(uploadSourceButtonsSource).not.toContain('accept="image/*,video/*"');
     expect(uploadSourceButtonsSource).toContain("multiple");
+    expect(uploadSourceButtonsSource).toContain("t(\"uploads.gallery\")");
     expect(uploadSourceButtonsSource).toContain("t(\"uploads.camera\")");
-    expect(uploadSourceButtonsSource).toContain("t(\"uploads.media\")");
     expect(uploadSourceButtonsSource).toContain("t(\"uploads.files\")");
+    expect(uploadSourceButtonsSource).toContain("galleryImageInputRef");
+    expect(uploadSourceButtonsSource).toContain("galleryVideoInputRef");
+    expect(uploadSourceButtonsSource).toContain("t(\"gallery.typePhotos\")");
+    expect(uploadSourceButtonsSource).toContain("t(\"gallery.typeVideos\")");
     expect(uploadSourceButtonsSource).toContain("onFiles(event.target.files)");
   });
 
