@@ -24,6 +24,9 @@ describe("manager material request UI source", () => {
     expect(projectDetailSource).toContain("materialItems,");
     expect(projectDetailSource).toContain("uploadTaskAttachment");
     expect(projectDetailSource).toContain("ACCEPT_ALL_UPLOADS");
+    expect(projectDetailSource).toContain("<UploadSourceButtons");
+    expect(projectDetailSource).toContain("dataTestIdPrefix=\"material-order-upload\"");
+    expect(projectDetailSource).toContain("setOrderFiles(files ? Array.from(files) : [])");
   });
 
   it("lets material requests carry an optional link alongside files and parsed rows", () => {

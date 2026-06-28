@@ -7,6 +7,7 @@ function readSource(path: string): string {
 }
 
 const uploaderSource = readSource("src/components/shared/TaskAttachmentUploader.tsx");
+const uploadSourceButtonsSource = readSource("src/components/shared/UploadSourceButtons.tsx");
 const workerModalSource = readSource("src/components/worker/WorkerTaskDetailModal.tsx");
 const workerTasksSource = readSource("src/components/worker/TasksPage.tsx");
 const workerProjectSource = readSource("src/components/worker/WorkerProjectView.tsx");
@@ -18,11 +19,19 @@ const projectMediaSource = readSource("src/components/shared/ProjectMediaLibrary
 describe("task attachment upload surfaces", () => {
   it("exposes a shared task uploader with all approved business file types", () => {
     expect(uploaderSource).toContain("TaskAttachmentUploader");
-    expect(uploaderSource).toContain("ACCEPT_ALL_UPLOADS");
+    expect(uploaderSource).toContain("<UploadSourceButtons");
     expect(uploaderSource).toContain("validateUploadFile");
-    expect(uploaderSource).toContain('data-testid="task-attachment-upload-button"');
-    expect(uploaderSource).toContain('data-testid="task-attachment-upload-input"');
+    expect(uploaderSource).toContain('dataTestIdPrefix="task-attachment-upload"');
     expect(uploaderSource).toContain("uploadTaskAttachment");
+    expect(uploadSourceButtonsSource).toContain("ACCEPT_ALL_UPLOADS");
+    expect(uploadSourceButtonsSource).toContain('accept="image/*"');
+    expect(uploadSourceButtonsSource).toContain('capture="environment"');
+    expect(uploadSourceButtonsSource).toContain('accept="image/*,video/*"');
+    expect(uploadSourceButtonsSource).toContain("multiple");
+    expect(uploadSourceButtonsSource).toContain("t(\"uploads.camera\")");
+    expect(uploadSourceButtonsSource).toContain("t(\"uploads.media\")");
+    expect(uploadSourceButtonsSource).toContain("t(\"uploads.files\")");
+    expect(uploadSourceButtonsSource).toContain("onFiles(event.target.files)");
   });
 
   it("renders direct task attachment upload in worker and manager task views", () => {

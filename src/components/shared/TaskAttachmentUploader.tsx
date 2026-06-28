@@ -1,14 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Paperclip } from "lucide-react";
+import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   uploadTaskAttachment,
   type TaskAttachmentRef,
 } from "@/lib/task-attachments";
 import { useTranslation } from "@/lib/i18n";
-import { ACCEPT_ALL_UPLOADS, validateUploadFile } from "@/lib/upload-limits";
+import { validateUploadFile } from "@/lib/upload-limits";
+import { UploadSourceButtons } from "@/components/shared/UploadSourceButtons";
 
 type TaskAttachmentUploaderProps = {
   taskId: string;
@@ -34,14 +34,12 @@ export function TaskAttachmentUploader({
   onAttached,
 }: TaskAttachmentUploaderProps) {
   const { t } = useTranslation();
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<"success" | "error" | "info">("info");
 
   async function handleFiles(files: FileList | null) {
     const list = Array.from(files ?? []);
-    if (inputRef.current) inputRef.current.value = "";
     if (list.length === 0) return;
 
     if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -121,29 +119,15 @@ export function TaskAttachmentUploader({
       : tone === "error"
         ? "text-[var(--red)]"
         : "text-[var(--text-muted)]";
-  const label = busy ? t("tasks.uploadingAttachment") : t("tasks.addAttachment");
 
   return (
     <div className={compact ? "mt-2" : "mt-3"}>
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPT_ALL_UPLOADS}
-        multiple
-        data-testid="task-attachment-upload-input"
-        onChange={(event) => void handleFiles(event.target.files)}
-        className="sr-only"
-      />
-      <button
-        type="button"
+      <UploadSourceButtons
+        onFiles={(files) => void handleFiles(files)}
         disabled={disabled || busy}
-        onClick={() => inputRef.current?.click()}
-        data-testid="task-attachment-upload-button"
-        className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] disabled:opacity-50 sm:w-auto"
-      >
-        <Paperclip size={14} />
-        {label}
-      </button>
+        dataTestIdPrefix="task-attachment-upload"
+        className="grid grid-cols-3 gap-2 sm:inline-grid"
+      />
       <div className="mt-1 text-[10px] text-[var(--text-muted)]">
         {t("tasks.attachmentInlineLabel")}
       </div>

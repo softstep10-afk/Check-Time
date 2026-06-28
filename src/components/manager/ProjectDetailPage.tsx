@@ -56,6 +56,7 @@ import {
 import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { TaskAttachmentUploader } from "@/components/shared/TaskAttachmentUploader";
 import { ProjectPlanningSections } from "@/components/manager/ProjectPlanningSections";
+import { UploadSourceButtons } from "@/components/shared/UploadSourceButtons";
 import {
   MediaViewerModal,
   useMediaViewerOpenGuard,
@@ -4528,21 +4529,18 @@ function MaterialsSection({
                 </div>
               ))}
             </div>
-            <label className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-primary)]">
+            <div className="grid gap-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] p-3 text-sm text-[var(--text-primary)]">
               <span className="font-semibold">{t("materials.addFile")}</span>
-              <input
-                type="file"
-                multiple
-                accept={ACCEPT_ALL_UPLOADS}
-                onChange={(event) => setOrderFiles(event.target.files ? Array.from(event.target.files) : [])}
-                className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
+              <UploadSourceButtons
+                onFiles={(files) => setOrderFiles(files ? Array.from(files) : [])}
+                dataTestIdPrefix="material-order-upload"
               />
               <span className="text-xs text-[var(--text-muted)]">
                 {orderFiles.length > 0
                   ? t("materials.filesSelected").replace("{count}", String(orderFiles.length))
                   : t("materials.addFileHint")}
               </span>
-            </label>
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"

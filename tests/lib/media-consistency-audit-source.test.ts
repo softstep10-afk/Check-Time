@@ -9,6 +9,7 @@ function readSource(path: string): string {
 const auditDoc = readSource("docs/MEDIA_CONSISTENCY_AUDIT_ALPHA7.md");
 const workerShellSource = readSource("src/components/worker/WorkerShell.tsx");
 const taskUploaderSource = readSource("src/components/shared/TaskAttachmentUploader.tsx");
+const uploadSourceButtonsSource = readSource("src/components/shared/UploadSourceButtons.tsx");
 const taskListSource = readSource("src/components/shared/TaskAttachmentList.tsx");
 const messageViewSource = readSource("src/components/shared/MessageAttachmentView.tsx");
 const projectLibrarySource = readSource("src/components/shared/ProjectMediaLibrary.tsx");
@@ -35,7 +36,8 @@ describe("media consistency audit guardrails", () => {
   });
 
   it("keeps shared open/download surfaces for project, task, and message files", () => {
-    expect(taskUploaderSource).toContain("ACCEPT_ALL_UPLOADS");
+    expect(taskUploaderSource).toContain("<UploadSourceButtons");
+    expect(uploadSourceButtonsSource).toContain("ACCEPT_ALL_UPLOADS");
     expect(taskListSource).toContain("MediaViewerModal");
     expect(taskListSource).toContain("createSignedUrl(normalized, 3600, { download: downloadAs })");
     expect(messageViewSource).toContain("MediaViewerModal");
