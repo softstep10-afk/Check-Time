@@ -1,92 +1,79 @@
-# Construction Clock — Context for Claude Code
+# Construction Clock — Working Agreement (canonical)
 
-**READ THESE FILES FIRST, in order, before doing anything:**
-
-1. `ABOUT_ANDREW.md` — who the user is, communication style, non-negotiables
-2. `HANDOFF.md` — high-level project orientation
-3. `PROGRESS_LOG.md` — current state, open bugs, wave history
-4. `docs/audit/AUDIT_REPORT.md` — full audit findings and recommended work order
+Single source of truth for how AI coders (Claude Code / Codex) work on this repo.
+**Codex: `AGENTS.md` points you here — read this file fully before doing anything.**
 
 ---
 
-## Working rules (non-negotiable)
+## Who / how (non-negotiable)
+- Andrew owns the company and the product. Technically literate but does **not** write code.
+  Never dump raw stack traces / PowerShell errors on him — translate to plain language.
+  When a command fails, **diagnose and retry yourself**; don't ask him to debug.
+- Full communication style & rules: see `ABOUT_ANDREW.md`.
+- Roles: Owner > Admin > Manager > Supervisor > Driver > Worker.
 
-- **Andrew is non-technical.** Never dump raw stack traces or PowerShell errors on him. Translate everything into plain language. When a command fails, diagnose and retry yourself — don't ask him to debug.
+## The loop (variant 2 — read carefully)
+- Andrew dictates a bug → chat-side architect (Claude) writes a focused prompt → Andrew pastes it
+  here → **you do the code work.**
+- Chat-side Claude does NOT edit repo source files. If you find uncommitted changes on disk you
+  didn't make, they're hotfixes from chat awaiting commit — ask before touching them.
+  (Exception: `CLAUDE.md` / `AGENTS.md` may be updated from chat-side; just commit them.)
+- **Fix your own errors. Do not bounce routine failures back to Andrew.** Read your own
+  tsc / lint / test / runtime / Supabase errors and fix them. Loop until green. Escalate to chat
+  ONLY a genuine blocker: an ambiguous product decision, a risky RLS/security change, or missing
+  info you cannot derive. Routine compile/test errors are yours to solve.
 
-- **Andrew dictates bugs → the chat-side assistant writes short prompts → Andrew pastes them here.** You (Claude Code) do the actual code work. The chat-side Claude does NOT edit files directly. If you find uncommitted changes on disk that you didn't make, ask before touching them — they are hotfixes from chat-side awaiting commit.
+## Supabase MCP — you have READ access. Use it to self-verify.
+- You can read prod: schema, RLS policies, logs. Project `vlrajjwbaxikbwvqdpft`.
+- **After any DB-affecting change, query the logs yourself and confirm zero new errors before
+  reporting done.** This is now your step, not Andrew's.
+- **Never run destructive SQL** (DROP / DELETE / TRUNCATE / column-dropping ALTER). The MCP is
+  read-only by design. Schema changes ship as migration files that **Andrew applies by hand**.
+- Migration head: `00032_profile_rates.sql`. New migration = next number (`00033_…`) as a file
+  under `supabase/migrations/`. You write it; you do NOT push or apply it.
 
-- **Work on a feature branch, never on main.** Current audit branch: `waveAudit/live-data-fixes`.
+## RLS / shared-data discipline (L0 — the security foundation)
+- Never change shared data — `profiles`, `time_events`, rates, RLS policies, grants — without first
+  producing a FULL MAP of every place affected (every read/write/policy). Change wide → verify wide.
+- If a task touches RLS / grants / shared columns and you don't have the full map: STOP and produce
+  it. Do not edit blind. This has caused production regressions before.
 
-- **Every logical change = its own commit.** Commit messages follow `waveXxx(area): what changed`.
+## "Done" = three checkmarks
+1. Full gate green (below).
+2. Supabase logs show zero new errors.
+3. Andrew eyeballs the screens. ← his step. You provide 1 + 2 and report concisely.
 
-- **Never merge to main.** Andrew reviews and merges himself.
+## Verify before you say done
+- `npx tsc --noEmit` clean
+- `npm run lint` not worse than current baseline
+- `npm test` green (vitest)
+- Anything touching routes / auth / security, also run `npm run smoke:core` and
+  `npm run alpha7:predeploy` (and `alpha7:rc-safety-gate` before a release candidate)
+- Do NOT flip `AUTH_BYPASS_ENABLED` back on. Real auth is live.
 
-- **Before finishing any prompt:** `tsc` clean, lint baseline unchanged (15/5/10), `npm test` 42/42 pass.
+## Branch / deploy
+- Work on a feature branch off `main`, never on `main`. Andrew (or the pasted prompt) names it.
+- Every logical change = its own commit: `area(scope): what changed`.
+- **Never merge to main. Never deploy.** Andrew reviews, merges, and deploys by hand.
 
-- **If something looks risky or unclear — stop and ask in chat** rather than guessing.
-
----
-
-## Tech stack quick facts
-
-- Next.js 16.2.3 (App Router, Turbopack dev), React 19
-- Supabase `vlrajjwbaxikbwvqdpft.supabase.co` with PostGIS
-- Auth: PIN-only login via `/api/auth/pin-login` (argon2)
-- `AUTH_BYPASS_ENABLED = false` — real auth is live. Don't flip this back on.
-- Seed owner: Andrew, PIN **9999** (already set via `scripts/set-owner-pin.mjs`)
-- Dev server usually runs as: `npx next dev --turbo -H 0.0.0.0` (LAN-exposed on `http://10.0.0.55:3000` for mobile testing)
-
----
+## Stack quick facts
+- Next.js 16.2.3 (App Router, Turbopack) — **NOT the Next you know**; check
+  `node_modules/next/dist/docs/` before using framework APIs. Heed deprecations.
+- React 19.2.4, TypeScript, Tailwind 4.
+- Supabase (`vlrajjwbaxikbwvqdpft`) + PostGIS, `@supabase/ssr`.
+- Auth: PIN-only `/api/auth/pin-login` (argon2). Seed owner Andrew, PIN 9999.
+- Dev: `npm run dev` (`next dev -H 0.0.0.0`), LAN-exposed for mobile testing.
 
 ## Key locations
+- Migrations: `supabase/migrations/` (head 00032)
+- Auth: `src/app/api/auth/pin-login/route.ts`, `src/app/(auth)/login/page.tsx`
+- Auth gate/proxy: `src/proxy.ts`; preview guard `src/lib/auth-bypass.ts`
+- Role check: `src/lib/manager-utils.ts` `isManagerRole()` (owner+admin+manager+supervisor)
+- Geo: `src/lib/worker-utils.ts` `parseGeoPoint` (WKB-aware); maps `src/components/maps/*`
+- RBAC matrix: `docs/permissions.md`; GPS consent: `GPS_CONSENT_FORM.md`
 
-- **Migrations:** `supabase/migrations/` (00001 foundation → 00013 is_manager includes owner)
-- **Seed:** `supabase/seed_dev.sql`
-- **Wash & reset:** `supabase/migrations/00099_wash_and_reset.sql`
-- **RBAC matrix:** `docs/permissions.md`
-- **Worker GPS consent:** `GPS_CONSENT_FORM.md` (EN + RU)
-- **Audit report:** `docs/audit/AUDIT_REPORT.md`
-- **Live audit branch:** `waveAudit/live-data-fixes`
-- **Auth code:** `src/app/api/auth/pin-login/route.ts`, `src/app/(auth)/login/page.tsx`
-- **Proxy/auth gate:** `src/proxy.ts`
-- **Preview-data guard:** `src/lib/auth-bypass.ts`
-- **Map components:** `src/components/maps/*`
-- **Key utility:** `src/lib/worker-utils.ts` has `parseGeoPoint` (WKB-aware)
-- **Role check:** `src/lib/manager-utils.ts` `isManagerRole()` (owner + admin + manager + supervisor)
-
----
-
-## Temporary scripts (delete before production)
-
-- `scripts/set-owner-pin.mjs` — one-off, already executed
-- `scripts/diagnose-profiles.mjs` — debug only
-- `scripts/check-sites.mjs` — debug only
-- `scripts/check-live-locations.mjs` — debug only
-- **Keep:** `scripts/show-db-state.mjs` — useful utility
-
----
-
-## Wave history (context for naming future waves)
-
-Closed in main: waves 1, 1.5, 2, 2.5, 3, 3.5, 5, 6, 7, 8, X1, X2, X3, WR, Fix/owner-role-gate.
-
-Active branch: `waveAudit/live-data-fixes` (not yet merged).
-
-Reserved for future: `wave4/pay-models` (migration 00007 reserved), `waveLiveOps/full-map-and-quick-task`, `waveTeam/create-worker-with-pin`, `waveX4/client-role`, `waveX5/worker-map-stores`, `wave9/real-device-testing`.
-
----
-
-## Communication pattern
-
-When Andrew pastes a prompt, it will be:
-- Focused on ONE bug or ONE small task
-- In imperative voice ("Fix X in file Y")
-- With a specific branch and commit-message convention
-
-You should:
-1. Read the prompt carefully — it contains all the diagnosis needed
-2. Do the work on the specified branch
-3. Commit with the specified message
-4. Run `tsc && npm run lint && npm test` silently
-5. Report back concisely what was done (one line per commit)
-6. Do NOT start a new branch, do NOT merge, do NOT modify anything outside scope
+## Old docs = archive, not current truth
+`HANDOFF.md`, `PROGRESS_LOG.md`, `IMPLEMENTATION_PLAN.md`, `PLAN_*.md`, `AUDIT_REPORT.md`,
+`OLD_APP_FINDINGS.md`, `STAGING_MOBILE_REPORT.md` are historical context only. The live source of
+truth for current tasks is the prompt Andrew pastes (driven by chat-side START_HERE.md /
+PROJECT_BACKLOG.md). When in doubt, the pasted prompt wins.
