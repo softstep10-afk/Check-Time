@@ -5,6 +5,18 @@ Single source of truth for how AI coders (Claude Code / Codex) work on this repo
 
 ---
 
+## RED LINE — scope discipline (the most important rule)
+**Never remove or change ANY existing functionality beyond exactly what was asked.**
+- Every edit is strictly minimal and surgical. Do ONLY the change discussed — nothing more.
+- A fix must NEVER make some other existing feature, button, field, behavior, or data disappear
+  as a side effect. The user asks for X → only X changes; everything else stays byte-for-byte.
+- Prefer the smallest diff that achieves the asked-for result. Hiding/gating beats deleting when
+  the goal is "don't show this here."
+- Before committing, re-read your own diff line by line and confirm it removes/alters nothing the
+  task did not explicitly name. If it does, revert that part.
+- If achieving the request seems to require removing or altering existing functionality, do NOT
+  proceed silently — surface it to chat and wait for an answer.
+
 ## Who / how (non-negotiable)
 - Andrew owns the company and the product. Technically literate but does **not** write code.
   Never dump raw stack traces / PowerShell errors on him — translate to plain language.
