@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
@@ -1936,7 +1937,7 @@ export function ProjectsPage({
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
+      <section className="grid gap-1.5 md:gap-4 xl:grid-cols-2">
         {visibleProjects.length === 0 && normalizedSearchQuery ? (
           <div className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-4 text-sm text-[var(--text-secondary)] xl:col-span-2">
             {t("projects.noSearchMatches")}
@@ -1964,12 +1965,39 @@ export function ProjectsPage({
           const publicNotesCount = readProjectPublicNotes(project.settings).length;
 
           return (
-            <article
-              key={project.id}
-              data-testid="manager-project-card"
-              className="surface-card relative touch-manipulation p-4 transition"
-              style={{ border: cardBorder, boxShadow: cardShadow }}
-            >
+            <Fragment key={project.id}>
+              <article
+                data-testid="manager-project-card"
+                className="relative block touch-manipulation rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-2.5 transition hover:border-[var(--brand-yellow)] md:hidden"
+              >
+                <Link
+                  href={`/projects/${project.id}`}
+                  data-testid="manager-project-card-main-link"
+                  aria-label={`${t("projects.openDetail")}: ${project.name}`}
+                  className="absolute inset-0 z-[1] rounded-[var(--radius-md)] outline-none focus:ring-2 focus:ring-[var(--brand-yellow)]"
+                >
+                  <span className="sr-only">{project.name}</span>
+                </Link>
+                <div className="pointer-events-none relative z-[2] flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--text-primary)]">
+                    {project.name}
+                  </span>
+                </div>
+                <div className="relative z-[3] mt-2" data-project-card-action="navigation">
+                  <ProjectNavigationActions
+                    projectName={project.name}
+                    address={project.address}
+                    siteCoordinates={project.siteCoordinates}
+                    compact
+                  />
+                </div>
+              </article>
+
+              <article
+                data-testid="manager-project-card"
+                className="surface-card relative hidden touch-manipulation p-4 transition md:block"
+                style={{ border: cardBorder, boxShadow: cardShadow }}
+              >
               <Link
                 href={`/projects/${project.id}`}
                 data-testid="manager-project-card-main-link"
@@ -2240,7 +2268,8 @@ export function ProjectsPage({
                   <Trash2 size={12} /> {t("common.remove")}
                 </button>
               </div>
-            </article>
+              </article>
+            </Fragment>
           );
         })}
       </section>
