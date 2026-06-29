@@ -8,6 +8,11 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { createClient } from "@/lib/supabase/client";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 
+const optionalCheckoutVideoLabel = {
+  en: "Optional checkout video",
+  ru: "Видео при выходе необязательно",
+} as const;
+
 function startOfTodayMs(): number {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -22,7 +27,7 @@ export function CheckoutModal({
   onClose: () => void;
 }) {
   const { shell, busyAction, clockOut, uploadMedia } = useWorkerShell();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const fileRef = useRef<HTMLInputElement>(null);
   const checkoutSubmittingRef = useRef(false);
@@ -43,6 +48,7 @@ export function CheckoutModal({
   }, [shell.media, shell.clockState.currentProjectId]);
 
   const requireVideo = liveRequireVideo ?? shell.profile.require_video;
+  const checkoutVideoCaptured = hasVideoToday || pickedAt !== null;
   const videoSatisfied = !requireVideo || hasVideoToday || pickedAt !== null;
   const uploading = busyAction === "before-leave-video";
   const checkingOut = busyAction === "clock-out" || submittingCheckout;
@@ -184,49 +190,60 @@ export function CheckoutModal({
           </button>
         </div>
 
-        {requireVideo ? (
-          <div className="mt-4 space-y-3">
-            <input
-              ref={fileRef}
-              type="file"
-              accept="video/*"
-              capture="environment"
-              onChange={(e) => void handlePick(e)}
-              className="hidden"
-              id="before-leave-file"
-            />
-            <div className="grid gap-2 sm:flex sm:flex-wrap">
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-semibold sm:w-auto"
-                style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
-              >
-                <Camera size={14} />
-                {uploading ? t("clock.uploadingVideo") : t("clock.recordVideo")}
-              </button>
-            </div>
-            <div
-              className="rounded-[var(--radius-md)] px-3 py-2 text-xs font-semibold"
-              style={{
-                background: hasVideoToday || pickedAt !== null
-                  ? "rgba(15, 168, 120, 0.16)"
-                  : "rgba(212, 81, 94, 0.12)",
-                color: hasVideoToday || pickedAt !== null ? "var(--green)" : "var(--red)",
-              }}
+        <div className="mt-4 space-y-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="video/*"
+            capture="environment"
+            onChange={(e) => void handlePick(e)}
+            className="hidden"
+            id="before-leave-file"
+          />
+          <div className="grid gap-2 sm:flex sm:flex-wrap">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[var(--radius-sm)] px-3 py-2.5 text-sm font-semibold sm:w-auto"
+              style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
             >
-              {hasVideoToday || pickedAt !== null ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <Check size={12} />
-                  {t("clock.videoCaptured")}
-                </span>
-              ) : (
-                t("clock.videoMissing")
-              )}
-            </div>
+              <Camera size={14} />
+              {uploading ? t("clock.uploadingVideo") : t("clock.recordVideo")}
+            </button>
           </div>
-        ) : null}
+          <div
+            className="rounded-[var(--radius-md)] border px-3 py-2 text-xs font-semibold"
+            style={{
+              background: checkoutVideoCaptured
+                ? "rgba(15, 168, 120, 0.16)"
+                : requireVideo
+                  ? "rgba(212, 81, 94, 0.12)"
+                  : "var(--bg-primary)",
+              borderColor: checkoutVideoCaptured
+                ? "rgba(15, 168, 120, 0.28)"
+                : requireVideo
+                  ? "rgba(212, 81, 94, 0.24)"
+                  : "var(--border-default)",
+              color: checkoutVideoCaptured
+                ? "var(--green)"
+                : requireVideo
+                  ? "var(--red)"
+                  : "var(--text-secondary)",
+            }}
+          >
+            {checkoutVideoCaptured ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Check size={12} />
+                {t("clock.videoCaptured")}
+              </span>
+            ) : requireVideo ? (
+              t("clock.videoMissing")
+            ) : (
+              optionalCheckoutVideoLabel[locale]
+            )}
+          </div>
+        </div>
 
         <div className="mt-4 w-full">
           <TextInputWithVoice
