@@ -15,8 +15,8 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
 import { OfflineCacheEmptyState, OfflineCacheNotice } from "@/components/worker/OfflineCacheNotice";
 import { WorkerMaterialSpecSection } from "@/components/worker/WorkerMaterialSpecSection";
+import { UploadSourceButtons } from "@/components/shared/UploadSourceButtons";
 import {
-  ACCEPT_ALL_UPLOADS,
   inferUploadContentType,
   validateUploadFile,
 } from "@/lib/upload-limits";
@@ -359,7 +359,6 @@ export function WorkerProjectView({
   const [claimMessage, setClaimMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
   const [cachedProjectSnapshot, setCachedProjectSnapshot] =
     useState<OfflineFieldSnapshot<WorkerProjectDetailCachePayload> | null>(null);
-  const projectMediaInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setTaskList((current) =>
@@ -995,34 +994,10 @@ export function WorkerProjectView({
           </h2>
         }
         headerAction={
-          <>
-            <input
-              ref={projectMediaInputRef}
-              type="file"
-              accept={ACCEPT_ALL_UPLOADS}
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                void handleWorkerProjectMediaUpload(event.target.files);
-                event.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                projectMediaInputRef.current?.click();
-              }}
-              className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-3 py-1.5 text-xs font-semibold"
-              style={{
-                borderColor: "rgba(191, 162, 52, 0.4)",
-                color: "var(--brand-yellow)",
-              }}
-            >
-              <Plus size={13} />
-              {t("projectDetail.addFiles")}
-            </button>
-          </>
+          <UploadSourceButtons
+            onFiles={(files) => void handleWorkerProjectMediaUpload(files)}
+            dataTestIdPrefix="worker-project-media-upload"
+          />
         }
       >
         <ProjectMediaLibrary
@@ -2867,7 +2842,6 @@ function WorkerReceiptUpload({
           ref={fileRef}
           type="file"
           accept="image/*,application/pdf"
-          capture="environment"
           className="block w-full cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-xs text-[var(--text-secondary)] file:mr-3 file:rounded-[var(--radius-sm)] file:border-0 file:bg-[var(--brand-yellow)] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[var(--text-inverse)]"
         />
         <div className="grid gap-3 sm:grid-cols-2">

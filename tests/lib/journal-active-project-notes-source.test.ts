@@ -54,7 +54,7 @@ describe("journal media back, active project, notes, and picker source guards", 
   it("keeps document picker support on journal and material/project upload surfaces", () => {
     expect(journalSource).toContain("<UploadSourceButtons");
     expect(uploadSourceButtonsSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
-    expect(workerProjectViewSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
+    expect(workerProjectViewSource).toContain("<UploadSourceButtons");
     expect(managerProjectDetailSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
   });
 

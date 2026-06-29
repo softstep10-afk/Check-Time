@@ -39,7 +39,7 @@ describe("worker mobile critical path audit source guards", () => {
     expect(workerProjectView).toContain('data-testid="active-project-checkout-button"');
     expect(workerProjectView).toContain("<ProjectMediaLibrary");
     expect(workerProjectView).toContain('data-testid="worker-project-public-notes"');
-    expect(workerProjectView).toContain("accept={ACCEPT_ALL_UPLOADS}");
+    expect(workerProjectView).toContain("<UploadSourceButtons");
     expect(checkoutModal).toContain('data-testid="checkout-confirm"');
     expect(clockPage).toContain("<CheckoutModal open={checkoutOpen}");
   });
