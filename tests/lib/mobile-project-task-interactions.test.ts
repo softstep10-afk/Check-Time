@@ -67,7 +67,7 @@ describe("mobile project card and task action UX", () => {
   });
 
   it("makes manager project cards use a native full-card link instead of touch gesture hacks", () => {
-    expect(managerProjectsSource).toContain('data-testid="manager-project-card"');
+    expect(managerProjectsSource).toContain('data-testid="manager-project-card-mobile"');
     expect(managerProjectsSource).toContain('data-testid="manager-project-card-main-link"');
     expect(managerProjectsSource).toContain('import Link from "next/link"');
     expect(managerProjectsSource).toContain("href={`/projects/${project.id}`}");
