@@ -147,8 +147,10 @@ describe("profile_rates migration guards", () => {
     expect(profileRatesSource).toContain('.select("profile_id, hourly_rate")');
     expect(profileRatesSource).not.toContain("profiles(");
     expect(profileRatesSource).not.toMatch(/\.select\([^)]*pin_hash/);
-    expect(profileRatesSource).toContain('.from("profiles")');
-    expect(profileRatesSource).toContain('.select("id, hourly_rate")');
+    // Legacy fallback removed: profile-rates.ts no longer reads the
+    // profiles.hourly_rate column; rates come solely from profile_rates.
+    expect(profileRatesSource).not.toContain('.from("profiles")');
+    expect(profileRatesSource).not.toContain('.select("id, hourly_rate")');
 
     for (const [file, source] of Object.entries(rateReadSources)) {
       expect(source, file).not.toMatch(/\.from\("profiles"\)\s*\.select\("\*"\)/);

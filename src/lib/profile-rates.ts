@@ -22,7 +22,6 @@ export const PROFILE_SELECT_WITHOUT_RATE = [
 
 export type ProfileWithoutRate = Omit<Profile, "hourly_rate" | "pin_hash">;
 export type ProfileRateValue = Pick<ProfileRate, "profile_id" | "hourly_rate">;
-export type LegacyProfileRateValue = Pick<Profile, "id" | "hourly_rate">;
 
 function normalizeHourlyRate(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
@@ -45,20 +44,14 @@ export function profilesWithoutRates(profiles: ProfileWithoutRate[]): Profile[] 
 export function applyProfileRates(
   profiles: Profile[],
   rates: ProfileRateValue[],
-  legacyRates: LegacyProfileRateValue[] = [],
 ): Profile[] {
   const ratesByProfileId = new Map(
     rates.map((row) => [row.profile_id, normalizeHourlyRate(row.hourly_rate)]),
   );
-  const legacyRatesByProfileId = new Map(
-    legacyRates.map((row) => [row.id, normalizeHourlyRate(row.hourly_rate)]),
-  );
 
   return profiles.map((profile) => ({
     ...profile,
-    hourly_rate: ratesByProfileId.has(profile.id)
-      ? ratesByProfileId.get(profile.id) ?? null
-      : legacyRatesByProfileId.get(profile.id) ?? null,
+    hourly_rate: ratesByProfileId.get(profile.id) ?? null,
   }));
 }
 
@@ -116,23 +109,5 @@ export async function hydrateProfilesWithRates(
     throw new Error(`Profile rates query failed: ${rateError.message}`);
   }
 
-  const rates = rateRows ?? [];
-  const rateProfileIds = new Set(rates.map((row) => row.profile_id));
-  const missingProfileIds = profileIds.filter((profileId) => !rateProfileIds.has(profileId));
-
-  if (missingProfileIds.length === 0) {
-    return applyProfileRates(profiles, rates);
-  }
-
-  const { data: legacyRows, error: legacyError } = await supabase
-    .from("profiles")
-    .select("id, hourly_rate")
-    .in("id", missingProfileIds)
-    .returns<LegacyProfileRateValue[]>();
-
-  if (legacyError) {
-    throw new Error(`Legacy profile rates query failed: ${legacyError.message}`);
-  }
-
-  return applyProfileRates(profiles, rates, legacyRows ?? []);
+  return applyProfileRates(profiles, rateRows ?? []);
 }

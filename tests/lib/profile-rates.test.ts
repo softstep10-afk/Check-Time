@@ -90,7 +90,7 @@ describe("profile_rates helpers", () => {
     ]);
   });
 
-  it("prefers profile_rates and falls back to legacy profiles.hourly_rate", () => {
+  it("applies profile_rates and leaves profiles without a rate row null", () => {
     const baseProfiles = profilesWithoutRates([
       profile({ id: "w1", name: "Worker One" }),
       profile({ id: "w2", name: "Worker Two" }),
@@ -99,14 +99,13 @@ describe("profile_rates helpers", () => {
     const result = applyProfileRates(
       baseProfiles,
       [{ profile_id: "w1", hourly_rate: 42 }],
-      [{ id: "w2", hourly_rate: 31 }],
     );
 
     expect(result.find((entry) => entry.id === "w1")?.hourly_rate).toBe(42);
-    expect(result.find((entry) => entry.id === "w2")?.hourly_rate).toBe(31);
+    expect(result.find((entry) => entry.id === "w2")?.hourly_rate).toBeNull();
   });
 
-  it("hydrates finance-visible rates from profile_rates with legacy fallback only for misses", async () => {
+  it("hydrates finance-visible rates from profile_rates only, with no legacy column fallback", async () => {
     const calls: Array<{ table: string; select?: string; in?: { column: string; values: string[] } }> = [];
     const supabase = supabaseForRates({
       rateRows: [{ profile_id: "w1", hourly_rate: "45.5" }],
@@ -125,18 +124,13 @@ describe("profile_rates helpers", () => {
 
     expect(result.map((entry) => [entry.id, entry.hourly_rate])).toEqual([
       ["w1", 45.5],
-      ["w2", 30],
+      ["w2", null],
     ]);
     expect(calls).toEqual([
       {
         table: "profile_rates",
         select: "profile_id, hourly_rate",
         in: { column: "profile_id", values: ["w1", "w2"] },
-      },
-      {
-        table: "profiles",
-        select: "id, hourly_rate",
-        in: { column: "id", values: ["w2"] },
       },
     ]);
   });
