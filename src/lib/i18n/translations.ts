@@ -2108,6 +2108,7 @@ export const translations = {
     ru: "Плановые материалы проекта. Работники видят этот список без цен.",
   },
   "projectMaterials.workerTitle": { en: "Project Materials", ru: "Материалы проекта" },
+  "projectMaterials.workerDocsTitle": { en: "Documents", ru: "Документы" },
   "projectMaterials.workerSubtitle": {
     en: "Use these materials on this project. Open links when a supplier or product link is attached.",
     ru: "Используйте эти материалы на проекте. Открывайте ссылки, если добавлен поставщик или товар.",
@@ -2201,6 +2202,8 @@ export const translations = {
 
   // ── Materials ──
   "materials.title": { en: "Materials & Deliveries", ru: "Материалы и поставки" },
+  "materials.folderTitle": { en: "Materials", ru: "Материалы" },
+  "materials.itemsSubsectionTitle": { en: "Items", ru: "Позиции" },
   "materials.addItem": { en: "Add material", ru: "Добавить материал" },
   "materials.name": { en: "Material name", ru: "Название материала" },
   "materials.quantity": { en: "Qty", ru: "Кол-во" },

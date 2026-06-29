@@ -28,7 +28,7 @@ export function WorkerMaterialSpecSection({ project }: { project: Project }) {
       summary={
         <div>
           <h2 className="text-lg font-bold text-[var(--text-primary)]">
-            {t("projectMaterials.workerTitle")}: {items.length}
+            {t("projectMaterials.workerDocsTitle")}: {items.length}
           </h2>
           <p className="mt-1 text-xs text-[var(--text-muted)]">
             {t("projectMaterials.workerSubtitle")}
