@@ -12,6 +12,7 @@ const tasksPage = read("src/components/worker/TasksPage.tsx");
 const messagesPage = read("src/components/worker/WorkerMessagesPage.tsx");
 const notificationBell = read("src/components/worker/NotificationBell.tsx");
 const journalPage = read("src/components/worker/JournalPage.tsx");
+const uploadSourceButtons = read("src/components/shared/UploadSourceButtons.tsx");
 const gpsConsent = read("src/components/worker/GpsConsentModal.tsx");
 const safetyBrief = read("src/components/worker/SafetyBriefModal.tsx");
 const checkoutModal = read("src/components/worker/CheckoutModal.tsx");
@@ -53,6 +54,7 @@ describe("worker mobile critical path audit source guards", () => {
     expect(messagesPage).toContain('filter: `recipient_id=eq.${shell.profile.id}`');
     expect(notificationBell).toContain("markMessagesReadById");
     expect(journalPage).toContain("<MediaViewerModal");
-    expect(journalPage).toContain("accept={ACCEPT_ALL_UPLOADS}");
+    expect(journalPage).toContain("<UploadSourceButtons");
+    expect(uploadSourceButtons).toContain("accept={ACCEPT_ALL_UPLOADS}");
   });
 });

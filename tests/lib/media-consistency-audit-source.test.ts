@@ -48,7 +48,8 @@ describe("media consistency audit guardrails", () => {
   it("keeps manager and worker project upload pickers on approved business file types", () => {
     expect(managerProjectSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
     expect(workerProjectSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
-    expect(journalSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
+    expect(journalSource).toContain("<UploadSourceButtons");
+    expect(uploadSourceButtonsSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
   });
 
   it("stores worker journal and shift media with inferred content type and safe display filename", () => {
