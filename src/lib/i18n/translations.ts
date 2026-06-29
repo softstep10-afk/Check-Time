@@ -260,6 +260,8 @@ export const translations = {
   "journal.captureDay": { en: "Capture the day", ru: "Запечатлейте день" },
   "journal.entriesLandUnder": { en: "Entries will land under", ru: "Записи попадут в" },
   "journal.clockInFirst": { en: "Clock in first so the upload lands on the right project.", ru: "Сначала начните смену, чтобы загрузка попала в нужный проект." },
+  "journal.pickProject": { en: "Choose a project for this entry", ru: "Выберите объект для записи" },
+  "journal.pickProjectPlaceholder": { en: "Select a project…", ru: "Выберите объект…" },
   "journal.addPhotoVideo": { en: "Add photo or video", ru: "Добавить фото или видео" },
   "journal.snapProgress": { en: "Snap progress, catch blockers, or log what just changed on site.", ru: "Фиксируйте прогресс, проблемы или изменения на объекте." },
   "journal.whatLookingAt": { en: "What are you looking at? What changed?", ru: "На что вы смотрите? Что изменилось?" },

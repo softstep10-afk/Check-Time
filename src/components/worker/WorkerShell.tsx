@@ -207,7 +207,12 @@ type WorkerShellContextValue = {
   dismissBanner: () => void;
   clockIn: (projectId: string, options?: ClockOptions) => Promise<void>;
   clockOut: (options?: ClockOptions) => Promise<boolean>;
-  uploadMedia: (files: FileList | File[], caption: string, mode: UploadMode) => Promise<void>;
+  uploadMedia: (
+    files: FileList | File[],
+    caption: string,
+    mode: UploadMode,
+    projectIdOverride?: string | null,
+  ) => Promise<void>;
   queueTaskClaim: (taskId: string) => void;
   updateTaskStatus: (
     taskId: string,
@@ -1980,6 +1985,7 @@ export function WorkerShell({
     files: FileList | File[],
     caption: string,
     mode: UploadMode,
+    projectIdOverride?: string | null,
   ) {
     const selectedFiles = normaliseFiles(files);
 
@@ -2015,10 +2021,14 @@ export function WorkerShell({
       }
     }
 
+    // An explicit override (off-shift journal entry with a picked project)
+    // wins; when omitted/null the project is derived from the shift exactly
+    // as before, so existing callers are byte-for-byte unchanged.
     const targetProjectId =
-      mode === "checkout"
+      projectIdOverride ??
+      (mode === "checkout"
         ? shell.clockState.pendingCheckoutProjectId
-        : shell.clockState.currentProjectId;
+        : shell.clockState.currentProjectId);
 
     if (!targetProjectId) {
       setBanner({

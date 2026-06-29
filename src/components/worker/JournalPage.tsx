@@ -9,15 +9,11 @@ import { formatDateTime } from "@/lib/worker-utils";
 import { useTranslation } from "@/lib/i18n";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { MediaFlagButton, MediaFlagModal } from "@/components/shared/MediaFlagModal";
+import { UploadSourceButtons } from "@/components/shared/UploadSourceButtons";
 import { createClient } from "@/lib/supabase/client";
 import { fetchOpenFlagMediaIds } from "@/lib/media-flags";
 import { normalizeStoragePath } from "@/lib/task-attachments";
 import { MediaViewerModal } from "@/components/shared/MediaViewerModal";
-import {
-  ACCEPT_ALL_UPLOADS,
-  ACCEPT_IMAGE_UPLOADS,
-  ACCEPT_VIDEO_UPLOADS,
-} from "@/lib/upload-limits";
 import type { WorkerMediaItem } from "@/lib/worker-types";
 
 type PendingUpload = {
@@ -54,16 +50,16 @@ function revokePendingUploads(files: PendingUpload[]) {
 export function JournalPage() {
   const { shell, shellDataStatus, busyAction, uploadMedia } = useWorkerShell();
   const { t } = useTranslation();
-  const journalInputRef = useRef<HTMLInputElement | null>(null);
-  const journalPhotoRef = useRef<HTMLInputElement | null>(null);
-  const journalVideoRef = useRef<HTMLInputElement | null>(null);
-  const journalPdfRef = useRef<HTMLInputElement | null>(null);
   const checkoutInputRef = useRef<HTMLInputElement | null>(null);
   const startInputRef = useRef<HTMLInputElement | null>(null);
   const [journalFiles, setJournalFiles] = useState<PendingUpload[]>([]);
   const [checkoutFiles, setCheckoutFiles] = useState<PendingUpload[]>([]);
   const [startFiles, setStartFiles] = useState<PendingUpload[]>([]);
   const [journalCaption, setJournalCaption] = useState("");
+  // Off-shift, the entry has no shift to derive its project from, so the
+  // worker picks one here. Pre-seeded with the current shift's project when
+  // there is one; on shift the picker is hidden and this is unused.
+  const [journalProjectId, setJournalProjectId] = useState<string | null>(null);
   const [checkoutCaption, setCheckoutCaption] = useState("");
   const [startCaption, setStartCaption] = useState("");
   const [openFlagIds, setOpenFlagIds] = useState<Set<string>>(new Set());
@@ -110,6 +106,15 @@ export function JournalPage() {
     const ids = await fetchOpenFlagMediaIds(supabase, recentMediaIds);
     setOpenFlagIds(ids);
   }
+
+  // Default the off-shift picker to the current shift's project when one is
+  // available, without clobbering a choice the worker has already made.
+  const currentProjectId = shell.clockState.currentProjectId;
+  useEffect(() => {
+    if (currentProjectId) {
+      setJournalProjectId((prev) => prev ?? currentProjectId);
+    }
+  }, [currentProjectId]);
 
   function openMediaItem(entry: WorkerMediaItem) {
     // Primary action — open the in-app viewer modal instead of
@@ -414,83 +419,34 @@ export function JournalPage() {
         <h2 className="mt-1 text-xl font-bold text-[var(--text-primary)]">
           {t("journal.captureDay")}
         </h2>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          {shell.clockState.isClockedIn && shell.clockState.currentProjectName
-            ? `${t("journal.entriesLandUnder")} ${shell.clockState.currentProjectName}.`
-            : t("journal.clockInFirst")}
-        </p>
+        {shell.clockState.isClockedIn && shell.clockState.currentProjectName ? (
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            {`${t("journal.entriesLandUnder")} ${shell.clockState.currentProjectName}.`}
+          </p>
+        ) : (
+          <div className="mt-2 space-y-2">
+            <p className="text-sm text-[var(--text-secondary)]">{t("journal.pickProject")}</p>
+            <select
+              value={journalProjectId ?? ""}
+              onChange={(event) => setJournalProjectId(event.target.value || null)}
+              aria-label={t("journal.pickProject")}
+              className="w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+            >
+              <option value="">{t("journal.pickProjectPlaceholder")}</option>
+              {shell.projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        <input
-          ref={journalInputRef}
-          type="file"
-          accept={ACCEPT_ALL_UPLOADS}
-          multiple
-          onChange={(event) => replaceJournalFiles(event.target.files)}
-          disabled={!shell.clockState.isClockedIn}
-          className="hidden"
+        <UploadSourceButtons
+          onFiles={replaceJournalFiles}
+          className="mt-4 grid grid-cols-3 gap-2"
+          dataTestIdPrefix="journal-upload-source"
         />
-        <input
-          ref={journalPhotoRef}
-          type="file"
-          accept={ACCEPT_IMAGE_UPLOADS}
-          capture="environment"
-          multiple
-          onChange={(event) => replaceJournalFiles(event.target.files)}
-          disabled={!shell.clockState.isClockedIn}
-          className="hidden"
-        />
-        <input
-          ref={journalVideoRef}
-          type="file"
-          accept={ACCEPT_VIDEO_UPLOADS}
-          capture="environment"
-          multiple
-          onChange={(event) => replaceJournalFiles(event.target.files)}
-          disabled={!shell.clockState.isClockedIn}
-          className="hidden"
-        />
-        <input
-          ref={journalPdfRef}
-          type="file"
-          accept={ACCEPT_ALL_UPLOADS}
-          multiple
-          onChange={(event) => replaceJournalFiles(event.target.files)}
-          disabled={!shell.clockState.isClockedIn}
-          className="hidden"
-        />
-
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <button
-            type="button"
-            onClick={() => journalPhotoRef.current?.click()}
-            disabled={!shell.clockState.isClockedIn}
-            className="rounded-[var(--radius-md)] border px-3 py-4 text-center text-sm font-semibold transition-opacity disabled:opacity-60"
-            style={{ borderColor: "rgba(191, 162, 52, 0.3)", color: "var(--brand-yellow)", background: "rgba(191, 162, 52, 0.08)" }}
-          >
-            <div className="text-2xl">📷</div>
-            <div className="mt-1 text-xs">{t("journal.bigBtnPhoto")}</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => journalVideoRef.current?.click()}
-            disabled={!shell.clockState.isClockedIn}
-            className="rounded-[var(--radius-md)] border px-3 py-4 text-center text-sm font-semibold transition-opacity disabled:opacity-60"
-            style={{ borderColor: "rgba(74, 127, 191, 0.3)", color: "var(--blue)", background: "rgba(74, 127, 191, 0.08)" }}
-          >
-            <div className="text-2xl">🎬</div>
-            <div className="mt-1 text-xs">{t("journal.bigBtnVideo")}</div>
-          </button>
-          <button
-            type="button"
-            onClick={() => journalPdfRef.current?.click()}
-            disabled={!shell.clockState.isClockedIn}
-            className="rounded-[var(--radius-md)] border px-3 py-4 text-center text-sm font-semibold transition-opacity disabled:opacity-60"
-            style={{ borderColor: "rgba(212, 81, 94, 0.3)", color: "var(--red)", background: "rgba(212, 81, 94, 0.06)" }}
-          >
-            <div className="text-2xl">📄</div>
-            <div className="mt-1 text-xs">{t("journal.bigBtnFiles")}</div>
-          </button>
-        </div>
         <div className="mt-1 text-[10px] text-[var(--text-muted)] text-center">
           {t("journal.snapProgress")}
         </div>
@@ -534,7 +490,6 @@ export function JournalPage() {
           value={journalCaption}
           onChange={(event) => setJournalCaption(event.target.value)}
           placeholder={t("journal.whatLookingAt")}
-          disabled={!shell.clockState.isClockedIn}
           className="mt-4 min-h-[110px] w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-3 text-sm text-[var(--text-primary)] outline-none disabled:cursor-not-allowed disabled:opacity-60"
         />
         {saveStatus ? (
@@ -559,12 +514,16 @@ export function JournalPage() {
             // belt-and-suspenders: refuse explicitly with a visible
             // message rather than silently doing nothing on edge cases
             // (mid-render race, browser autosave restoring an old DOM).
-            if (!shell.clockState.isClockedIn) {
-              setSaveStatus({ kind: "err", text: t("journal.clockInFirst") });
-              return;
-            }
             if (journalFiles.length === 0) {
               setSaveStatus({ kind: "err", text: t("journal.attachFileFirst") });
+              return;
+            }
+            // Off shift there is no shift to derive the project from, so the
+            // worker must pick one. On shift uploadMedia derives the current
+            // project exactly as before (override stays undefined).
+            const offShift = !shell.clockState.isClockedIn;
+            if (offShift && !journalProjectId) {
+              setSaveStatus({ kind: "err", text: t("journal.pickProject") });
               return;
             }
             setSaveStatus(null);
@@ -575,6 +534,7 @@ export function JournalPage() {
                   journalFiles.map((file) => file.file),
                   journalCaption,
                   "journal",
+                  offShift ? journalProjectId : undefined,
                 );
                 // uploadMedia surfaces its own banner on validation /
                 // network errors and returns without throwing. Detect
@@ -594,10 +554,6 @@ export function JournalPage() {
                   revokePendingUploads(journalFiles);
                   setJournalFiles([]);
                   setJournalCaption("");
-                  if (journalInputRef.current) journalInputRef.current.value = "";
-                  if (journalPhotoRef.current) journalPhotoRef.current.value = "";
-                  if (journalVideoRef.current) journalVideoRef.current.value = "";
-                  if (journalPdfRef.current) journalPdfRef.current.value = "";
                 } else {
                   setSaveStatus({ kind: "err", text: t("journal.saveFailedHint") });
                 }
@@ -608,7 +564,6 @@ export function JournalPage() {
             })();
           }}
           disabled={
-            !shell.clockState.isClockedIn ||
             journalFiles.length === 0 ||
             busyAction === "journal-upload"
           }

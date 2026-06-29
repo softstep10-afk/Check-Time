@@ -13,6 +13,7 @@ const managerProjectDetailSource = readSource("src/components/manager/ProjectDet
 const managerProjectsSource = readSource("src/components/manager/ProjectsPage.tsx");
 const projectNotesRouteSource = readSource("src/app/api/worker/project-notes/route.ts");
 const projectMediaLibrarySource = readSource("src/components/shared/ProjectMediaLibrary.tsx");
+const uploadSourceButtonsSource = readSource("src/components/shared/UploadSourceButtons.tsx");
 
 describe("journal media back, active project, notes, and picker source guards", () => {
   it("closes in-app media viewer through browser Back without leaving the current surface", () => {
@@ -51,7 +52,8 @@ describe("journal media back, active project, notes, and picker source guards", 
   });
 
   it("keeps document picker support on journal and material/project upload surfaces", () => {
-    expect(journalSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
+    expect(journalSource).toContain("<UploadSourceButtons");
+    expect(uploadSourceButtonsSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
     expect(workerProjectViewSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
     expect(managerProjectDetailSource).toContain("accept={ACCEPT_ALL_UPLOADS}");
   });
