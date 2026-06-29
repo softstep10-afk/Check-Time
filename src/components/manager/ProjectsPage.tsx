@@ -1493,7 +1493,7 @@ export function ProjectsPage({
 
   return (
     <div className="mx-auto max-w-[1400px] space-y-5 p-5">
-      <section className="space-y-2">
+      <section className="hidden space-y-2 md:block">
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
           {t("projects.title")}
         </p>
