@@ -1279,6 +1279,7 @@ export const translations = {
   "clock.endShiftCta": { en: "End shift", ru: "Завершить смену" },
   "clock.shiftCompleteTitle": { en: "Shift complete", ru: "Смена завершена" },
   "projects.filterAll": { en: "All", ru: "Все" },
+  "projects.statusFilter": { en: "Status", ru: "Статус" },
   "projects.sortBy": { en: "Sort by", ru: "Сортировка" },
   "projects.sortActivity": { en: "By activity", ru: "По активности" },
   "projects.sortName": { en: "By name", ru: "По имени" },

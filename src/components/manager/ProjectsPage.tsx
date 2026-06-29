@@ -1549,13 +1549,13 @@ export function ProjectsPage({
         </section>
       ) : null}
 
-      <section className="surface-card p-4">
+      <section className="surface-card p-3 md:p-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("projects.createProject")}</h2>
+          <h2 className="text-base font-bold text-[var(--text-primary)] md:text-lg">{t("projects.createProject")}</h2>
           <button
             type="button"
             onClick={toggleCreateProjectPanel}
-            className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
+            className="inline-flex items-center gap-1.5 rounded-[var(--radius-sm)] px-2.5 py-1 text-[11px] font-semibold md:px-3 md:py-1.5 md:text-xs"
             style={{
               background: showCreatePanel ? "transparent" : "var(--brand-yellow)",
               color: showCreatePanel ? "var(--text-primary)" : "var(--text-inverse)",
@@ -1872,7 +1872,7 @@ export function ProjectsPage({
       </section>
 
       <section className="sticky top-0 z-20 flex flex-wrap items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--bg-card)] p-3 shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
-        <div className="flex flex-wrap gap-1.5">
+        <div className="hidden flex-wrap gap-1.5 md:flex">
           {(
             [
               { key: "all", label: t("projects.filterAll") },
@@ -1900,10 +1900,35 @@ export function ProjectsPage({
             );
           })}
         </div>
+        {/* Mobile-only compact filter row: status + sort selects replace the chip buttons. */}
+        <div className="flex w-full gap-2 md:hidden">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+            aria-label={t("projects.statusFilter")}
+          >
+            <option value="all">{t("projects.filterAll")}</option>
+            <option value="active">{t("common.active")}</option>
+            <option value="paused">{t("common.paused")}</option>
+            <option value="completed">{t("common.completed")}</option>
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="min-w-0 flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+            aria-label={t("projects.sortBy")}
+          >
+            <option value="activity">{t("projects.sortActivity")}</option>
+            <option value="name">{t("projects.sortName")}</option>
+            <option value="week">{t("projects.sortWeek")}</option>
+            {hasFinanceAccess ? <option value="cost">{t("projects.sortCost")}</option> : null}
+          </select>
+        </div>
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-          className="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none"
+          className="hidden rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2.5 py-1.5 text-xs text-[var(--text-primary)] outline-none md:block"
           aria-label={t("projects.sortBy")}
         >
           <option value="activity">{t("projects.sortActivity")}</option>
