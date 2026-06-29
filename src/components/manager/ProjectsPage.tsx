@@ -1992,7 +1992,7 @@ export function ProjectsPage({
           return (
             <Fragment key={project.id}>
               <article
-                data-testid="manager-project-card"
+                data-testid="manager-project-card-mobile"
                 className="relative block touch-manipulation rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-card)] p-2.5 transition hover:border-[var(--brand-yellow)] md:hidden"
               >
                 <Link
