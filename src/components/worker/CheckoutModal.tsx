@@ -8,11 +8,6 @@ import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { createClient } from "@/lib/supabase/client";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 
-const optionalCheckoutVideoLabel = {
-  en: "Optional checkout video",
-  ru: "Видео при выходе необязательно",
-} as const;
-
 function startOfTodayMs(): number {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -27,7 +22,7 @@ export function CheckoutModal({
   onClose: () => void;
 }) {
   const { shell, busyAction, clockOut, uploadMedia } = useWorkerShell();
-  const { t, locale } = useTranslation();
+  const { t } = useTranslation();
   const supabase = useMemo(() => createClient(), []);
   const fileRef = useRef<HTMLInputElement>(null);
   const checkoutSubmittingRef = useRef(false);
@@ -240,7 +235,7 @@ export function CheckoutModal({
             ) : requireVideo ? (
               t("clock.videoMissing")
             ) : (
-              optionalCheckoutVideoLabel[locale]
+              t("clock.checkoutVideoOptional")
             )}
           </div>
         </div>

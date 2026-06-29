@@ -196,6 +196,7 @@ export const translations = {
   "clock.uploadVideo": { en: "Choose a file", ru: "Выбрать файл" },
   "clock.videoCaptured": { en: "Video captured. You can now check out.", ru: "Видео записано. Можно завершить смену." },
   "clock.videoMissing": { en: "Video not yet uploaded.", ru: "Видео ещё не загружено." },
+  "clock.checkoutVideoOptional": { en: "Video optional", ru: "Видео по желанию" },
   "clock.uploadingVideo": { en: "Uploading…", ru: "Загрузка…" },
   "clock.checkoutNotePlaceholder": { en: "What did you do today? You can type or dictate it.", ru: "Что сделали сегодня? Можно написать или надиктовать." },
   "clock.confirmCheckout": { en: "End shift now?", ru: "Завершить смену сейчас?" },
