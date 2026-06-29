@@ -980,7 +980,32 @@ export function WorkerProjectView({
         )}
       </section>
 
-      <WorkerMaterialSpecSection project={project} />
+      {/* One "Материалы" folder grouping the two existing, independent
+          mechanisms as labelled subsections: "Позиции" (delivery line items
+          backed by task rows) and "Документы" (supplier spec). No data is
+          merged or migrated — each subsection keeps its own source and add
+          path exactly as before. */}
+      <CollapsibleSection
+        id="materials-folder"
+        projectId={project.id}
+        defaultOpen={true}
+        dataTestid="worker-project-materials-combined"
+        className="p-4"
+        contentClassName="space-y-4"
+        summary={
+          <h2 className="text-lg font-bold text-[var(--text-primary)]">
+            {t("materials.folderTitle")}
+          </h2>
+        }
+      >
+        <WorkerMaterialsList
+          orgId={orgId}
+          projectId={project.id}
+          profileId={profileId}
+          currentUserName={workerShell.shell.profile.name}
+        />
+        <WorkerMaterialSpecSection project={project} />
+      </CollapsibleSection>
 
       <CollapsibleSection
         id="media"
@@ -1006,12 +1031,6 @@ export function WorkerProjectView({
         />
       </CollapsibleSection>
 
-      <WorkerMaterialsList
-        orgId={orgId}
-        projectId={project.id}
-        profileId={profileId}
-        currentUserName={workerShell.shell.profile.name}
-      />
       <WorkerReceiptUpload
         orgId={orgId}
         projectId={project.id}
@@ -2280,7 +2299,7 @@ function WorkerMaterialsList({
     await refreshMaterials();
   }
 
-  const materialsSummary = formatSectionCountSummary(t("materials.title"), [
+  const materialsSummary = formatSectionCountSummary(t("materials.itemsSubsectionTitle"), [
     { count: items.length, label: t("projectDetail.summaryItems") },
   ]);
 
