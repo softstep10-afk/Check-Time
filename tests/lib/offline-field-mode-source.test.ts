@@ -35,7 +35,8 @@ describe("stable offline field mode source wiring", () => {
   it("queues task status updates and avoids false success before server confirmation", () => {
     expect(workerShellSource).toContain("queueTaskStatusAction(taskId, nextStatus, updatePayload)");
     expect(workerShellSource).toContain("return false;");
-    expect(workerShellSource).toContain(".update(item.payload.updatePayload)");
+    expect(workerShellSource).toContain('fetch("/api/worker/task-status"');
+    expect(workerShellSource).toContain("updatePayload: item.payload.updatePayload");
     expect(workerShellSource).toContain('t("worker.fieldActionSynced")');
   });
 
