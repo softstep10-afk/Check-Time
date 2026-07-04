@@ -120,6 +120,7 @@ describe("profile_rates helpers", () => {
         profile({ id: "w2", name: "Worker Two" }),
       ],
       true,
+      "org",
     );
 
     expect(result.map((entry) => [entry.id, entry.hourly_rate])).toEqual([
@@ -133,6 +134,29 @@ describe("profile_rates helpers", () => {
         in: { column: "profile_id", values: ["w1", "w2"] },
       },
     ]);
+  });
+
+  it("rejects profile rate hydration when the profile seed set crosses orgs", async () => {
+    const calls: Array<{ table: string; select?: string; in?: { column: string; values: string[] } }> = [];
+    const supabase = supabaseForRates({
+      rateRows: [{ profile_id: "w1", hourly_rate: "45.5" }],
+      legacyRows: [],
+      calls,
+    });
+
+    await expect(
+      hydrateProfilesWithRates(
+        supabase,
+        [
+          profile({ id: "w1", name: "Worker One" }),
+          profile({ id: "w2", name: "Worker Two", org_id: "other-org" }),
+        ],
+        true,
+        "org",
+      ),
+    ).rejects.toThrow("outside the authenticated org");
+
+    expect(calls).toEqual([]);
   });
 
   it("builds the profile_rates upsert payload with updated_at", () => {

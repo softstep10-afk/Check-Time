@@ -128,6 +128,10 @@ function findProfileSelectArgs(source: string): string[] {
   });
 }
 
+function countOrgFilters(source: string, expression: string): number {
+  return (source.match(new RegExp(`\\.eq\\("${expression}", org\\.id\\)`, "g")) ?? []).length;
+}
+
 describe("profile_rates migration guards", () => {
   it("writes team member rates through profile_rates upsert", () => {
     expect(createRouteSource).toContain("upsertProfileRate(adminClient");
@@ -155,6 +159,11 @@ describe("profile_rates migration guards", () => {
     for (const [file, source] of Object.entries(rateReadSources)) {
       expect(source, file).not.toMatch(/\.from\("profiles"\)\s*\.select\("\*"\)/);
     }
+
+    expect(countOrgFilters(payrollRunSource, "org_id")).toBe(4);
+    expect(countOrgFilters(payrollExportSource, "org_id")).toBe(4);
+    expect(countOrgFilters(payWorkerSource, "org_id")).toBe(4);
+    expect(profileRatesSource).toContain("outside the authenticated org");
   });
 
   it("keeps annual worker report profile reads on display-safe columns", () => {
