@@ -24,6 +24,7 @@ import type { Media, ProjectAssignment, Task, UserRole } from "@/types/database"
 import type { StoreVisit } from "@/lib/store-types";
 import { ArrowRight, Camera, Store } from "lucide-react";
 import { useTranslation, type TranslationKey } from "@/lib/i18n";
+import { ShiftEditDialog } from "@/components/manager/ShiftEditDialog";
 import { canUpdateTeamRole } from "@/lib/role-permissions";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { SendMessageForm } from "@/components/manager/SendMessageForm";
@@ -162,6 +163,7 @@ export function TeamMemberPage({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showUnpaidBreakdown, setShowUnpaidBreakdown] = useState(false);
   const [dayDetailDate, setDayDetailDate] = useState<string | null>(null);
+  const [shiftEditTarget, setShiftEditTarget] = useState<ManagerSession | "create" | null>(null);
   const [flagModalMediaId, setFlagModalMediaId] = useState<string | null>(null);
   const [mediaViewerItem, setMediaViewerItem] = useState<ViewerMediaItem | null>(null);
   // Journal-timeline gallery drawer (open via "Open gallery" near the
@@ -1445,8 +1447,19 @@ export function TeamMemberPage({
           {/* Latest 5 closed shifts. Severity badge mirrors shift-review:
               red ≥ 24h, amber 16h–24h, otherwise nothing. */}
           <div className="mt-4">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-              {t("teamMember.recentShifts")}
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
+                {t("teamMember.recentShifts")}
+              </div>
+              {hasFinanceAccess && (
+                <button
+                  type="button"
+                  className="shrink-0 rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-primary)]"
+                  onClick={() => setShiftEditTarget("create")}
+                >
+                  {t("shiftEdit.addManual")}
+                </button>
+              )}
             </div>
             <div className="mt-2 space-y-1.5">
               {sessionRows.length === 0 ? (
@@ -1482,20 +1495,32 @@ export function TeamMemberPage({
                             : ` · ${t("common.live").toLowerCase()}`}
                           {noGps ? ` · ${t("shiftReview.noGps")}` : ""}
                           {missingVideo ? ` · ${t("shiftReview.videoMissing")}` : ""}
+                          {session.edited ? ` · ${t("shiftEdit.editedMarker")}` : ""}
                         </div>
                       </div>
-                      <span
-                        className="shrink-0 whitespace-nowrap rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
-                        style={
-                          isExtreme
-                            ? { background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }
-                            : isLong
-                              ? { background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }
-                              : { background: "rgba(148, 163, 184, 0.10)", color: "var(--text-muted)" }
-                        }
-                      >
-                        {formatDurationCompact(session.durationMinutes)}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <span
+                          className="whitespace-nowrap rounded-[var(--radius-pill)] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
+                          style={
+                            isExtreme
+                              ? { background: "rgba(212, 81, 94, 0.14)", color: "var(--red)" }
+                              : isLong
+                                ? { background: "rgba(245, 158, 11, 0.14)", color: "#f59e0b" }
+                                : { background: "rgba(148, 163, 184, 0.10)", color: "var(--text-muted)" }
+                          }
+                        >
+                          {formatDurationCompact(session.durationMinutes)}
+                        </span>
+                        {hasFinanceAccess && (
+                          <button
+                            type="button"
+                            className="whitespace-nowrap rounded-[var(--radius-pill)] border border-[var(--border-default)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-primary)]"
+                            onClick={() => setShiftEditTarget(session)}
+                          >
+                            {t("shiftEdit.edit")}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })
@@ -2999,6 +3024,25 @@ export function TeamMemberPage({
         adjustments={workerAdjustments}
         onClose={() => setDayDetailDate(null)}
       />
+
+      {hasFinanceAccess && shiftEditTarget !== null && (
+        <ShiftEditDialog
+          mode={shiftEditTarget === "create" ? "create" : "edit"}
+          session={shiftEditTarget === "create" ? null : shiftEditTarget}
+          workerId={profile.id}
+          workerName={profile.name}
+          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          onClose={() => setShiftEditTarget(null)}
+          onSaved={() => {
+            setShiftEditTarget(null);
+            setMessage(
+              shiftEditTarget === "create" ? t("shiftEdit.created") : t("shiftEdit.saved"),
+            );
+            setMessageType("success");
+            router.refresh();
+          }}
+        />
+      )}
 
       <MediaFlagModal
         open={flagModalMediaId !== null}
