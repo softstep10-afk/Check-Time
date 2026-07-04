@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireManagerContext } from "@/lib/manager-data";
+import { consumePaidApiLimit, paidApiLimitResponse } from "@/lib/paid-api-limits";
 import { parseGoogleGeocodePayload } from "@/lib/project-geocoding";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isValidGeoPoint } from "@/lib/worker-utils";
 
@@ -24,7 +26,7 @@ function getGeocodingApiKey(): { key: string; source: "server" | "public" | "mis
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    await requireManagerContext(supabase);
+    const context = await requireManagerContext(supabase);
 
     const rawBody = (await request.json()) as unknown;
     const body =
@@ -68,6 +70,16 @@ export async function POST(request: NextRequest) {
         },
         { status: 503 },
       );
+    }
+    const paidLimit = await consumePaidApiLimit({
+      adminClient: createAdminClient(),
+      orgId: context.profile.org_id,
+      profileId: context.profile.id,
+      route: "/api/manager/projects/geocode",
+      provider: "google_geocoding",
+    });
+    if (!paidLimit.allowed) {
+      return paidApiLimitResponse(paidLimit);
     }
 
     const geocodeUrl = new URL("https://maps.googleapis.com/maps/api/geocode/json");

@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getManagerWorkspaceData } from "@/lib/manager-data";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { buildAssistantSnapshot, interpretVoiceCommand } from "@/lib/ai/service";
+import {
+  createPaidApiLimitGuard,
+  isPaidApiLimitError,
+  paidApiLimitResponse,
+} from "@/lib/paid-api-limits";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { DailyReport } from "@/types/database";
 
 function assertNoError(error: { message: string } | null, label: string) {
@@ -48,13 +54,31 @@ export async function POST(request: NextRequest) {
     const snapshot = buildAssistantSnapshot(managerData, reports, {
       includeFinancials: ownerJarvisAccess,
     });
-    const command = await interpretVoiceCommand(transcript, snapshot);
+    const limitIdentity = auth.kind === "authenticated"
+      ? {
+          orgId: auth.context.profile.org_id,
+          profileId: auth.context.profile.id,
+        }
+      : {
+          orgId: managerData.org.id,
+          profileId: managerData.manager.id,
+        };
+    const command = await interpretVoiceCommand(transcript, snapshot, {
+      beforeProviderCall: createPaidApiLimitGuard({
+        adminClient: auth.kind === "authenticated" ? createAdminClient() : null,
+        route: "/api/ai/voice-command",
+        ...limitIdentity,
+      }),
+    });
 
     return NextResponse.json({
       ok: true,
       command,
     });
   } catch (error) {
+    if (isPaidApiLimitError(error)) {
+      return paidApiLimitResponse(error.result);
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

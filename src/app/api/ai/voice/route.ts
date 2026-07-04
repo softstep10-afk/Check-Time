@@ -20,6 +20,12 @@ import {
 } from "@/lib/ai/jarvis-memory";
 import { resolveJarvisRuntimeConfig } from "@/lib/ai/jarvis-config";
 import { logJarvisPreparedActions } from "@/lib/ai/prepared-action-audit";
+import {
+  createPaidApiLimitGuard,
+  isPaidApiLimitError,
+  paidApiLimitResponse,
+} from "@/lib/paid-api-limits";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { AssistantConversationTurn, AssistantResult } from "@/lib/ai/types";
 import type { DailyReport } from "@/types/database";
 
@@ -125,6 +131,22 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      const wakeIdentity = auth.kind === "authenticated"
+        ? {
+            orgId: auth.context.profile.org_id,
+            profileId: auth.context.profile.id,
+          }
+        : {
+            orgId: auth.managerData.org.id,
+            profileId: auth.managerData.manager.id,
+          };
+      const wakeLimitGuard = createPaidApiLimitGuard({
+        adminClient: auth.kind === "authenticated" ? createAdminClient() : null,
+        route: "/api/ai/voice",
+        ...wakeIdentity,
+      });
+      await wakeLimitGuard("google_tts");
+
       let audio = null;
       let audioError: string | null = null;
       try {
@@ -207,6 +229,20 @@ export async function POST(request: NextRequest) {
       includeFinancials: ownerJarvisAccess,
     });
     const jarvisConfig = resolveJarvisRuntimeConfig(managerData.org.settings);
+    const limitIdentity = auth.kind === "authenticated"
+      ? {
+          orgId: auth.context.profile.org_id,
+          profileId: auth.context.profile.id,
+        }
+      : {
+          orgId: managerData.org.id,
+          profileId: managerData.manager.id,
+        };
+    const limitGuard = createPaidApiLimitGuard({
+      adminClient: auth.kind === "authenticated" ? createAdminClient() : null,
+      route: "/api/ai/voice",
+      ...limitIdentity,
+    });
     const assistant: AssistantResult = memorySaved
       ? {
           answer: /[а-яё]/i.test(question)
@@ -223,6 +259,7 @@ export async function POST(request: NextRequest) {
             attachments,
             history,
             systemPrompt: jarvisConfig.systemPrompt,
+            beforeProviderCall: limitGuard,
           })),
           memorySaved,
         };
@@ -243,6 +280,8 @@ export async function POST(request: NextRequest) {
         audioError: "Jarvis voice is temporarily unavailable.",
       });
     }
+
+    await limitGuard("google_tts");
 
     let audio = null;
     let audioError: string | null = null;
@@ -266,6 +305,9 @@ export async function POST(request: NextRequest) {
       audioError,
     });
   } catch (error) {
+    if (isPaidApiLimitError(error)) {
+      return paidApiLimitResponse(error.result);
+    }
     if (process.env.NODE_ENV !== "production") {
       console.error("[Jarvis voice]", getErrorMessage(error, "Jarvis voice request failed."));
     }

@@ -3,6 +3,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { consumePaidApiLimit, paidApiLimitResponse } from "@/lib/paid-api-limits";
 import { readRequiredUuid } from "@/lib/server/id-guards";
 import { redactText, safeClientErrorMessage } from "@/lib/safe-log";
 import { normalizeStoragePath } from "@/lib/task-attachments";
@@ -123,6 +124,16 @@ export async function POST(request: NextRequest) {
         { error: "Video processing is temporarily unavailable." },
         { status: 503 },
       );
+    }
+    const paidLimit = await consumePaidApiLimit({
+      adminClient: admin,
+      orgId: profile.org_id,
+      profileId: profile.id,
+      route: "/api/media/transcode",
+      provider: "mux",
+    });
+    if (!paidLimit.allowed) {
+      return paidApiLimitResponse(paidLimit);
     }
 
     // 24-hour signed URL — Mux ingests within seconds normally, but

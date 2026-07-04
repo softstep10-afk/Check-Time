@@ -15,6 +15,12 @@ import {
 } from "@/lib/ai/jarvis-memory";
 import { resolveJarvisRuntimeConfig } from "@/lib/ai/jarvis-config";
 import { logJarvisPreparedActions } from "@/lib/ai/prepared-action-audit";
+import {
+  createPaidApiLimitGuard,
+  isPaidApiLimitError,
+  paidApiLimitResponse,
+} from "@/lib/paid-api-limits";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { DailyReport } from "@/types/database";
 import type { AssistantConversationTurn } from "@/lib/ai/types";
 
@@ -138,10 +144,25 @@ export async function POST(request: NextRequest) {
         },
       });
     }
+    const limitIdentity = auth.kind === "authenticated"
+      ? {
+          orgId: auth.context.profile.org_id,
+          profileId: auth.context.profile.id,
+        }
+      : {
+          orgId: managerData.org.id,
+          profileId: managerData.manager.id,
+        };
+    const limitGuard = createPaidApiLimitGuard({
+      adminClient: auth.kind === "authenticated" ? createAdminClient() : null,
+      route: "/api/ai/assistant",
+      ...limitIdentity,
+    });
     const assistant = await answerManagerAssistant(question, snapshot, {
       attachments,
       history,
       systemPrompt: jarvisConfig.systemPrompt,
+      beforeProviderCall: limitGuard,
     });
     if (auth.kind === "authenticated") {
       await logJarvisPreparedActions(supabase, {
@@ -160,6 +181,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (isPaidApiLimitError(error)) {
+      return paidApiLimitResponse(error.result);
+    }
     if (process.env.NODE_ENV !== "production") {
       console.error("[Jarvis assistant]", error);
     }

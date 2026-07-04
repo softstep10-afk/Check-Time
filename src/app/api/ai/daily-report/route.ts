@@ -4,6 +4,12 @@ import { generateDailyReport, formatOrgDateKey, getTodayInOrgTimeZone } from "@/
 import { buildManagerSessions, isOpenTask } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
+import {
+  createPaidApiLimitGuard,
+  isPaidApiLimitError,
+  paidApiLimitResponse,
+} from "@/lib/paid-api-limits";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { DailyReport } from "@/types/database";
 
 function assertNoError(error: { message: string } | null, label: string) {
@@ -62,6 +68,15 @@ export async function POST(request: NextRequest) {
       projectId
         ? data.projects.find((project) => project.id === projectId)?.name ?? "Unknown project"
         : "All Projects";
+    const limitIdentity = auth.kind === "authenticated"
+      ? {
+          orgId: auth.context.profile.org_id,
+          profileId: auth.context.profile.id,
+        }
+      : {
+          orgId: data.org.id,
+          profileId: data.manager.id,
+        };
     const report = await generateDailyReport({
       reportDate,
       projectId,
@@ -76,6 +91,12 @@ export async function POST(request: NextRequest) {
         .map((item) => item.caption?.trim() ?? "")
         .filter(Boolean)
         .slice(0, 5),
+    }, {
+      beforeProviderCall: createPaidApiLimitGuard({
+        adminClient: auth.kind === "authenticated" ? createAdminClient() : null,
+        route: "/api/ai/daily-report",
+        ...limitIdentity,
+      }),
     });
 
     let savedReportId: string | null = null;
@@ -113,6 +134,9 @@ export async function POST(request: NextRequest) {
       savedReportId,
     });
   } catch (error) {
+    if (isPaidApiLimitError(error)) {
+      return paidApiLimitResponse(error.result);
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
