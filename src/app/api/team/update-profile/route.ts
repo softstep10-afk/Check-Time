@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
       .from("profiles")
       .select("id, org_id, role, settings, deleted_at")
       .eq("id", profileIdResult.value)
+      .eq("org_id", actor.org_id)
       .maybeSingle<TargetProfile>();
 
     if (targetError) {

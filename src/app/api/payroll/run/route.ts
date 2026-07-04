@@ -53,17 +53,20 @@ export async function POST(request: NextRequest) {
         supabase
           .from("profiles")
           .select(PROFILE_SELECT_WITHOUT_RATE)
+          .eq("org_id", org.id)
           .returns<ProfileWithoutRate[]>(),
-        supabase.from("projects").select("*").returns<Project[]>(),
+        supabase.from("projects").select("*").eq("org_id", org.id).returns<Project[]>(),
         supabase
           .from("time_events")
           .select("*")
+          .eq("org_id", org.id)
           .order("event_time", { ascending: false })
           .range(0, 4999)
           .returns<TimeEvent[]>(),
         supabase
           .from("payroll_closures")
           .select("*")
+          .eq("org_id", org.id)
           .order("closed_through", { ascending: false })
           .range(0, 999)
           .returns<PayrollClosure[]>(),
@@ -78,6 +81,7 @@ export async function POST(request: NextRequest) {
       supabase,
       profilesResult.data ?? [],
       true,
+      org.id,
     );
 
     const workspace: ManagerWorkspaceData = {

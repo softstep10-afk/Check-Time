@@ -202,6 +202,7 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
     supabase,
     profilesResult.data ?? [],
     canReadRates,
+    context.org.id,
   );
 
   return {
@@ -361,6 +362,7 @@ export const getProjectsPageData = cache(async (): Promise<ManagerWorkspaceData>
     supabase,
     profilesResult.data ?? [],
     canReadRates,
+    context.org.id,
   );
 
   return {
@@ -477,6 +479,7 @@ export const getArchivePageData = cache(async (): Promise<ArchivePageData> => {
     supabase,
     profilesResult.data ?? [],
     canReadRates,
+    context.org.id,
   );
 
   const periodIds = (payPeriodsResult.data ?? []).map((period) => period.id);
@@ -572,6 +575,7 @@ export const getTeamPageData = cache(async (): Promise<ManagerWorkspaceData> => 
     supabase,
     profilesResult.data ?? [],
     canReadRates,
+    context.org.id,
   );
 
   return {
@@ -644,6 +648,7 @@ export const getPayrollPageData = cache(async (): Promise<ManagerWorkspaceData> 
     supabase,
     profilesResult.data ?? [],
     canReadRates,
+    context.org.id,
   );
 
   return {

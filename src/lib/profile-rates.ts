@@ -92,7 +92,13 @@ export async function hydrateProfilesWithRates(
   supabase: SupabaseClient,
   profileRows: ProfileWithoutRate[],
   canReadRates: boolean,
+  orgId: string,
 ): Promise<Profile[]> {
+  const outOfOrgProfile = profileRows.find((profile) => profile.org_id !== orgId);
+  if (outOfOrgProfile) {
+    throw new Error("Profile rates query received a profile outside the authenticated org.");
+  }
+
   const profiles = profilesWithoutRates(profileRows);
   if (!canReadRates || profiles.length === 0) {
     return profiles;
