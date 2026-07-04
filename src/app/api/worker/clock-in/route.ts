@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { closeOpenStoreVisits } from "@/lib/store-visits";
+import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { buildNoGpsMetadata, type WorkerGpsErrorKind } from "@/lib/worker-clock-metadata";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
+import { haversineMeters, parseGeoPoint, toSupabasePoint } from "@/lib/worker-utils";
+import { readRequiredUuid } from "@/lib/server/id-guards";
 import type { TimeEvent } from "@/types/database";
 
-type ClockOutBody = {
+type ClockInBody = {
+  projectId?: unknown;
   eventTime?: unknown;
   gps?: unknown;
-  gpsAccuracy?: unknown;
   gpsErrorKind?: unknown;
-  note?: unknown;
   clientEventId?: unknown;
   gpsReviewSuppressed?: unknown;
   offlineQueued?: unknown;
@@ -24,6 +25,15 @@ type WorkerProfile = {
   require_video: boolean;
   current_project: string | null;
   is_active: boolean;
+};
+
+type ProjectRow = {
+  id: string;
+  org_id: string;
+  site_point: unknown;
+  gps_radius_m: number | null;
+  radius_m: number | null;
+  settings: Record<string, unknown> | null;
 };
 
 type GpsPoint = {
@@ -64,19 +74,15 @@ function safeIso(value: unknown, fallback: string) {
   return Number.isFinite(ms) ? new Date(ms).toISOString() : fallback;
 }
 
-function toSupabasePoint(point: GpsPoint): string {
-  return `SRID=4326;POINT(${point.lng} ${point.lat})`;
-}
-
 /**
- * Service-side worker checkout.
+ * Service-side worker clock-in (audit C-H4).
  *
- * The old client-only clock_out insert depended on browser/RLS behavior.
- * That made the project page checkout path fragile on phones: if the
- * client was stale, GPS permission changed, or RLS returned a hard error,
- * the worker looked trapped in the checkout modal. This endpoint keeps
- * the same auth boundary, but performs the ledger insert with the service
- * role after verifying the caller owns the open shift.
+ * The old client-only clock_in insert (plus the follow-up profiles.update)
+ * ran straight from the browser, so a tampered client could forge a shift
+ * or bypass the geofence. This endpoint keeps the same auth boundary as the
+ * clock-out route, derives org_id/profile_id/video_status from the server
+ * profile, and enforces the geofence server-side. Idempotent by
+ * metadata->>client_event_id so the offline drain can replay safely.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -93,18 +99,21 @@ export async function POST(request: NextRequest) {
     const admin = createAdminClient();
     if (!admin) {
       return NextResponse.json(
-        { error: "Clock-out is temporarily unavailable." },
+        { error: "Clock-in is temporarily unavailable." },
         { status: 503 },
       );
     }
 
-    const body = (await request.json().catch(() => ({}))) as ClockOutBody;
+    const body = (await request.json().catch(() => ({}))) as ClockInBody;
+    const projectId = readRequiredUuid(body.projectId, "project id");
+    if (!projectId.ok) {
+      return NextResponse.json({ error: projectId.error }, { status: projectId.status });
+    }
     const nowIso = new Date().toISOString();
-    const requestedTimestamp = safeIso(body.eventTime, nowIso);
+    const eventTime = safeIso(body.eventTime, nowIso);
     const gps = asGpsPoint(body.gps);
     const gpsErrorKind = asGpsErrorKind(body.gpsErrorKind);
     const offlineQueued = body.offlineQueued === true;
-    const note = typeof body.note === "string" ? body.note.trim().slice(0, 4000) : "";
     const clientEventId =
       typeof body.clientEventId === "string" && body.clientEventId.trim()
         ? body.clientEventId.trim().slice(0, 120)
@@ -126,11 +135,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Profile is inactive." }, { status: 403 });
     }
 
+    // Layer-B dedup: an event already stamped with this client_event_id means
+    // the drain (or a double-tap) already landed. Return it instead of a dupe.
     const { data: existingEvent, error: existingError } = await admin
       .from("time_events")
       .select("*")
       .eq("profile_id", user.id)
-      .eq("event_type", "clock_out")
+      .eq("event_type", "clock_in")
       .contains("metadata", { client_event_id: clientEventId })
       .maybeSingle<TimeEvent>();
 
@@ -141,35 +152,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, event: existingEvent, requireVideo: profile.require_video });
     }
 
-    const { data: latestEvent, error: latestError } = await admin
-      .from("time_events")
-      .select("*")
-      .eq("profile_id", user.id)
-      .in("event_type", ["clock_in", "clock_out"])
-      .order("event_time", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<TimeEvent>();
-
-    if (latestError) {
-      return NextResponse.json({ error: latestError.message }, { status: 500 });
-    }
-    if (!latestEvent || latestEvent.event_type !== "clock_in") {
-      return NextResponse.json({ error: "There is no active shift to close." }, { status: 409 });
-    }
-    if (latestEvent.org_id !== profile.org_id || latestEvent.profile_id !== profile.id) {
-      return NextResponse.json({ error: "Shift ownership mismatch." }, { status: 403 });
-    }
-
-    const openMs = new Date(latestEvent.event_time).getTime();
-    const requestedMs = new Date(requestedTimestamp).getTime();
-    const eventTime = Number.isFinite(openMs) && requestedMs <= openMs ? nowIso : requestedTimestamp;
-    const { data: project } = await admin
+    const { data: project, error: projectError } = await admin
       .from("projects")
-      .select("settings")
-      .eq("id", latestEvent.project_id)
+      .select("id, org_id, site_point, gps_radius_m, radius_m, settings")
+      .eq("id", projectId.value)
       .eq("org_id", profile.org_id)
-      .maybeSingle<{ settings: Record<string, unknown> | null }>();
+      .is("deleted_at", null)
+      .maybeSingle<ProjectRow>();
+
+    if (projectError) {
+      return NextResponse.json({ error: projectError.message }, { status: 500 });
+    }
+    if (!project) {
+      return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    }
+
+    // Server-side geofence enforcement — mirrors the client formula exactly:
+    // radius (per-project gps_radius_m → app setting → 75m) + max(accuracy, 25).
+    // Only enforced when we actually have both a device fix and a site point;
+    // the No-GPS path (gpsErrorKind present, gps null) passes through as today.
+    const site = parseGeoPoint(project.site_point);
+    if (gps && site) {
+      const appRadius = await getAppGeofenceRadiusM(admin);
+      const effectiveRadius = resolveProjectRadiusM(project, appRadius);
+      const allowedDistance = effectiveRadius + Math.max(gps.accuracy ?? 0, 25);
+      const distanceMeters = haversineMeters(site, { lat: gps.lat, lng: gps.lng });
+      if (distanceMeters > allowedDistance) {
+        return NextResponse.json(
+          { error: "Outside the job-site geofence.", distance: Math.round(distanceMeters) },
+          { status: 422 },
+        );
+      }
+    }
+
     const noGpsMetadata = buildNoGpsMetadata({
       skippedGps: !gps,
       errorKind: gpsErrorKind,
@@ -183,20 +198,19 @@ export async function POST(request: NextRequest) {
       .insert({
         org_id: profile.org_id,
         profile_id: profile.id,
-        project_id: latestEvent.project_id,
-        event_type: "clock_out",
+        project_id: project.id,
+        event_type: "clock_in",
         event_time: eventTime,
-        gps_point: gps ? toSupabasePoint(gps) : null,
+        gps_point: gps ? toSupabasePoint({ lat: gps.lat, lng: gps.lng }) : null,
         gps_accuracy_m: gps?.accuracy ?? null,
         gps_source: gps ? "device" : "unavailable",
         video_status: profile.require_video ? "pending" : "not_required",
         metadata: {
-          capturedBy: "worker-clock-out-api",
+          capturedBy: "worker-clock-in-api",
           gps,
           client_event_id: clientEventId,
           queued_offline: offlineQueued,
           ...noGpsMetadata,
-          ...(note ? { checkout_note: note } : {}),
         },
       })
       .select("*")
@@ -204,18 +218,16 @@ export async function POST(request: NextRequest) {
 
     if (insertError || !insertedEvent) {
       return NextResponse.json(
-        { error: insertError?.message ?? "Clock-out failed." },
+        { error: insertError?.message ?? "Clock-in failed." },
         { status: 500 },
       );
     }
 
     await admin
       .from("profiles")
-      .update({ current_project: null })
+      .update({ last_clock_in: eventTime, current_project: project.id })
       .eq("id", profile.id)
       .eq("org_id", profile.org_id);
-
-    await closeOpenStoreVisits(admin, profile.id, eventTime);
 
     return NextResponse.json({
       ok: true,

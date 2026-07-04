@@ -52,7 +52,6 @@ import {
   type OfflineUploadMode,
 } from "@/lib/offline-uploads";
 import {
-  isNetworkLikeError,
   loadOfflineEventQueue,
   markEventStatus,
   queueOfflineEvent,
@@ -1500,26 +1499,46 @@ export function WorkerShell({
 
       if (!offlineFromStart) {
         try {
-          const result = await supabase
-            .from("time_events")
-            .insert({ ...insertPayload, metadata: { ...insertPayload.metadata, queued_offline: false } })
-            .select("*")
-            .single<TimeEvent>();
-          if (result.error) {
-            if (
-              isNetworkLikeError(result.error) ||
-              (typeof window !== "undefined" && !window.navigator.onLine)
-            ) {
-              networkFailed = true;
-            } else {
-              hardError = result.error;
-            }
+          const response = await fetch("/api/worker/clock-in", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              projectId: project.id,
+              eventTime: timestamp,
+              gps,
+              gpsErrorKind: options?.gpsErrorKind ?? null,
+              gpsReviewSuppressed: isDriverTimeProject(project),
+              clientEventId: client_event_id,
+            }),
+          });
+          const result = (await response.json().catch(() => null)) as {
+            event?: TimeEvent;
+            error?: string;
+            distance?: number;
+          } | null;
+
+          if (response.status === 422) {
+            // Server-side geofence rejection (defense-in-depth — the client
+            // check above normally blocks this first). Show the same banner.
+            const distance = typeof result?.distance === "number" ? result.distance : null;
+            setBanner({
+              tone: "error",
+              text:
+                distance != null
+                  ? `You are ${distance}m from ${project.name}. Move closer to clock in.`
+                  : result?.error ?? "Clock-in failed.",
+            });
+            playSound("error");
+            return;
+          }
+          if (!response.ok || !result?.event) {
+            hardError = { message: result?.error ?? "Clock-in failed." };
           } else {
-            insertedEvent = result.data;
+            insertedEvent = result.event;
           }
         } catch (caught) {
-          // supabase-js usually packs network failures into result.error
-          // but a thrown TypeError ("Failed to fetch") can still happen.
+          // A thrown TypeError ("Failed to fetch") means the network dropped —
+          // fall through to the offline queue path.
           networkFailed = true;
           if (caught instanceof Error) {
             console.warn("clock-in throw treated as network error:", caught.message);
@@ -1606,18 +1625,9 @@ export function WorkerShell({
         throw new Error("Clock-in failed.");
       }
 
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
-          last_clock_in: timestamp,
-          current_project: project.id,
-        })
-        .eq("id", shell.profile.id);
-
-      if (profileError) {
-        console.warn("Profile sync failed after clock-in:", profileError.message);
-      }
-
+      // profiles.last_clock_in / current_project are now written by the
+      // /api/worker/clock-in route (service role). The optimistic local
+      // setShell below keeps the UI in sync immediately.
       const nextSessions = [
         {
           id: insertedEvent.id,
@@ -2594,15 +2604,68 @@ export function WorkerShell({
           continue;
         }
 
-        const { error: insertError } = await supabase
-          .from("time_events")
-          .insert(item.payload);
+        // Replay through the guarded server routes (no direct browser insert).
+        // Reconstruct the request from the queued payload so the server rebuilds
+        // identical metadata (offlineQueued:true preserves the offline markers).
+        const meta = item.payload.metadata as Record<string, unknown>;
+        const queuedErrorKind =
+          meta.gps_error_kind === "denied" ||
+          meta.gps_error_kind === "unavailable" ||
+          meta.gps_error_kind === "unsupported"
+            ? meta.gps_error_kind
+            : null;
+        const queuedSuppressed =
+          typeof meta.gps_status === "string" && meta.needs_review !== true;
+        const isClockIn = item.payload.event_type === "clock_in";
+        const drainBody: Record<string, unknown> = {
+          eventTime: item.payload.event_time,
+          gps: meta.gps ?? null,
+          gpsErrorKind: queuedErrorKind,
+          gpsReviewSuppressed: queuedSuppressed,
+          offlineQueued: true,
+          clientEventId: item.client_event_id,
+        };
+        if (isClockIn) {
+          drainBody.projectId = item.payload.project_id;
+        } else if (typeof meta.checkout_note === "string" && meta.checkout_note) {
+          drainBody.note = meta.checkout_note;
+        }
 
-        if (insertError) {
+        let drainFailed = false;
+        let drainRetryable = false;
+        let drainErrorMessage = "Sync failed.";
+        try {
+          const response = await fetch(
+            isClockIn ? "/api/worker/clock-in" : "/api/worker/clock-out",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(drainBody),
+            },
+          );
+          if (!response.ok) {
+            // 409 on clock-out means the shift is already closed — nothing left
+            // to replay, so drop it (dedup-safe) rather than retry forever.
+            if (response.status === 409 && !isClockIn) {
+              // treated as success below
+            } else {
+              const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+              drainFailed = true;
+              drainRetryable = response.status >= 500;
+              drainErrorMessage = payload?.error ?? `Sync failed (${response.status}).`;
+            }
+          }
+        } catch (caught) {
+          drainFailed = true;
+          drainRetryable = true;
+          if (caught instanceof Error) drainErrorMessage = caught.message;
+        }
+
+        if (drainFailed) {
           markEventStatus(item.client_event_id, {
-            status: isNetworkLikeError(insertError) ? "pending" : "failed",
+            status: drainRetryable ? "pending" : "failed",
             retryCount: item.retryCount + 1,
-            lastErrorMessage: insertError.message,
+            lastErrorMessage: drainErrorMessage,
           });
           setOfflineEventQueue(loadOfflineEventQueue());
           continue;
