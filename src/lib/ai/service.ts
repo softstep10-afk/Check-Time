@@ -57,6 +57,12 @@ const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest";
 export const JARVIS_GEMINI_SYSTEM_PROMPT = JARVIS_SYSTEM_PROMPT;
 
+type PaidProviderCallHook = (provider: JarvisProviderId) => Promise<void>;
+
+type AiProviderCallOptions = {
+  beforeProviderCall?: PaidProviderCallHook;
+};
+
 const dateFormatter = new Intl.DateTimeFormat("en-CA", {
   timeZone: ORG_TIME_ZONE,
   year: "numeric",
@@ -1110,6 +1116,10 @@ function hasBinaryJarvisAttachments(attachments: JarvisAttachment[]): boolean {
   return attachments.some((attachment) => Boolean(attachment.dataUrl));
 }
 
+function isExternalModelProvider(provider: JarvisProviderId): boolean {
+  return provider === "gemini" || provider === "openai" || provider === "anthropic";
+}
+
 async function tryProviderModel(
   provider: JarvisProviderId,
   taskInstructions: string,
@@ -1135,6 +1145,7 @@ async function tryRoutedModelObject(
   prompt: string,
   attachments: JarvisAttachment[] = [],
   systemInstruction = JARVIS_GEMINI_SYSTEM_PROMPT,
+  options: AiProviderCallOptions = {},
 ): Promise<{
   object: Record<string, unknown>;
   provider: JarvisProviderId;
@@ -1147,6 +1158,10 @@ async function tryRoutedModelObject(
   const candidates = [route.selected, ...route.fallbackOrder];
 
   for (const candidate of candidates) {
+    if (options.beforeProviderCall && isExternalModelProvider(candidate.provider)) {
+      await options.beforeProviderCall(candidate.provider);
+    }
+
     const object = await tryProviderModel(
       candidate.provider,
       taskInstructions,
@@ -1173,6 +1188,7 @@ async function tryGeminiObject(
   attachments: JarvisAttachment[] = [],
   systemInstruction = JARVIS_GEMINI_SYSTEM_PROMPT,
   routeCategory: JarvisRouteCategory = "fallback",
+  options: AiProviderCallOptions = {},
 ): Promise<Record<string, unknown> | null> {
   const routedObject = await tryRoutedModelObject(
     routeCategory,
@@ -1180,6 +1196,7 @@ async function tryGeminiObject(
     prompt,
     attachments,
     systemInstruction,
+    options,
   );
   return routedObject?.object ?? null;
 }
@@ -1190,6 +1207,7 @@ async function tryAssistantModelObject(
   attachments: JarvisAttachment[] = [],
   systemInstruction?: string,
   routeCategory: JarvisRouteCategory = "operations_reasoning",
+  options: AiProviderCallOptions = {},
 ): Promise<{
   object: Record<string, unknown>;
   source: "gemini";
@@ -1201,6 +1219,7 @@ async function tryAssistantModelObject(
     prompt,
     attachments,
     systemInstruction,
+    options,
   );
   return routedObject
     ? {
@@ -1671,6 +1690,7 @@ export function buildAssistantSnapshot(
 
 export async function generateDailyReport(
   input: DailyReportInput,
+  options: AiProviderCallOptions = {},
 ): Promise<GeneratedDailyReport> {
   const fallback = buildDailyReportFallback(input);
   const geminiObject = await tryGeminiObject(
@@ -1691,6 +1711,7 @@ export async function generateDailyReport(
     [],
     JARVIS_GEMINI_SYSTEM_PROMPT,
     "project_summary",
+    options,
   );
 
   if (!geminiObject) {
@@ -1716,6 +1737,7 @@ export async function generateDailyReport(
 
 export async function analyzePhotoEvidence(
   input: PhotoAnalysisInput,
+  options: AiProviderCallOptions = {},
 ): Promise<PhotoAnalysisResult> {
   const fallback = buildPhotoAnalysisFallback(input);
   const geminiObject = await tryGeminiObject(
@@ -1735,6 +1757,7 @@ export async function analyzePhotoEvidence(
     [],
     JARVIS_GEMINI_SYSTEM_PROMPT,
     "document_or_media_analysis",
+    options,
   );
 
   if (!geminiObject) {
@@ -1856,6 +1879,7 @@ function buildWorkerJarvisFallback(question: string, shell: WorkerShellData): As
 export async function answerWorkerAssistant(
   question: string,
   shell: WorkerShellData,
+  options: AiProviderCallOptions = {},
 ): Promise<AssistantResult> {
   const fallback = buildWorkerJarvisFallback(question, shell);
   const materialLines = shell.projects.flatMap((project) =>
@@ -1883,6 +1907,7 @@ export async function answerWorkerAssistant(
     [],
     JARVIS_GEMINI_SYSTEM_PROMPT,
     "general_chat",
+    options,
   );
 
   if (!modelObject) {
@@ -1918,6 +1943,7 @@ export async function answerManagerAssistant(
     attachments?: JarvisAttachment[];
     history?: AssistantConversationTurn[];
     systemPrompt?: string;
+    beforeProviderCall?: PaidProviderCallHook;
   } = {},
 ): Promise<AssistantResult> {
   const attachments = options.attachments ?? [];
@@ -2002,6 +2028,7 @@ export async function answerManagerAssistant(
     attachments,
     options.systemPrompt,
     includeWorkspaceSnapshot ? "operations_reasoning" : "general_chat",
+    { beforeProviderCall: options.beforeProviderCall },
   );
 
   if (!modelObject) {
@@ -2046,6 +2073,7 @@ export async function answerManagerAssistant(
 export async function interpretVoiceCommand(
   transcript: string,
   snapshot: AssistantSnapshot,
+  options: AiProviderCallOptions = {},
 ): Promise<VoiceCommandResult> {
   const fallback = buildVoiceFallback(transcript, snapshot);
   const geminiObject = await tryGeminiObject(
@@ -2061,6 +2089,7 @@ export async function interpretVoiceCommand(
     [],
     JARVIS_GEMINI_SYSTEM_PROMPT,
     "fast_command",
+    options,
   );
 
   if (!geminiObject) {

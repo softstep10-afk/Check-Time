@@ -5,6 +5,11 @@ import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { readRequiredUuid } from "@/lib/server/id-guards";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import {
+  createPaidApiLimitGuard,
+  isPaidApiLimitError,
+  paidApiLimitResponse,
+} from "@/lib/paid-api-limits";
 import type { Media } from "@/types/database";
 
 function assertNoError(error: { message: string } | null, label: string) {
@@ -58,6 +63,16 @@ export async function POST(request: NextRequest) {
       .filter((task) => task.project_id === media.project_id)
       .map((task) => task.title)
       .slice(0, 6);
+    const adminClient = auth.kind === "authenticated" ? createAdminClient() : null;
+    const limitIdentity = auth.kind === "authenticated"
+      ? {
+          orgId: auth.context.profile.org_id,
+          profileId: auth.context.profile.id,
+        }
+      : {
+          orgId: data.org.id,
+          profileId: data.manager.id,
+        };
     const analysis = await analyzePhotoEvidence({
       mediaId: media.id,
       mediaType: media.media_type,
@@ -67,6 +82,12 @@ export async function POST(request: NextRequest) {
       projectName,
       createdAt: media.created_at,
       relatedTasks,
+    }, {
+      beforeProviderCall: createPaidApiLimitGuard({
+        adminClient,
+        route: "/api/ai/photo-analysis",
+        ...limitIdentity,
+      }),
     });
 
     let persisted = false;
@@ -76,8 +97,6 @@ export async function POST(request: NextRequest) {
     // gated the request to manager / admin / owner — workers cannot
     // call this endpoint and trigger an analyze on a foreign-project
     // media row.
-    const adminClient = auth.kind === "authenticated" ? createAdminClient() : null;
-
     if (adminClient) {
       const persistResult = await adminClient
         .from("media")
@@ -99,6 +118,9 @@ export async function POST(request: NextRequest) {
       persisted,
     });
   } catch (error) {
+    if (isPaidApiLimitError(error)) {
+      return paidApiLimitResponse(error.result);
+    }
     const message = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 500 });
   }
