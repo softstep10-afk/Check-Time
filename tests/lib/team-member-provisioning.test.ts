@@ -32,9 +32,16 @@ describe("team member provisioning", () => {
     );
   });
 
-  it("generates a 4 digit PIN", () => {
-    expect(generateTeamMemberPin(() => 0)).toBe("1000");
-    expect(generateTeamMemberPin(() => 0.9999)).toBe("9999");
+  it("generates a 6 digit PIN across the full range", () => {
+    expect(generateTeamMemberPin(() => 0)).toBe("100000");
+    expect(generateTeamMemberPin(() => 0.999999)).toBe("999999");
+    const pin = generateTeamMemberPin();
+    expect(pin).toMatch(/^\d{6}$/);
+  });
+
+  it("still accepts existing 4-digit PINs so legacy logins keep working", () => {
+    expect(isValidTeamPasscode("1234")).toBe(true);
+    expect(isValidTeamPasscode(generateTeamMemberPin())).toBe(true);
   });
 
   it("allows stronger alphanumeric passcodes while keeping short/bad values out", () => {

@@ -30,8 +30,11 @@ export function buildTeamMemberEmail(
   return `${slug}-${suffix}@${SYNTHETIC_TEAM_EMAIL_DOMAIN}`;
 }
 
+// Mints NEW PINs in the 6-digit space (100000..999999 = 1,000,000) to resist
+// brute force. isValidTeamPasscode / TEAM_PASSCODE_PATTERN still accept 4..12
+// chars, so existing 4-digit PINs keep working — only generation lengthens.
 export function generateTeamMemberPin(random: () => number = Math.random): string {
-  return String(Math.floor(1000 + random() * 9000));
+  return String(Math.floor(100000 + random() * 900000));
 }
 
 export function isValidTeamPasscode(value: string): boolean {

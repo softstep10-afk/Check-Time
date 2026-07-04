@@ -2,12 +2,15 @@ import { verify } from "@node-rs/argon2";
 import { NextRequest, NextResponse } from "next/server";
 import {
   buildPinLoginRateLimitKey,
+  checkGlobalPinLoginRateLimit,
   checkPinLoginRateLimit,
   clearPinLoginRateLimit,
+  recordGlobalPinLoginFailure,
   recordPinLoginFailure,
 } from "@/lib/pin-login-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { safeClientErrorMessage } from "@/lib/safe-log";
+import { readTrustedClientIp } from "@/lib/server/request-ip";
 import { isValidTeamPasscode } from "@/lib/team-member-provisioning";
 import type { UserRole } from "@/types/database";
 
@@ -19,13 +22,18 @@ type PinProfile = {
   is_active: boolean;
 };
 
-function readClientIp(request: NextRequest): string {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) return forwardedFor.split(",")[0]?.trim() || "unknown";
-  return (
-    request.headers.get("x-real-ip") ??
-    request.headers.get("cf-connecting-ip") ??
-    "unknown"
+function tooManyAttemptsResponse(retryAfterSeconds?: number): NextResponse {
+  return NextResponse.json(
+    {
+      error: "Too many login attempts. Try again later.",
+      retryAfterSeconds,
+    },
+    {
+      status: 429,
+      headers: retryAfterSeconds
+        ? { "Retry-After": String(retryAfterSeconds) }
+        : undefined,
+    },
   );
 }
 
@@ -50,23 +58,18 @@ export async function POST(request: NextRequest) {
     }
 
     const rateLimitKey = buildPinLoginRateLimitKey({
-      ipAddress: readClientIp(request),
-      userAgent: request.headers.get("user-agent") ?? "unknown",
+      ipAddress: readTrustedClientIp(request),
     });
+
+    // Global endpoint circuit-breaker first (a single cheap lookup that IP
+    // rotation cannot evade), then the per-client bucket.
+    const globalLimit = await checkGlobalPinLoginRateLimit(adminClient);
+    if (!globalLimit.allowed) {
+      return tooManyAttemptsResponse(globalLimit.retryAfterSeconds);
+    }
     const rateLimit = await checkPinLoginRateLimit(adminClient, rateLimitKey);
     if (!rateLimit.allowed) {
-      return NextResponse.json(
-        {
-          error: "Too many login attempts. Try again later.",
-          retryAfterSeconds: rateLimit.retryAfterSeconds,
-        },
-        {
-          status: 429,
-          headers: rateLimit.retryAfterSeconds
-            ? { "Retry-After": String(rateLimit.retryAfterSeconds) }
-            : undefined,
-        },
-      );
+      return tooManyAttemptsResponse(rateLimit.retryAfterSeconds);
     }
 
     const { data: profiles, error: profilesError } = await adminClient
@@ -98,13 +101,17 @@ export async function POST(request: NextRequest) {
     }
 
     if (!matchedProfile) {
+      // Count the miss against both the caller's bucket and the global ceiling.
       await recordPinLoginFailure(adminClient, rateLimitKey);
+      await recordGlobalPinLoginFailure(adminClient);
       return NextResponse.json(
         { error: "PIN not recognized." },
         { status: 401 },
       );
     }
 
+    // Clear only the caller's bucket on success; the global ceiling is never
+    // cleared by a success (it decays with its own window) so it can't be reset.
     await clearPinLoginRateLimit(adminClient, rateLimitKey);
 
     const { data: authUserResult, error: authUserError } =
