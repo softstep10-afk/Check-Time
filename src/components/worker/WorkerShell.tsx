@@ -2410,10 +2410,12 @@ export function WorkerShell({
           if (result.ok) {
             completionMediaIds.push(result.mediaId);
           } else {
-            // Surface the storage failure but keep going with whatever
-            // already uploaded — half-uploaded evidence is better than
-            // dropping the whole completion.
+            // Online proof upload failed (audit C-H2): do NOT silently close
+            // the task and lose the evidence. Block the completion so the
+            // worker can retry. (Offline-with-files is already blocked earlier
+            // and handled by the offline flow — this only affects online.)
             console.warn("[task-completion] file upload failed:", result.error);
+            throw new Error(t("messages.uploadFailed"));
           }
         }
       }
