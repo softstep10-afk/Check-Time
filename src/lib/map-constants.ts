@@ -76,9 +76,7 @@ export const TRACKER_ROLE_COLOR: Record<TrackerRole, string> = {
 };
 
 // Active map should hide projects that are archived, soft-deleted, or
-// completed. `completed` is also filtered in FullscreenMapWrapper today;
-// duplicate the check here so direct callers of ProjectsStatusMap stay
-// consistent.
+// completed.
 export function isProjectOnActiveMap(
   project: Pick<ManagerProjectSummary, "status" | "deleted_at">,
 ): boolean {
