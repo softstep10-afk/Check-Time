@@ -9,6 +9,7 @@ import {
   isShiftActionable,
 } from "@/lib/shift-review";
 import { createClient } from "@/lib/supabase/server";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import {
   hydrateProfilesWithRates,
   PROFILE_SELECT_WITHOUT_RATE,
@@ -215,9 +216,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, payrollRunId: payrollRun.id });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: safeClientErrorMessage(error) },
+      { status: 500 },
+    );
   }
 }

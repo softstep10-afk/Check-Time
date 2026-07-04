@@ -4,6 +4,7 @@ import { hasFinanceAccess } from "@/lib/finance-access";
 import { getDisplayOrgName } from "@/lib/brand";
 import { requireManagerContext } from "@/lib/manager-data";
 import { createClient } from "@/lib/supabase/server";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import {
   hydrateProfilesWithRates,
   PROFILE_SELECT_WITHOUT_RATE,
@@ -317,8 +318,9 @@ export async function GET(request: NextRequest) {
     if (error && typeof error === "object" && "digest" in error) {
       throw error;
     }
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: safeClientErrorMessage(error) },
+      { status: 500 },
+    );
   }
 }

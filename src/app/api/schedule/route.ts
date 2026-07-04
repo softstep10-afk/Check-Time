@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { readOptionalUuid, readRequiredUuid } from "@/lib/server/id-guards";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, UserRole } from "@/types/database";
@@ -211,7 +212,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, item: data });
@@ -265,7 +266,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, project: data });
@@ -298,7 +299,7 @@ export async function POST(request: Request) {
       }>();
 
     if (taskError || !task) {
-      return NextResponse.json({ error: taskError?.message ?? "Delivery not found." }, { status: 404 });
+      return NextResponse.json({ error: taskError ? safeClientErrorMessage(taskError, "Delivery not found.") : "Delivery not found." }, { status: 404 });
     }
     const metadata = asRecord(task.metadata);
     if (metadata.schedule_kind !== "delivery") {
@@ -337,7 +338,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
     }
     if (!updated) {
       return NextResponse.json({ error: "Delivery is already claimed or closed." }, { status: 409 });
@@ -369,7 +370,7 @@ export async function POST(request: Request) {
       }>();
 
     if (taskError || !task) {
-      return NextResponse.json({ error: taskError?.message ?? "Delivery not found." }, { status: 404 });
+      return NextResponse.json({ error: taskError ? safeClientErrorMessage(taskError, "Delivery not found.") : "Delivery not found." }, { status: 404 });
     }
     const metadata = asRecord(task.metadata);
     if (metadata.schedule_kind !== "delivery") {
@@ -413,7 +414,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, item: updated });

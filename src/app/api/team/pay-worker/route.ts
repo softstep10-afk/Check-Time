@@ -6,6 +6,8 @@ import type { ManagerWorkspaceData } from "@/lib/manager-types";
 import { buildManagerSessions, computePayrollPreview } from "@/lib/manager-utils";
 import { buildPayrollActionAuditPayload } from "@/lib/payroll-audit-utils";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
+import { readRequiredUuid } from "@/lib/server/id-guards";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import {
   buildShiftReviewAckEventIds,
   deriveShiftReview,
@@ -51,13 +53,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as Record<string, unknown>;
-    const workerId = typeof body.workerId === "string" ? body.workerId : "";
+    const workerIdGuard = readRequiredUuid(body.workerId, "worker id");
+    if (!workerIdGuard.ok) {
+      return NextResponse.json({ error: workerIdGuard.error }, { status: workerIdGuard.status });
+    }
+    const workerId = workerIdGuard.value;
     const periodEnd =
       typeof body.periodEnd === "string" && body.periodEnd ? body.periodEnd : undefined;
-
-    if (!workerId) {
-      return NextResponse.json({ error: "workerId is required." }, { status: 400 });
-    }
 
     const [profilesResult, projectsResult, timeEventsResult, closuresResult] =
       await Promise.all([
@@ -293,10 +295,12 @@ export async function POST(request: NextRequest) {
       totalAmount: r2(preview.totalAmount),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Internal server error";
-    const status = message.includes("payroll_overlap") ? 409 : 500;
+    // Derive the status from the RAW error (payroll_overlap -> 409) BEFORE
+    // sanitizing, so the client-facing text no longer leaks Postgres detail
+    // but the status code is unchanged.
+    const rawMessage = error instanceof Error ? error.message : "";
+    const status = rawMessage.includes("payroll_overlap") ? 409 : 500;
 
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: safeClientErrorMessage(error) }, { status });
   }
 }
