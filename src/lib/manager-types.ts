@@ -49,6 +49,12 @@ export interface ManagerSession {
    * shift is still open.
    */
   checkoutNote: string | null;
+  /**
+   * True when this shift's clock_in or clock_out event carries an
+   * `edited_by` marker in metadata (owner shift edit). Drives the
+   * "отредактировано" marker in the team member view.
+   */
+  edited?: boolean;
 }
 
 export interface ManagerProjectSummary extends Project {

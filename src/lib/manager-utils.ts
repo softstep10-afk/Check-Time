@@ -526,6 +526,12 @@ export function computeOvertime(
   };
 }
 
+function hasEditMarker(metadata: Record<string, unknown> | null | undefined): boolean {
+  if (!metadata || typeof metadata !== "object") return false;
+  const editedBy = (metadata as Record<string, unknown>).edited_by;
+  return typeof editedBy === "string" && editedBy.trim().length > 0;
+}
+
 export function buildManagerSessions(data: ManagerWorkspaceData): ManagerSession[] {
   const profilesById = new Map(data.profiles.map((profile) => [profile.id, profile]));
   const projectsById = new Map(data.projects.map((project) => [project.id, project]));
@@ -592,6 +598,7 @@ export function buildManagerSessions(data: ManagerWorkspaceData): ManagerSession
         isOpen: false,
         eventIds: [openClockIn.id, event.id],
         checkoutNote,
+        edited: hasEditMarker(openClockIn.metadata) || hasEditMarker(event.metadata),
       });
 
       openClockIn = null;
