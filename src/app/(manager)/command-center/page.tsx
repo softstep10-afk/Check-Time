@@ -25,7 +25,7 @@ import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { getServerLocale } from "@/lib/i18n/server";
-import { formatDurationCompact } from "@/lib/worker-utils";
+import { formatDurationCompact, ORG_TIMEZONE } from "@/lib/worker-utils";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { TaskPriority } from "@/types/database";
 
@@ -330,6 +330,7 @@ export default async function CommandCenterPage() {
       return rightTime - leftTime;
     });
   const auditDateFormatter = new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+    timeZone: ORG_TIMEZONE,
     month: "short",
     day: "numeric",
     hourCycle: "h23",

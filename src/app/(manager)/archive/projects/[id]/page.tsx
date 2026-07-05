@@ -13,7 +13,7 @@ import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { createClient } from "@/lib/supabase/server";
 import { getServerLocale } from "@/lib/i18n/server";
-import { formatDurationCompact } from "@/lib/worker-utils";
+import { formatDurationCompact, ORG_TIMEZONE } from "@/lib/worker-utils";
 
 export const revalidate = 0;
 
@@ -298,10 +298,10 @@ export default async function ArchivedProjectDetailPage({
                     </Link>
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                    {new Date(session.clockInTime).toLocaleString(dateLocale, { hourCycle: "h23" })}
+                    {new Date(session.clockInTime).toLocaleString(dateLocale, { timeZone: ORG_TIMEZONE, hourCycle: "h23" })}
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                    {session.clockOutTime ? new Date(session.clockOutTime).toLocaleString(dateLocale, { hourCycle: "h23" }) : text.open}
+                    {session.clockOutTime ? new Date(session.clockOutTime).toLocaleString(dateLocale, { timeZone: ORG_TIMEZONE, hourCycle: "h23" }) : text.open}
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-primary)]">
                     {formatDurationCompact(session.durationMinutes)}
@@ -349,7 +349,7 @@ export default async function ArchivedProjectDetailPage({
                     </td>
                     <td className="py-3 pr-3 text-[var(--text-secondary)]">{completedBy}</td>
                     <td className="py-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                      {task.completed_at ? new Date(task.completed_at).toLocaleString(dateLocale, { hourCycle: "h23" }) : text.notCompleted}
+                      {task.completed_at ? new Date(task.completed_at).toLocaleString(dateLocale, { timeZone: ORG_TIMEZONE, hourCycle: "h23" }) : text.notCompleted}
                     </td>
                   </tr>
                 );
