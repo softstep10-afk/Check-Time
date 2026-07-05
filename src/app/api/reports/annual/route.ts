@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { StoreVisit } from "@/lib/store-types";
 import type { Media, Profile, Project, TimeEvent } from "@/types/database";
 
-type AnnualActor = Pick<Profile, "id" | "role">;
+type AnnualActor = Pick<Profile, "id" | "role" | "org_id">;
 type AnnualProfileRow = Pick<Profile, "id" | "name" | "role">;
 type AnnualProjectRow = Pick<Project, "id" | "name" | "address" | "status" | "start_date" | "end_date">;
 type AnnualEventRow = Pick<TimeEvent, "profile_id" | "project_id" | "event_type" | "event_time">;
@@ -236,7 +236,7 @@ export async function GET(request: Request) {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id, role")
+    .select("id, role, org_id")
     .eq("id", user.id)
     .maybeSingle<AnnualActor>();
 
@@ -258,6 +258,7 @@ export async function GET(request: Request) {
       supabase
         .from("profiles")
         .select(ANNUAL_PROFILE_SELECT)
+        .eq("org_id", profile.org_id)
         .order("name", { ascending: true })
         .range(from, to)
         .returns<AnnualProfileRow[]>(),
@@ -266,6 +267,7 @@ export async function GET(request: Request) {
       supabase
         .from("projects")
         .select(ANNUAL_PROJECT_SELECT)
+        .eq("org_id", profile.org_id)
         .order("name", { ascending: true })
         .range(from, to)
         .returns<AnnualProjectRow[]>(),
@@ -274,6 +276,7 @@ export async function GET(request: Request) {
       supabase
         .from("time_events")
         .select(ANNUAL_TIME_EVENT_SELECT)
+        .eq("org_id", profile.org_id)
         .gte("event_time", yearStart)
         .lte("event_time", yearEnd)
         .in("event_type", PAYROLL_EVENT_TYPES)
@@ -285,6 +288,7 @@ export async function GET(request: Request) {
       supabase
         .from("media")
         .select(ANNUAL_RECEIPT_SELECT)
+        .eq("org_id", profile.org_id)
         .eq("metadata->>category", "receipt")
         .is("deleted_at", null)
         .gte("created_at", yearStart)
@@ -297,6 +301,7 @@ export async function GET(request: Request) {
       supabase
         .from("store_visits")
         .select(ANNUAL_STORE_VISIT_SELECT)
+        .eq("org_id", profile.org_id)
         .gte("entered_at", yearStart)
         .lte("entered_at", yearEnd)
         .range(from, to)

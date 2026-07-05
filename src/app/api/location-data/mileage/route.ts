@@ -109,9 +109,9 @@ export async function GET(request: Request) {
 
   const { data: actor, error: actorError } = await supabase
     .from("profiles")
-    .select("id, role")
+    .select("id, role, org_id")
     .eq("id", user.id)
-    .maybeSingle<Pick<Profile, "id" | "role">>();
+    .maybeSingle<Pick<Profile, "id" | "role" | "org_id">>();
 
   if (actorError || !actor || !isManagerRole(actor.role)) {
     return NextResponse.json({ error: "Location data access denied." }, { status: 403 });
@@ -130,6 +130,7 @@ export async function GET(request: Request) {
   let profileQuery = supabase
     .from("profiles")
     .select("id, name, role")
+    .eq("org_id", actor.org_id)
     .is("deleted_at", null)
     .in("role", TRACKED_MILEAGE_ROLES);
 
@@ -147,12 +148,14 @@ export async function GET(request: Request) {
   let countQuery = supabase
     .from("worker_live_locations")
     .select("id", { count: "exact", head: true })
+    .eq("org_id", actor.org_id)
     .gte("recorded_at", `${dateFrom}T00:00:00.000Z`)
     .lt("recorded_at", nextDateIso(dateTo));
 
   let oldestQuery = supabase
     .from("worker_live_locations")
     .select("recorded_at")
+    .eq("org_id", actor.org_id)
     .gte("recorded_at", `${dateFrom}T00:00:00.000Z`)
     .lt("recorded_at", nextDateIso(dateTo));
 
@@ -193,6 +196,7 @@ export async function GET(request: Request) {
       supabase
         .from("worker_live_locations")
         .select("worker_id, lat, lng, accuracy, recorded_at")
+        .eq("org_id", actor.org_id)
         .in("worker_id", workerIds)
         .gte("recorded_at", `${dateFrom}T00:00:00.000Z`)
         .lt("recorded_at", nextDateIso(dateTo))
