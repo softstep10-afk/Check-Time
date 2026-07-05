@@ -40,6 +40,10 @@ const DELIVERY_CLAIM_ROLES = new Set<UserRole>([
 
 type CalendarActorProfile = Pick<Profile, "id" | "org_id" | "role">;
 
+const SCHEDULE_TASK_RETURN_SELECT =
+  "id, project_id, assigned_to, title, description, priority, status, due_date, completed_at, metadata";
+const SCHEDULE_PROJECT_RETURN_SELECT = "id, name, address, status, site_point, start_date, end_date";
+
 function isScheduleKind(value: unknown): value is ScheduleKind {
   return (
     value === "client_meeting" ||
@@ -208,7 +212,7 @@ export async function POST(request: Request) {
           schedule_created_by_role: actor.profile.role,
         },
       })
-      .select("*")
+      .select(SCHEDULE_TASK_RETURN_SELECT)
       .single();
 
     if (error) {
@@ -262,7 +266,7 @@ export async function POST(request: Request) {
       })
       .eq("id", projectId.value)
       .eq("org_id", actor.profile.org_id)
-      .select("*")
+      .select(SCHEDULE_PROJECT_RETURN_SELECT)
       .single();
 
     if (error) {
@@ -334,7 +338,7 @@ export async function POST(request: Request) {
       .neq("status", "done")
       .is("completed_at", null)
       .or(`assigned_to.is.null,assigned_to.eq.${actor.profile.id}`)
-      .select("*")
+      .select(SCHEDULE_TASK_RETURN_SELECT)
       .maybeSingle();
 
     if (error) {
@@ -410,7 +414,7 @@ export async function POST(request: Request) {
       .eq("id", taskId.value)
       .eq("org_id", actor.profile.org_id)
       .is("deleted_at", null)
-      .select("*")
+      .select(SCHEDULE_TASK_RETURN_SELECT)
       .maybeSingle();
 
     if (error) {
