@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { logAudit } from "@/lib/audit";
-import { formatDateTime, formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
+import { formatDateTime, formatDurationCompact, formatEventDate, formatEventTime } from "@/lib/worker-utils";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -1489,6 +1489,8 @@ export function TeamMemberPage({
                           {session.projectName}
                         </div>
                         <div className="text-[10px] text-[var(--text-muted)]">
+                          {formatEventDate(session.clockInTime)}
+                          {" · "}
                           {formatEventTime(session.clockInTime)}
                           {session.clockOutTime
                             ? ` → ${formatEventTime(session.clockOutTime)}`

@@ -37,7 +37,7 @@ import {
 } from "@/lib/payroll-audit-utils";
 import type { PayrollClosure, Profile, UserRole } from "@/types/database";
 import type { ManagerSession } from "@/lib/manager-types";
-import { formatEventTime } from "@/lib/worker-utils";
+import { formatEventDate, formatEventTime } from "@/lib/worker-utils";
 
 // ── Types ──
 
@@ -403,6 +403,7 @@ function ShiftRow({
           </span>
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-2 font-mono text-[10px] text-[var(--text-muted)]">
+          <span>{formatEventDate(row.clockInTime)}</span>
           <span>{formatEventTime(row.clockInTime)}</span>
           <span>→</span>
           <span>
