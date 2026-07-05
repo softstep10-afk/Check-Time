@@ -41,6 +41,10 @@ const annualReportClientSource = readFileSync(
   resolve(process.cwd(), "src/app/(manager)/reports/annual/AnnualReportClient.tsx"),
   "utf8",
 );
+const annualReportRouteSource = readFileSync(
+  resolve(process.cwd(), "src/app/api/reports/annual/route.ts"),
+  "utf8",
+);
 const scheduleClientSource = readFileSync(
   resolve(process.cwd(), "src/app/(manager)/schedule/SchedulePageClient.tsx"),
   "utf8",
@@ -53,6 +57,7 @@ const rateReadSources = {
   "src/app/api/payroll/export/route.ts": payrollExportSource,
   "src/app/api/team/pay-worker/route.ts": payWorkerSource,
   "src/app/(manager)/reports/annual/AnnualReportClient.tsx": annualReportClientSource,
+  "src/app/api/reports/annual/route.ts": annualReportRouteSource,
   "src/app/(manager)/schedule/SchedulePageClient.tsx": scheduleClientSource,
 };
 
@@ -167,9 +172,12 @@ describe("profile_rates migration guards", () => {
   });
 
   it("keeps annual worker report profile reads on display-safe columns", () => {
-    expect(annualReportClientSource).toContain("PROFILE_SELECT_WITHOUT_RATE");
-    expect(annualReportClientSource).toContain("profilesWithoutRates");
+    expect(annualReportClientSource).not.toContain('.from("profiles")');
+    expect(annualReportRouteSource).toContain('const ANNUAL_PROFILE_SELECT = "id, name, role"');
+    expect(annualReportRouteSource).toContain(".select(ANNUAL_PROFILE_SELECT)");
     expect(annualReportClientSource).not.toMatch(/\.from\("profiles"\)\s*\.select\("\*"\)/);
+    expect(annualReportRouteSource).not.toMatch(/\.from\("profiles"\)\s*\.select\("\*"\)/);
+    expect(annualReportRouteSource).not.toMatch(/hourly_rate|pin_hash/);
     expect(profileRatesSource).toContain('"name"');
     expect(profileRatesSource).toContain('"role"');
     expect(profileRatesSource).toContain('"color"');
