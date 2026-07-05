@@ -276,9 +276,8 @@ export default async function OverviewPage() {
         : false;
       return { ...session, review, reviewed };
     })
-    .filter((session) => session.review.status !== "normal")
+    .filter((session) => session.review.status !== "normal" && !session.reviewed)
     .sort((left, right) => {
-      if (left.reviewed !== right.reviewed) return left.reviewed ? 1 : -1;
       const statusGap =
         reviewPriorityRank[left.review.status] - reviewPriorityRank[right.review.status];
       if (statusGap !== 0) return statusGap;
@@ -286,11 +285,10 @@ export default async function OverviewPage() {
     })
     .slice(0, 8);
 
-  // Closed-shift alerts that the owner has NOT yet acknowledged. The band and
-  // each row only stay red while real unreviewed work remains; once every
-  // suspicious shift is marked reviewed the zone calms down (still listed for
-  // the record, but no longer alarming). This count never includes reviewed
-  // shifts, mirroring how reviewed shifts are excluded from the risk queue.
+  // Closed-shift alerts still awaiting the owner's review. Reviewed shifts are
+  // excluded entirely — once acknowledged they leave this block; that history
+  // stays reachable from the worker's own page, not the Overview risk band. So
+  // every row here is unreviewed and the risk-queue counts match one-for-one.
   const unreviewedClosedCount = closedShiftAlerts.filter(
     (session) => !session.reviewed,
   ).length;
@@ -723,11 +721,8 @@ export default async function OverviewPage() {
                   key={session.id}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-2.5"
                   style={{
-                    borderColor: session.reviewed
-                      ? "rgba(15, 168, 120, 0.22)"
-                      : "rgba(212, 81, 94, 0.22)",
+                    borderColor: "rgba(212, 81, 94, 0.22)",
                     background: "rgba(15, 17, 23, 0.62)",
-                    opacity: session.reviewed ? 0.72 : 1,
                   }}
                 >
                   {/* Clickable shift summary. The worker name opens the team
@@ -769,17 +764,13 @@ export default async function OverviewPage() {
                     <span
                       className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] font-semibold"
                       style={{
-                        color: session.reviewed
-                          ? "var(--text-muted)"
-                          : SHIFT_REVIEW_COLOR[session.review.status],
+                        color: SHIFT_REVIEW_COLOR[session.review.status],
                       }}
                     >
                       <span
                         className="inline-block h-2 w-2 rounded-full"
                         style={{
-                          background: session.reviewed
-                            ? "var(--text-muted)"
-                            : SHIFT_REVIEW_COLOR[session.review.status],
+                          background: SHIFT_REVIEW_COLOR[session.review.status],
                         }}
                       />
                       {shiftReviewLabel[session.review.status]}
@@ -787,13 +778,11 @@ export default async function OverviewPage() {
                     <span
                       className="inline-flex whitespace-nowrap rounded-[var(--radius-pill)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em]"
                       style={{
-                        background: session.reviewed
-                          ? "rgba(15, 168, 120, 0.14)"
-                          : "rgba(212, 81, 94, 0.14)",
-                        color: session.reviewed ? "var(--green)" : "var(--red)",
+                        background: "rgba(212, 81, 94, 0.14)",
+                        color: "var(--red)",
                       }}
                     >
-                      {session.reviewed ? t("timeline.reviewed") : t("timeline.notReviewed")}
+                      {t("timeline.notReviewed")}
                     </span>
                     <span className="font-mono text-sm font-bold text-[var(--text-primary)]">
                       {formatDurationCompact(session.durationMinutes)}
