@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent, MouseEvent } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Play, Plus, Square, Receipt as ReceiptIcon, Trash2, X } from "lucide-react";
@@ -12,7 +13,6 @@ import { TaskAttachmentList } from "@/components/shared/TaskAttachmentList";
 import { ProjectMediaLibrary } from "@/components/shared/ProjectMediaLibrary";
 import { ProjectNavigationActions } from "@/components/shared/ProjectNavigationActions";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
-import { WorkerTaskDetailModal } from "@/components/worker/WorkerTaskDetailModal";
 import { OfflineCacheEmptyState, OfflineCacheNotice } from "@/components/worker/OfflineCacheNotice";
 import { WorkerMaterialSpecSection } from "@/components/worker/WorkerMaterialSpecSection";
 import { UploadSourceButtons } from "@/components/shared/UploadSourceButtons";
@@ -22,9 +22,7 @@ import {
 } from "@/lib/upload-limits";
 import { keepStableListIfUnchanged } from "@/lib/list-stability";
 import { useWorkerShell } from "@/components/worker/WorkerShell";
-import { CheckoutModal } from "@/components/worker/CheckoutModal";
 import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
-import { SafetyBriefModal } from "@/components/worker/SafetyBriefModal";
 import { buildSafeUploadName } from "@/lib/media-extension";
 import {
   DEFAULT_SAFETY_VERSION,
@@ -315,6 +313,28 @@ function mapTaskStatusToMaterialStatus(taskStatus: string): MaterialStatus {
   if (taskStatus === "in_progress") return "ordered";
   return "needed";
 }
+
+// Heavy worker-flow modals are code-split out of the initial /project/[id]
+// bundle (audit C-M9). Each only mounts on an explicit interaction (opening a
+// task, tapping "End shift", or the safety brief), so ssr:false is safe and
+// only load timing changes.
+const WorkerTaskDetailModal = dynamic(
+  () =>
+    import("@/components/worker/WorkerTaskDetailModal").then(
+      (m) => m.WorkerTaskDetailModal,
+    ),
+  { ssr: false },
+);
+
+const CheckoutModal = dynamic(
+  () => import("@/components/worker/CheckoutModal").then((m) => m.CheckoutModal),
+  { ssr: false },
+);
+
+const SafetyBriefModal = dynamic(
+  () => import("@/components/worker/SafetyBriefModal").then((m) => m.SafetyBriefModal),
+  { ssr: false },
+);
 
 export function WorkerProjectView({
   project,
@@ -1322,6 +1342,7 @@ export function WorkerProjectView({
         </div>
       ) : null}
 
+      {liveSelectedTask ? (
       <WorkerTaskDetailModal
         task={liveSelectedTask ? { ...liveSelectedTask, projectName: project.name } : null}
         initialMode={selectedTaskMode}
@@ -1402,6 +1423,7 @@ export function WorkerProjectView({
           );
         }}
       />
+      ) : null}
     </div>
   );
 }
@@ -1858,22 +1880,26 @@ function ProjectClockControls({
         </div>
       )}
 
-      <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
-      <SafetyBriefModal
-        open={safetyOpen}
-        projectName={projectName}
-        workerName={shell.profile.name}
-        busy={savingAck}
-        errorMessage={ackError}
-        onConfirm={(signedName) => void handleSafetyConfirm(signedName)}
-        onCancel={() => {
-          if (!savingAck) {
-            setAckError(null);
-            setPendingNoGpsStart(false);
-            setSafetyOpen(false);
-          }
-        }}
-      />
+      {checkoutOpen ? (
+        <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
+      ) : null}
+      {safetyOpen ? (
+        <SafetyBriefModal
+          open={safetyOpen}
+          projectName={projectName}
+          workerName={shell.profile.name}
+          busy={savingAck}
+          errorMessage={ackError}
+          onConfirm={(signedName) => void handleSafetyConfirm(signedName)}
+          onCancel={() => {
+            if (!savingAck) {
+              setAckError(null);
+              setPendingNoGpsStart(false);
+              setSafetyOpen(false);
+            }
+          }}
+        />
+      ) : null}
     </section>
   );
 }
