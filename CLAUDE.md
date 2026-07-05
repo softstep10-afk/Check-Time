@@ -89,3 +89,7 @@ Single source of truth for how AI coders (Claude Code / Codex) work on this repo
 `OLD_APP_FINDINGS.md`, `STAGING_MOBILE_REPORT.md` are historical context only. The live source of
 truth for current tasks is the prompt Andrew pastes (driven by chat-side START_HERE.md /
 PROJECT_BACKLOG.md). When in doubt, the pasted prompt wins.
+
+## Reports go to disk
+When a task's deliverable is a report, analysis, or recon (not code), write the full text to
+`docs/handoff/<topic>.md` in the repo and reply in chat with only a short summary and the file path.

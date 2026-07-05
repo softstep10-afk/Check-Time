@@ -36,6 +36,17 @@ function localDay(iso: string | null | undefined): string {
   return local ? local.slice(0, 10) : "";
 }
 
+/** Local calendar day "YYYY-MM-DD" → local-midnight..+24h as ISO timestamps. */
+function localDayWindow(day: string): { from: string; to: string } | null {
+  if (!day) return null;
+  const start = new Date(`${day}T00:00:00`); // parsed as local wall-clock time
+  if (Number.isNaN(start.getTime())) return null;
+  return {
+    from: start.toISOString(),
+    to: new Date(start.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+  };
+}
+
 function formatHintTime(iso: string): string {
   const local = toLocalInput(iso);
   return local ? local.slice(11, 16) : "";
@@ -71,12 +82,13 @@ export function ShiftEditDialog({
   useEffect(() => {
     const hintProjectId = mode === "edit" ? session?.projectId : projectId;
     const hintDay = mode === "edit" ? localDay(session?.clockInTime) : localDay(clockIn);
+    const dayWindow = localDayWindow(hintDay);
     let cancelled = false;
     const applyHint = (value: { from: string; to: string } | null) => {
       if (!cancelled) setHint(value);
     };
 
-    if (!hintProjectId || !hintDay) {
+    if (!hintProjectId || !dayWindow) {
       // Defer to a microtask so we never setState synchronously in the effect.
       Promise.resolve().then(() => applyHint(null));
       return () => {
@@ -85,7 +97,9 @@ export function ShiftEditDialog({
     }
 
     void fetch(
-      `/api/team/edit-shift?projectId=${encodeURIComponent(hintProjectId)}&day=${encodeURIComponent(hintDay)}`,
+      `/api/team/edit-shift?projectId=${encodeURIComponent(hintProjectId)}` +
+        `&excludeProfileId=${encodeURIComponent(workerId)}` +
+        `&from=${encodeURIComponent(dayWindow.from)}&to=${encodeURIComponent(dayWindow.to)}`,
     )
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { crewLeftFrom?: string | null; crewLeftTo?: string | null } | null) => {
@@ -100,7 +114,7 @@ export function ShiftEditDialog({
     return () => {
       cancelled = true;
     };
-  }, [mode, session?.projectId, session?.clockInTime, projectId, clockIn]);
+  }, [mode, session?.projectId, session?.clockInTime, projectId, clockIn, workerId]);
 
   async function handleSave() {
     setError("");

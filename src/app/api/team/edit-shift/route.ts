@@ -385,25 +385,37 @@ export async function GET(request: NextRequest) {
     if (!projectId.ok) {
       return NextResponse.json({ error: projectId.error }, { status: projectId.status });
     }
-    const day = request.nextUrl.searchParams.get("day") ?? "";
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-      return NextResponse.json({ error: "Invalid day." }, { status: 400 });
+    // Exclude the worker whose shift is being edited/added so the hint reflects
+    // only the OTHER crew members' departures.
+    const excludeProfileId = readRequiredUuid(
+      request.nextUrl.searchParams.get("excludeProfileId"),
+      "worker id",
+    );
+    if (!excludeProfileId.ok) {
+      return NextResponse.json({ error: excludeProfileId.error }, { status: excludeProfileId.status });
     }
-    const dayStart = new Date(`${day}T00:00:00.000Z`);
-    if (Number.isNaN(dayStart.getTime())) {
-      return NextResponse.json({ error: "Invalid day." }, { status: 400 });
+    // The client sends an explicit local-day window (local midnight → +24h) as
+    // ISO timestamps, so evening shifts don't fall into the wrong UTC day.
+    const fromIso = parseIso(request.nextUrl.searchParams.get("from"));
+    const toIso = parseIso(request.nextUrl.searchParams.get("to"));
+    if (!fromIso || !toIso) {
+      return NextResponse.json({ error: "Invalid window." }, { status: 400 });
     }
-    const dayStartIso = dayStart.toISOString();
-    const dayEndIso = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000).toISOString();
+    const fromMs = new Date(fromIso).getTime();
+    const toMs = new Date(toIso).getTime();
+    if (toMs <= fromMs || toMs - fromMs > 26 * 60 * 60 * 1000) {
+      return NextResponse.json({ error: "Invalid window." }, { status: 400 });
+    }
 
     const { data, error } = await admin
       .from("time_events")
       .select("event_time, profile_id")
       .eq("org_id", org.id)
       .eq("project_id", projectId.value)
+      .neq("profile_id", excludeProfileId.value)
       .in("event_type", ["clock_out", "auto_out"])
-      .gte("event_time", dayStartIso)
-      .lt("event_time", dayEndIso)
+      .gte("event_time", fromIso)
+      .lt("event_time", toIso)
       .returns<{ event_time: string; profile_id: string }[]>();
     if (error) {
       return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
