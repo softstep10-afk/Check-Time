@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, MapPin, Navigation, ShieldCheck } from "lucide-react";
-import { WorkerGpsCheckMap } from "@/components/maps/WorkerGpsCheckMap";
 import { WorkerSessionMeta, useWorkerShell } from "@/components/worker/WorkerShell";
-import { CheckoutModal } from "@/components/worker/CheckoutModal";
 import { WorkerSectionSkeleton } from "@/components/worker/WorkerSectionSkeleton";
 import {
   formatDateTime,
@@ -14,6 +13,27 @@ import {
 } from "@/lib/worker-utils";
 import { useTranslation } from "@/lib/i18n";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
+
+// Heavy, conditionally-rendered pieces are code-split out of the initial
+// /clock bundle (audit C-M8 / C-M9). The GPS map pulls in
+// @react-google-maps/api but only renders after a clock-in fence check;
+// the checkout modal only mounts when the worker taps "End shift". Both
+// are client-only, so ssr:false is safe and load timing is all that changes.
+const WorkerGpsCheckMap = dynamic(
+  () =>
+    import("@/components/maps/WorkerGpsCheckMap").then((m) => m.WorkerGpsCheckMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full" style={{ background: "var(--bg-primary)" }} aria-hidden />
+    ),
+  },
+);
+
+const CheckoutModal = dynamic(
+  () => import("@/components/worker/CheckoutModal").then((m) => m.CheckoutModal),
+  { ssr: false },
+);
 
 export function ClockPage() {
   const router = useRouter();
@@ -294,7 +314,9 @@ export function ClockPage() {
             </button>
           </div>
         ) : null}
-        <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
+        {checkoutOpen ? (
+          <CheckoutModal open={checkoutOpen} onClose={() => setCheckoutOpen(false)} />
+        ) : null}
 
         {shell.profile.require_video ? (
           <p className="mt-3 text-xs text-[var(--text-secondary)]">
