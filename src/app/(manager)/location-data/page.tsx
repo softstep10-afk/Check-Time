@@ -11,33 +11,26 @@ import {
   type ProfileWithoutRate,
 } from "@/lib/profile-rates";
 import type { Profile } from "@/types/database";
-import { haversineMeters } from "@/lib/worker-utils";
 
-type LocationPointRow = {
-  id: string;
-  worker_id: string;
-  shift_id: string | null;
-  lat: number;
-  lng: number;
-  accuracy: number | null;
-  heading: number | null;
-  speed: number | null;
-  recorded_at: string;
-};
+type MileageProfile = Pick<Profile, "id" | "name" | "role">;
 
 type MileageSummary = {
-  profile: Profile;
+  profile: MileageProfile;
   miles: number;
   pings: number;
   firstSeen: string | null;
   lastSeen: string | null;
 };
 
+type MileageData = {
+  summaries: MileageSummary[];
+  totalMiles: number;
+  totalRows: number;
+  oldestRecord: string | null;
+  estimatedSizeMb: number;
+};
+
 const TRACKED_MILEAGE_ROLES = new Set(["driver", "manager", "admin", "owner"]);
-const METERS_PER_MILE = 1609.344;
-const MAX_SEGMENT_GAP_MS = 30 * 60 * 1000;
-const MAX_REASONABLE_SPEED_MPH = 120;
-const MAX_ACCURACY_M = 250;
 
 function toDateInput(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -50,12 +43,6 @@ function defaultMonthStart(): string {
 
 function defaultToday(): string {
   return toDateInput(new Date());
-}
-
-function nextDateIso(dateInput: string): string {
-  const date = new Date(`${dateInput}T00:00:00`);
-  date.setDate(date.getDate() + 1);
-  return date.toISOString();
 }
 
 function roleLabel(role: string, locale: string): string {
@@ -85,60 +72,14 @@ function formatDateTime(value: string | null, locale: string): string {
   }).format(new Date(value));
 }
 
-function buildMileageSummaries(
-  points: LocationPointRow[],
-  profiles: Profile[],
-): MileageSummary[] {
-  const profilesById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const pointsByWorker = new Map<string, LocationPointRow[]>();
-
-  for (const point of points) {
-    const profile = profilesById.get(point.worker_id);
-    if (!profile) continue;
-    if (!TRACKED_MILEAGE_ROLES.has(profile.role)) continue;
-    if (point.accuracy != null && point.accuracy > MAX_ACCURACY_M) continue;
-    const list = pointsByWorker.get(point.worker_id) ?? [];
-    list.push(point);
-    pointsByWorker.set(point.worker_id, list);
-  }
-
-  return profiles
-    .filter((profile) => TRACKED_MILEAGE_ROLES.has(profile.role))
-    .map((profile) => {
-      const workerPoints = [...(pointsByWorker.get(profile.id) ?? [])].sort(
-        (a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime(),
-      );
-      let meters = 0;
-
-      for (let i = 1; i < workerPoints.length; i += 1) {
-        const previous = workerPoints[i - 1];
-        const current = workerPoints[i];
-        const previousTime = new Date(previous.recorded_at).getTime();
-        const currentTime = new Date(current.recorded_at).getTime();
-        const gapMs = currentTime - previousTime;
-        if (gapMs <= 0 || gapMs > MAX_SEGMENT_GAP_MS) continue;
-
-        const segmentMeters = haversineMeters(
-          { lat: previous.lat, lng: previous.lng },
-          { lat: current.lat, lng: current.lng },
-        );
-        if (segmentMeters < 8) continue;
-
-        const speedMph = (segmentMeters / METERS_PER_MILE) / (gapMs / 3_600_000);
-        if (speedMph > MAX_REASONABLE_SPEED_MPH) continue;
-        meters += segmentMeters;
-      }
-
-      return {
-        profile,
-        miles: meters / METERS_PER_MILE,
-        pings: workerPoints.length,
-        firstSeen: workerPoints[0]?.recorded_at ?? null,
-        lastSeen: workerPoints.at(-1)?.recorded_at ?? null,
-      };
-    })
-    .filter((summary) => summary.pings > 0 || summary.miles > 0)
-    .sort((a, b) => b.miles - a.miles);
+function emptyMileageData(): MileageData {
+  return {
+    summaries: [],
+    totalMiles: 0,
+    totalRows: 0,
+    oldestRecord: null,
+    estimatedSizeMb: 0.01,
+  };
 }
 
 export default function LocationDataPage() {
@@ -147,7 +88,7 @@ export default function LocationDataPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingPoints, setLoadingPoints] = useState(true);
-  const [points, setPoints] = useState<LocationPointRow[]>([]);
+  const [mileageData, setMileageData] = useState<MileageData>(() => emptyMileageData());
   const [selectedWorker, setSelectedWorker] = useState("");
   const [dateFrom, setDateFrom] = useState(defaultMonthStart);
   const [dateTo, setDateTo] = useState(defaultToday);
@@ -175,29 +116,31 @@ export default function LocationDataPage() {
 
     async function loadPoints() {
       setLoadingPoints(true);
-      let query = supabase
-        .from("worker_live_locations")
-        .select("id, worker_id, shift_id, lat, lng, accuracy, heading, speed, recorded_at")
-        .order("recorded_at", { ascending: true })
-        .limit(20000);
+      try {
+        const params = new URLSearchParams();
+        if (selectedWorker) {
+          params.set("workerId", selectedWorker);
+        }
+        if (dateFrom) {
+          params.set("from", dateFrom);
+        }
+        if (dateTo) {
+          params.set("to", dateTo);
+        }
 
-      if (selectedWorker) {
-        query = query.eq("worker_id", selectedWorker);
-      }
-      if (dateFrom) {
-        query = query.gte("recorded_at", `${dateFrom}T00:00:00.000Z`);
-      }
-      if (dateTo) {
-        query = query.lt("recorded_at", nextDateIso(dateTo));
-      }
-
-      const { data, error } = await query;
-      if (cancelled) return;
-      if (error) {
-        setMessage(error.message);
-        setPoints([]);
-      } else {
-        setPoints((data as LocationPointRow[]) ?? []);
+        const response = await fetch(`/api/location-data/mileage?${params.toString()}`, { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as MileageData | { error: string } | null;
+        if (cancelled) return;
+        if (!response.ok || !payload || "error" in payload) {
+          setMessage((payload && "error" in payload && payload.error) || "Could not load mileage data.");
+          setMileageData(emptyMileageData());
+        } else {
+          setMileageData(payload);
+        }
+      } catch {
+        if (cancelled) return;
+        setMessage("Could not load mileage data.");
+        setMileageData(emptyMileageData());
       }
       setLoadingPoints(false);
     }
@@ -214,14 +157,10 @@ export default function LocationDataPage() {
     [profiles],
   );
 
-  const mileageSummaries = useMemo(
-    () => buildMileageSummaries(points, mileageProfiles),
-    [points, mileageProfiles],
-  );
-
-  const totalMiles = mileageSummaries.reduce((sum, row) => sum + row.miles, 0);
-  const oldestDate = points[0]?.recorded_at.slice(0, 10) ?? "—";
-  const estimatedSizeMb = Math.max(0.01, points.length * 0.00025);
+  const mileageSummaries = mileageData.summaries;
+  const totalMiles = mileageData.totalMiles;
+  const oldestDate = mileageData.oldestRecord?.slice(0, 10) ?? "—";
+  const estimatedSizeMb = mileageData.estimatedSizeMb;
 
   function handleExport() {
     const header = [
@@ -310,7 +249,7 @@ export default function LocationDataPage() {
         </div>
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("gps.totalRows")}</div>
-          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{points.length.toLocaleString("en-US")}</div>
+          <div className="mt-2 text-[28px] font-bold text-[var(--text-primary)]">{mileageData.totalRows.toLocaleString("en-US")}</div>
         </div>
         <div className="surface-card p-4">
           <div className="text-[10px] uppercase tracking-[0.16em] text-[var(--text-muted)]">{t("gps.oldestRecord")}</div>

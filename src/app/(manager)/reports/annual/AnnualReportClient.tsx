@@ -2,17 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
 import { summarizeAnnualPaidPayroll } from "@/lib/annual-report-utils";
 import { useTranslation } from "@/lib/i18n";
 import type { PayrollArchiveSummary } from "@/lib/archive-utils";
-import {
-  PROFILE_SELECT_WITHOUT_RATE,
-  profilesWithoutRates,
-  type ProfileWithoutRate,
-} from "@/lib/profile-rates";
-import type { Profile, Project, TimeEvent, Media } from "@/types/database";
-import type { StoreVisit } from "@/lib/store-types";
+import type { Profile, Project } from "@/types/database";
 
 // ── Types ──
 
@@ -52,25 +45,89 @@ type MonthData = {
   activeWorkers: number;
 };
 
+type AnnualProfile = Pick<Profile, "id" | "name" | "role">;
+type AnnualProject = Pick<Project, "id" | "name" | "address" | "status" | "start_date" | "end_date">;
+type AnnualWorkerHours = {
+  workerId: string;
+  totalHours: number;
+  projectCount: number;
+  dayCount: number;
+  firstShift: string | null;
+  lastShift: string | null;
+};
+type AnnualProjectHours = {
+  projectId: string;
+  laborHours: number;
+  workerCount: number;
+};
+type AnnualReceiptProject = {
+  projectId: string;
+  materialCost: number;
+};
+type AnnualStoreBreakdown = {
+  stores: Array<{ name: string; chain: string; visits: number; minutes: number }>;
+  chains: Array<{ name: string; visits: number; minutes: number }>;
+  workers: Array<{ name: string; visits: number; minutes: number }>;
+};
+type AnnualReportData = {
+  profiles: AnnualProfile[];
+  projects: AnnualProject[];
+  workerHours: AnnualWorkerHours[];
+  projectHours: AnnualProjectHours[];
+  activeWorkerCountsByMonth: number[];
+  receiptsByProject: AnnualReceiptProject[];
+  materialByMonth: number[];
+  totalMaterials: number;
+  visitsByWorker: Array<{ workerId: string; visits: number }>;
+  totalVisits: number;
+  totalVisitMinutes: number;
+  storeBreakdown: AnnualStoreBreakdown;
+  sourceRowCounts: {
+    profiles: number;
+    projects: number;
+    timeEvents: number;
+    receipts: number;
+    storeVisits: number;
+  };
+};
+
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+function emptyAnnualReportData(): AnnualReportData {
+  return {
+    profiles: [],
+    projects: [],
+    workerHours: [],
+    projectHours: [],
+    activeWorkerCountsByMonth: new Array<number>(12).fill(0),
+    receiptsByProject: [],
+    materialByMonth: new Array<number>(12).fill(0),
+    totalMaterials: 0,
+    visitsByWorker: [],
+    totalVisits: 0,
+    totalVisitMinutes: 0,
+    storeBreakdown: { stores: [], chains: [], workers: [] },
+    sourceRowCounts: {
+      profiles: 0,
+      projects: 0,
+      timeEvents: 0,
+      receipts: 0,
+      storeVisits: 0,
+    },
+  };
+}
 
 export function AnnualReportClient({
   paidPayrollArchive,
 }: {
   paidPayrollArchive: PayrollArchiveSummary;
 }) {
-  const supabase = useMemo(() => createClient(), []);
   const { t, locale } = useTranslation();
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [loading, setLoading] = useState(true);
 
-  // Data
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [events, setEvents] = useState<TimeEvent[]>([]);
-  const [receipts, setReceipts] = useState<Media[]>([]);
-  const [storeVisits, setStoreVisits] = useState<StoreVisit[]>([]);
+  const [annualData, setAnnualData] = useState<AnnualReportData>(() => emptyAnnualReportData());
   const [tab, setTab] = useState<"workers" | "projects" | "monthly" | "stores">("workers");
 
   const annualPayroll = useMemo(
@@ -79,90 +136,64 @@ export function AnnualReportClient({
   );
 
   useEffect(() => {
+    let cancelled = false;
+
     async function load() {
       setLoading(true);
-      const yearStart = `${year}-01-01T00:00:00`;
-      const yearEnd = `${year}-12-31T23:59:59`;
+      try {
+        const response = await fetch(`/api/reports/annual?year=${year}`, { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as AnnualReportData | { error: string } | null;
 
-      const [profilesRes, projectsRes, eventsRes, receiptsRes, visitsRes] = await Promise.all([
-        supabase.from("profiles").select(PROFILE_SELECT_WITHOUT_RATE).returns<ProfileWithoutRate[]>(),
-        supabase.from("projects").select("*"),
-        supabase.from("time_events").select("*").gte("event_time", yearStart).lte("event_time", yearEnd),
-        supabase.from("media").select("*").eq("metadata->>category", "receipt").is("deleted_at", null).gte("created_at", yearStart).lte("created_at", yearEnd),
-        // store_visits may not exist yet in every environment — tolerate the error.
-        supabase.from("store_visits").select("*").gte("entered_at", yearStart).lte("entered_at", yearEnd),
-      ]);
-
-      setProfiles(profilesWithoutRates(profilesRes.data ?? []));
-      setProjects((projectsRes.data as Project[]) ?? []);
-      setEvents((eventsRes.data as TimeEvent[]) ?? []);
-      setReceipts((receiptsRes.data as Media[]) ?? []);
-      setStoreVisits(visitsRes.error ? [] : ((visitsRes.data as StoreVisit[]) ?? []));
+        if (cancelled) return;
+        if (!response.ok || !payload || "error" in payload) {
+          setAnnualData(emptyAnnualReportData());
+        } else {
+          setAnnualData(payload);
+        }
+      } catch {
+        if (cancelled) return;
+        setAnnualData(emptyAnnualReportData());
+      }
       setLoading(false);
     }
+
     void load();
-  }, [supabase, year]);
+    return () => {
+      cancelled = true;
+    };
+  }, [year]);
 
   // ── Compute summaries ──
 
+  const profiles = annualData.profiles;
+  const projects = annualData.projects;
+
   const visitsByWorker = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const v of storeVisits) {
-      map.set(v.worker_id, (map.get(v.worker_id) ?? 0) + 1);
-    }
-    return map;
-  }, [storeVisits]);
+    return new Map(annualData.visitsByWorker.map((row) => [row.workerId, row.visits]));
+  }, [annualData.visitsByWorker]);
 
   const workerRows = useMemo((): WorkerRow[] => {
     const profileMap = new Map(profiles.map((p) => [p.id, p]));
-    const hoursByWorker = new Map<string, { total: number; ot: number; gross: number; projects: Set<string>; days: Set<string>; first: string | null; last: string | null }>();
+    const hoursByWorker = new Map(annualData.workerHours.map((row) => [row.workerId, row]));
 
-    // Pair clock_in → clock_out
-    const sorted = [...events].filter((e) => e.event_type === "clock_in" || e.event_type === "clock_out" || e.event_type === "auto_out").sort((a, b) => new Date(a.event_time).getTime() - new Date(b.event_time).getTime());
-    const openShifts = new Map<string, TimeEvent>();
-
-    for (const e of sorted) {
-      if (e.event_type === "clock_in") {
-        openShifts.set(e.profile_id, e);
-        continue;
-      }
-      const clockIn = openShifts.get(e.profile_id);
-      if (!clockIn) continue;
-      openShifts.delete(e.profile_id);
-
-      const minutes = Math.max(0, Math.round((new Date(e.event_time).getTime() - new Date(clockIn.event_time).getTime()) / 60_000));
-      const hours = minutes / 60;
-
-      const entry = hoursByWorker.get(e.profile_id) ?? { total: 0, ot: 0, gross: 0, projects: new Set<string>(), days: new Set<string>(), first: null, last: null };
-      entry.total += hours;
-      entry.projects.add(e.project_id);
-      entry.days.add(clockIn.event_time.slice(0, 10));
-      if (!entry.first || clockIn.event_time < entry.first) entry.first = clockIn.event_time;
-      if (!entry.last || e.event_time > entry.last) entry.last = e.event_time;
-
-      // Simple OT: if total exceeds 40h/week boundary we'd need weekly bucketing.
-      // For annual report, approximate: every hour above 2080 (40*52) is OT.
-      hoursByWorker.set(e.profile_id, entry);
-    }
-
-    // Second pass: compute OT and gross
-    const rows: WorkerRow[] = Array.from(hoursByWorker.entries()).map(([workerId, data]) => {
+    const rows: WorkerRow[] = annualData.workerHours.map((data) => {
+      const workerId = data.workerId;
       const profile = profileMap.get(workerId);
-      const ot = Math.max(0, data.total - 2080);
+      const ot = Math.max(0, data.totalHours - 2080);
       const paid = annualPayroll.workerPayById.get(workerId);
-      const avgPerDay = data.days.size > 0 ? Math.round((data.total / data.days.size) * 10) / 10 : 0;
+      const avgPerDay = data.dayCount > 0 ? Math.round((data.totalHours / data.dayCount) * 10) / 10 : 0;
 
       return {
         id: workerId,
         name: profile?.name ?? "Unknown",
         role: profile?.role ?? "worker",
-        totalHours: Math.round((data.total || paid?.paidHours || 0) * 100) / 100,
+        totalHours: Math.round((data.totalHours || paid?.paidHours || 0) * 100) / 100,
         otHours: Math.round(ot * 100) / 100,
         grossPaid: paid?.grossPaid ?? 0,
-        projectCount: data.projects.size || paid?.projectNames.length || 0,
+        projectCount: data.projectCount || paid?.projectNames.length || 0,
         storeVisits: visitsByWorker.get(workerId) ?? 0,
-        firstShift: data.first,
-        lastShift: data.last,
+        firstShift: data.firstShift,
+        lastShift: data.lastShift,
         avgHoursPerDay: avgPerDay,
       };
     });
@@ -185,33 +216,13 @@ export function AnnualReportClient({
     }
 
     return rows.sort((a, b) => b.grossPaid - a.grossPaid || b.totalHours - a.totalHours);
-  }, [annualPayroll, profiles, events, visitsByWorker]);
+  }, [annualData.workerHours, annualPayroll, profiles, visitsByWorker]);
 
   const projectRows = useMemo((): ProjectRow[] => {
-    const hoursByProject = new Map<string, { hours: number; workers: Set<string> }>();
-    const sorted = [...events].filter((e) => e.event_type === "clock_in" || e.event_type === "clock_out" || e.event_type === "auto_out").sort((a, b) => new Date(a.event_time).getTime() - new Date(b.event_time).getTime());
-    const openShifts = new Map<string, TimeEvent>();
-
-    for (const e of sorted) {
-      if (e.event_type === "clock_in") { openShifts.set(e.profile_id, e); continue; }
-      const clockIn = openShifts.get(e.profile_id);
-      if (!clockIn) continue;
-      openShifts.delete(e.profile_id);
-
-      const hours = Math.max(0, (new Date(e.event_time).getTime() - new Date(clockIn.event_time).getTime()) / 3_600_000);
-      const entry = hoursByProject.get(clockIn.project_id) ?? { hours: 0, workers: new Set<string>() };
-      entry.hours += hours;
-      entry.workers.add(e.profile_id);
-      hoursByProject.set(clockIn.project_id, entry);
-    }
-
-    const receiptsByProject = new Map<string, number>();
-    for (const r of receipts) {
-      if (r.project_id) {
-        const amt = Number((r.metadata as Record<string, unknown>)?.amount ?? 0);
-        receiptsByProject.set(r.project_id, (receiptsByProject.get(r.project_id) ?? 0) + amt);
-      }
-    }
+    const hoursByProject = new Map(annualData.projectHours.map((row) => [row.projectId, row]));
+    const receiptsByProject = new Map(
+      annualData.receiptsByProject.map((row) => [row.projectId, row.materialCost]),
+    );
 
     return projects.map((p) => {
       const labor = hoursByProject.get(p.id);
@@ -224,61 +235,42 @@ export function AnnualReportClient({
         status: p.status,
         startDate: p.start_date,
         endDate: p.end_date,
-        laborHours: Math.round((labor?.hours ?? 0) * 100) / 100,
+        laborHours: Math.round((labor?.laborHours ?? 0) * 100) / 100,
         laborCost,
         materialCost: Math.round(matCost * 100) / 100,
         totalCost: Math.round((laborCost + matCost) * 100) / 100,
-        workerCount: labor?.workers.size ?? 0,
+        workerCount: labor?.workerCount ?? 0,
       };
     }).filter((p) => p.laborHours > 0 || p.laborCost > 0 || p.materialCost > 0).sort((a, b) => b.totalCost - a.totalCost);
-  }, [annualPayroll, projects, events, receipts]);
+  }, [annualData.projectHours, annualData.receiptsByProject, annualPayroll, projects]);
 
   const monthlyData = useMemo((): MonthData[] => {
     const months = locale === "ru"
       ? ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"]
       : ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-    const workersByMonth = Array.from({ length: 12 }, () => new Set<string>());
-    const sorted = [...events].filter((e) => e.event_type === "clock_in" || e.event_type === "clock_out" || e.event_type === "auto_out").sort((a, b) => new Date(a.event_time).getTime() - new Date(b.event_time).getTime());
-    const openShifts = new Map<string, TimeEvent>();
-
-    for (const e of sorted) {
-      if (e.event_type === "clock_in") { openShifts.set(e.profile_id, e); continue; }
-      const clockIn = openShifts.get(e.profile_id);
-      if (!clockIn) continue;
-      openShifts.delete(e.profile_id);
-
-      const month = new Date(clockIn.event_time).getMonth();
-      workersByMonth[month].add(e.profile_id);
-    }
-
-    const materialByMonth = new Array(12).fill(0);
-    for (const r of receipts) {
-      const month = new Date(r.created_at).getMonth();
-      materialByMonth[month] += Number((r.metadata as Record<string, unknown>)?.amount ?? 0);
-    }
-
     return months.map((label, i) => ({
       month: i,
       label,
       laborCost: annualPayroll.laborCostByMonth[i],
-      materialCost: Math.round(materialByMonth[i] * 100) / 100,
-      activeWorkers: Math.max(workersByMonth[i].size, annualPayroll.paidWorkerIdsByMonth[i].size),
+      materialCost: Math.round((annualData.materialByMonth[i] ?? 0) * 100) / 100,
+      activeWorkers: Math.max(
+        annualData.activeWorkerCountsByMonth[i] ?? 0,
+        annualPayroll.paidWorkerIdsByMonth[i].size,
+      ),
     }));
-  }, [annualPayroll, events, receipts, locale]);
+  }, [annualData.activeWorkerCountsByMonth, annualData.materialByMonth, annualPayroll, locale]);
 
   // ── Summary totals ──
   const summary = useMemo(() => {
     const totalHours = workerRows.reduce((s, w) => s + w.totalHours, 0);
     const totalGross = annualPayroll.totalGross;
-    const totalMaterials = receipts.reduce((s, r) => s + Number((r.metadata as Record<string, unknown>)?.amount ?? 0), 0);
+    const totalMaterials = annualData.totalMaterials;
     const totalProjectsWorked = projectRows.length;
     const completedProjects = projectRows.filter((p) => p.status === "completed").length;
     const activeWorkers = workerRows.length;
-    const totalVisits = storeVisits.length;
-    const totalVisitMinutes = Math.round(
-      storeVisits.reduce((s, v) => s + (v.duration_seconds ?? 0), 0) / 60,
-    );
+    const totalVisits = annualData.totalVisits;
+    const totalVisitMinutes = annualData.totalVisitMinutes;
     return {
       totalHours,
       totalGross,
@@ -289,50 +281,10 @@ export function AnnualReportClient({
       totalVisits,
       totalVisitMinutes,
     };
-  }, [annualPayroll, workerRows, projectRows, receipts, storeVisits]);
+  }, [annualData.totalMaterials, annualData.totalVisitMinutes, annualData.totalVisits, annualPayroll, workerRows, projectRows]);
 
   // ── Store breakdowns for the Stores tab ──
-  const storeBreakdown = useMemo(() => {
-    const byStore = new Map<string, { name: string; chain: string; visits: number; minutes: number }>();
-    const byChain = new Map<string, { visits: number; minutes: number }>();
-    const byWorker = new Map<string, { name: string; visits: number; minutes: number }>();
-
-    for (const v of storeVisits) {
-      const minutes = Math.round((v.duration_seconds ?? 0) / 60);
-
-      const storeKey = v.store_id ?? v.store_name ?? "unknown";
-      const store = byStore.get(storeKey) ?? {
-        name: v.store_name ?? "Unknown",
-        chain: v.store_chain ?? "",
-        visits: 0,
-        minutes: 0,
-      };
-      store.visits += 1;
-      store.minutes += minutes;
-      byStore.set(storeKey, store);
-
-      if (v.store_chain) {
-        const chain = byChain.get(v.store_chain) ?? { visits: 0, minutes: 0 };
-        chain.visits += 1;
-        chain.minutes += minutes;
-        byChain.set(v.store_chain, chain);
-      }
-
-      const workerKey = v.worker_id ?? v.worker_name ?? "unknown";
-      const worker = byWorker.get(workerKey) ?? { name: v.worker_name ?? "Unknown", visits: 0, minutes: 0 };
-      worker.visits += 1;
-      worker.minutes += minutes;
-      byWorker.set(workerKey, worker);
-    }
-
-    return {
-      stores: [...byStore.values()].sort((a, b) => b.visits - a.visits).slice(0, 10),
-      chains: [...byChain.entries()]
-        .map(([name, value]) => ({ name, ...value }))
-        .sort((a, b) => b.visits - a.visits),
-      workers: [...byWorker.values()].sort((a, b) => b.visits - a.visits).slice(0, 10),
-    };
-  }, [storeVisits]);
+  const storeBreakdown = annualData.storeBreakdown;
 
   // ── CSV export ──
   function exportWorkersCsv() {
@@ -508,7 +460,10 @@ export function AnnualReportClient({
   }
 
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
-  const hasData = events.length > 0 || receipts.length > 0 || annualPayroll.totalPaidHours > 0;
+  const hasData =
+    annualData.sourceRowCounts.timeEvents > 0 ||
+    annualData.sourceRowCounts.receipts > 0 ||
+    annualPayroll.totalPaidHours > 0;
   const maxBar = Math.max(...monthlyData.map((m) => m.laborCost + m.materialCost), 1);
 
   return (
@@ -730,7 +685,7 @@ export function AnnualReportClient({
           ) : (
             <section className="surface-card p-4">
               <h2 className="text-lg font-bold text-[var(--text-primary)]">{t("report.storeActivity")}</h2>
-              {storeVisits.length === 0 ? (
+              {annualData.totalVisits === 0 ? (
                 <div className="mt-4 rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-4 text-center text-sm text-[var(--text-secondary)]">
                   {t("report.noData")}
                 </div>

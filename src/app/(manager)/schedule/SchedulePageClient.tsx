@@ -54,6 +54,11 @@ type CalendarMode = "general" | "deliveries";
 type EntrySource = "task" | "project";
 type EntryType = ScheduleKind | "project_start" | "project_deadline";
 type DeliveryStatus = "open" | "assigned" | "claimed" | "in_progress" | "delivered";
+type ScheduleProject = Pick<Project, "id" | "name" | "address" | "status" | "site_point" | "start_date" | "end_date">;
+type ScheduleTask = Pick<
+  Task,
+  "id" | "project_id" | "assigned_to" | "title" | "description" | "priority" | "status" | "due_date" | "completed_at" | "metadata"
+>;
 
 type CalendarEntry = {
   id: string;
@@ -122,6 +127,10 @@ const GENERAL_EVENT_KINDS: ScheduleKind[] = [
 ];
 
 const FIELD_EVENT_KINDS: ScheduleKind[] = ["delivery", "task"];
+
+const SCHEDULE_PROJECT_SELECT = "id, name, address, status, site_point, start_date, end_date";
+const SCHEDULE_TASK_SELECT =
+  "id, project_id, assigned_to, title, description, priority, status, due_date, completed_at, metadata";
 
 const DELIVERY_ASSIGNEE_ROLES = new Set<UserRole>([
   "worker",
@@ -461,7 +470,7 @@ function entryTypeLabel(type: EntryType, text: ScheduleText): string {
 }
 
 function deliveryStatusFromTask(
-  task: Task,
+  task: ScheduleTask,
   metadata: Record<string, unknown>,
 ): DeliveryStatus | null {
   if (metadata.schedule_kind !== "delivery") return null;
@@ -559,8 +568,8 @@ export default function SchedulePageClient() {
   const realtimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const realtimePendingWhileHiddenRef = useRef(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<ScheduleProject[]>([]);
+  const [tasks, setTasks] = useState<ScheduleTask[]>([]);
   const [currentProfile, setCurrentProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<"item" | "dates" | "delivery" | null>(null);
@@ -631,19 +640,19 @@ export default function SchedulePageClient() {
         .returns<ProfileWithoutRate[]>(),
       supabase
         .from("projects")
-        .select("*")
+        .select(SCHEDULE_PROJECT_SELECT)
         .is("deleted_at", null)
         .neq("status", "archived")
         .order("name", { ascending: true })
-        .returns<Project[]>(),
+        .returns<ScheduleProject[]>(),
       supabase
         .from("tasks")
-        .select("*")
+        .select(SCHEDULE_TASK_SELECT)
         .is("deleted_at", null)
         .gte("due_date", loadStart)
         .lte("due_date", loadEnd)
         .order("due_date", { ascending: true })
-        .returns<Task[]>(),
+        .returns<ScheduleTask[]>(),
     ]);
 
     if (profilesRes.error || projectsRes.error || tasksRes.error) {
