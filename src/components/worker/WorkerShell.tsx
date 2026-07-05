@@ -44,7 +44,9 @@ import {
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
 import {
+  countRetryOfflineUploads,
   loadOfflineQueue,
+  markOfflineUploadStatus,
   offlineUploadToFile,
   queueOfflineUpload,
   removeOfflineUpload,
@@ -2802,9 +2804,27 @@ export function WorkerShell({
       }
 
       // ── Phase 3: media ─────────────────────────────────────────────
+      let mediaFailureCount = 0;
       for (const item of mediaItems) {
+        const markMediaRetry = (message: string) => {
+          mediaFailureCount += 1;
+          setOfflineQueue(
+            markOfflineUploadStatus(item.id, {
+              status: "retry",
+              retryCount: item.retryCount + 1,
+              lastErrorMessage: message,
+            }),
+          );
+        };
+
         const file = offlineUploadToFile(item);
         if (!file) continue; // thumb-only, needs re-pick
+        setOfflineQueue(
+          markOfflineUploadStatus(item.id, {
+            status: "syncing",
+            lastAttemptAt: new Date().toISOString(),
+          }),
+        );
         const today = new Date().toISOString().slice(0, 10);
         const safeName = buildSafeUploadName(file, item.mode);
         const displayName = file.name || safeName;
@@ -2818,7 +2838,10 @@ export function WorkerShell({
             cacheControl: "3600",
             contentType: resolvedContentType,
           });
-        if (uploadError) continue;
+        if (uploadError) {
+          markMediaRetry(uploadError.message || "Upload failed.");
+          continue;
+        }
 
         const queuedMediaType = guessMediaType(file);
         const { data: insertedRow, error: insertError } = await supabase
@@ -2843,7 +2866,10 @@ export function WorkerShell({
           })
           .select("id")
           .single<{ id: string }>();
-        if (insertError || !insertedRow) continue;
+        if (insertError || !insertedRow) {
+          markMediaRetry(insertError?.message ?? "Media record insert failed.");
+          continue;
+        }
 
         // Fire-and-forget Mux transcode kickoff for queued video drains
         // — same contract as the online path. Never awaited.
@@ -2861,6 +2887,12 @@ export function WorkerShell({
         const remaining = removeOfflineUpload(item.id);
         setOfflineQueue(remaining);
       }
+      if (mediaFailureCount > 0) {
+        setBanner({
+          tone: "error",
+          text: t("uploads.syncFailed").replace("{count}", String(mediaFailureCount)),
+        });
+      }
       void refreshShellData("offline-drain");
     } finally {
       setDraining(false);
@@ -2868,6 +2900,7 @@ export function WorkerShell({
   }, [mergeVisibleRealtimeTask, refreshShellData, shell.profile.id, supabase, t]);
 
   const offlineActionPendingCount = countPendingOfflineFieldActions(offlineActionQueue);
+  const offlineUploadRetryCount = countRetryOfflineUploads(offlineQueue);
 
   // Auto-drain when the browser flips back online.
   useEffect(() => {
@@ -3075,6 +3108,19 @@ export function WorkerShell({
                   ? t("uploads.retrying")
                   : t("uploads.offlineBanner")
                 ).replace("{count}", String(offlineQueue.length))}
+              </div>
+            ) : null}
+
+            {offlineUploadRetryCount > 0 ? (
+              <div
+                className="mt-2 inline-flex items-center gap-2 rounded-[var(--radius-pill)] px-3 py-1.5 text-[11px] font-semibold"
+                style={{
+                  background: "rgba(212, 81, 94, 0.12)",
+                  color: "var(--red)",
+                }}
+              >
+                <span aria-hidden>⚠</span>
+                {t("uploads.syncFailed").replace("{count}", String(offlineUploadRetryCount))}
               </div>
             ) : null}
 

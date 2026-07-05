@@ -2,6 +2,10 @@ import { createClient } from "@/lib/supabase/client";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { redactSensitive, safeErrorForLog } from "@/lib/safe-log";
 
+export type AuditLogResult =
+  | { ok: true }
+  | { ok: false; errorMessage: string };
+
 export async function logAudit({
   orgId,
   actorId,
@@ -22,10 +26,10 @@ export async function logAudit({
   targetId?: string;
   beforeData?: Record<string, unknown> | null;
   afterData?: Record<string, unknown> | null;
-}) {
+}): Promise<AuditLogResult> {
   if (AUTH_BYPASS_ENABLED) {
     console.log("[Audit]", action, targetType, targetId, redactSensitive({ beforeData, afterData }));
-    return;
+    return { ok: true };
   }
 
   // Best-effort: never throw out of logAudit. Callers use it inside
@@ -44,8 +48,16 @@ export async function logAudit({
       before_data: beforeData ?? null,
       after_data: afterData ?? null,
     });
-    if (error) console.warn("[Audit] insert failed:", safeErrorForLog(error));
+    if (error) {
+      console.warn("[Audit] insert failed:", safeErrorForLog(error));
+      return { ok: false, errorMessage: error.message };
+    }
+    return { ok: true };
   } catch (err) {
     console.warn("[Audit] insert threw:", safeErrorForLog(err));
+    return {
+      ok: false,
+      errorMessage: err instanceof Error ? err.message : "Audit insert failed.",
+    };
   }
 }

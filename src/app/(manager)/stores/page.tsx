@@ -78,7 +78,16 @@ export default function StoresPage() {
 
   async function handleToggle(storeId: string, isActive: boolean) {
     setBusyKey(`toggle-${storeId}`);
-    await supabase.from("supply_stores").update({ is_active: !isActive }).eq("id", storeId);
+    setMessage("");
+    const { error } = await supabase
+      .from("supply_stores")
+      .update({ is_active: !isActive })
+      .eq("id", storeId);
+    if (error) {
+      setMessage(error.message || t("stores.toggleFailed"));
+      setBusyKey(null);
+      return;
+    }
     setStores((prev) =>
       prev.map((s) => (s.id === storeId ? { ...s, is_active: !isActive } : s)),
     );

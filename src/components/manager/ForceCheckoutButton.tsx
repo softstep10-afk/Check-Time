@@ -34,13 +34,15 @@ export function ForceCheckoutButton({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<"success" | "error" | null>(null);
+  const [result, setResult] = useState<"success" | "partial" | "error" | null>(null);
+  const [resultMessage, setResultMessage] = useState("");
   const [checkoutTime, setCheckoutTime] = useState(localDatetimeValue);
   const [reason, setReason] = useState("");
 
   async function handleConfirm() {
     setBusy(true);
     setResult(null);
+    setResultMessage("");
 
     const timestamp = new Date(checkoutTime).toISOString();
 
@@ -65,18 +67,23 @@ export function ForceCheckoutButton({
     if (error) {
       setBusy(false);
       setResult("error");
+      setResultMessage(error.message);
       return;
     }
 
-    await supabase
+    const partialFailures: string[] = [];
+
+    const { error: profileError } = await supabase
       .from("profiles")
       .update({ current_project: null })
       .eq("id", profileId);
+    if (profileError) partialFailures.push(t("overview.forceCheckoutProfileUpdateFailed"));
 
     // Close any open store_visit row for this worker so the auto-detection
     // state machine doesn't treat them as still in a store after the manager
     // ends their shift.
-    await closeOpenStoreVisits(supabase, profileId, timestamp);
+    const storeVisitResult = await closeOpenStoreVisits(supabase, profileId, timestamp);
+    if (!storeVisitResult.ok) partialFailures.push(t("overview.forceCheckoutStoreVisitFailed"));
 
     // Send notification message to worker. Includes time of checkout so
     // the worker has audit context, and priority='urgent' so the worker's
@@ -92,7 +99,7 @@ export function ForceCheckoutButton({
       ? `${t("overview.forceCheckoutNotify")} (${timeLabel}) — ${reason.trim()}`
       : `${t("overview.forceCheckoutNotify")} (${timeLabel})`;
 
-    await supabase.from("messages").insert({
+    const { error: messageError } = await supabase.from("messages").insert({
       org_id: orgId,
       sender_id: managerId,
       recipient_id: profileId,
@@ -101,9 +108,10 @@ export function ForceCheckoutButton({
       priority: "urgent",
       metadata: { kind: "force_checkout_notice" },
     });
+    if (messageError) partialFailures.push(t("overview.forceCheckoutNotifyFailed"));
 
     // Audit log
-    void logAudit({
+    const auditResult = await logAudit({
       orgId,
       actorId: managerId,
       actorName: "Manager",
@@ -114,18 +122,29 @@ export function ForceCheckoutButton({
       beforeData: { project_id: projectId, worker: workerName },
       afterData: { event_time: timestamp, reason: reason.trim() || null },
     });
+    if (!auditResult.ok) partialFailures.push(t("overview.forceCheckoutAuditFailed"));
 
     setBusy(false);
     setOpen(false);
-    setResult("success");
+    if (partialFailures.length > 0) {
+      setResult("partial");
+      setResultMessage(
+        t("overview.forceCheckoutPartialFailure").replace(
+          "{steps}",
+          partialFailures.join(", "),
+        ),
+      );
+    } else {
+      setResult("success");
+    }
     router.refresh();
   }
 
-  if (result === "success") {
+  if (result === "success" || result === "partial") {
     return (
-      <span className="text-xs font-semibold" style={{ color: "var(--green)" }}>
-        {t("overview.forceCheckoutSuccess")}
-      </span>
+      <div className="max-w-[18rem] text-xs font-semibold" style={{ color: result === "success" ? "var(--green)" : "var(--brand-yellow)" }}>
+        {result === "success" ? t("overview.forceCheckoutSuccess") : resultMessage}
+      </div>
     );
   }
 
@@ -211,7 +230,7 @@ export function ForceCheckoutButton({
 
       {result === "error" ? (
         <div className="text-[10px] font-semibold" style={{ color: "var(--red)" }}>
-          {t("common.errorTryAgain")}
+          {resultMessage || t("common.errorTryAgain")}
         </div>
       ) : null}
     </div>

@@ -1420,6 +1420,11 @@ export const translations = {
   "overview.forceCheckoutTime": { en: "Checkout time", ru: "Время выхода" },
   "overview.forceCheckoutReason": { en: "Reason (optional)", ru: "Причина (необязательно)" },
   "overview.forceCheckoutNotify": { en: "You were checked out by a manager", ru: "Менеджер завершил вашу смену" },
+  "overview.forceCheckoutPartialFailure": { en: "Checkout was saved, but these follow-up steps failed: {steps}. Refresh and review worker status.", ru: "Чекаут сохранён, но не завершились шаги: {steps}. Обновите и проверьте статус работника." },
+  "overview.forceCheckoutProfileUpdateFailed": { en: "worker status cleanup", ru: "очистка статуса работника" },
+  "overview.forceCheckoutStoreVisitFailed": { en: "store visit cleanup", ru: "закрытие визита магазина" },
+  "overview.forceCheckoutNotifyFailed": { en: "worker notification", ru: "уведомление работника" },
+  "overview.forceCheckoutAuditFailed": { en: "audit log", ru: "аудит-лог" },
 
   // ── Schedule / Calendar ──
   "nav.schedule": { en: "Schedule", ru: "Расписание" },
@@ -1553,6 +1558,7 @@ export const translations = {
   "uploads.queuedTooLarge": { en: "File over 10 MB — saved a thumbnail. Re-pick the file when you're back online.", ru: "Файл больше 10 МБ — сохранили превью. Прикрепите файл заново, когда появится связь." },
   "uploads.offlineBanner": { en: "Offline — {count} {count, plural, one {file} other {files}} in queue", ru: "Офлайн — в очереди {count} {count, plural, one {файл} few {файла} other {файлов}}" },
   "uploads.retrying": { en: "Reconnecting — uploading {count} queued…", ru: "Подключение — загружаем {count}…" },
+  "uploads.syncFailed": { en: "Could not upload {count} queued file(s). Will retry.", ru: "Не удалось загрузить файлов: {count}. Повторим." },
   "worker.queuedClockIn": { en: "Saved locally — will sync when online.", ru: "Сохранено локально — отправим, когда появится связь." },
   "worker.queuedClockOut": { en: "Shift saved locally — will sync when online.", ru: "Смена сохранена локально — отправим, когда появится связь." },
   "worker.pendingShiftSync": { en: "Pending shift sync ({count})", ru: "Ожидает отправки: {count}" },
@@ -1694,6 +1700,7 @@ export const translations = {
   "stores.importNearby": { en: "Import nearby", ru: "Импорт рядом" },
   "stores.deactivate": { en: "Deactivate", ru: "Деактивировать" },
   "stores.activate": { en: "Activate", ru: "Активировать" },
+  "stores.toggleFailed": { en: "Couldn't update store status.", ru: "Не удалось обновить статус магазина." },
   "stores.empty": { en: "No stores added yet.", ru: "Магазины ещё не добавлены." },
   "stores.visits": { en: "Store visits", ru: "Посещения магазинов" },
   "stores.noVisits": { en: "No store visits recorded.", ru: "Посещений магазинов не зафиксировано." },

@@ -25,6 +25,7 @@ export const THUMB_MAX_DIMENSION = 320;            // px on the long edge
 export const THUMB_MAX_BYTES = 64 * 1024;          // ~64 KB per thumb
 
 export type OfflineUploadMode = "journal" | "before_leave" | "checkout";
+export type OfflineUploadStatus = "pending" | "syncing" | "retry";
 
 export interface OfflineUploadFull {
   kind: "full";
@@ -53,6 +54,10 @@ export interface OfflineUpload {
   orgId: string;
   caption: string;
   createdAt: string;
+  status: OfflineUploadStatus;
+  retryCount: number;
+  lastErrorMessage: string | null;
+  lastAttemptAt: string | null;
   payload: OfflineUploadFull | OfflineUploadThumb;
 }
 
@@ -73,7 +78,20 @@ export function loadOfflineQueue(): OfflineUpload[] {
         entry !== null &&
         typeof (entry as OfflineUpload).id === "string" &&
         typeof (entry as OfflineUpload).mode === "string",
-    );
+    ).map((entry) => ({
+      ...entry,
+      status:
+        entry.status === "syncing" || entry.status === "retry"
+          ? entry.status
+          : "pending",
+      retryCount: Number.isFinite(entry.retryCount) ? entry.retryCount : 0,
+      lastErrorMessage:
+        typeof entry.lastErrorMessage === "string"
+          ? entry.lastErrorMessage
+          : null,
+      lastAttemptAt:
+        typeof entry.lastAttemptAt === "string" ? entry.lastAttemptAt : null,
+    }));
   } catch {
     return [];
   }
@@ -210,6 +228,10 @@ export async function queueOfflineUpload(args: QueueArgs): Promise<QueueResult> 
     orgId: args.orgId,
     caption: args.caption,
     createdAt: new Date().toISOString(),
+    status: "pending",
+    retryCount: 0,
+    lastErrorMessage: null,
+    lastAttemptAt: null,
     payload,
   };
 
@@ -255,4 +277,21 @@ export function offlineUploadToFile(upload: OfflineUpload): File | null {
   } catch {
     return null;
   }
+}
+
+export function markOfflineUploadStatus(
+  id: string,
+  patch: Partial<
+    Pick<OfflineUpload, "status" | "retryCount" | "lastErrorMessage" | "lastAttemptAt">
+  >,
+): OfflineUpload[] {
+  const next = loadOfflineQueue().map((item) =>
+    item.id === id ? { ...item, ...patch } : item,
+  );
+  persist(next);
+  return next;
+}
+
+export function countRetryOfflineUploads(items = loadOfflineQueue()): number {
+  return items.filter((item) => item.status === "retry").length;
 }
