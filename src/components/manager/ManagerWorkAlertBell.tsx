@@ -31,6 +31,103 @@ type AlertTask = {
   metadata: Record<string, unknown> | null;
 };
 
+type AlertLoadReason = "initial" | "visibility" | "realtime" | "poll";
+
+type AlertsSnapshot = {
+  messages: AppMessage[];
+  tasks: AlertTask[];
+  loaded: true;
+};
+
+type AlertPollOwner = {
+  id: string;
+  updatedAt: number;
+};
+
+type AlertBroadcastMessage =
+  | {
+      type: "snapshot";
+      profileId: string;
+      ownerId: string;
+      reason: AlertLoadReason;
+      targetId?: string;
+      snapshot: AlertsSnapshot;
+    }
+  | {
+      type: "refresh-request";
+      profileId: string;
+      requesterId: string;
+      reason: Extract<AlertLoadReason, "initial" | "visibility">;
+    }
+  | {
+      type: "owner-heartbeat";
+      profileId: string;
+      ownerId: string;
+      updatedAt: number;
+    }
+  | {
+      type: "owner-released";
+      profileId: string;
+      ownerId: string;
+    };
+
+const MANAGER_WORK_ALERT_POLL_MS = 30_000;
+const MANAGER_WORK_ALERT_OWNER_HEARTBEAT_MS = 10_000;
+const MANAGER_WORK_ALERT_OWNER_STALE_MS = 45_000;
+
+function makePollerId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function ownerStorageKey(profileId: string): string {
+  return `check-time-manager-work-alert-owner:${profileId}`;
+}
+
+function canUsePollOwnership(): boolean {
+  try {
+    const key = "check-time-manager-work-alert-owner:test";
+    window.localStorage.setItem(key, "1");
+    window.localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readPollOwner(key: string): AlertPollOwner | null {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AlertPollOwner>;
+    if (typeof parsed.id !== "string" || typeof parsed.updatedAt !== "number") return null;
+    return { id: parsed.id, updatedAt: parsed.updatedAt };
+  } catch {
+    return null;
+  }
+}
+
+function claimPollOwnership(key: string, owner: AlertPollOwner): boolean {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(owner));
+    return readPollOwner(key)?.id === owner.id;
+  } catch {
+    return false;
+  }
+}
+
+function releasePollOwnership(key: string, ownerId: string) {
+  try {
+    if (readPollOwner(key)?.id === ownerId) {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // localStorage can be blocked; ownership simply falls back to per-tab polling.
+  }
+}
+
 function inferPriority(row: {
   priority?: string | null;
   color?: string | null;
@@ -122,8 +219,13 @@ export function ManagerWorkAlertBell() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("check-time-manager-alert-muted") === "true";
   });
+  const pollerIdRef = useRef<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const lastSignalAtRef = useRef(0);
+
+  if (pollerIdRef.current === null) {
+    pollerIdRef.current = makePollerId();
+  }
 
   const signal = useCallback(
     (force = false) => {
@@ -140,9 +242,27 @@ export function ManagerWorkAlertBell() {
     [muted],
   );
 
+  const applyAlertsSnapshot = useCallback(
+    (snapshot: AlertsSnapshot, reason: AlertLoadReason) => {
+      setMessages((current) =>
+        keepStableListIfUnchanged(current, snapshot.messages, messageFingerprint),
+      );
+      setTasks((current) =>
+        keepStableListIfUnchanged(current, snapshot.tasks, taskFingerprint),
+      );
+      setLoaded(snapshot.loaded);
+
+      const total = snapshot.messages.filter((message) => !message.read).length + snapshot.tasks.length;
+      if (total > 0 && (reason === "initial" || reason === "visibility" || reason === "realtime")) {
+        signal(reason === "realtime");
+      }
+    },
+    [signal],
+  );
+
   const loadAlerts = useCallback(
-    async (reason: "initial" | "visibility" | "realtime" | "poll" = "poll") => {
-      if (!profile) return;
+    async (reason: AlertLoadReason = "poll"): Promise<AlertsSnapshot | null> => {
+      if (!profile) return null;
       const [messagesResult, tasksResult] = await Promise.all([
         supabase
           .from("messages")
@@ -163,20 +283,11 @@ export function ManagerWorkAlertBell() {
 
       const nextMessages = mapMessages(messagesResult.data ?? []);
       const nextTasks = (tasksResult.data ?? []) as AlertTask[];
-      setMessages((current) =>
-        keepStableListIfUnchanged(current, nextMessages, messageFingerprint),
-      );
-      setTasks((current) =>
-        keepStableListIfUnchanged(current, nextTasks, taskFingerprint),
-      );
-      setLoaded(true);
-
-      const total = nextMessages.filter((message) => !message.read).length + nextTasks.length;
-      if (total > 0 && (reason === "initial" || reason === "visibility" || reason === "realtime")) {
-        signal(reason === "realtime");
-      }
+      const snapshot: AlertsSnapshot = { messages: nextMessages, tasks: nextTasks, loaded: true };
+      applyAlertsSnapshot(snapshot, reason);
+      return snapshot;
     },
-    [profile, signal, supabase],
+    [applyAlertsSnapshot, profile, supabase],
   );
 
   useEffect(() => {
@@ -219,63 +330,229 @@ export function ManagerWorkAlertBell() {
   }, []);
 
   useEffect(() => {
-    if (!profile) return;
+    const activeProfile = profile;
+    if (!activeProfile) return;
+    const activeProfileId = activeProfile.id;
+    if (typeof window === "undefined") return;
+    const pollerId = pollerIdRef.current ?? makePollerId();
+    pollerIdRef.current = pollerId;
+    const ownershipKey = ownerStorageKey(activeProfileId);
+    const canSharePoll = typeof BroadcastChannel !== "undefined" && canUsePollOwnership();
+    const broadcast = canSharePoll
+      ? new BroadcastChannel(`check-time-manager-work-alerts:${activeProfileId}`)
+      : null;
+    let stopped = false;
+    let ownsPoll = false;
     let reloadTimer: number | null = null;
-    let pendingReason: "initial" | "visibility" | "realtime" | "poll" = "poll";
-    const initialTimer = window.setTimeout(() => void loadAlerts("initial"), 0);
+    let heartbeatTimer: number | null = null;
+    let pollInterval: number | null = null;
+    let realtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+    let pendingReason: AlertLoadReason = "poll";
 
-    function scheduleAlertsLoad(reason: "visibility" | "realtime" | "poll") {
-      if (document.visibilityState !== "visible") return;
-      if (reason === "realtime" || pendingReason !== "realtime") {
-        pendingReason = reason;
-      }
-      if (reloadTimer) window.clearTimeout(reloadTimer);
-      reloadTimer = window.setTimeout(() => {
-        const reasonToLoad = pendingReason;
-        pendingReason = "poll";
-        reloadTimer = null;
-        void loadAlerts(reasonToLoad);
-      }, 250);
+    function emit(message: AlertBroadcastMessage) {
+      broadcast?.postMessage(message);
     }
 
-    const channel = supabase
-      .channel(`manager-work-alerts-${profile.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${profile.id}` },
-        () => scheduleAlertsLoad("realtime"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "messages", filter: `recipient_id=eq.${profile.id}` },
-        () => scheduleAlertsLoad("poll"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "tasks", filter: `assigned_to=eq.${profile.id}` },
-        () => scheduleAlertsLoad("realtime"),
-      )
-      .subscribe();
-
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") scheduleAlertsLoad("poll");
-    }, 30_000);
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") scheduleAlertsLoad("visibility");
+    function isVisible() {
+      return document.visibilityState === "visible";
     }
-    document.addEventListener("visibilitychange", handleVisibilityChange);
 
-    return () => {
-      window.clearTimeout(initialTimer);
+    function activeOtherOwner(): AlertPollOwner | null {
+      if (!canSharePoll) return null;
+      const owner = readPollOwner(ownershipKey);
+      if (!owner || owner.id === pollerId) return null;
+      if (Date.now() - owner.updatedAt > MANAGER_WORK_ALERT_OWNER_STALE_MS) return null;
+      return owner;
+    }
+
+    function refreshOwnership() {
+      if (!canSharePoll) return true;
+      const owner = { id: pollerId, updatedAt: Date.now() };
+      if (!claimPollOwnership(ownershipKey, owner)) return false;
+      emit({
+        type: "owner-heartbeat",
+        profileId: activeProfileId,
+        ownerId: pollerId,
+        updatedAt: owner.updatedAt,
+      });
+      return true;
+    }
+
+    function clearReloadTimer() {
       if (reloadTimer) {
         window.clearTimeout(reloadTimer);
         reloadTimer = null;
       }
-      window.clearInterval(interval);
+    }
+
+    async function runLoad(reason: AlertLoadReason, targetId?: string) {
+      const snapshot = await loadAlerts(targetId ? "poll" : reason);
+      if (!snapshot || stopped || !ownsPoll) return;
+      emit({
+        type: "snapshot",
+        profileId: activeProfileId,
+        ownerId: pollerId,
+        reason,
+        targetId,
+        snapshot,
+      });
+    }
+
+    function scheduleAlertsLoad(reason: AlertLoadReason) {
+      if (document.visibilityState !== "visible") return;
+      if (reason === "realtime" || pendingReason !== "realtime") {
+        pendingReason = reason;
+      }
+      clearReloadTimer();
+      reloadTimer = window.setTimeout(() => {
+        const reasonToLoad = pendingReason;
+        pendingReason = "poll";
+        reloadTimer = null;
+        void runLoad(reasonToLoad);
+      }, 250);
+    }
+
+    function stopOwner(release = true) {
+      if (!ownsPoll) return;
+      ownsPoll = false;
+      clearReloadTimer();
+      if (heartbeatTimer) {
+        window.clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+      if (pollInterval) {
+        window.clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      if (realtimeChannel) {
+        void supabase.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+      }
+      if (release && canSharePoll) {
+        releasePollOwnership(ownershipKey, pollerId);
+        emit({ type: "owner-released", profileId: activeProfileId, ownerId: pollerId });
+      }
+    }
+
+    function startOwner(reason: AlertLoadReason) {
+      if (stopped || ownsPoll || !isVisible()) return;
+      if (activeOtherOwner()) return;
+      if (!refreshOwnership()) return;
+      ownsPoll = true;
+
+      realtimeChannel = supabase
+        .channel(`manager-work-alerts-${activeProfileId}-${pollerId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "messages", filter: `recipient_id=eq.${activeProfileId}` },
+          () => scheduleAlertsLoad("realtime"),
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "messages", filter: `recipient_id=eq.${activeProfileId}` },
+          () => scheduleAlertsLoad("poll"),
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "tasks", filter: `assigned_to=eq.${activeProfileId}` },
+          () => scheduleAlertsLoad("realtime"),
+        )
+        .subscribe();
+
+      pollInterval = window.setInterval(() => {
+        if (isVisible()) scheduleAlertsLoad("poll");
+      }, MANAGER_WORK_ALERT_POLL_MS);
+
+      heartbeatTimer = window.setInterval(() => {
+        if (!ownsPoll) return;
+        if (!isVisible()) {
+          stopOwner(true);
+          return;
+        }
+        if (!refreshOwnership()) stopOwner(false);
+      }, MANAGER_WORK_ALERT_OWNER_HEARTBEAT_MS);
+
+      void runLoad(reason);
+    }
+
+    function requestOwnerRefresh(reason: Extract<AlertLoadReason, "initial" | "visibility">) {
+      if (!canSharePoll) return;
+      emit({
+        type: "refresh-request",
+        profileId: activeProfileId,
+        requesterId: pollerId,
+        reason,
+      });
+    }
+
+    function ensureOwner(reason: Extract<AlertLoadReason, "initial" | "visibility">) {
+      if (stopped || !isVisible()) return;
+      if (activeOtherOwner()) {
+        requestOwnerRefresh(reason);
+        return;
+      }
+      startOwner(reason);
+    }
+
+    function handleBroadcast(event: MessageEvent) {
+      const message = event.data as AlertBroadcastMessage | undefined;
+      if (!message || message.profileId !== activeProfileId) return;
+      if (message.type === "snapshot") {
+        if (message.ownerId === pollerId) return;
+        const reason = message.targetId && message.targetId !== pollerId ? "poll" : message.reason;
+        applyAlertsSnapshot(message.snapshot, reason);
+        return;
+      }
+      if (message.type === "refresh-request") {
+        if (message.requesterId !== pollerId && ownsPoll) {
+          void runLoad(message.reason, message.requesterId);
+        }
+        return;
+      }
+      if (message.type === "owner-heartbeat") {
+        if (message.ownerId !== pollerId && ownsPoll && readPollOwner(ownershipKey)?.id !== pollerId) {
+          stopOwner(false);
+        }
+        return;
+      }
+      if (message.ownerId !== pollerId && !ownsPoll) {
+        ensureOwner("visibility");
+      }
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (!canSharePoll || event.key !== ownershipKey || ownsPoll) return;
+      if (activeOtherOwner()) return;
+      ensureOwner("visibility");
+    }
+
+    function handleVisibilityChange() {
+      if (!isVisible()) {
+        stopOwner(true);
+        return;
+      }
+      if (ownsPoll) {
+        scheduleAlertsLoad("visibility");
+      } else {
+        ensureOwner("visibility");
+      }
+    }
+
+    broadcast?.addEventListener("message", handleBroadcast);
+    window.addEventListener("storage", handleStorage);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const initialTimer = window.setTimeout(() => ensureOwner("initial"), 0);
+
+    return () => {
+      stopped = true;
+      window.clearTimeout(initialTimer);
+      stopOwner(true);
+      broadcast?.removeEventListener("message", handleBroadcast);
+      broadcast?.close();
+      window.removeEventListener("storage", handleStorage);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      void supabase.removeChannel(channel);
     };
-  }, [loadAlerts, profile, supabase]);
+  }, [applyAlertsSnapshot, loadAlerts, profile, supabase]);
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
