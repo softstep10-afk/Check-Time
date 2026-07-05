@@ -93,3 +93,8 @@ PROJECT_BACKLOG.md). When in doubt, the pasted prompt wins.
 ## Reports go to disk
 When a task's deliverable is a report, analysis, or recon (not code), write the full text to
 `docs/handoff/<topic>.md` in the repo and reply in chat with only a short summary and the file path.
+
+## Applied by hand (migrations already live in prod)
+Migrations Andrew has applied to prod directly — these are DONE; do NOT re-flag as outstanding:
+- `00045_paid_api_usage.sql` — applied 2026-07-05; `paid_api_usage` table (paid-route rate
+  limiter state) is live in prod.
