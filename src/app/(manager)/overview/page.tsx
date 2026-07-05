@@ -256,7 +256,7 @@ export default async function OverviewPage() {
     (r) => r.status === "needs_review",
   ).length;
 
-  const closedShiftAlerts = activeSessions
+  const flaggedClosedShifts = activeSessions
     .filter((session) => !session.isOpen)
     .map((session) => {
       const profile = profilesByIdForReview.get(session.profileId);
@@ -282,8 +282,11 @@ export default async function OverviewPage() {
         reviewPriorityRank[left.review.status] - reviewPriorityRank[right.review.status];
       if (statusGap !== 0) return statusGap;
       return right.durationMinutes - left.durationMinutes;
-    })
-    .slice(0, 8);
+    });
+  // Cap the visible list at 8 rows, but count the full flagged set first so the
+  // footer can tell the owner how many more are queued beyond what's shown.
+  const closedShiftAlerts = flaggedClosedShifts.slice(0, 8);
+  const closedShiftOverflowCount = flaggedClosedShifts.length - closedShiftAlerts.length;
 
   // Closed-shift alerts still awaiting the owner's review. Reviewed shifts are
   // excluded entirely — once acknowledged they leave this block; that history
@@ -803,6 +806,17 @@ export default async function OverviewPage() {
               );
             })}
           </div>
+          {closedShiftOverflowCount > 0 ? (
+            <Link
+              href="/timeline"
+              className="mt-3 block text-xs font-medium text-[var(--text-muted)] hover:text-[var(--brand-yellow)]"
+            >
+              {t("shiftReview.moreAwaitingReview").replace(
+                "{count}",
+                String(closedShiftOverflowCount),
+              )}
+            </Link>
+          ) : null}
         </section>
       ) : null}
 
