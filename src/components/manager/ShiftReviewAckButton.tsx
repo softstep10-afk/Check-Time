@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -22,6 +22,11 @@ export function ShiftReviewAckButton({
   const supabase = createClient();
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+  // Synchronous re-entrancy guard. The `busy` state flips a render later, which
+  // leaves a window where a fast double-click fires two inserts (seen in prod as
+  // duplicate ack events ~2s apart). This ref is checked and set in the same
+  // tick, so one logical click = one insert.
+  const busyRef = useRef(false);
   const [error, setError] = useState("");
   const nextReviewed = !reviewed;
   const actionColor = reviewed
@@ -29,6 +34,8 @@ export function ShiftReviewAckButton({
     : SHIFT_REVIEW_COLOR[status] ?? "var(--red)";
 
   async function handleClick() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError("");
     const { data, error: readError } = await supabase
@@ -38,6 +45,7 @@ export function ShiftReviewAckButton({
       .single<{ org_id: string; profile_id: string; project_id: string }>();
 
     if (readError) {
+      busyRef.current = false;
       setBusy(false);
       setError(readError.message);
       return;
@@ -66,6 +74,7 @@ export function ShiftReviewAckButton({
         },
       });
 
+    busyRef.current = false;
     setBusy(false);
     if (insertError) {
       setError(insertError.message);
