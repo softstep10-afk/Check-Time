@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAiApiContext } from "@/lib/ai/api-auth";
 import { canConfirmJarvisWriteAction } from "@/lib/role-permissions";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -87,10 +88,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const status = error instanceof TaskDispatchError ? error.status : 500;
-    const message =
+    const fallback =
       error instanceof TaskDispatchError && error.status < 500
         ? error.message
         : "Jarvis could not create the task. No changes were made.";
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: safeClientErrorMessage(error, fallback) }, { status });
   }
 }

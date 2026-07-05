@@ -4,6 +4,7 @@ import {
   buildJarvisRuntimeSettings,
   resolveJarvisRuntimeConfig,
 } from "@/lib/ai/jarvis-config";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
@@ -43,8 +44,9 @@ export async function POST(request: NextRequest) {
       config: resolveJarvisRuntimeConfig(settings),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Jarvis settings could not be saved.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: safeClientErrorMessage(error, "Jarvis settings could not be saved.") },
+      { status: 400 },
+    );
   }
 }

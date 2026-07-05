@@ -10,6 +10,7 @@ import {
   isPaidApiLimitError,
   paidApiLimitResponse,
 } from "@/lib/paid-api-limits";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import type { Media } from "@/types/database";
 
 function assertNoError(error: { message: string } | null, label: string) {
@@ -121,7 +122,6 @@ export async function POST(request: NextRequest) {
     if (isPaidApiLimitError(error)) {
       return paidApiLimitResponse(error.result);
     }
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
   }
 }

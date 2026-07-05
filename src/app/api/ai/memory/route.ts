@@ -6,6 +6,7 @@ import {
   readJarvisMemory,
   removeJarvisMemoryRule,
 } from "@/lib/ai/jarvis-memory";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import { createClient } from "@/lib/supabase/server";
 
 function assertNoError(error: { message: string } | null, label: string) {
@@ -31,8 +32,7 @@ export async function GET() {
       canWrite: auth.kind === "authenticated" && isJarvisMemoryWriter(profile),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -71,8 +71,7 @@ export async function POST(request: NextRequest) {
       memory: updated.memory,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
   }
 }
 
@@ -105,7 +104,6 @@ export async function DELETE(request: NextRequest) {
       memory: updated.memory,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
   }
 }
