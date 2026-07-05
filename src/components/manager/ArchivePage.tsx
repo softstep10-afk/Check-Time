@@ -747,7 +747,7 @@ export function ArchivePage({
                     {text.paidAt}
                   </div>
                   <div className="mt-1 text-sm font-semibold text-[var(--text-primary)]">
-                    {period.paidAt ? new Date(period.paidAt).toLocaleString() : text.notRecorded}
+                    {period.paidAt ? new Date(period.paidAt).toLocaleString(undefined, { hourCycle: "h23" }) : text.notRecorded}
                   </div>
                 </div>
                 <div className="rounded-[var(--radius-md)] bg-[var(--bg-primary)] p-3">
@@ -778,7 +778,7 @@ export function ArchivePage({
                             ? `${text.externalPaymentReference}: ${period.externalPayment.reference}`
                             : null,
                           period.externalPayment.recordedAt
-                            ? new Date(period.externalPayment.recordedAt).toLocaleString()
+                            ? new Date(period.externalPayment.recordedAt).toLocaleString(undefined, { hourCycle: "h23" })
                             : null,
                         ].filter(Boolean).join(" · ")
                       : text.notRecorded}
@@ -817,10 +817,10 @@ export function ArchivePage({
                               {shift.projectName}
                             </td>
                             <td className="px-3 py-2 text-[var(--text-secondary)]">
-                              {new Date(shift.clockInTime).toLocaleString()}
+                              {new Date(shift.clockInTime).toLocaleString(undefined, { hourCycle: "h23" })}
                               {" - "}
                               {shift.clockOutTime
-                                ? new Date(shift.clockOutTime).toLocaleString()
+                                ? new Date(shift.clockOutTime).toLocaleString(undefined, { hourCycle: "h23" })
                                 : text.notRecorded}
                             </td>
                             <td className="px-3 py-2 text-right font-mono text-[var(--text-primary)]">

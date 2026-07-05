@@ -426,6 +426,7 @@ function timeLabel(value: string | null, locale: "en" | "ru"): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+    hourCycle: "h23",
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
@@ -439,6 +440,7 @@ function dateTimeLabel(value: string | null, locale: "en" | "ru"): string | null
     month: "short",
     day: "numeric",
     year: "numeric",
+    hourCycle: "h23",
     hour: "numeric",
     minute: "2-digit",
   }).format(date);

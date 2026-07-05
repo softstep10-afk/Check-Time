@@ -57,6 +57,7 @@ export function formatProjectPublicNoteTime(
     return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
       month: "short",
       day: "2-digit",
+      hourCycle: "h23",
       hour: "2-digit",
       minute: "2-digit",
     }).format(new Date(value));

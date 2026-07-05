@@ -332,6 +332,7 @@ export default async function CommandCenterPage() {
   const auditDateFormatter = new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
     month: "short",
     day: "numeric",
+    hourCycle: "h23",
     hour: "2-digit",
     minute: "2-digit",
   });

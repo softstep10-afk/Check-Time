@@ -102,6 +102,7 @@ function RelativeTime({ iso }: { iso: string }) {
   const absolute = new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
+    hourCycle: "h23",
     hour: "numeric",
     minute: "2-digit",
   });

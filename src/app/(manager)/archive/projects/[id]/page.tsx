@@ -298,10 +298,10 @@ export default async function ArchivedProjectDetailPage({
                     </Link>
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                    {new Date(session.clockInTime).toLocaleString(dateLocale)}
+                    {new Date(session.clockInTime).toLocaleString(dateLocale, { hourCycle: "h23" })}
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                    {session.clockOutTime ? new Date(session.clockOutTime).toLocaleString(dateLocale) : text.open}
+                    {session.clockOutTime ? new Date(session.clockOutTime).toLocaleString(dateLocale, { hourCycle: "h23" }) : text.open}
                   </td>
                   <td className="py-3 pr-3 whitespace-nowrap font-mono text-[var(--text-primary)]">
                     {formatDurationCompact(session.durationMinutes)}
@@ -349,7 +349,7 @@ export default async function ArchivedProjectDetailPage({
                     </td>
                     <td className="py-3 pr-3 text-[var(--text-secondary)]">{completedBy}</td>
                     <td className="py-3 whitespace-nowrap font-mono text-xs text-[var(--text-secondary)]">
-                      {task.completed_at ? new Date(task.completed_at).toLocaleString(dateLocale) : text.notCompleted}
+                      {task.completed_at ? new Date(task.completed_at).toLocaleString(dateLocale, { hourCycle: "h23" }) : text.notCompleted}
                     </td>
                   </tr>
                 );

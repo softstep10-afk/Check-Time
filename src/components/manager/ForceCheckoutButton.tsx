@@ -84,6 +84,7 @@ export function ForceCheckoutButton({
     const timeLabel = new Date(timestamp).toLocaleString("en-US", {
       month: "short",
       day: "numeric",
+      hourCycle: "h23",
       hour: "numeric",
       minute: "2-digit",
     });

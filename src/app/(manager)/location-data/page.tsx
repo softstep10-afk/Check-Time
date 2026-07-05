@@ -79,6 +79,7 @@ function formatDateTime(value: string | null, locale: string): string {
   return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
     month: "short",
     day: "numeric",
+    hourCycle: "h23",
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));

@@ -98,7 +98,7 @@ export function ArchiveProjectMediaList({
                       {item.filename ?? item.media_type}
                     </div>
                     <div className="mt-1 text-xs text-[var(--text-secondary)]">
-                      {new Date(item.created_at).toLocaleString()}
+                      {new Date(item.created_at).toLocaleString(undefined, { hourCycle: "h23" })}
                       {item.uploadedByName ? ` · ${item.uploadedByName}` : ""}
                     </div>
                     {item.caption ? (

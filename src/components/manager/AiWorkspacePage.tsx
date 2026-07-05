@@ -947,7 +947,7 @@ export function AiWorkspacePage({
                           {item.selectedIntent ?? "answer"} · {item.executionStatus}
                         </span>
                         <span className="text-[var(--text-muted)]">
-                          {new Date(item.updatedAt).toLocaleTimeString()}
+                          {new Date(item.updatedAt).toLocaleTimeString(undefined, { hourCycle: "h23" })}
                         </span>
                       </div>
                       <div className="mt-1 truncate text-[var(--text-secondary)]">

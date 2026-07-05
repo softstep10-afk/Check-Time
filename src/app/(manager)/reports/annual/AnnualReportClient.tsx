@@ -373,7 +373,7 @@ export function AnnualReportClient({
     const darkBg: [number, number, number] = [30, 35, 51];
     const ink: [number, number, number] = [241, 245, 249];
     const goldHex = "#f59e0b";
-    const generated = new Date().toLocaleString(locale === "ru" ? "ru-RU" : "en-US");
+    const generated = new Date().toLocaleString(locale === "ru" ? "ru-RU" : "en-US", { hourCycle: "h23" });
 
     function paintPage() {
       doc.setFillColor(...darkBg);

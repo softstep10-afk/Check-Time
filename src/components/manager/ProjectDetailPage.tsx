@@ -360,6 +360,7 @@ function formatMaterialDate(value: string | null | undefined) {
     return new Intl.DateTimeFormat(undefined, {
       month: "short",
       day: "2-digit",
+      hourCycle: "h23",
       hour: "numeric",
       minute: "2-digit",
     }).format(new Date(value));

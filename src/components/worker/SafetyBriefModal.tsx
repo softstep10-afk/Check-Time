@@ -86,6 +86,7 @@ export function SafetyBriefModal({
       year: "numeric",
       month: "short",
       day: "numeric",
+      hourCycle: "h23",
       hour: "numeric",
       minute: "2-digit",
     });

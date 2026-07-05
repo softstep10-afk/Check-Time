@@ -497,6 +497,7 @@ export function formatElapsedSeconds(totalSeconds: number): string {
 
 export function formatEventTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
+    hourCycle: "h23",
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
@@ -514,6 +515,7 @@ export function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
     month: "short",
     day: "numeric",
+    hourCycle: "h23",
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
