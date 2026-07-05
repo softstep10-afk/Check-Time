@@ -495,8 +495,15 @@ export function formatElapsedSeconds(totalSeconds: number): string {
     .join(":");
 }
 
+// Single source of truth for the org's display timezone. On Vercel, server
+// components run in UTC, so event-time formatters must pin the zone explicitly
+// or the same shift renders in UTC server-side and in local time client-side.
+// This company operates in Washington state (US Pacific).
+export const ORG_TIMEZONE = "America/Los_Angeles";
+
 export function formatEventTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
+    timeZone: ORG_TIMEZONE,
     hourCycle: "h23",
     hour: "numeric",
     minute: "2-digit",
@@ -505,6 +512,7 @@ export function formatEventTime(value: string): string {
 
 export function formatEventDate(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
+    timeZone: ORG_TIMEZONE,
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -513,6 +521,7 @@ export function formatEventDate(value: string): string {
 
 export function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat(undefined, {
+    timeZone: ORG_TIMEZONE,
     month: "short",
     day: "numeric",
     hourCycle: "h23",
