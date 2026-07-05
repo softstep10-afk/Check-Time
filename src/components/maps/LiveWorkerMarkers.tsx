@@ -168,21 +168,32 @@ export function LiveWorkerMarkers() {
         }
 
         const workerIds = (clockedIn as Array<{ id: string }>).map((p) => p.id);
+        const projectIds = [...new Set(
+          (clockedIn as Array<{ current_project: string | null }>)
+            .map((p) => p.current_project)
+            .filter(Boolean) as string[],
+        )];
 
-        // Get latest location per worker.
-        const { data: locations } = await supabase
-          .from("worker_live_locations")
-          .select("worker_id, lat, lng, recorded_at")
-          .in("worker_id", workerIds)
-          .order("recorded_at", { ascending: false })
-          .limit(workerIds.length * 2); // overfetch slightly, we'll dedup
+        const [locationsResult, consentsResult, projectsResult] = await Promise.all([
+          supabase
+            .from("worker_live_locations")
+            .select("worker_id, lat, lng, recorded_at")
+            .in("worker_id", workerIds)
+            .order("recorded_at", { ascending: false })
+            .limit(workerIds.length * 2), // overfetch slightly, we'll dedup
+          supabase
+            .from("worker_location_consents")
+            .select("worker_id, consented")
+            .in("worker_id", workerIds)
+            .order("signed_at", { ascending: false }),
+          projectIds.length > 0
+            ? supabase.from("projects").select("id, name").in("id", projectIds)
+            : Promise.resolve({ data: [] }),
+        ]);
 
-        // Get consent status per worker.
-        const { data: consents } = await supabase
-          .from("worker_location_consents")
-          .select("worker_id, consented")
-          .in("worker_id", workerIds)
-          .order("signed_at", { ascending: false });
+        const { data: locations } = locationsResult;
+        const { data: consents } = consentsResult;
+        const { data: projects } = projectsResult;
 
         // Build latest consent per worker.
         const consentMap = new Map<string, boolean>();
@@ -204,15 +215,6 @@ export function LiveWorkerMarkers() {
           }
         }
 
-        // Get project names.
-        const projectIds = [...new Set(
-          (clockedIn as Array<{ current_project: string | null }>)
-            .map((p) => p.current_project)
-            .filter(Boolean) as string[],
-        )];
-        const { data: projects } = projectIds.length > 0
-          ? await supabase.from("projects").select("id, name").in("id", projectIds)
-          : { data: [] };
         const projectMap = new Map(
           ((projects ?? []) as Array<{ id: string; name: string }>).map((p) => [p.id, p.name]),
         );
