@@ -3,6 +3,7 @@ import { ForceCheckoutButton } from "@/components/manager/ForceCheckoutButton";
 import { EventFeed, type FeedEvent } from "@/components/manager/EventFeed";
 import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
 import { ShiftReviewAckButton } from "@/components/manager/ShiftReviewAckButton";
+import { ShiftReviewEditButton } from "@/components/manager/ShiftReviewEditButton";
 import {
   buildActiveProjectIdSet,
   getActiveOperationalMedia,
@@ -20,7 +21,7 @@ import {
   TRANSFER_GAP_COLOR,
 } from "@/lib/manager-utils";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
-import { formatDurationCompact, formatEventTime } from "@/lib/worker-utils";
+import { formatDurationCompact, formatEventDate, formatEventTime } from "@/lib/worker-utils";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import {
   GPS_STATUS_COLOR,
@@ -294,6 +295,13 @@ export default async function OverviewPage() {
     (session) => !session.reviewed,
   ).length;
   const hasUnreviewedClosed = unreviewedClosedCount > 0;
+
+  // Project options for the review-queue edit dialog (edit mode ignores them,
+  // but the shared dialog requires the prop for its create-mode picker).
+  const editProjectOptions = activeProjects.map((project) => ({
+    id: project.id,
+    name: project.name,
+  }));
 
   // ── Project-transfer gap detection ──
   // Today-only scope so the Overview's travel-gaps band shows what's
@@ -749,6 +757,8 @@ export default async function OverviewPage() {
                       className="mt-1 block text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
                       title={t("common.openProject")}
                     >
+                      {formatEventDate(session.clockInTime)}
+                      {" · "}
                       {formatEventTime(session.clockInTime)}
                       {clockOutEvent ? ` - ${formatEventTime(clockOutEvent.event_time)}` : ""}
                       {" · "}
@@ -795,6 +805,9 @@ export default async function OverviewPage() {
                         status={session.review.status}
                         reviewed={session.reviewed}
                       />
+                    ) : null}
+                    {managerHasFinanceAccess ? (
+                      <ShiftReviewEditButton session={session} projects={editProjectOptions} />
                     ) : null}
                   </div>
                 </article>
