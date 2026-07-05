@@ -15,7 +15,7 @@ type ShiftEditDialogProps = {
   onSaved: () => void;
 };
 
-/** ISO → value for <input type="datetime-local"> (local wall-clock, minutes). */
+/** ISO → local "YYYY-MM-DDTHH:mm" (local wall-clock, minutes). */
 function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";
   const date = new Date(iso);
@@ -24,16 +24,37 @@ function toLocalInput(iso: string | null | undefined): string {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
-/** datetime-local value (local) → ISO, or null if empty/invalid. */
-function localInputToIso(value: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+/** ISO → local date ("YYYY-MM-DD") + time ("HH:MM") parts for the split inputs. */
+function isoToLocalParts(iso: string | null | undefined): { date: string; time: string } {
+  const local = toLocalInput(iso);
+  return local ? { date: local.slice(0, 10), time: local.slice(11, 16) } : { date: "", time: "" };
+}
+
+/** True for a full "HH:MM" 24-hour time (00-23 / 00-59). */
+function isValidTime(value: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return false;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+}
+
+/** Live-format keystrokes into "HH:MM": digits only, colon auto-inserted after 2. */
+function formatTimeInput(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+}
+
+/** Local date + "HH:MM" → ISO, or null if either part is missing/invalid. */
+function composeIso(date: string, time: string): string | null {
+  if (!date || !isValidTime(time)) return null;
+  const composed = new Date(`${date}T${time}:00`); // parsed as local wall-clock time
+  return Number.isNaN(composed.getTime()) ? null : composed.toISOString();
 }
 
 function localDay(iso: string | null | undefined): string {
-  const local = toLocalInput(iso);
-  return local ? local.slice(0, 10) : "";
+  return isoToLocalParts(iso).date;
 }
 
 /** Local calendar day "YYYY-MM-DD" → local-midnight..+24h as ISO timestamps. */
@@ -48,8 +69,7 @@ function localDayWindow(day: string): { from: string; to: string } | null {
 }
 
 function formatHintTime(iso: string): string {
-  const local = toLocalInput(iso);
-  return local ? local.slice(11, 16) : "";
+  return isoToLocalParts(iso).time;
 }
 
 export function ShiftEditDialog({
@@ -64,12 +84,15 @@ export function ShiftEditDialog({
 }: ShiftEditDialogProps) {
   const { t } = useTranslation();
 
-  const [clockIn, setClockIn] = useState(() =>
-    mode === "edit" ? toLocalInput(session?.clockInTime) : "",
-  );
-  const [clockOut, setClockOut] = useState(() =>
-    mode === "edit" ? toLocalInput(session?.clockOutTime) : "",
-  );
+  const initialIn = mode === "edit" ? isoToLocalParts(session?.clockInTime) : { date: "", time: "" };
+  const initialOut = mode === "edit" ? isoToLocalParts(session?.clockOutTime) : { date: "", time: "" };
+
+  const [inDate, setInDate] = useState(initialIn.date);
+  const [inTime, setInTime] = useState(initialIn.time);
+  const [outDate, setOutDate] = useState(initialOut.date);
+  const [outTime, setOutTime] = useState(initialOut.time);
+  const [inTimeTouched, setInTimeTouched] = useState(false);
+  const [outTimeTouched, setOutTimeTouched] = useState(false);
   const [projectId, setProjectId] = useState(
     mode === "edit" ? session?.projectId ?? "" : defaultProjectId ?? "",
   );
@@ -81,7 +104,9 @@ export function ShiftEditDialog({
   // Suggestion only — never writes.
   useEffect(() => {
     const hintProjectId = mode === "edit" ? session?.projectId : projectId;
-    const hintDay = mode === "edit" ? localDay(session?.clockInTime) : localDay(clockIn);
+    // In create mode the day comes straight from the date input (already
+    // "YYYY-MM-DD"); in edit mode it derives from the shift's clock-in.
+    const hintDay = mode === "edit" ? localDay(session?.clockInTime) : inDate;
     const dayWindow = localDayWindow(hintDay);
     let cancelled = false;
     const applyHint = (value: { from: string; to: string } | null) => {
@@ -114,12 +139,22 @@ export function ShiftEditDialog({
     return () => {
       cancelled = true;
     };
-  }, [mode, session?.projectId, session?.clockInTime, projectId, clockIn, workerId]);
+  }, [mode, session?.projectId, session?.clockInTime, projectId, inDate, workerId]);
+
+  const inTimeValid = isValidTime(inTime);
+  const outTimeValid = isValidTime(outTime);
+  const canSave =
+    !busy &&
+    Boolean(inDate) &&
+    Boolean(outDate) &&
+    inTimeValid &&
+    outTimeValid &&
+    (mode !== "create" || Boolean(projectId));
 
   async function handleSave() {
     setError("");
-    const inIso = localInputToIso(clockIn);
-    const outIso = localInputToIso(clockOut);
+    const inIso = composeIso(inDate, inTime);
+    const outIso = composeIso(outDate, outTime);
     if (!inIso || !outIso) {
       setError(t("shiftEdit.outAfterIn"));
       return;
@@ -170,6 +205,16 @@ export function ShiftEditDialog({
 
   const title = mode === "edit" ? t("shiftEdit.editTitle") : t("shiftEdit.createTitle");
 
+  const dateInputClass =
+    "flex-1 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-base text-[var(--text-primary)]";
+  const timeInputClass = (showError: boolean) =>
+    `w-24 rounded-[var(--radius-md)] border ${
+      showError ? "border-[var(--red)]" : "border-[var(--border-default)]"
+    } bg-[var(--bg-primary)] px-3 py-2.5 text-center text-base text-[var(--text-primary)]`;
+
+  const inTimeShowError = inTimeTouched && !inTimeValid;
+  const outTimeShowError = outTimeTouched && !outTimeValid;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -186,7 +231,7 @@ export function ShiftEditDialog({
           <label className="mt-3 block text-xs text-[var(--text-secondary)]">
             {t("shiftEdit.project")}
             <select
-              className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
+              className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-3 py-2.5 text-base text-[var(--text-primary)]"
               value={projectId}
               onChange={(event) => setProjectId(event.target.value)}
             >
@@ -200,25 +245,49 @@ export function ShiftEditDialog({
           </label>
         )}
 
-        <label className="mt-3 block text-xs text-[var(--text-secondary)]">
-          {t("shiftEdit.clockIn")}
-          <input
-            type="datetime-local"
-            className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-            value={clockIn}
-            onChange={(event) => setClockIn(event.target.value)}
-          />
-        </label>
+        <div className="mt-3">
+          <div className="text-xs text-[var(--text-secondary)]">{t("shiftEdit.clockIn")}</div>
+          <div className="mt-1 flex gap-2">
+            <input
+              type="date"
+              className={dateInputClass}
+              value={inDate}
+              onChange={(event) => setInDate(event.target.value)}
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="HH:MM"
+              maxLength={5}
+              className={timeInputClass(inTimeShowError)}
+              value={inTime}
+              onChange={(event) => setInTime(formatTimeInput(event.target.value))}
+              onBlur={() => setInTimeTouched(true)}
+            />
+          </div>
+        </div>
 
-        <label className="mt-3 block text-xs text-[var(--text-secondary)]">
-          {t("shiftEdit.clockOut")}
-          <input
-            type="datetime-local"
-            className="mt-1 w-full rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--bg-primary)] px-2 py-1.5 text-sm text-[var(--text-primary)]"
-            value={clockOut}
-            onChange={(event) => setClockOut(event.target.value)}
-          />
-        </label>
+        <div className="mt-3">
+          <div className="text-xs text-[var(--text-secondary)]">{t("shiftEdit.clockOut")}</div>
+          <div className="mt-1 flex gap-2">
+            <input
+              type="date"
+              className={dateInputClass}
+              value={outDate}
+              onChange={(event) => setOutDate(event.target.value)}
+            />
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="HH:MM"
+              maxLength={5}
+              className={timeInputClass(outTimeShowError)}
+              value={outTime}
+              onChange={(event) => setOutTime(formatTimeInput(event.target.value))}
+              onBlur={() => setOutTimeTouched(true)}
+            />
+          </div>
+        </div>
 
         {hint && (
           <div className="mt-3 flex items-center justify-between gap-2 rounded-[var(--radius-md)] bg-[var(--bg-primary)] px-2.5 py-2">
@@ -229,8 +298,11 @@ export function ShiftEditDialog({
             </span>
             <button
               type="button"
-              className="shrink-0 rounded-[var(--radius-pill)] border border-[var(--border-default)] px-2 py-1 text-[10px] font-semibold text-[var(--text-primary)]"
-              onClick={() => setClockOut(toLocalInput(hint.to))}
+              className="shrink-0 rounded-[var(--radius-pill)] border border-[var(--border-default)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)]"
+              onClick={() => {
+                setOutTime(formatHintTime(hint.to));
+                setOutTimeTouched(true);
+              }}
             >
               {t("shiftEdit.applyHint")}
             </button>
@@ -242,7 +314,7 @@ export function ShiftEditDialog({
         <div className="mt-4 flex items-center justify-end gap-2">
           <button
             type="button"
-            className="rounded-[var(--radius-md)] px-3 py-1.5 text-sm text-[var(--text-secondary)]"
+            className="rounded-[var(--radius-md)] px-3 py-2.5 text-sm text-[var(--text-secondary)]"
             onClick={onClose}
             disabled={busy}
           >
@@ -250,9 +322,9 @@ export function ShiftEditDialog({
           </button>
           <button
             type="button"
-            className="rounded-[var(--radius-md)] bg-[var(--brand-yellow)] px-3 py-1.5 text-sm font-semibold text-black disabled:opacity-60"
+            className="rounded-[var(--radius-md)] bg-[var(--brand-yellow)] px-4 py-2.5 text-sm font-semibold text-black disabled:opacity-60"
             onClick={handleSave}
-            disabled={busy}
+            disabled={!canSave}
           >
             {t("shiftEdit.save")}
           </button>
