@@ -44,11 +44,35 @@ function assertNoError(error: { message: string } | null, label: string) {
   }
 }
 
-export async function requireManagerContext(supabase: ServerSupabase) {
+// The auth result a caller may already hold from an earlier
+// `supabase.auth.getUser()` — its shape mirrors that call's
+// `{ data: { user }, error }`, flattened to `{ user, error }`.
+type PreresolvedManagerAuth = {
+  user: Awaited<ReturnType<ServerSupabase["auth"]["getUser"]>>["data"]["user"];
+  error: Awaited<ReturnType<ServerSupabase["auth"]["getUser"]>>["error"];
+};
+
+async function resolveManagerAuth(
+  supabase: ServerSupabase,
+): Promise<PreresolvedManagerAuth> {
   const {
     data: { user },
-    error: authError,
+    error,
   } = await supabase.auth.getUser();
+  return { user, error };
+}
+
+// `preresolvedAuth` lets callers that already ran `supabase.auth.getUser()`
+// (the manager page-data fetchers below) hand in that result instead of paying
+// for a second Auth-server round-trip. When omitted — every API-route caller
+// elsewhere — it resolves the user itself, exactly as before. Behavior is
+// otherwise identical: same redirects, same return shape.
+export async function requireManagerContext(
+  supabase: ServerSupabase,
+  preresolvedAuth?: PreresolvedManagerAuth,
+) {
+  const { user, error: authError } =
+    preresolvedAuth ?? (await resolveManagerAuth(supabase));
 
   if (authError || !user) {
     redirect("/login");
@@ -168,10 +192,14 @@ export const getManagerWorkspaceData = cache(async (): Promise<ManagerWorkspaceD
         .returns<StoreVisit[]>(),
     ]);
 
-  const contextPromise = !authError && user ? requireManagerContext(supabase) : null;
+  // Reuse the user already fetched above — requireManagerContext would otherwise
+  // hit the Auth server a second time on every manager workspace load.
+  const preresolvedAuth = { user, error: authError };
+  const contextPromise =
+    !authError && user ? requireManagerContext(supabase, preresolvedAuth) : null;
   const [context, workspaceResults] = contextPromise
     ? await Promise.all([contextPromise, getWorkspaceResults()])
-    : [await requireManagerContext(supabase), await getWorkspaceResults()];
+    : [await requireManagerContext(supabase, preresolvedAuth), await getWorkspaceResults()];
 
   const [
     profilesResult,
@@ -250,7 +278,7 @@ async function resolveContextOrPreview(): Promise<
     }
   }
 
-  const context = await requireManagerContext(supabase);
+  const context = await requireManagerContext(supabase, { user, error: authError });
   return { preview: null, supabase, context };
 }
 
@@ -278,12 +306,18 @@ async function resolveDeferredContextOrPreview(): Promise<
     }
   }
 
+  const preresolvedAuth = { user, error: authError };
+
   if (authError || !user) {
-    const context = await requireManagerContext(supabase);
+    const context = await requireManagerContext(supabase, preresolvedAuth);
     return { preview: null, supabase, contextPromise: Promise.resolve(context) };
   }
 
-  return { preview: null, supabase, contextPromise: requireManagerContext(supabase) };
+  return {
+    preview: null,
+    supabase,
+    contextPromise: requireManagerContext(supabase, preresolvedAuth),
+  };
 }
 
 function isoDaysAgo(days: number): string {
