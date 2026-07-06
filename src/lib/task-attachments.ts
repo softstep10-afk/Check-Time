@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
 import { buildSafeUploadName } from "@/lib/media-extension";
+import { buildMediaInsertPayload } from "@/lib/media-payload";
 import { guessMediaType } from "@/lib/worker-utils";
 import { redactSensitive, redactText, safeErrorForLog } from "@/lib/safe-log";
 
@@ -66,20 +67,17 @@ export async function uploadTaskAttachment(
   }
   const { data, error: insertErr } = await supabase
     .from("media")
-    .insert({
-      org_id: orgId,
-      project_id: projectId,
-      uploaded_by: uploadedBy,
-      media_type: guessMediaType(file),
-      storage_path: storagePath,
+    .insert(buildMediaInsertPayload({
+      orgId,
+      projectId,
+      uploadedBy,
+      mediaType: guessMediaType(file),
+      storagePath,
       filename: displayName,
-      file_size: file.size,
-      mime_type: resolvedContentType,
-      caption: null,
-      is_checkout: false,
-      time_event_id: null,
+      fileSize: file.size,
+      mimeType: resolvedContentType,
       metadata,
-    })
+    }))
     .select("id")
     .single<{ id: string }>();
 

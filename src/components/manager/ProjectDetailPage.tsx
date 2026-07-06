@@ -76,6 +76,11 @@ import {
   groupMaterialOrderItems,
   type GroupedMaterialOrderWithLink,
 } from "@/lib/materials-grouping";
+import {
+  buildMediaInsertPayload,
+  buildProjectMediaMetadata,
+  buildReceiptMediaMetadata,
+} from "@/lib/media-payload";
 import { parseMaterialSpecPaste, type MaterialSpecItem } from "@/lib/material-spec-parser";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { filterMaterialTakerProfiles } from "@/lib/material-driver-permissions";
@@ -1433,21 +1438,20 @@ export function ProjectDetailPage({
         setBusyKey(null);
         return;
       }
-      const metadata = { kind: "project_media" as const };
-      const { error: insertErr } = await supabase.from("media").insert({
-        org_id: orgId,
-        project_id: project.id,
-        uploaded_by: managerId,
-        media_type: kind,
-        storage_path: path,
-        filename: displayName,
-        file_size: file.size,
-        mime_type: contentType,
-        caption: null,
-        is_checkout: false,
-        time_event_id: null,
-        metadata,
-      });
+      const metadata = buildProjectMediaMetadata();
+      const { error: insertErr } = await supabase.from("media").insert(
+        buildMediaInsertPayload({
+          orgId,
+          projectId: project.id,
+          uploadedBy: managerId,
+          mediaType: kind,
+          storagePath: path,
+          filename: displayName,
+          fileSize: file.size,
+          mimeType: contentType,
+          metadata,
+        }),
+      );
       if (insertErr) {
         console.error("[project-media] media insert FAIL", insertErr);
         setMessage(`media-insert: ${insertErr.message}`);
@@ -3999,27 +4003,22 @@ function MaterialsSection({
     const mediaType = validation.kind === "photo" ? "photo" : "pdf";
     const { data: row, error: insertErr } = await supabase
       .from("media")
-      .insert({
-        org_id: orgId,
-        project_id: projectId,
-        uploaded_by: managerId,
-        media_type: mediaType,
-        storage_path: path,
+      .insert(buildMediaInsertPayload({
+        orgId,
+        projectId,
+        uploadedBy: managerId,
+        mediaType,
+        storagePath: path,
         filename: displayName,
-        file_size: file.size,
-        mime_type: mimeType,
-        caption: null,
-        is_checkout: false,
-        time_event_id: null,
-        metadata: {
-          kind: "receipt",
-          category: "receipt",
-          store_name: null,
+        fileSize: file.size,
+        mimeType,
+        metadata: buildReceiptMediaMetadata({
+          storeName: null,
           amount: 0,
-          purchase_date: new Date().toISOString().slice(0, 10),
-          uploader_name: "Manager",
-        },
-      })
+          purchaseDate: new Date().toISOString().slice(0, 10),
+          uploaderName: "Manager",
+        }),
+      }))
       .select("id, storage_path, filename, mime_type, media_type, caption, created_at, metadata")
       .single<ViewerMediaItem>();
     if (insertErr || !row) throw new Error(insertErr?.message ?? t("messages.uploadFailed"));
@@ -4770,33 +4769,29 @@ function ReceiptsSection({
 
       const mediaType = mimeType.startsWith("image/") ? "photo" : "pdf";
 
-      const metadata = {
-        kind: "receipt" as const,
-        category: "receipt" as const,
-        store_name: finalStore || null,
+      const metadata = buildReceiptMediaMetadata({
+        storeName: finalStore || null,
         amount,
-        purchase_date: purchaseDate,
-        uploader_name: "Manager",
-      };
+        purchaseDate,
+        uploaderName: "Manager",
+      });
       if (metadata.kind !== "receipt") {
         console.warn("[upload-guard] expected metadata.kind=receipt, got:", metadata);
       }
       const { data: row, error: insertErr } = await supabase
         .from("media")
-        .insert({
-          org_id: orgId,
-          project_id: projectId,
-          uploaded_by: managerId,
-          media_type: mediaType,
-          storage_path: path,
+        .insert(buildMediaInsertPayload({
+          orgId,
+          projectId,
+          uploadedBy: managerId,
+          mediaType,
+          storagePath: path,
           filename: displayName,
-          file_size: file.size,
-          mime_type: mimeType,
+          fileSize: file.size,
+          mimeType,
           caption: note || null,
-          is_checkout: false,
-          time_event_id: null,
           metadata,
-        })
+        }))
         .select("id")
         .single();
 
