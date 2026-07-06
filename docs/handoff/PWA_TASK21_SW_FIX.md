@@ -95,3 +95,4 @@ Not merged/pushed at time of writing.
 
 ---
 Build B trigger for update-banner verification: 2026-07-06T08:34:44.4849253-07:00
+Build C trigger for banner verification (build B observer in place): 2026-07-06T08:42:04.2195348-07:00
