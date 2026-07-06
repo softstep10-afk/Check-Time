@@ -6,8 +6,11 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 // (see node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md).
 // The functionality is identical — this is THE auth gate / session refresher.
 
-// Routes anyone can visit without a session.
-const PUBLIC_PATHS = new Set(["/", "/login"]);
+// Routes anyone can visit without a session. `/offline` is the PWA offline boot
+// shell (Task 4): a static, data-free page that only reads this device's local
+// queues — it must be reachable without a session (and pre-warmed into the HTTP
+// cache) so it can render when the network is gone.
+const PUBLIC_PATHS = new Set(["/", "/login", "/offline"]);
 const PUBLIC_PREFIXES = [
   "/api/auth/pin-login",
   "/_next",

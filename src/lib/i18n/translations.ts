@@ -1660,6 +1660,18 @@ export const translations = {
   "pwa.updateAction": { en: "Update now", ru: "Обновить" },
   "pwa.updateHeldForSync": { en: "Update ready — it will apply once your saved work has synced.", ru: "Обновление готово — оно применится после синхронизации сохранённых данных." },
 
+  // ── Offline boot shell (PWA Task 4) ──
+  "offline.title": { en: "You're offline", ru: "Вы офлайн" },
+  "offline.subtitle": { en: "No internet connection right now.", ru: "Сейчас нет подключения к интернету." },
+  "offline.reassure": { en: "Your saved work is stored on this device and will sync automatically when you're back online.", ru: "Сохранённая работа хранится на этом устройстве и синхронизируется автоматически, когда связь вернётся." },
+  "offline.queuedTitle": { en: "Waiting to sync", ru: "Ожидают синхронизации" },
+  "offline.queuedEmpty": { en: "No saved work waiting to sync.", ru: "Нет сохранённой работы в очереди." },
+  "offline.retry": { en: "Try to reconnect", ru: "Проверить связь" },
+  "offline.clockIn": { en: "Clock in", ru: "Начало смены" },
+  "offline.clockOut": { en: "Clock out", ru: "Конец смены" },
+  "offline.fieldAction": { en: "Field update", ru: "Действие в поле" },
+  "offline.upload": { en: "Media upload", ru: "Загрузка медиа" },
+
   // ── GPS Tracking ──
   "gps.consentTitle": { en: "Location Sharing", ru: "Передача геолокации" },
   "gps.consentBody": { en: "Your live location will be shared with your manager only while you are clocked in. Tracking stops automatically when you clock out. Location data is retained for the duration of your employment and at least 12 months after, and may be kept indefinitely unless specifically deleted by the owner. Data is used solely for payroll verification, dispute resolution, safety, and insurance claims. Your manager can see your position on the map during your shift.", ru: "Ваше местоположение будет передаваться менеджеру только во время смены. Отслеживание прекращается автоматически при завершении смены. Данные хранятся на протяжении вашей работы и минимум 12 месяцев после, и могут храниться бессрочно, если не удалены владельцем. Данные используются исключительно для проверки табеля, разрешения споров, безопасности и страховых случаев. Менеджер видит вашу позицию на карте во время смены." },

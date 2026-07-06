@@ -83,6 +83,20 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // The /offline boot shell (PWA Task 4) must survive in the browser HTTP
+        // cache so it can be served when the network is gone — the service worker
+        // is forbidden from serving navigations (Task 2.1), so the browser cache
+        // is the only mechanism. It's a static, data-free document, so a day of
+        // freshness is safe; a new deploy re-warms it on the next online visit.
+        source: "/offline",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
     ];
   },
 };

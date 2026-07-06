@@ -1,6 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import { OfflineShell } from "@/components/pwa/OfflineShell";
+
+function subscribeOnline(onChange: () => void): () => void {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
 
 export default function WorkerError({
   error,
@@ -15,7 +25,20 @@ export default function WorkerError({
     console.error("[worker] route render failed", error);
   }, [error]);
 
+  // When the worker screen fails because the device is offline, show the offline
+  // boot shell (chrome + offline banner + queued work) instead of a dead-end
+  // error. useSyncExternalStore keeps this SSR-safe (assumes online on the server).
+  const offline = useSyncExternalStore(
+    subscribeOnline,
+    () => !navigator.onLine,
+    () => false,
+  );
+
   const retry = unstable_retry ?? reset;
+
+  if (offline) {
+    return <OfflineShell />;
+  }
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)]">
