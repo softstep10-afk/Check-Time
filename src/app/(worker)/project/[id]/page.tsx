@@ -9,6 +9,10 @@ import {
 } from "@/lib/task-attachments";
 import { getCompletionMediaIds } from "@/lib/task-notifications";
 import { isReceiptVisibleToWorker } from "@/lib/worker-receipt-visibility";
+import {
+  splitProjectMaterialMedia,
+  toMaterialMediaAttachmentRef,
+} from "@/lib/materials-grouping";
 import { WorkerProjectView } from "@/components/worker/WorkerProjectView";
 import type { Media, Project, Task } from "@/types/database";
 
@@ -38,21 +42,10 @@ export default async function WorkerProjectPage({
     const rawMedia = preview.media.filter(
       (item) => item.project_id === id && !item.deleted_at,
     );
-    const projectMedia: TaskAttachmentRef[] = rawMedia
-      .filter((item) => item.metadata?.kind === "project_media")
-      .map((item) => ({
-        id: item.id,
-        filename: item.filename,
-        mime_type: item.mime_type,
-        media_type: item.media_type,
-        storage_path: item.storage_path,
-      }));
-    const projectReceipts = rawMedia
-      .filter(
-        (item) =>
-          item.metadata?.kind === "receipt" ||
-          item.metadata?.category === "receipt",
-      )
+    const previewMediaGroups = splitProjectMaterialMedia(rawMedia);
+    const projectMedia: TaskAttachmentRef[] =
+      previewMediaGroups.projectMedia.map(toMaterialMediaAttachmentRef);
+    const projectReceipts = previewMediaGroups.receipts
       .map((item) => ({
         id: item.id,
         filename: item.filename,
@@ -150,30 +143,21 @@ export default async function WorkerProjectPage({
     .eq("project_id", id)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
-  const projectMedia: TaskAttachmentRef[] = (rawMedia ?? [])
-    .filter((m) => {
-      const meta = (m as unknown as Media).metadata as Record<string, unknown> | null;
-      return meta?.kind === "project_media";
-    })
-    .map((m) => ({
-      id: m.id,
-      filename: m.filename,
-      mime_type: m.mime_type,
-      media_type: m.media_type,
-      storage_path: m.storage_path,
-    }));
-  const projectReceipts = (rawMedia ?? [])
+  const mediaGroups = splitProjectMaterialMedia(rawMedia ?? [], {
     // Worker view shows only the worker's own receipts. Manager / owner
     // surfaces continue to see all receipts (those pages run their own
     // queries). Without this filter a worker on a shared project would
     // see every other worker's amounts and effectively the project's
     // material cost — a leak the spec calls out.
-    .filter((m) =>
+    receiptFilter: (m) =>
       isReceiptVisibleToWorker(
         m as unknown as { uploaded_by: string | null; metadata: Record<string, unknown> | null },
         user.id,
       ),
-    )
+  });
+  const projectMedia: TaskAttachmentRef[] =
+    mediaGroups.projectMedia.map(toMaterialMediaAttachmentRef);
+  const projectReceipts = mediaGroups.receipts
     .map((m) => {
       const meta = (m as unknown as Media).metadata as Record<string, unknown> | null;
       return {
