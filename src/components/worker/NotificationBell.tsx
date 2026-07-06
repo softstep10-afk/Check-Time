@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
 import { useTranslation } from "@/lib/i18n";
 import { keepStableListIfUnchanged } from "@/lib/list-stability";
+import { mapMessageRowToAppMessage } from "@/lib/message-mapping";
 import { markMessagesReadById, sortMessagesForStableNotificationList } from "@/lib/message-state";
 function relativeTime(iso: string, lang: "en" | "ru"): string {
   const diff = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -22,25 +23,7 @@ import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView
 import {
   PRIORITY_COLOR,
   type AppMessage,
-  type MessageAttachment,
-  type MessagePriority,
 } from "@/lib/message-types";
-
-function inferPriority(row: { priority?: string | null; color?: string | null; metadata?: Record<string, unknown> | null }): MessagePriority {
-  const fromColumn = row.priority;
-  if (fromColumn === "urgent" || fromColumn === "info" || fromColumn === "good" || fromColumn === "task") {
-    return fromColumn;
-  }
-  const fromMeta = (row.metadata as Record<string, unknown> | null)?.priority;
-  if (fromMeta === "urgent" || fromMeta === "info" || fromMeta === "good" || fromMeta === "task") {
-    return fromMeta;
-  }
-  // Legacy color-based fallback for rows written before Wave 7.
-  if (row.color === "#ef4444") return "urgent";
-  if (row.color === "#22c55e") return "good";
-  if (row.color === "#3b82f6") return "task";
-  return "info";
-}
 
 function messageFingerprint(message: AppMessage): string {
   const attachment = message.attachment;
@@ -156,28 +139,7 @@ export function NotificationBell({
           metadata?: Record<string, unknown> | null;
           created_at: string;
         }>;
-        const mapped: AppMessage[] = rows.map((r) => ({
-          id: r.id,
-          from_id: r.sender_id,
-          from_name: "", // We don't join profiles here for simplicity
-          to_id: r.recipient_id,
-          text: r.text,
-          color: r.color as AppMessage["color"],
-          priority: inferPriority(r),
-          read: r.read,
-          created_at: r.created_at,
-          metadata: r.metadata ?? null,
-          attachment: r.attachment
-            ? {
-                url: (r.attachment as Record<string, string>).url ?? "",
-                storagePath: (r.attachment as Record<string, string>).storagePath ?? "",
-                filename: (r.attachment as Record<string, string>).filename ?? "",
-                type: ((r.attachment as Record<string, string>).type ?? "image") as MessageAttachment["type"],
-                mimeType: (r.attachment as Record<string, string>).mimeType ?? undefined,
-                size: Number((r.attachment as Record<string, number>).size ?? 0),
-              }
-            : undefined,
-        }));
+        const mapped: AppMessage[] = rows.map((r) => mapMessageRowToAppMessage(r));
         setMessages((current) =>
           keepStableListIfUnchanged(current, mapped, messageFingerprint),
         );

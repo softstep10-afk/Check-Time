@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ArchivePage } from "@/components/manager/ArchivePage";
 import {
   buildArchivedProjectRows,
@@ -7,10 +8,21 @@ import { hasFinanceAccess } from "@/lib/finance-access";
 import { getArchivePageData } from "@/lib/manager-data";
 import { buildManagerSessions } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
+import ArchiveLoading from "./loading";
 
 export const revalidate = 0;
 
-export default async function ArchiveRoutePage() {
+// The manager layout chrome paints immediately; the archive query batch streams
+// into this Suspense boundary. Data/computation unchanged — only delivery timing.
+export default function ArchiveRoutePage() {
+  return (
+    <Suspense fallback={<ArchiveLoading />}>
+      <ArchiveRouteContent />
+    </Suspense>
+  );
+}
+
+async function ArchiveRouteContent() {
   const data = await getArchivePageData();
   const supabase = await createClient();
   const managerHasFinanceAccess = await hasFinanceAccess(supabase, {

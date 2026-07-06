@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ManagerTasksPage } from "@/components/manager/ManagerTasksPage";
 import {
   buildActiveProjectIdSet,
@@ -9,11 +10,22 @@ import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { type TaskAttachmentRef } from "@/lib/task-attachments";
 import { collectTaskReferencedMediaIds } from "@/lib/task-media-hydration";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
+import TasksLoading from "./loading";
 
 // F5 must reflect newly assigned/completed tasks immediately.
 export const revalidate = 15;
 
-export default async function ManagerTasksRoutePage() {
+// The manager layout chrome paints immediately; the workspace query batch streams
+// into this Suspense boundary. Data/computation unchanged — only delivery timing.
+export default function ManagerTasksRoutePage() {
+  return (
+    <Suspense fallback={<TasksLoading />}>
+      <ManagerTasksRouteContent />
+    </Suspense>
+  );
+}
+
+async function ManagerTasksRouteContent() {
   const data = await getProjectsPageData();
 
   const activeProjects = getActiveOperationalProjects(data.projects);

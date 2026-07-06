@@ -10,6 +10,11 @@ import {
   PRIORITY_EMOJI,
   type MessagePriority,
 } from "@/lib/message-types";
+import {
+  mapMessageHistoryRow,
+  type MessageHistoryRow,
+  type MappedMessageHistoryRow,
+} from "@/lib/message-mapping";
 import { isTaskMessagePriority, mergeMessagesById } from "@/lib/message-state";
 import {
   OFFLINE_FIELD_ACTIONS_CHANGED_EVENT,
@@ -25,34 +30,7 @@ type CrewMember = { id: string; name: string; role: string };
 type ProjectOption = { id: string; name: string; status?: string | null };
 type InsertedMessage = { id: string; recipient_id: string };
 
-type HistoryRow = {
-  id: string;
-  recipient_id: string;
-  text: string;
-  priority: MessagePriority;
-  read: boolean;
-  created_at: string;
-};
-
 const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
-
-function inferPriority(row: {
-  priority?: string | null;
-  color?: string | null;
-  metadata?: Record<string, unknown> | null;
-}): MessagePriority {
-  if (row.priority === "urgent" || row.priority === "info" || row.priority === "good" || row.priority === "task") {
-    return row.priority;
-  }
-  const fromMeta = row.metadata?.priority;
-  if (fromMeta === "urgent" || fromMeta === "info" || fromMeta === "good" || fromMeta === "task") {
-    return fromMeta;
-  }
-  if (row.color === "#ef4444") return "urgent";
-  if (row.color === "#22c55e") return "good";
-  if (row.color === "#3b82f6") return "task";
-  return "info";
-}
 
 function formatRelativeTime(iso: string, lang: "en" | "ru"): string {
   const nowMs = Date.now();
@@ -65,26 +43,6 @@ function formatRelativeTime(iso: string, lang: "en" | "ru"): string {
   if (hr < 24) return lang === "ru" ? `${hr} ч назад` : `${hr} hr ago`;
   const day = Math.round(hr / 24);
   return lang === "ru" ? `${day} дн назад` : `${day} d ago`;
-}
-
-function mapHistoryRow(row: {
-  id: string;
-  recipient_id: string;
-  text: string;
-  priority?: string | null;
-  color?: string | null;
-  metadata?: Record<string, unknown> | null;
-  read: boolean;
-  created_at: string;
-}): HistoryRow {
-  return {
-    id: row.id,
-    recipient_id: row.recipient_id,
-    text: row.text,
-    priority: inferPriority(row),
-    read: row.read,
-    created_at: row.created_at,
-  };
 }
 
 export function BulkMessageComposer({
@@ -114,7 +72,7 @@ export function BulkMessageComposer({
   const [taskProjectId, setTaskProjectId] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
-  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [history, setHistory] = useState<MappedMessageHistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const historyReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -136,7 +94,7 @@ export function BulkMessageComposer({
       .order("created_at", { ascending: false })
       .limit(historyLimit);
     setHistory(
-      ((data ?? []) as Array<Parameters<typeof mapHistoryRow>[0]>).map(mapHistoryRow),
+      ((data ?? []) as MessageHistoryRow[]).map(mapMessageHistoryRow),
     );
     setHistoryLoading(false);
   }, [historyLimit, supabase, senderId]);
@@ -303,10 +261,10 @@ export function BulkMessageComposer({
 
   useEffect(() => {
     function mergeHistoryPayload(row: unknown) {
-      const nextRow = row as (Parameters<typeof mapHistoryRow>[0] & { sender_id?: string | null }) | null;
+      const nextRow = row as (MessageHistoryRow & { sender_id?: string | null }) | null;
       if (!nextRow?.id || nextRow.sender_id !== senderId) return;
       setHistory((current) =>
-        mergeMessagesById(current, mapHistoryRow(nextRow)).slice(0, historyLimit),
+        mergeMessagesById(current, mapMessageHistoryRow(nextRow)).slice(0, historyLimit),
       );
       setHistoryLoading(false);
     }
