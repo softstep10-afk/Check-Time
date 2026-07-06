@@ -14,8 +14,10 @@
 //    ("Without a default handler, unmatched requests will go against the
 //    network."). That is the recon's NetworkOnly requirement, by omission.
 //  - No navigation fallback / offline shell (that is Task 4).
-//  - No update prompt, version compare, or auto-reload (that is Task 3). This
-//    file only EXPOSES its build version to controlled clients on request.
+//  - It EXPOSES its build version to controlled clients on request
+//    (GET_SW_VERSION) and, on activate, cleans up previous-deploy caches. The
+//    client-side update prompt / one-tap reload lives in WorkerShell (Task 3);
+//    this file never reloads clients or touches localStorage.
 //
 // This file is compiled by esbuild (via src/app/serwist/[path]/route.ts) with
 // the `webworker` lib, NOT by the app's tsc pass (it is excluded in tsconfig).
@@ -37,10 +39,29 @@ declare const __APP_BUILD_SHA__: string;
 const BUILD_SHA =
   typeof __APP_BUILD_SHA__ === "string" && __APP_BUILD_SHA__ ? __APP_BUILD_SHA__ : "dev";
 
-// Versioned cache-name prefix so a new deploy lands in fresh caches. Cleanup of
-// stale `ct-app-*` caches on activate is intentionally left to Task 3 (update
-// lifecycle); Serwist already prunes its own precache across revisions.
+// Versioned cache-name prefix so a new deploy lands in fresh caches (all of this
+// SW's caches are `${CACHE_PREFIX}-*`). The activate handler below drops caches
+// from previous deploys.
 const CACHE_PREFIX = `ct-app-${BUILD_SHA}`;
+
+// On activate, delete caches left by previous deploys (any `ct-app-*` that is not
+// this build's `${CACHE_PREFIX}-*`). This only uses the Cache Storage API — it
+// never reads or clears localStorage, so the offline queues/snapshots
+// (cc_offline_time_events, cc_offline_field_actions, cc_offline_uploads, the
+// field-cache snapshots) are untouched. Runs alongside Serwist's own activate
+// listener (clientsClaim + precache pruning); service-worker listeners are additive.
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key.startsWith("ct-app-") && !key.startsWith(`${CACHE_PREFIX}-`))
+          .map((key) => caches.delete(key)),
+      );
+    })(),
+  );
+});
 
 // Expose the running SW's build version to controlled clients. Task 3 will
 // query this (GET_SW_VERSION) and compare it against APP_BUILD_COMMIT_SHA to
