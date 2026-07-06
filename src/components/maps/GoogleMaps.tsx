@@ -76,11 +76,13 @@ const COPY = {
   en: {
     missingKey: "Map unavailable: NEXT_PUBLIC_GOOGLE_MAPS_KEY is not set.",
     loadError: "Map failed to load. Check the Google Maps API key and billing.",
+    offlineUnavailable: "Map unavailable while you're offline.",
     loading: "Loading map...",
   },
   ru: {
     missingKey: "Карта недоступна: NEXT_PUBLIC_GOOGLE_MAPS_KEY не задан.",
     loadError: "Карта не загрузилась. Проверьте Google Maps API key и billing.",
+    offlineUnavailable: "Карта недоступна, пока вы офлайн.",
     loading: "Карта загружается...",
   },
 } as const;
@@ -125,12 +127,15 @@ export function MapProvider({
   }
 
   if (loadError) {
+    // Offline is the common cause of a load failure in the field — don't blame
+    // the API key/billing when the worker simply has no connection.
+    const offline = typeof navigator !== "undefined" && navigator.onLine === false;
     return (
       <div
         className="flex h-full w-full items-center justify-center px-4 text-center text-sm"
         style={{ background: "var(--bg-primary)", color: "var(--text-secondary)" }}
       >
-        {text.loadError}
+        {offline ? text.offlineUnavailable : text.loadError}
       </div>
     );
   }
