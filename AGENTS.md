@@ -1,13 +1,5 @@
-# Working rules for AI coders on this repo
+Every reply to the user MUST end with a final section formatted exactly as:
+━━━━━━━━━━ ИТОГ ━━━━━━━━━━
+<max 10 short lines: what was done, current branch/commit, gate results, what the owner must do next>
 
-**Read `CLAUDE.md` first and follow it fully — it is the canonical working agreement**
-(the loop, self-verification, Supabase MCP usage, RLS discipline, "done = three checkmarks",
-branch/deploy rules). This file only adds the framework warning below.
-
-<!-- BEGIN:nextjs-agent-rules -->
-## This is NOT the Next.js you know
-
-This version (Next.js 16.2.3) has breaking changes — APIs, conventions, and file structure may all
-differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before
-writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+When a task's deliverable is a report, write the full report to docs/handoff/<topic>.md and put only its file path in ИТОГ.
