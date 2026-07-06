@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { I18nProvider } from "@/lib/i18n";
 import { AUTH_EXPIRED_EVENT } from "@/lib/supabase/client";
-import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -34,10 +33,5 @@ export function Providers({ children }: { children: React.ReactNode }) {
     };
   }, [onLoginPath, router]);
 
-  return (
-    <I18nProvider>
-      <ServiceWorkerRegistration />
-      {children}
-    </I18nProvider>
-  );
+  return <I18nProvider>{children}</I18nProvider>;
 }

@@ -35,8 +35,6 @@ import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { WorkerJarvisTextDock } from "@/components/worker/WorkerJarvisTextDock";
 import { PwaInstallPrompt } from "@/components/worker/PwaInstallPrompt";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
-import { usePwaUpdate } from "@/lib/hooks/usePwaUpdate";
-import { hasPendingOfflineWork } from "@/lib/pwa-update";
 import {
   hasCachedGpsConsentDecision,
   readCachedGpsConsent,
@@ -501,9 +499,6 @@ export function WorkerShell({
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState<number>(0);
   const { t } = useTranslation();
-  // PWA update-delivery (Task 3): true once the live deploy is newer than the
-  // JS this tab is running. The banner below decides how to surface it.
-  const { updateAvailable } = usePwaUpdate();
   const shellRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shellRefreshPendingWhileHiddenRef = useRef(false);
   const shellRefreshLastRunRef = useRef(0);
@@ -2908,15 +2903,6 @@ export function WorkerShell({
   const offlineActionPendingCount = countPendingOfflineFieldActions(offlineActionQueue);
   const offlineUploadRetryCount = countRetryOfflineUploads(offlineQueue);
 
-  // Any unsynced offline work? While true, a pending app update is held (no
-  // reload) so we never drop the tab mid-sync. Reads the raw queues by design
-  // (a failed/retrying item is still unsynced work).
-  const offlineWorkPending = hasPendingOfflineWork({
-    timeEvents: offlineEventQueue.length,
-    fieldActions: offlineActionQueue.length,
-    uploads: offlineQueue.length,
-  });
-
   // Auto-drain when the browser flips back online.
   useEffect(() => {
     if (!isOnline) return;
@@ -3154,37 +3140,6 @@ export function WorkerShell({
                   ? t("worker.syncingShifts")
                   : t("worker.pendingShiftSync")
                 ).replace("{count}", String(offlineEventQueue.length))}
-              </div>
-            ) : null}
-
-            {/* PWA update banner (Task 3). Shown only when a newer deploy is
-                live. If offline queues are empty, offer a one-tap reload; while
-                any queue holds unsynced work, hold the update and say so — never
-                auto-reload mid-sync. */}
-            {updateAvailable ? (
-              <div
-                className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-md)] border px-3 py-3 text-sm"
-                style={{
-                  background: "rgba(191, 162, 52, 0.12)",
-                  borderColor: "rgba(191, 162, 52, 0.24)",
-                  color: "var(--brand-yellow)",
-                }}
-                role="status"
-                aria-live="polite"
-              >
-                <span className="min-w-0">
-                  {offlineWorkPending ? t("pwa.updateHeldForSync") : t("pwa.updateAvailable")}
-                </span>
-                {offlineWorkPending ? null : (
-                  <button
-                    type="button"
-                    onClick={() => window.location.reload()}
-                    className="shrink-0 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs font-semibold"
-                    style={{ background: "var(--brand-yellow)", color: "var(--text-inverse)" }}
-                  >
-                    {t("pwa.updateAction")}
-                  </button>
-                )}
               </div>
             ) : null}
 
