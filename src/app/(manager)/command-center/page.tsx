@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import {
   CheckCircle2,
@@ -25,6 +26,7 @@ import { getManagerTaskRowAuditText } from "@/lib/manager-task-row-audit";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { getServerLocale } from "@/lib/i18n/server";
+import type { Locale } from "@/lib/i18n";
 import { formatDurationCompact, ORG_TIMEZONE } from "@/lib/worker-utils";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import type { TaskPriority } from "@/types/database";
@@ -238,8 +240,70 @@ function metricCard({
 }
 
 export default async function CommandCenterPage() {
+  // Only the fast locale cookie read blocks the shell — the header paints
+  // immediately and the workspace query batch streams into <CommandCenterBody>.
   const locale = await getServerLocale();
   const text = COPY[locale];
+  return (
+    <div className="mx-auto max-w-[1500px] space-y-6 p-5">
+      <section className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
+            {text.eyebrow}
+          </p>
+          <h1 className="mt-2 text-[30px] font-bold text-[var(--text-primary)]">
+            {text.title}
+          </h1>
+          <p className="mt-1 max-w-[82ch] text-sm leading-6 text-[var(--text-secondary)]">
+            {text.description}
+          </p>
+          <p className="mt-2 text-xs font-semibold text-[var(--brand-yellow)]">
+            {text.overviewHint}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <OverviewLiveIndicator />
+          <Link href="/overview" className="button-base button-secondary px-3 py-2 text-xs">
+            {text.openOverview}
+          </Link>
+          <Link href="/timeline" className="button-base button-secondary px-3 py-2 text-xs">
+            {text.viewTimeline}
+          </Link>
+        </div>
+      </section>
+      <Suspense fallback={<CommandCenterBodySkeleton />}>
+        <CommandCenterBody locale={locale} text={text} />
+      </Suspense>
+    </div>
+  );
+}
+
+function CommandCenterBodySkeleton() {
+  const pulse = "animate-pulse rounded-[var(--radius-md)] bg-[var(--bg-surface-raised)]";
+  return (
+    <>
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className={`${pulse} h-[340px]`} />
+        <div className={`${pulse} h-[340px]`} />
+      </section>
+      <section className={`${pulse} h-[220px]`} />
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`${pulse} h-[116px]`} />
+        ))}
+      </section>
+      <section className={`${pulse} h-[260px]`} />
+    </>
+  );
+}
+
+async function CommandCenterBody({
+  locale,
+  text,
+}: {
+  locale: Locale;
+  text: (typeof COPY)[Locale];
+}) {
   const data = await getProjectsPageData();
   const supabase = await createClient();
   const activeProjects = getActiveOperationalProjects(data.projects);
@@ -501,33 +565,7 @@ export default async function CommandCenterPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6 p-5">
-      <section className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">
-            {text.eyebrow}
-          </p>
-          <h1 className="mt-2 text-[30px] font-bold text-[var(--text-primary)]">
-            {text.title}
-          </h1>
-          <p className="mt-1 max-w-[82ch] text-sm leading-6 text-[var(--text-secondary)]">
-            {text.description}
-          </p>
-          <p className="mt-2 text-xs font-semibold text-[var(--brand-yellow)]">
-            {text.overviewHint}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <OverviewLiveIndicator />
-          <Link href="/overview" className="button-base button-secondary px-3 py-2 text-xs">
-            {text.openOverview}
-          </Link>
-          <Link href="/timeline" className="button-base button-secondary px-3 py-2 text-xs">
-            {text.viewTimeline}
-          </Link>
-        </div>
-      </section>
-
+    <>
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-4">
           <div>
@@ -885,6 +923,6 @@ export default async function CommandCenterPage() {
           embedded
         />
       </section>
-    </div>
+    </>
   );
 }
