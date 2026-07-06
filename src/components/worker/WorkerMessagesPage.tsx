@@ -9,10 +9,10 @@ import {
   isPrivateMessageVisibleToProfile,
   markMessagesReadById,
 } from "@/lib/message-state";
+import { mapMessageRowToAppMessage } from "@/lib/message-mapping";
 import {
   PRIORITY_COLOR,
   type AppMessage,
-  type MessageAttachment,
   type MessagePriority,
 } from "@/lib/message-types";
 import { MessageAttachmentView } from "@/components/shared/MessageAttachmentView";
@@ -30,34 +30,6 @@ const PRIORITY_LABEL_KEYS: Record<MessagePriority, TranslationKey> = {
   good: "messages.priorityGood",
   task: "messages.priorityTask",
 };
-
-function inferPriority(row: {
-  priority?: string | null;
-  color?: string | null;
-  metadata?: Record<string, unknown> | null;
-}): MessagePriority {
-  if (
-    row.priority === "urgent" ||
-    row.priority === "info" ||
-    row.priority === "good" ||
-    row.priority === "task"
-  ) {
-    return row.priority;
-  }
-  const fromMeta = row.metadata?.priority;
-  if (
-    fromMeta === "urgent" ||
-    fromMeta === "info" ||
-    fromMeta === "good" ||
-    fromMeta === "task"
-  ) {
-    return fromMeta;
-  }
-  if (row.color === "#ef4444") return "urgent";
-  if (row.color === "#22c55e") return "good";
-  if (row.color === "#3b82f6") return "task";
-  return "info";
-}
 
 function relativeTime(iso: string, lang: "en" | "ru"): string {
   const diff = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
@@ -158,34 +130,20 @@ export function WorkerMessagesPage() {
       const unreadIds = visibleRows
         .filter((row) => row.recipient_id === shell.profile.id && !row.read)
         .map((row) => row.id);
-      const nextMessages = visibleRows.map((row) => {
-          const sentByMe = row.sender_id === shell.profile.id;
-          const recipientName = nameById.get(row.recipient_id) ?? "";
-          return {
-            id: row.id,
-            from_id: row.sender_id,
-            from_name: sentByMe
+      const nextMessages = visibleRows.map((row) =>
+        mapMessageRowToAppMessage(row, {
+          attachmentStringMode: "string",
+          colorFallback: true,
+          emptyAttachment: "null",
+          fromName: (messageRow) => {
+            const sentByMe = messageRow.sender_id === shell.profile.id;
+            const recipientName = nameById.get(messageRow.recipient_id) ?? "";
+            return sentByMe
               ? `${t("messages.you")} → ${recipientName || t("messages.recipient")}`
-              : nameById.get(row.sender_id) ?? "",
-            to_id: row.recipient_id,
-            text: row.text,
-            color: (row.color ?? PRIORITY_COLOR[inferPriority(row)]) as AppMessage["color"],
-            priority: inferPriority(row),
-            read: row.read,
-            created_at: row.created_at,
-            metadata: row.metadata ?? null,
-            attachment: row.attachment
-              ? {
-                  url: String(row.attachment.url ?? ""),
-                  storagePath: String(row.attachment.storagePath ?? ""),
-                  filename: String(row.attachment.filename ?? ""),
-                  type: (String(row.attachment.type ?? "image") as MessageAttachment["type"]),
-                  mimeType: row.attachment.mimeType ? String(row.attachment.mimeType) : undefined,
-                  size: Number(row.attachment.size ?? 0),
-                }
-              : null,
-          };
-        });
+              : nameById.get(messageRow.sender_id) ?? "";
+          },
+        }),
+      );
       setMessages(nextMessages);
       saveOfflineSnapshot(cacheActor, "worker-messages", { messages: nextMessages });
       setCachedMessagesSnapshot(loadOfflineSnapshot(cacheActor, "worker-messages"));

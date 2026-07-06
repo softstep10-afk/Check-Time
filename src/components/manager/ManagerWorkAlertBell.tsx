@@ -6,12 +6,15 @@ import { Bell, BellOff, CheckSquare, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
 import { keepStableListIfUnchanged } from "@/lib/list-stability";
+import {
+  mapMessageRowToAppMessage,
+  type MessageDisplayRow,
+} from "@/lib/message-mapping";
 import { markMessagesReadById } from "@/lib/message-state";
 import {
   PRIORITY_COLOR,
   PRIORITY_ORDER,
   type AppMessage,
-  type MessagePriority,
 } from "@/lib/message-types";
 
 type ManagerProfile = {
@@ -128,24 +131,6 @@ function releasePollOwnership(key: string, ownerId: string) {
   }
 }
 
-function inferPriority(row: {
-  priority?: string | null;
-  color?: string | null;
-  metadata?: Record<string, unknown> | null;
-}): MessagePriority {
-  if (row.priority === "urgent" || row.priority === "info" || row.priority === "good" || row.priority === "task") {
-    return row.priority;
-  }
-  const fromMeta = row.metadata?.priority;
-  if (fromMeta === "urgent" || fromMeta === "info" || fromMeta === "good" || fromMeta === "task") {
-    return fromMeta;
-  }
-  if (row.color === "#ef4444") return "urgent";
-  if (row.color === "#22c55e") return "good";
-  if (row.color === "#3b82f6") return "task";
-  return "info";
-}
-
 function isManagerRole(role: string) {
   return role === "owner" || role === "admin" || role === "manager";
 }
@@ -157,32 +142,6 @@ function taskKindLabel(task: AlertTask) {
   if (kind === "client_meeting") return "Встреча";
   if (kind === "worker_meeting") return "Команда";
   return "Задача";
-}
-
-function mapMessages(rows: unknown[]): AppMessage[] {
-  return (rows as Array<{
-    id: string;
-    sender_id: string;
-    recipient_id: string;
-    text: string;
-    color: string;
-    priority?: string | null;
-    read: boolean;
-    attachment: Record<string, unknown> | null;
-    metadata?: Record<string, unknown> | null;
-    created_at: string;
-  }>).map((row) => ({
-    id: row.id,
-    from_id: row.sender_id,
-    from_name: "",
-    to_id: row.recipient_id,
-    text: row.text,
-    color: row.color as AppMessage["color"],
-    priority: inferPriority(row),
-    read: row.read,
-    created_at: row.created_at,
-    attachment: undefined,
-  }));
 }
 
 function messageFingerprint(message: AppMessage): string {
@@ -281,7 +240,12 @@ export function ManagerWorkAlertBell() {
           .limit(25),
       ]);
 
-      const nextMessages = mapMessages(messagesResult.data ?? []);
+      const nextMessages = ((messagesResult.data ?? []) as MessageDisplayRow[]).map((row) =>
+        mapMessageRowToAppMessage(row, {
+          attachment: "none",
+          includeMetadata: false,
+        }),
+      );
       const nextTasks = (tasksResult.data ?? []) as AlertTask[];
       const snapshot: AlertsSnapshot = { messages: nextMessages, tasks: nextTasks, loaded: true };
       applyAlertsSnapshot(snapshot, reason);
