@@ -1,35 +1,31 @@
 /// <reference lib="esnext" />
 /// <reference lib="webworker" />
 
-// PWA Task 2 — Serwist service-worker skeleton.
+// PWA Task 2.1 — navigation-safe service worker.
 //
-// SCOPE OF THIS FILE (deliberately minimal):
-//  - Precache immutable build assets + public PWA assets (Serwist injects the
-//    manifest into `self.__SW_MANIFEST`; dev builds inject nothing).
-//  - Runtime caching is effectively OFF: only /_next/static/** and the public
-//    PWA assets are CacheFirst. Everything else — all /api/**, Supabase
-//    auth/rest/realtime/storage, RSC/flight, signed Storage/Mux URLs,
-//    payroll/manager/admin/archive, Google Maps, AI/transcode, and navigations
-//    — has NO matching route, so Serwist passes it straight to the network
-//    ("Without a default handler, unmatched requests will go against the
-//    network."). That is the recon's NetworkOnly requirement, by omission.
-//  - No navigation fallback / offline shell (that is Task 4).
-//  - It EXPOSES its build version to controlled clients on request
-//    (GET_SW_VERSION) and, on activate, cleans up previous-deploy caches. The
-//    client-side update prompt / one-tap reload lives in WorkerShell (Task 3);
-//    this file never reloads clients or touches localStorage.
+// WHY THIS WORKER IS ASSET-ONLY:
+// A service worker that lets its router touch navigation or RSC (React Server
+// Component / "flight") requests can buffer Next.js's streamed responses and
+// serialize SPA navigation behind the worker — the regression that got the first
+// release reverted (menu clicks 5-23s while direct URL loads stayed fast). The
+// prior worker's only navigation guard was `destination !== "document"`, which
+// does NOT catch RSC soft-navigations (their destination is ""), and its Serwist
+// precache route carried navigation URL heuristics (cleanURLs / directoryIndex).
 //
-// This file is compiled by esbuild (via src/app/serwist/[path]/route.ts) with
-// the `webworker` lib, NOT by the app's tsc pass (it is excluded in tsconfig).
+// So this worker NEVER handles navigations or RSC traffic:
+//   - NO precache (removed the PrecacheRoute and its navigation heuristics);
+//   - every runtime matcher hard-excludes navigations and ALL RSC signals via
+//     isNavigationOrRscRequest();
+//   - no catch-all, no default handler, no navigation fallback.
+// The SW calls respondWith ONLY for same-origin /_next/static/** and the named
+// public PWA assets. Everything else — navigations, RSC, /api, Supabase, signed
+// URLs, maps, AI — is untouched: no respondWith, browser-native, streaming intact.
+//
+// Compiled by esbuild via src/app/serwist/[path]/route.ts (webworker lib), not
+// the app's tsc pass (excluded in tsconfig).
 
-import type { PrecacheEntry, RuntimeCaching, SerwistGlobalConfig } from "serwist";
+import type { RuntimeCaching } from "serwist";
 import { CacheFirst, Serwist } from "serwist";
-
-declare global {
-  interface WorkerGlobalScope extends SerwistGlobalConfig {
-    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
-  }
-}
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -39,17 +35,32 @@ declare const __APP_BUILD_SHA__: string;
 const BUILD_SHA =
   typeof __APP_BUILD_SHA__ === "string" && __APP_BUILD_SHA__ ? __APP_BUILD_SHA__ : "dev";
 
-// Versioned cache-name prefix so a new deploy lands in fresh caches (all of this
-// SW's caches are `${CACHE_PREFIX}-*`). The activate handler below drops caches
-// from previous deploys.
+// Versioned cache-name prefix so a new deploy lands in fresh caches. The activate
+// handler drops caches from previous deploys.
 const CACHE_PREFIX = `ct-app-${BUILD_SHA}`;
 
+// True for a top-level navigation OR any Next RSC/flight request. These MUST
+// bypass the SW entirely — matching one here would let respondWith buffer a
+// streamed response and stall SPA navigation. Note that RSC soft-navigations are
+// NOT `document` requests (destination is ""), so checking destination/mode alone
+// is insufficient; we also inspect the RSC headers, the ?_rsc= param, and the
+// flight Accept type.
+function isNavigationOrRscRequest(request: Request, url: URL): boolean {
+  return (
+    request.mode === "navigate" ||
+    request.destination === "document" ||
+    request.headers.has("RSC") ||
+    request.headers.has("Next-Router-State-Tree") ||
+    request.headers.has("Next-Url") ||
+    url.searchParams.has("_rsc") ||
+    (request.headers.get("Accept") ?? "").includes("text/x-component")
+  );
+}
+
 // On activate, delete caches left by previous deploys (any `ct-app-*` that is not
-// this build's `${CACHE_PREFIX}-*`). This only uses the Cache Storage API — it
-// never reads or clears localStorage, so the offline queues/snapshots
-// (cc_offline_time_events, cc_offline_field_actions, cc_offline_uploads, the
-// field-cache snapshots) are untouched. Runs alongside Serwist's own activate
-// listener (clientsClaim + precache pruning); service-worker listeners are additive.
+// this build's `${CACHE_PREFIX}-*`). Cache Storage API only — it never reads or
+// clears localStorage, so the offline queues/snapshots (cc_offline_time_events,
+// cc_offline_field_actions, cc_offline_uploads, field-cache) are untouched.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
@@ -63,9 +74,8 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Expose the running SW's build version to controlled clients. Task 3 will
-// query this (GET_SW_VERSION) and compare it against APP_BUILD_COMMIT_SHA to
-// drive the update prompt. Read-only: no caching or reload behavior here.
+// Expose the running SW's build version to controlled clients — the Task 3 update
+// prompt compares it against APP_BUILD_COMMIT_SHA. Read-only; no caching/reload.
 self.addEventListener("message", (event) => {
   const data = event.data as { type?: unknown } | null;
   if (data?.type === "GET_SW_VERSION") {
@@ -75,30 +85,33 @@ self.addEventListener("message", (event) => {
 
 const runtimeCaching: RuntimeCaching[] = [
   {
-    // Immutable, content-hashed build assets — safe to serve cache-first.
-    matcher: ({ url, sameOrigin }) =>
-      sameOrigin && url.pathname.startsWith("/_next/static/"),
+    // Immutable, content-hashed build assets. Never a navigation/RSC request.
+    matcher: ({ url, request, sameOrigin }) =>
+      sameOrigin &&
+      !isNavigationOrRscRequest(request, url) &&
+      url.pathname.startsWith("/_next/static/"),
     handler: new CacheFirst({ cacheName: `${CACHE_PREFIX}-static` }),
   },
   {
-    // Public PWA assets (manifest + icons + favicon). Never documents.
-    matcher: ({ url, sameOrigin, request }) =>
+    // Named public PWA assets only: manifest + icons + favicon.
+    matcher: ({ url, request, sameOrigin }) =>
       sameOrigin &&
-      request.destination !== "document" &&
+      !isNavigationOrRscRequest(request, url) &&
       /^\/(manifest\.json|icon-192\.png|icon-512\.png|favicon\.ico)$/.test(url.pathname),
     handler: new CacheFirst({ cacheName: `${CACHE_PREFIX}-assets` }),
   },
-  // NOTE: no catch-all route. Everything not matched above is passed through to
-  // the network by Serwist (NetworkOnly by omission) — see the header comment.
+  // No catch-all, no precache, no navigation fallback: any request not matched
+  // above (navigations, RSC, /api, Supabase, signed URLs, maps, AI — everything)
+  // is passed straight to the network by the browser; the SW never respondWith's it.
 ];
 
 const serwist = new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
-  precacheOptions: { cacheName: `${CACHE_PREFIX}-precache` },
+  // No precache list is passed on purpose: Serwist's PrecacheRoute registers
+  // navigation URL heuristics (cleanURLs / directoryIndex) that evaluate nav/RSC
+  // requests — the class of bug that stalled SPA navigation. The CacheFirst
+  // routes above cache /_next/static/** and the named assets on first fetch.
   skipWaiting: true,
   clientsClaim: true,
-  // Enabled alongside the offline navigation fallback in Task 4; leaving it off
-  // now avoids an unconsumed-preload warning since there is no nav handler yet.
   navigationPreload: false,
   runtimeCaching,
 });
