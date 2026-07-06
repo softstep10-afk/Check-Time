@@ -6,6 +6,7 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 import { I18nProvider } from "@/lib/i18n";
 import { AUTH_EXPIRED_EVENT } from "@/lib/supabase/client";
 import { ServiceWorkerRegistration } from "@/components/pwa/ServiceWorkerRegistration";
+import { OfflineBoot } from "@/components/pwa/OfflineBoot";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -37,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
       <ServiceWorkerRegistration />
+      <OfflineBoot />
       {children}
     </I18nProvider>
   );
