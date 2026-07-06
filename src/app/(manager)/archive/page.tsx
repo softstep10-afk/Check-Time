@@ -8,6 +8,7 @@ import { hasFinanceAccess } from "@/lib/finance-access";
 import { getArchivePageData } from "@/lib/manager-data";
 import { buildManagerSessions } from "@/lib/manager-utils";
 import { createClient } from "@/lib/supabase/server";
+import ArchiveLoading from "./loading";
 
 export const revalidate = 0;
 
@@ -15,26 +16,9 @@ export const revalidate = 0;
 // into this Suspense boundary. Data/computation unchanged — only delivery timing.
 export default function ArchiveRoutePage() {
   return (
-    <Suspense fallback={<ArchiveSkeleton />}>
+    <Suspense fallback={<ArchiveLoading />}>
       <ArchiveRouteContent />
     </Suspense>
-  );
-}
-
-function ArchiveSkeleton() {
-  const pulse = "animate-pulse rounded-[var(--radius-md)] bg-[var(--bg-surface-raised)]";
-  return (
-    <div className="mx-auto max-w-[1400px] space-y-5 p-5">
-      <section className="space-y-2">
-        <div className={`${pulse} h-3 w-28`} />
-        <div className={`${pulse} h-8 w-56`} />
-      </section>
-      <section className="space-y-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`${pulse} h-16`} />
-        ))}
-      </section>
-    </div>
   );
 }
 
