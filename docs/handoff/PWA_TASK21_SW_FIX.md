@@ -92,3 +92,6 @@ will look fine even if broken. So:
 Only after step 2-4 pass on a real device is the SW safe to re-release (together with Task 3).
 
 Not merged/pushed at time of writing.
+
+---
+Build B trigger for update-banner verification: 2026-07-06T08:34:44.4849253-07:00
