@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPayrollPageData } from "@/lib/manager-data";
@@ -8,10 +9,23 @@ import { PayrollCalculator } from "@/components/manager/PayrollCalculator";
 import { getServerLocale, serverT } from "@/lib/i18n/server";
 import { createClient } from "@/lib/supabase/server";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
+import PayrollLoading from "./loading";
 
 export const revalidate = 30;
 
-export default async function PayrollPage() {
+// The manager layout chrome paints immediately; the payroll query batch streams
+// into this Suspense boundary, reusing the route skeleton. The finance-access
+// redirect stays inside the async body, so it fires while the skeleton is shown —
+// same as the existing loading.tsx behavior. Data/computation unchanged.
+export default function PayrollPage() {
+  return (
+    <Suspense fallback={<PayrollLoading />}>
+      <PayrollPageData />
+    </Suspense>
+  );
+}
+
+async function PayrollPageData() {
   const locale = await getServerLocale();
   const t = (key: Parameters<typeof serverT>[1]) => serverT(locale, key);
   const data = await getPayrollPageData();

@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import OverviewLoading from "./loading";
 import { ForceCheckoutButton } from "@/components/manager/ForceCheckoutButton";
 import { EventFeed, type FeedEvent } from "@/components/manager/EventFeed";
 import { OverviewLiveIndicator } from "@/components/manager/OverviewLiveIndicator";
@@ -85,7 +87,19 @@ function hoursColor(minutes: number): string {
   return "var(--green)";
 }
 
-export default async function OverviewPage() {
+// The manager layout chrome paints immediately; the workspace query batch streams
+// into this Suspense boundary, reusing the route skeleton. The page-level
+// loading.tsx still covers the navigation transition — this makes the data
+// boundary explicit too. Data/computation unchanged — only delivery timing.
+export default function OverviewPage() {
+  return (
+    <Suspense fallback={<OverviewLoading />}>
+      <OverviewPageData />
+    </Suspense>
+  );
+}
+
+async function OverviewPageData() {
   const locale = await getServerLocale();
   const t = (key: Parameters<typeof serverT>[1]) => serverT(locale, key);
   const data = await getManagerWorkspaceData();

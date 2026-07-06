@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ArchivePage } from "@/components/manager/ArchivePage";
 import {
   buildArchivedProjectRows,
@@ -10,7 +11,34 @@ import { createClient } from "@/lib/supabase/server";
 
 export const revalidate = 0;
 
-export default async function ArchiveRoutePage() {
+// The manager layout chrome paints immediately; the archive query batch streams
+// into this Suspense boundary. Data/computation unchanged — only delivery timing.
+export default function ArchiveRoutePage() {
+  return (
+    <Suspense fallback={<ArchiveSkeleton />}>
+      <ArchiveRouteContent />
+    </Suspense>
+  );
+}
+
+function ArchiveSkeleton() {
+  const pulse = "animate-pulse rounded-[var(--radius-md)] bg-[var(--bg-surface-raised)]";
+  return (
+    <div className="mx-auto max-w-[1400px] space-y-5 p-5">
+      <section className="space-y-2">
+        <div className={`${pulse} h-3 w-28`} />
+        <div className={`${pulse} h-8 w-56`} />
+      </section>
+      <section className="space-y-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className={`${pulse} h-16`} />
+        ))}
+      </section>
+    </div>
+  );
+}
+
+async function ArchiveRouteContent() {
   const data = await getArchivePageData();
   const supabase = await createClient();
   const managerHasFinanceAccess = await hasFinanceAccess(supabase, {

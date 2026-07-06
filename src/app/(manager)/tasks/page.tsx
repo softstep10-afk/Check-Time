@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ManagerTasksPage } from "@/components/manager/ManagerTasksPage";
 import {
   buildActiveProjectIdSet,
@@ -13,7 +14,34 @@ import { getTaskCompletionAudit } from "@/lib/task-notifications";
 // F5 must reflect newly assigned/completed tasks immediately.
 export const revalidate = 15;
 
-export default async function ManagerTasksRoutePage() {
+// The manager layout chrome paints immediately; the workspace query batch streams
+// into this Suspense boundary. Data/computation unchanged — only delivery timing.
+export default function ManagerTasksRoutePage() {
+  return (
+    <Suspense fallback={<TasksSkeleton />}>
+      <ManagerTasksRouteContent />
+    </Suspense>
+  );
+}
+
+function TasksSkeleton() {
+  const pulse = "animate-pulse rounded-[var(--radius-md)] bg-[var(--bg-surface-raised)]";
+  return (
+    <div className="mx-auto max-w-[1400px] space-y-5 p-5">
+      <section className="space-y-2">
+        <div className={`${pulse} h-3 w-24`} />
+        <div className={`${pulse} h-8 w-52`} />
+      </section>
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className={`${pulse} h-[120px]`} />
+        ))}
+      </section>
+    </div>
+  );
+}
+
+async function ManagerTasksRouteContent() {
   const data = await getProjectsPageData();
 
   const activeProjects = getActiveOperationalProjects(data.projects);
