@@ -4708,59 +4708,20 @@ function ReceiptsSection({
 
   useEffect(() => {
     async function load() {
-      // Without finance access the user is gated to their own receipts.
-      // RLS already enforces this — the client-side .eq() narrows the
-      // result set and keeps the UI honest (so the totals/count match
-      // what the user is actually entitled to see).
-      let query = supabase
-        .from("media")
-        .select("*")
-        .eq("project_id", projectId)
-        .eq("metadata->>category", "receipt")
-        .is("deleted_at", null);
-      if (!hasFinanceAccess) {
-        query = query.eq("uploaded_by", managerId);
+      try {
+        const response = await fetch(`/api/manager/projects/${projectId}/receipts`);
+        const payload = (await response.json().catch(() => ({}))) as {
+          receipts?: ReceiptItem[];
+        };
+        setReceipts(response.ok ? payload.receipts ?? [] : []);
+      } catch {
+        setReceipts([]);
+      } finally {
+        setLoading(false);
       }
-      const { data } = await query.order("created_at", { ascending: false });
-
-      const rows = (data ?? []) as Array<Media & { metadata: Record<string, unknown> }>;
-
-      // Sign every receipt URL in one batch round-trip. The "media" bucket
-      // is Private, so getPublicUrl produces 404'ing URLs — same root cause
-      // already fixed in TaskAttachmentList. 1h TTL is plenty for browsing.
-      const paths = rows.map((r) => normalizeStoragePath(r.storage_path));
-      let signedByPath = new Map<string, string>();
-      if (paths.length > 0) {
-        const { data: signed } = await supabase.storage
-          .from("media")
-          .createSignedUrls(paths, 3600);
-        signedByPath = new Map(
-          (signed ?? [])
-            .filter((s): s is { path: string; signedUrl: string; error: null } =>
-              Boolean(s.signedUrl && s.path),
-            )
-            .map((s) => [s.path, s.signedUrl]),
-        );
-      }
-
-      setReceipts(
-        rows.map((r) => ({
-          id: r.id,
-          storagePath: r.storage_path,
-          url: signedByPath.get(normalizeStoragePath(r.storage_path)) ?? "",
-          filename: r.filename ?? "receipt",
-          storeName: (r.metadata?.store_name as string) ?? "",
-          amount: (r.metadata?.amount as number) ?? 0,
-          purchaseDate: (r.metadata?.purchase_date as string) ?? "",
-          note: r.caption ?? "",
-          uploaderName: (r.metadata?.uploader_name as string) ?? "",
-          isImage: r.mime_type?.startsWith("image/") ?? false,
-        })),
-      );
-      setLoading(false);
     }
     void load();
-  }, [supabase, projectId, hasFinanceAccess, managerId]);
+  }, [projectId]);
 
   const total = receipts.reduce((sum, r) => sum + r.amount, 0);
 
