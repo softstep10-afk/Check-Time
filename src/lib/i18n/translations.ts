@@ -1656,6 +1656,9 @@ export const translations = {
   "pwa.installAction": { en: "Install app", ru: "Установить приложение" },
   "pwa.installLater": { en: "Not now", ru: "Позже" },
   "pwa.iosHintBody": { en: "Tap the Share button, then \"Add to Home Screen\".", ru: "Нажмите «Поделиться», затем «На экран „Домой“»." },
+  "pwa.updateAvailable": { en: "A new version is available.", ru: "Доступна новая версия." },
+  "pwa.updateAction": { en: "Update now", ru: "Обновить" },
+  "pwa.updateHeldForSync": { en: "Update ready — it will apply once your saved work has synced.", ru: "Обновление готово — оно применится после синхронизации сохранённых данных." },
 
   // ── GPS Tracking ──
   "gps.consentTitle": { en: "Location Sharing", ru: "Передача геолокации" },

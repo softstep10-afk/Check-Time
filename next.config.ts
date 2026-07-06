@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import type { NextConfig } from "next";
+import { withSerwist } from "@serwist/turbopack";
 
 function safeEnv(...keys: string[]): string | undefined {
   for (const key of keys) {
@@ -60,6 +61,30 @@ const nextConfig: NextConfig = {
     "10.0.0.55",
     "10.0.0.55:3000",
   ],
+  // The Serwist service worker is served from the /serwist/[path] route
+  // handler (see src/app/serwist/[path]/route.ts). The handler already sets
+  // Content-Type + Service-Worker-Allowed: "/", but not caching headers — a
+  // service-worker script MUST be no-store so the browser always revalidates
+  // it on navigation and a new deploy can take over promptly (Task 3 wires the
+  // in-app update prompt; this only guarantees the script itself is never
+  // stuck in the HTTP cache). charset is pinned here for good measure.
+  async headers() {
+    return [
+      {
+        source: "/serwist/:path*",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "application/javascript; charset=utf-8",
+          },
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+        ],
+      },
+    ];
+  },
 };
 
-export default nextConfig;
+export default withSerwist(nextConfig);
