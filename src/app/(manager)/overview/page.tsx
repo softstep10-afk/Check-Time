@@ -288,14 +288,9 @@ export default async function OverviewPage() {
   const closedShiftAlerts = flaggedClosedShifts.slice(0, 8);
   const closedShiftOverflowCount = flaggedClosedShifts.length - closedShiftAlerts.length;
 
-  // Closed-shift alerts still awaiting the owner's review. Reviewed shifts are
-  // excluded entirely — once acknowledged they leave this block; that history
-  // stays reachable from the worker's own page, not the Overview risk band. So
-  // every row here is unreviewed and the risk-queue counts match one-for-one.
-  const unreviewedClosedCount = closedShiftAlerts.filter(
-    (session) => !session.reviewed,
-  ).length;
-  const hasUnreviewedClosed = unreviewedClosedCount > 0;
+  // Reviewed shifts are excluded upstream (see the flaggedClosedShifts filter),
+  // so every row in this block is unreviewed and the section always renders in
+  // the alert (red) state — there is no all-reviewed/calm variant.
 
   // Project options for the review-queue edit dialog (edit mode ignores them,
   // but the shared dialog requires the prop for its create-mode picker).
@@ -679,19 +674,15 @@ export default async function OverviewPage() {
         <section
           className="rounded-[var(--radius-lg)] border p-4"
           style={{
-            background: hasUnreviewedClosed
-              ? "rgba(212, 81, 94, 0.06)"
-              : "rgba(15, 168, 120, 0.05)",
-            borderColor: hasUnreviewedClosed
-              ? "rgba(212, 81, 94, 0.24)"
-              : "rgba(15, 168, 120, 0.22)",
+            background: "rgba(212, 81, 94, 0.06)",
+            borderColor: "rgba(212, 81, 94, 0.24)",
           }}
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2
                 className="text-lg font-bold"
-                style={{ color: hasUnreviewedClosed ? "var(--red)" : "var(--green)" }}
+                style={{ color: "var(--red)" }}
               >
                 {t("shiftReview.closedShiftAlerts")}
               </h2>

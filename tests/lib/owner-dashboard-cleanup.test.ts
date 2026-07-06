@@ -90,16 +90,19 @@ describe("closed-shift review acknowledgement", () => {
     expect(buildShiftReviewAckEventIds(events).has("co-1")).toBe(false);
   });
 
-  it("drives the overview risk zone off the unreviewed count, not the raw list", () => {
-    // The band/rows only stay red while unreviewed work remains; reviewed
-    // rows are de-emphasised toward green and excluded from the count.
-    expect(overviewSource).toContain("const unreviewedClosedCount = closedShiftAlerts.filter");
-    expect(overviewSource).toContain("(session) => !session.reviewed,");
-    expect(overviewSource).toContain("const hasUnreviewedClosed = unreviewedClosedCount > 0;");
-    expect(overviewSource).toContain("hasUnreviewedClosed");
-    // reviewed rows turn green instead of red
-    expect(overviewSource).toContain("session.reviewed");
-    expect(overviewSource).toContain('"rgba(15, 168, 120, 0.22)"');
+  it("keeps the overview closed-shift band red by excluding reviewed shifts upstream", () => {
+    // Reviewed shifts leave the block entirely (dropped in the flaggedClosedShifts
+    // filter), so the section always renders in the alert (red) state. The old
+    // section-level green "all-reviewed/calm" branch and its unreviewed-count flag
+    // were unreachable-by-design and have been removed.
+    expect(overviewSource).toContain(
+      '.filter((session) => session.review.status !== "normal" && !session.reviewed)',
+    );
+    expect(overviewSource).toContain('background: "rgba(212, 81, 94, 0.06)"');
+    expect(overviewSource).toContain('borderColor: "rgba(212, 81, 94, 0.24)"');
+    // the dead green section styling and its flag are gone
+    expect(overviewSource).not.toContain('"rgba(15, 168, 120, 0.22)"');
+    expect(overviewSource).not.toContain("const hasUnreviewedClosed");
     // the explicit reversible reviewed flag stays wired to the ack button
     expect(overviewSource).toContain("reviewed={session.reviewed}");
   });
