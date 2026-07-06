@@ -33,6 +33,7 @@ import { NotificationBell } from "@/components/worker/NotificationBell";
 import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { WorkerJarvisTextDock } from "@/components/worker/WorkerJarvisTextDock";
+import { PwaInstallPrompt } from "@/components/worker/PwaInstallPrompt";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
 import {
   hasCachedGpsConsentDecision,
@@ -3228,6 +3229,8 @@ export function WorkerShell({
                 {t("gps.iosTip")}
               </div>
             ) : null}
+
+            <PwaInstallPrompt />
           </header>
 
           <main className="flex-1 px-4 pb-20 pt-4">
