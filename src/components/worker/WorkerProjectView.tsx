@@ -44,6 +44,11 @@ import {
   groupMaterialOrderItems,
   type GroupedMaterialOrder,
 } from "@/lib/materials-grouping";
+import {
+  buildMediaInsertPayload,
+  buildProjectMediaMetadata,
+  buildReceiptMediaMetadata,
+} from "@/lib/media-payload";
 import { getEffectiveTaskStatus, isEffectiveOpenTask } from "@/lib/task-status";
 import { isNetworkLikeFieldError } from "@/lib/offline-field-actions";
 import {
@@ -752,23 +757,17 @@ export function WorkerProjectView({
 
       const { data: row, error: insertErr } = await supabase
         .from("media")
-        .insert({
-          org_id: orgId,
-          project_id: project.id,
-          uploaded_by: profileId,
-          media_type: validation.kind,
-          storage_path: path,
+        .insert(buildMediaInsertPayload({
+          orgId,
+          projectId: project.id,
+          uploadedBy: profileId,
+          mediaType: validation.kind,
+          storagePath: path,
           filename: displayName,
-          file_size: file.size,
-          mime_type: mimeType,
-          caption: null,
-          is_checkout: false,
-          time_event_id: null,
-          metadata: {
-            kind: "project_media",
-            source: "worker_project_view",
-          },
-        })
+          fileSize: file.size,
+          mimeType,
+          metadata: buildProjectMediaMetadata("worker_project_view"),
+        }))
         .select("id, filename, mime_type, media_type, storage_path")
         .single<TaskAttachmentRef>();
 
@@ -2166,27 +2165,22 @@ function WorkerMaterialsList({
     const mediaType = validation.kind === "photo" ? "photo" : "pdf";
     const { data: row, error: insertErr } = await supabase
       .from("media")
-      .insert({
-        org_id: orgId,
-        project_id: projectId,
-        uploaded_by: profileId,
-        media_type: mediaType,
-        storage_path: path,
+      .insert(buildMediaInsertPayload({
+        orgId,
+        projectId,
+        uploadedBy: profileId,
+        mediaType,
+        storagePath: path,
         filename: displayName,
-        file_size: file.size,
-        mime_type: mimeType,
-        caption: null,
-        is_checkout: false,
-        time_event_id: null,
-        metadata: {
-          kind: "receipt",
-          category: "receipt",
-          store_name: null,
+        fileSize: file.size,
+        mimeType,
+        metadata: buildReceiptMediaMetadata({
+          storeName: null,
           amount: 0,
-          purchase_date: new Date().toISOString().slice(0, 10),
-          uploader_name: "Worker",
-        },
-      })
+          purchaseDate: new Date().toISOString().slice(0, 10),
+          uploaderName: "Worker",
+        }),
+      }))
       .select("id, storage_path, filename, mime_type, media_type, caption, created_at, metadata")
       .single<ViewerMediaItem>();
     if (insertErr || !row) throw new Error(insertErr?.message ?? t("messages.uploadFailed"));
@@ -2767,29 +2761,25 @@ function WorkerReceiptUpload({
     }
 
     const mediaType = validation.kind === "photo" ? "photo" : "pdf";
-    const metadata = {
-      kind: "receipt" as const,
-      category: "receipt" as const,
-      store_name: finalStore || null,
+    const metadata = buildReceiptMediaMetadata({
+      storeName: finalStore || null,
       amount,
-      purchase_date: new Date().toISOString().slice(0, 10),
-      uploader_name: "Worker",
-    };
-
-    const { error: insertErr } = await supabase.from("media").insert({
-      org_id: orgId,
-      project_id: projectId,
-      uploaded_by: profileId,
-      media_type: mediaType,
-      storage_path: path,
-      filename: displayName,
-      file_size: file.size,
-      mime_type: mimeType,
-      caption: note || null,
-      is_checkout: false,
-      time_event_id: null,
-      metadata,
+      purchaseDate: new Date().toISOString().slice(0, 10),
+      uploaderName: "Worker",
     });
+
+    const { error: insertErr } = await supabase.from("media").insert(buildMediaInsertPayload({
+      orgId,
+      projectId,
+      uploadedBy: profileId,
+      mediaType,
+      storagePath: path,
+      filename: displayName,
+      fileSize: file.size,
+      mimeType,
+      caption: note || null,
+      metadata,
+    }));
 
     setBusy(false);
     if (insertErr) {
