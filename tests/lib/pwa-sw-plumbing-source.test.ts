@@ -33,11 +33,13 @@ describe("pwa service-worker plumbing (Task 2)", () => {
   });
 
   it("keeps runtime caching narrow: build/public assets only, NetworkOnly by omission", () => {
-    expect(sw).toContain("self.__SW_MANIFEST");
     expect(sw).toContain("/_next/static/");
     expect(sw).toContain("CacheFirst");
     // No broad Next default cache (would cache pages/RSC/api/maps/fonts).
     expect(sw).not.toContain("defaultCache");
+    // Task 2.1: precache removed (its PrecacheRoute carried nav URL heuristics).
+    expect(sw).not.toContain("precacheEntries");
+    expect(sw).not.toContain("__SW_MANIFEST");
     // Versioned cache names keyed by the injected build SHA.
     expect(sw).toContain("ct-app-");
     expect(sw).toContain("__APP_BUILD_SHA__");
