@@ -99,3 +99,6 @@ compare (query `GET_SW_VERSION` vs `APP_BUILD_COMMIT_SHA`), block auto-reload wh
 queues are non-empty, and delete stale `ct-app-*` caches on activate.
 
 Not merged/pushed at time of writing.
+
+---
+Device verification build B trigger: 2026-07-05T22:29:30.4878937-07:00
