@@ -12,6 +12,7 @@ import { buildManagerSessions } from "@/lib/manager-utils";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { createClient } from "@/lib/supabase/server";
+import { isReceiptCategoryMetadata } from "@/lib/materials-grouping";
 import { getServerLocale } from "@/lib/i18n/server";
 import { formatDurationCompact, ORG_TIMEZONE } from "@/lib/worker-utils";
 
@@ -173,7 +174,7 @@ export default async function ArchivedProjectDetailPage({
     .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
     .map((item) => {
       const metadata = item.metadata as Record<string, unknown>;
-      const isReceipt = metadata.category === "receipt";
+      const isReceipt = isReceiptCategoryMetadata(metadata);
       return {
         id: item.id,
         media_type: item.media_type,

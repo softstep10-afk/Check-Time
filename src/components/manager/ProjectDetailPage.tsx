@@ -72,6 +72,10 @@ import {
   isMaterialTask,
   type MaterialTaskUrgency,
 } from "@/lib/material-tasks";
+import {
+  groupMaterialOrderItems,
+  type GroupedMaterialOrderWithLink,
+} from "@/lib/materials-grouping";
 import { parseMaterialSpecPaste, type MaterialSpecItem } from "@/lib/material-spec-parser";
 import { isDriverTimeProject } from "@/lib/driver-time-projects";
 import { filterMaterialTakerProfiles } from "@/lib/material-driver-permissions";
@@ -3610,16 +3614,7 @@ type MaterialItem = {
   links: string[];
 };
 
-type MaterialOrderGroup = {
-  id: string;
-  orderId: string | null;
-  authorName: string;
-  createdAt: string;
-  priority: TaskPriority;
-  note: string;
-  link: string | null;
-  items: MaterialItem[];
-};
+type MaterialOrderGroup = GroupedMaterialOrderWithLink<MaterialItem, string>;
 
 function MaterialsSection({
   orgId,
@@ -3981,47 +3976,10 @@ function MaterialsSection({
     await refreshMaterials();
   }
 
-  const materialGroups = useMemo<MaterialOrderGroup[]>(() => {
-    const grouped = new Map<string, MaterialOrderGroup>();
-    for (const item of items) {
-      const orderId = typeof item.metadata.order_id === "string" ? item.metadata.order_id : null;
-      const groupKey = orderId ?? `legacy-${item.id}`;
-      const note = typeof item.metadata.order_note === "string" ? item.metadata.order_note : "";
-      const link = item.links[0] ?? null;
-      const current = grouped.get(groupKey);
-      if (current) {
-        current.items.push(item);
-        if (!current.link && link) current.link = link;
-        if (new Date(item.createdAt).getTime() < new Date(current.createdAt).getTime()) {
-          current.createdAt = item.createdAt;
-        }
-      } else {
-        grouped.set(groupKey, {
-          id: groupKey,
-          orderId,
-          authorName: item.authorName,
-          createdAt: item.createdAt,
-          priority: item.priority,
-          note,
-          link,
-          items: [item],
-        });
-      }
-    }
-
-    return [...grouped.values()]
-      .map((group) => ({
-        ...group,
-        items: [...group.items].sort(
-          (left, right) =>
-            new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-        ),
-      }))
-      .sort(
-        (left, right) =>
-          new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-      );
-  }, [items]);
+  const materialGroups = useMemo<MaterialOrderGroup[]>(
+    () => groupMaterialOrderItems(items, { getLink: (item) => item.links[0] ?? null }),
+    [items],
+  );
 
   async function createDeliveryReceipt(file: File): Promise<ViewerMediaItem> {
     const validation = validateUploadFile(file);
