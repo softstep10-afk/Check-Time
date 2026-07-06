@@ -50,8 +50,11 @@ import {
   type JarvisRouteCategory,
 } from "@/lib/ai/provider-routing";
 import { safeErrorForLog } from "@/lib/safe-log";
+import { ORG_TIMEZONE } from "@/lib/worker-utils";
 
-export const ORG_TIME_ZONE = "America/Los_Angeles";
+// Re-exported alias of the org's canonical display timezone (worker-utils is the
+// single source of truth). Same value as before — no behavior change.
+export const ORG_TIME_ZONE = ORG_TIMEZONE;
 const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 const DEFAULT_OPENAI_MODEL = "gpt-4.1-mini";
 const DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest";

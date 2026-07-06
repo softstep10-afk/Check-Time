@@ -12,7 +12,7 @@ import {
   isMaterialTask,
   type MaterialTaskLike,
 } from "@/lib/material-tasks";
-import { parseGeoPoint } from "@/lib/worker-utils";
+import { ORG_TIMEZONE, parseGeoPoint } from "@/lib/worker-utils";
 import {
   EXTREME_SHIFT_MINUTES,
   WARN_SHIFT_MINUTES,
@@ -271,7 +271,9 @@ export interface BillableTransferGap {
   sessionIds: string[];
 }
 
-const DEFAULT_PAYROLL_TIME_ZONE = "America/Los_Angeles";
+// Payroll day-key math is anchored to the org's timezone (single source of
+// truth in worker-utils). Same value as before — no behavior change.
+const DEFAULT_PAYROLL_TIME_ZONE = ORG_TIMEZONE;
 
 function dateKeyInTimeZone(iso: string, timeZone = DEFAULT_PAYROLL_TIME_ZONE): string {
   const parts = new Intl.DateTimeFormat("en-US", {
