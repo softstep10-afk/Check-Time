@@ -1028,6 +1028,7 @@ export function WorkerProjectView({
         defaultOpen={false}
         dataTestid="worker-project-media-folder"
         className="p-4"
+        wideHeaderAction
         summary={
           <h2 className="text-lg font-bold text-[var(--text-primary)]">
             {mediaFolderSummary}

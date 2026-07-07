@@ -22,6 +22,16 @@ type CollapsibleSectionProps = {
   className?: string;
   contentClassName?: string;
   persistState?: boolean;
+  /**
+   * Opt-in for sections whose `headerAction` is WIDE (e.g. a multi-button
+   * group like UploadSourceButtons) rather than a single button. It gives the
+   * summary a min-width floor so that, on a narrow card, the action group wraps
+   * onto its own line beneath the title instead of collapsing the title to zero
+   * and overlapping it. Intrinsic flex-wrap only — no viewport breakpoint — so
+   * it behaves on phones that mis-report their width. Sections that omit it are
+   * unaffected (summary keeps `min-w-0`).
+   */
+  wideHeaderAction?: boolean;
 };
 
 const memoryState = new Map<string, boolean>();
@@ -80,6 +90,7 @@ export function CollapsibleSection({
   className = "",
   contentClassName = "",
   persistState = true,
+  wideHeaderAction = false,
 }: CollapsibleSectionProps) {
   const panelId = useId();
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -153,7 +164,7 @@ export function CollapsibleSection({
           aria-expanded={open}
           aria-controls={panelId}
           onClick={controls.toggle}
-          className="-m-1 flex min-w-0 flex-1 items-start gap-3 rounded-[var(--radius-sm)] p-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand-yellow)]"
+          className={`-m-1 flex ${wideHeaderAction ? "min-w-[12rem]" : "min-w-0"} flex-1 items-start gap-3 rounded-[var(--radius-sm)] p-1 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--brand-yellow)]`}
         >
           <span
             aria-hidden="true"
