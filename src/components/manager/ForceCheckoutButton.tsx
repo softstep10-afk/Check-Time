@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useTranslation } from "@/lib/i18n";
 import { logAudit } from "@/lib/audit";
+import { sendMessagesViaApi } from "@/lib/messages-client";
 import { TextInputWithVoice } from "@/components/shared/TextInputWithVoice";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 
@@ -99,15 +100,17 @@ export function ForceCheckoutButton({
       ? `${t("overview.forceCheckoutNotify")} (${timeLabel}) — ${reason.trim()}`
       : `${t("overview.forceCheckoutNotify")} (${timeLabel})`;
 
-    const { error: messageError } = await supabase.from("messages").insert({
-      org_id: orgId,
-      sender_id: managerId,
-      recipient_id: profileId,
-      text: notifyText,
-      color: "#ef4444",
-      priority: "urgent",
-      metadata: { kind: "force_checkout_notice" },
-    });
+    // Server-side send (Push Phase 2): the route stamps org_id/sender_id from the
+    // authed manager and fires a push to the worker. Same message row as before.
+    const { error: messageError } = await sendMessagesViaApi([
+      {
+        recipient_id: profileId,
+        text: notifyText,
+        color: "#ef4444",
+        priority: "urgent",
+        metadata: { kind: "force_checkout_notice" },
+      },
+    ]);
     if (messageError) partialFailures.push(t("overview.forceCheckoutNotifyFailed"));
 
     // Audit log

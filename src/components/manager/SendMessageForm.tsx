@@ -29,6 +29,7 @@ import {
   queueOfflineFieldAction,
   removeOfflineFieldAction,
 } from "@/lib/offline-field-actions";
+import { sendMessagesViaApi } from "@/lib/messages-client";
 
 const PRIORITY_OPTIONS: MessagePriority[] = ["urgent", "info", "good", "task"];
 type ProjectOption = { id: string; name: string; status?: string | null };
@@ -368,23 +369,15 @@ export function SendMessageForm({
     };
     // priority column was added in migration 00014. Retry without it on the
     // off chance an older DB hasn't run the migration yet — cheap insurance.
+    // Server-side send (Push Phase 2): the route stamps org_id/sender_id, inserts
+    // with the priority-column fallback, and pushes the recipient. A network
+    // failure surfaces as a network-like error and falls through to the offline
+    // queue below, exactly as the direct insert did.
     let messageId: string | null = null;
-    let insertResult = await supabase
-      .from("messages")
-      .insert({ ...basePayload, priority })
-      .select("id")
-      .single<{ id: string }>();
-    let insertErr = insertResult.error;
-    if (insertErr && /column .* priority/i.test(insertErr.message)) {
-      insertResult = await supabase
-        .from("messages")
-        .insert(basePayload)
-        .select("id")
-        .single<{ id: string }>();
-      insertErr = insertResult.error;
-    }
-    if (!insertErr && insertResult.data?.id) {
-      messageId = insertResult.data.id;
+    const sendResult = await sendMessagesViaApi([{ ...basePayload, priority }]);
+    const insertErr = sendResult.error;
+    if (!insertErr && sendResult.data && sendResult.data[0]?.id) {
+      messageId = sendResult.data[0].id;
     }
     if (insertErr) {
       if (isNetworkLikeFieldError(insertErr) && !pendingFile && orgId && senderId) {
