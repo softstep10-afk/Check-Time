@@ -13,6 +13,7 @@ import {
   splitProjectMaterialMedia,
   toMaterialMediaAttachmentRef,
 } from "@/lib/materials-grouping";
+import { parseMoneyAmount } from "@/lib/money-amount";
 import { WorkerProjectView } from "@/components/worker/WorkerProjectView";
 import type { Media, Project, Task } from "@/types/database";
 
@@ -57,12 +58,12 @@ export default async function WorkerProjectPage({
           typeof item.metadata?.store_name === "string"
             ? item.metadata.store_name
             : null,
-        amount:
-          typeof item.metadata?.amount === "number"
-            ? item.metadata.amount
-            : typeof item.metadata?.amount === "string"
-              ? Number.parseFloat(item.metadata.amount)
-              : null,
+        amount: parseMoneyAmount(item.metadata?.amount, {
+          mode: "parseFloat",
+          missing: null,
+          invalid: "parsed",
+          finiteNumbers: false,
+        }),
       }));
     const tasks = preview.tasks.filter(
       (task) =>
@@ -168,12 +169,12 @@ export default async function WorkerProjectPage({
         storage_path: m.storage_path,
         created_at: m.created_at,
         store_name: typeof meta?.store_name === "string" ? meta.store_name : null,
-        amount:
-          typeof meta?.amount === "number"
-            ? meta.amount
-            : typeof meta?.amount === "string"
-              ? Number.parseFloat(meta.amount)
-              : null,
+        amount: parseMoneyAmount(meta?.amount, {
+          mode: "parseFloat",
+          missing: null,
+          invalid: "parsed",
+          finiteNumbers: false,
+        }),
       };
     });
 

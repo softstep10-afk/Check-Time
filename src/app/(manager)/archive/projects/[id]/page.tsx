@@ -9,6 +9,7 @@ import { isArchivedProject } from "@/lib/archive-utils";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { getArchivePageData } from "@/lib/manager-data";
 import { buildManagerSessions } from "@/lib/manager-utils";
+import { parseMoneyAmount } from "@/lib/money-amount";
 import { getTaskCompletionAudit } from "@/lib/task-notifications";
 import { getEffectiveTaskStatus } from "@/lib/task-status";
 import { createClient } from "@/lib/supabase/server";
@@ -110,13 +111,11 @@ const COPY = {
 } as const;
 
 function receiptAmount(metadata: Record<string, unknown>): number | null {
-  const value = metadata.amount;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
+  return parseMoneyAmount(metadata.amount, {
+    mode: "parseFloat",
+    missing: null,
+    invalid: null,
+  });
 }
 
 function playbackMetadata(metadata: Record<string, unknown>): Record<string, unknown> {

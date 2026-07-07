@@ -9,6 +9,7 @@ import {
   getOverviewStats,
 } from "@/lib/manager-utils";
 import { getActiveOperationalProjects } from "@/lib/archive-utils";
+import { parseMoneyAmount } from "@/lib/money-amount";
 import { isEffectiveOpenTask } from "@/lib/task-status";
 import {
   inferSkillTagsFromText,
@@ -1452,7 +1453,7 @@ export function buildAssistantSnapshot(
       if (item.deleted_at || !item.project_id) continue;
       const meta = item.metadata as Record<string, unknown> | null;
       if (meta?.category !== "receipt") continue;
-      const amount = Number(meta.amount ?? 0);
+      const amount = parseMoneyAmount(meta.amount) ?? 0;
       if (!Number.isFinite(amount) || amount <= 0) continue;
 
       const project = projectById.get(item.project_id);

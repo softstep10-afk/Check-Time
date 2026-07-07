@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { isManagerRole } from "@/lib/manager-utils";
+import { parseMoneyAmount } from "@/lib/money-amount";
 import { safeClientErrorMessage } from "@/lib/safe-log";
 import { readRequiredUuid } from "@/lib/server/id-guards";
 import { createClient } from "@/lib/supabase/server";
@@ -18,12 +19,7 @@ type ReceiptRow = Pick<
 >;
 
 function readMoney(value: unknown): number {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
+  return parseMoneyAmount(value, { mode: "parseFloat", missing: 0, invalid: 0 }) ?? 0;
 }
 
 function readString(value: unknown): string {

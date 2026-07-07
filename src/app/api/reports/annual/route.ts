@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { hasFinanceAccess } from "@/lib/finance-access";
 import { isManagerRole } from "@/lib/manager-utils";
+import { parseMoneyAmount } from "@/lib/money-amount";
 import { safeClientErrorMessage } from "@/lib/safe-log";
 import { createClient } from "@/lib/supabase/server";
 import type { StoreVisit } from "@/lib/store-types";
@@ -57,8 +58,7 @@ function roundHours(value: number): number {
 }
 
 function readMoney(metadata: Record<string, unknown> | null | undefined): number {
-  const value = Number(metadata?.amount ?? 0);
-  return Number.isFinite(value) ? value : 0;
+  return parseMoneyAmount(metadata?.amount) ?? 0;
 }
 
 function summarizeEvents(events: AnnualEventRow[]) {

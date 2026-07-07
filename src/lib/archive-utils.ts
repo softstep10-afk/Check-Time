@@ -1,4 +1,5 @@
 import type { ManagerSession } from "@/lib/manager-types";
+import { parseMoneyAmount } from "@/lib/money-amount";
 import { isEffectiveCompletedTask } from "@/lib/task-status";
 import type {
   Media,
@@ -381,7 +382,11 @@ export function buildArchivedProjectRows(args: {
         const meta = item.metadata as Record<string, unknown> | null;
         if (meta?.category !== "receipt") continue;
         receiptCount += 1;
-        receiptTotal += toNumber(meta.amount);
+        receiptTotal += parseMoneyAmount(meta.amount, {
+          mode: "parseFloat",
+          missing: 0,
+          invalid: 0,
+        }) ?? 0;
       }
 
       return {

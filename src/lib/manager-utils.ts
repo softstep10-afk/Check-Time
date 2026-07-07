@@ -19,6 +19,7 @@ import {
   shiftDurationSeverity,
   type ShiftSeverity,
 } from "@/lib/shift-review";
+import { parseMoneyAmount } from "@/lib/money-amount";
 import type {
   ManagerProfileSummary,
   ManagerProjectSummary,
@@ -659,7 +660,7 @@ export function buildProjectSummaries(
       if (item.deleted_at || !item.project_id) continue;
       const meta = item.metadata as Record<string, unknown>;
       if (meta?.category !== "receipt") continue;
-      const amount = Number(meta.amount ?? 0);
+      const amount = parseMoneyAmount(meta.amount) ?? 0;
       if (!Number.isFinite(amount) || amount <= 0) continue;
       receiptTotalByProject.set(
         item.project_id,
