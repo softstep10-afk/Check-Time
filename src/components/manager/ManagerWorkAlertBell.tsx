@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Bell, BellOff, CheckSquare, MessageSquare } from "lucide-react";
+import { Bell, Volume2, VolumeX, CheckSquare, MessageSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { playNotificationChime, unlockNotificationAudio } from "@/lib/client-notification-sound";
 import { keepStableListIfUnchanged } from "@/lib/list-stability";
@@ -587,7 +587,7 @@ export function ManagerWorkAlertBell() {
           aria-label={muted ? "Включить звук" : "Без звука"}
           title={muted ? "Включить звук" : "Без звука"}
         >
-          {muted ? <BellOff size={16} /> : <Bell size={16} />}
+          {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </button>
         <button
           type="button"
