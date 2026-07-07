@@ -70,6 +70,9 @@ describe("Push Phase 2 — task assignment trigger", () => {
   it("createManagerTask fires a fire-and-forget push to the assignee only", () => {
     expect(taskDispatch).toContain("if (assignedTo) {");
     expect(taskDispatch).toContain("dispatchNotification(assignedTo");
+    expect(taskDispatch).toContain('select("id, name, org_id, role, is_active, deleted_at, language")');
+    expect(taskDispatch).toContain('serverT(readLocale(assignee?.language), "tasks.newTaskBanner")');
+    expect(taskDispatch).not.toContain('title: "Новая задача"');
     expect(taskDispatch).toContain('url: "/my-tasks"');
   });
 });
