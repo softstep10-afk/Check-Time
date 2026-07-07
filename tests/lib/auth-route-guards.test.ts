@@ -114,6 +114,34 @@ describe("production auth route guards", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("lets Vercel cron routes bypass the session gate (they self-protect via CRON_SECRET)", async () => {
+    getUserMock.mockResolvedValue({
+      data: { user: null },
+      error: null,
+    });
+
+    const { proxy } = await loadProxy();
+    const response = await proxy(requestFor("/api/cron/geofence-scan"));
+
+    // No redirect — the gate lets it through so the handler's own
+    // CRON_SECRET bearer check is the security boundary.
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("still redirects anonymous callers away from non-cron /api routes", async () => {
+    getUserMock.mockResolvedValue({
+      data: { user: null },
+      error: null,
+    });
+
+    const { proxy } = await loadProxy();
+    const response = await proxy(requestFor("/api/worker/shell-data"));
+    const location = response.headers.get("location");
+
+    expect(location).toBeTruthy();
+    expect(new URL(location!).pathname).toBe("/login");
+  });
+
   it("keeps diagnostics behind the existing owner/admin server gate", () => {
     const diagnosticsPageSource = readFileSync(
       resolve(process.cwd(), "src/app/(manager)/admin/diagnostics/page.tsx"),
