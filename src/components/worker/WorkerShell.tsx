@@ -34,6 +34,7 @@ import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
 import { WorkerJarvisTextDock } from "@/components/worker/WorkerJarvisTextDock";
 import { PwaInstallPrompt } from "@/components/worker/PwaInstallPrompt";
+import { PushNotifications } from "@/components/worker/PushNotifications";
 import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
 import { usePwaUpdate } from "@/lib/hooks/usePwaUpdate";
 import { hasPendingOfflineWork } from "@/lib/pwa-update";
@@ -3291,6 +3292,7 @@ export function WorkerShell({
             ) : null}
 
             <PwaInstallPrompt />
+            <PushNotifications />
           </header>
 
           <main className="flex-1 px-4 pb-20 pt-4">
