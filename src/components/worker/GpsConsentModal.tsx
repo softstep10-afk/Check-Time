@@ -71,6 +71,10 @@ export function GpsConsentModal({
           {t("gps.consentBody")}
         </p>
 
+        <p className="mt-3 text-sm font-medium leading-6 text-[var(--text-primary)]">
+          {t("gps.consentClarification")}
+        </p>
+
         <label className="mt-4 flex items-start gap-2.5">
           <input
             type="checkbox"
