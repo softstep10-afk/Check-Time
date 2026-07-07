@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 
 // Persist the authenticated user's OWN UI locale to profiles.language so
 // server-side features (push titles, Jarvis voice, future emails) match what
@@ -46,12 +47,11 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id);
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
+      return NextResponse.json({ error: safeClientErrorMessage(updateError) }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, language: locale });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: safeClientErrorMessage(error) }, { status: 500 });
   }
 }
