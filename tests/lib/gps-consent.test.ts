@@ -37,7 +37,7 @@ describe("GPS consent audit helpers", () => {
       worker_id: "worker-1",
       signed_name: "Test Worker",
       consented: true,
-      consent_version: 1,
+      consent_version: 2,
       user_agent: "Mobile Safari",
     });
   });

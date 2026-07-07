@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type ConsentState = "granted" | "denied" | "unknown";
 
-export const GPS_CONSENT_VERSION = 1;
+export const GPS_CONSENT_VERSION = 2;
 export const GPS_CONSENT_LEGACY_STORAGE_KEY = "check-time-gps-consent";
 
 export function gpsConsentStorageKey(version = GPS_CONSENT_VERSION): string {
