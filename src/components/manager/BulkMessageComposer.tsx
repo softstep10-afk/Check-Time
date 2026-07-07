@@ -25,6 +25,7 @@ import {
   queueOfflineFieldAction,
   removeOfflineFieldAction,
 } from "@/lib/offline-field-actions";
+import { sendMessagesViaApi } from "@/lib/messages-client";
 
 type CrewMember = { id: string; name: string; role: string };
 type ProjectOption = { id: string; name: string; status?: string | null };
@@ -378,68 +379,42 @@ export function BulkMessageComposer({
       return;
     }
 
-    // Chunk to 50 per insert to keep under request size on bigger orgs.
-    let failures = 0;
-    const insertedMessages: InsertedMessage[] = [];
-    for (let i = 0; i < rows.length; i += 50) {
-      const chunk = rows.slice(i, i + 50);
-      let result = await supabase
-        .from("messages")
-        .insert(chunk)
-        .select("id, recipient_id");
-      let error = result.error;
-      if (error && /column .* priority/i.test(error.message)) {
-        const fallbackChunk = chunk.map((row) => ({
-          org_id: row.org_id,
-          sender_id: row.sender_id,
-          recipient_id: row.recipient_id,
-          text: row.text,
-          color: row.color,
-          metadata: row.metadata,
-        }));
-        result = await supabase
-          .from("messages")
-          .insert(fallbackChunk)
-          .select("id, recipient_id");
-        error = result.error;
-      }
-      if (error && isNetworkLikeFieldError(error)) {
-        queueOfflineFieldAction({
-          clientActionId,
-          dedupeKey: `message_send:${senderId}:${clientActionId}`,
-          kind: "message_send",
-          actorId: senderId,
-          orgId,
-          payload: {
-            rows: rows.map((row) => ({
-              ...row,
-              metadata: { ...row.metadata, queued_offline: true },
-            })),
-            priority,
-            taskProjectId: taskProjectId || null,
-            taskSource: isTaskMessagePriority(priority) ? "broadcast_task" : null,
-          },
-        });
-        setSending(false);
-        setMessage({ kind: "info", text: t("messages.queued") });
-        setText("");
-        setTaskProjectId("");
-        setSelectedIds(new Set());
-        setSendToAll(false);
-        return;
-      }
-      if (error) failures += error ? 1 : 0;
-      else insertedMessages.push(...((result.data ?? []) as InsertedMessage[]));
-    }
-
-    if (failures > 0) {
-      setSending(false);
-      setMessage({
-        kind: "err",
-        text: `${failures} / ${Math.ceil(rows.length / 50)} ${t("common.errorTryAgain").toLowerCase()}`,
+    // Server-side send (Push Phase 2): the route stamps org_id/sender_id, chunks
+    // + inserts with the priority-column fallback, and pushes each recipient. A
+    // network failure surfaces as a network-like error and queues offline below,
+    // exactly as the direct chunked insert did.
+    const sendResult = await sendMessagesViaApi(rows);
+    if (sendResult.error && isNetworkLikeFieldError(sendResult.error)) {
+      queueOfflineFieldAction({
+        clientActionId,
+        dedupeKey: `message_send:${senderId}:${clientActionId}`,
+        kind: "message_send",
+        actorId: senderId,
+        orgId,
+        payload: {
+          rows: rows.map((row) => ({
+            ...row,
+            metadata: { ...row.metadata, queued_offline: true },
+          })),
+          priority,
+          taskProjectId: taskProjectId || null,
+          taskSource: isTaskMessagePriority(priority) ? "broadcast_task" : null,
+        },
       });
+      setSending(false);
+      setMessage({ kind: "info", text: t("messages.queued") });
+      setText("");
+      setTaskProjectId("");
+      setSelectedIds(new Set());
+      setSendToAll(false);
       return;
     }
+    if (sendResult.error) {
+      setSending(false);
+      setMessage({ kind: "err", text: t("common.errorTryAgain") });
+      return;
+    }
+    const insertedMessages = (sendResult.data ?? []) as InsertedMessage[];
 
     if (isTaskMessagePriority(priority)) {
       const taskTitle = text.trim().length > 140
