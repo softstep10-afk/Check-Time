@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAuditServer } from "@/lib/audit-server";
+import { dispatchNotification } from "@/lib/notifications/dispatch";
 import { readOptionalUuid } from "@/lib/server/id-guards";
 import type { Profile, Project, Task, TaskPriority } from "@/types/database";
 
@@ -158,6 +159,19 @@ export async function createManagerTask(
       message_id: input.messageId ?? null,
     },
   });
+
+  // Push Phase 2 — task assignment trigger. Fire-and-forget (never delays/fails
+  // the task write). Scoped to the assignee: only worker profiles hold push
+  // subscriptions, so a manager/no-subscription assignee is a natural no-op.
+  // Only on creation-with-assignee here (this helper never runs on status changes).
+  if (assignedTo) {
+    dispatchNotification(assignedTo, {
+      title: "Новая задача",
+      body: data.title,
+      url: "/my-tasks",
+      tag: `task:${data.id}`,
+    });
+  }
 
   return data;
 }
