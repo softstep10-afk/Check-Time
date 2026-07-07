@@ -13,6 +13,11 @@ import { AUTH_BYPASS_ENABLED } from "@/lib/auth-bypass";
 const PUBLIC_PATHS = new Set(["/", "/login", "/offline"]);
 const PUBLIC_PREFIXES = [
   "/api/auth/pin-login",
+  // Cron routes must bypass the session gate: Vercel invokes them with no user
+  // session, so the gate would 307 them to /login and the handler never runs.
+  // They self-protect via CRON_SECRET (a bearer check inside the handler) —
+  // that is the security boundary here, not the session gate.
+  "/api/cron/",
   "/_next",
   "/favicon",
   "/manifest",
