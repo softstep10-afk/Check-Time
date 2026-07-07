@@ -1672,6 +1672,15 @@ export const translations = {
   "offline.fieldAction": { en: "Field update", ru: "Действие в поле" },
   "offline.upload": { en: "Media upload", ru: "Загрузка медиа" },
 
+  // ── Push notifications (Phase 1) ──
+  "push.settingLabel": { en: "Push notifications", ru: "Push-уведомления" },
+  "push.promptBody": { en: "Turn on push notifications from Check-Time?", ru: "Включить push-уведомления от Check-Time?" },
+  "push.enable": { en: "Enable", ru: "Включить" },
+  "push.notNow": { en: "Not now", ru: "Позже" },
+  "push.deniedHint": { en: "Blocked in your browser settings.", ru: "Заблокировано в настройках браузера." },
+  "push.on": { en: "On", ru: "Вкл" },
+  "push.off": { en: "Off", ru: "Выкл" },
+
   // ── GPS Tracking ──
   "gps.consentTitle": { en: "Location Sharing", ru: "Передача геолокации" },
   "gps.consentBody": { en: "Your live location will be shared with your manager only while you are clocked in. Tracking stops automatically when you clock out. Location data is retained for the duration of your employment and at least 12 months after, and may be kept indefinitely unless specifically deleted by the owner. Data is used solely for payroll verification, dispute resolution, safety, and insurance claims. Your manager can see your position on the map during your shift.", ru: "Ваше местоположение будет передаваться менеджеру только во время смены. Отслеживание прекращается автоматически при завершении смены. Данные хранятся на протяжении вашей работы и минимум 12 месяцев после, и могут храниться бессрочно, если не удалены владельцем. Данные используются исключительно для проверки табеля, разрешения споров, безопасности и страховых случаев. Менеджер видит вашу позицию на карте во время смены." },

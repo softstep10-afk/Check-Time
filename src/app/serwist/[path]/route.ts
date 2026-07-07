@@ -22,6 +22,11 @@ export const { dynamic, dynamicParams, revalidate, generateStaticParams, GET } =
     esbuildOptions: {
       define: {
         __APP_BUILD_SHA__: JSON.stringify(buildSha),
+        // VAPID public key for the SW's pushsubscriptionchange re-subscribe path
+        // (Push Phase 1). Empty string when unset → the handler no-ops.
+        __WEB_PUSH_VAPID_PUBLIC_KEY__: JSON.stringify(
+          process.env.NEXT_PUBLIC_WEB_PUSH_VAPID_PUBLIC_KEY?.trim() ?? "",
+        ),
       },
     },
   });

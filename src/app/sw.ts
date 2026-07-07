@@ -83,6 +83,94 @@ self.addEventListener("message", (event) => {
   }
 });
 
+// ── Push notifications (Phase 1) ─────────────────────────────────────────────
+// Additive event listeners ONLY — no fetch/respondWith, no matcher, no caching.
+// The Task 2.1 guardrail (SW never intercepts navigations/RSC) is unaffected.
+
+// Injected at build time by esbuild `define` in the Serwist route handler.
+declare const __WEB_PUSH_VAPID_PUBLIC_KEY__: string;
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
+// Show a notification from the push payload (JSON: title/body/url/tag) with
+// sensible defaults. Never touches the network for the message itself.
+self.addEventListener("push", (event) => {
+  let data: { title?: string; body?: string; url?: string; tag?: string } = {};
+  try {
+    data = (event.data?.json() as typeof data) ?? {};
+  } catch {
+    data = { body: event.data?.text() };
+  }
+  const title = data.title || "Check-Time";
+  const options: NotificationOptions = {
+    body: data.body || "",
+    tag: data.tag || "check-time",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    data: { url: data.url || "/" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Focus an already-open tab (and navigate it) or open a new window at the url.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data as { url?: string } | null)?.url || "/";
+  event.waitUntil(
+    (async () => {
+      const clientList = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const client of clientList) {
+        await client.focus();
+        try {
+          await client.navigate(targetUrl);
+        } catch {
+          // Cross-origin or blocked navigation — a focused tab is enough.
+        }
+        return;
+      }
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(targetUrl);
+      }
+    })(),
+  );
+});
+
+// Re-subscribe when the browser rotates the subscription (where supported), using
+// the build-injected VAPID public key, and post it to the auth-gated subscribe
+// route (a same-origin fetch carries the session cookie). No-op if unconfigured.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  const applicationServerKey =
+    typeof __WEB_PUSH_VAPID_PUBLIC_KEY__ === "string" ? __WEB_PUSH_VAPID_PUBLIC_KEY__ : "";
+  if (!applicationServerKey) return;
+  (event as ExtendableEvent).waitUntil(
+    (async () => {
+      try {
+        const subscription = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(applicationServerKey),
+        });
+        await fetch("/api/worker/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: subscription.toJSON() }),
+        });
+      } catch {
+        // Best-effort; the client re-verifies its subscription on next open.
+      }
+    })(),
+  );
+});
+
 const runtimeCaching: RuntimeCaching[] = [
   {
     // Immutable, content-hashed build assets. Never a navigation/RSC request.
