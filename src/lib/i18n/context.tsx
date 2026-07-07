@@ -12,6 +12,7 @@ import {
   defaultLocale,
   translations,
 } from "./translations";
+import { persistProfileLocale } from "./persist-locale";
 
 type I18nContextValue = {
   locale: Locale;
@@ -97,7 +98,13 @@ export function LanguageSwitcher() {
   return (
     <button
       type="button"
-      onClick={() => setLocale(locale === "en" ? "ru" : "en")}
+      onClick={() => {
+        const next = locale === "en" ? "ru" : "en";
+        // Instant UI switch (localStorage + cookie) stays exactly as before.
+        setLocale(next);
+        // Also persist to profiles.language so server-side features match.
+        persistProfileLocale(next);
+      }}
       className="inline-flex items-center gap-1 rounded-[var(--radius-sm)] border px-2 py-1.5 text-xs font-semibold"
       style={{
         borderColor: "var(--border-default)",

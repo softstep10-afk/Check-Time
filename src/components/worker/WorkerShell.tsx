@@ -29,6 +29,7 @@ import { buildSafeUploadName } from "@/lib/media-extension";
 import { Timer, History, Camera, ClipboardCheck, FolderKanban, CalendarDays } from "lucide-react";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n";
+import { persistProfileLocale } from "@/lib/i18n/persist-locale";
 import { NotificationBell } from "@/components/worker/NotificationBell";
 import { MessageOverlay } from "@/components/worker/MessageOverlay";
 import { GpsConsentModal } from "@/components/worker/GpsConsentModal";
@@ -502,7 +503,7 @@ export function WorkerShell({
   // only after mount.
   const [mounted, setMounted] = useState(false);
   const [now, setNow] = useState<number>(0);
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   // PWA update-delivery (Task 3): true once the live deploy is newer than the
   // JS this tab is running. The banner below decides how to surface it.
   const { updateAvailable } = usePwaUpdate();
@@ -510,10 +511,24 @@ export function WorkerShell({
   const shellRefreshPendingWhileHiddenRef = useRef(false);
   const shellRefreshLastRunRef = useRef(0);
   const shellDataRequestRef = useRef<Promise<void> | null>(null);
+  const languageSyncedRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Boot sync (once): if the device UI locale differs from the stored
+  // profiles.language, persist the device locale to the profile. This
+  // auto-backfills every worker's real language on their next login so
+  // server-side features (push titles, Jarvis voice) match their UI. The
+  // device locale stays the instant source of truth for the UI itself.
+  useEffect(() => {
+    if (languageSyncedRef.current) return;
+    languageSyncedRef.current = true;
+    if (locale !== shell.profile.language) {
+      persistProfileLocale(locale);
+    }
+  }, [locale, shell.profile.language]);
 
   // ── Sound mute state ──
   // Source of truth: profiles.notif_mode (Wave 7 migration 00009).
