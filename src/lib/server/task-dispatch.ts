@@ -2,6 +2,8 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logAuditServer } from "@/lib/audit-server";
+import { serverT } from "@/lib/i18n/server";
+import { defaultLocale, type Locale } from "@/lib/i18n/translations";
 import { dispatchNotification } from "@/lib/notifications/dispatch";
 import { readOptionalUuid } from "@/lib/server/id-guards";
 import type { Profile, Project, Task, TaskPriority } from "@/types/database";
@@ -37,6 +39,10 @@ function trimText(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readLocale(value: string | null | undefined): Locale {
+  return value === "en" || value === "ru" ? value : defaultLocale;
+}
+
 async function assertProfileTarget(
   adminClient: SupabaseClient,
   orgId: string,
@@ -46,10 +52,10 @@ async function assertProfileTarget(
 
   const { data, error } = await adminClient
     .from("profiles")
-    .select("id, name, org_id, role, is_active, deleted_at")
+    .select("id, name, org_id, role, is_active, deleted_at, language")
     .eq("id", profileId)
     .eq("org_id", orgId)
-    .maybeSingle<Pick<Profile, "id" | "name" | "org_id" | "role" | "is_active" | "deleted_at">>();
+    .maybeSingle<Pick<Profile, "id" | "name" | "org_id" | "role" | "is_active" | "deleted_at" | "language">>();
 
   if (error) {
     throw new TaskDispatchError(error.message, 500);
@@ -108,7 +114,7 @@ export async function createManagerTask(
   const priority = input.priority ?? "medium";
   const dueDate = trimText(input.dueDate) || null;
 
-  await assertProfileTarget(adminClient, input.orgId, assignedTo);
+  const assignee = await assertProfileTarget(adminClient, input.orgId, assignedTo);
   await assertProjectTarget(adminClient, input.orgId, projectId);
 
   const metadata = {
@@ -166,7 +172,7 @@ export async function createManagerTask(
   // Only on creation-with-assignee here (this helper never runs on status changes).
   if (assignedTo) {
     dispatchNotification(assignedTo, {
-      title: "Новая задача",
+      title: serverT(readLocale(assignee?.language), "tasks.newTaskBanner"),
       body: data.title,
       url: "/my-tasks",
       tag: `task:${data.id}`,
