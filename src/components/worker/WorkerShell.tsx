@@ -2591,6 +2591,21 @@ export function WorkerShell({
       (item) => item.status !== "failed" && item.actorId === shell.profile.id,
     );
     if (mediaItems.length === 0 && eventItems.length === 0 && actionItems.length === 0) return;
+
+    // Reconnect drain must only replay once auth is valid. If the session has
+    // expired, replaying would 401 and (for field actions) mark queued work
+    // "failed" — which the drain filter above then skips forever. So verify the
+    // session first and, if it's gone, leave every queued item intact for a
+    // post-reauth drain. The auth-expired redirect is handled by the supabase
+    // client / providers on the next authenticated call; we just don't corrupt
+    // the queue in the meantime. (getUser hits the Auth endpoint, which
+    // authAwareFetch never classifies as auth-expired, so this can't false-fire.)
+    const {
+      data: { user: drainUser },
+      error: drainAuthError,
+    } = await supabase.auth.getUser();
+    if (drainAuthError || !drainUser) return;
+
     setDraining(true);
     try {
       // ── Phase 1: time events ────────────────────────────────────────

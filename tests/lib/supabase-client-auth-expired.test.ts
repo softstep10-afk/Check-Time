@@ -106,4 +106,29 @@ describe("authAwareFetch", () => {
 
     expect(dispatchEvent).not.toHaveBeenCalled();
   });
+
+  // PWA Task 6, invariant 3: offline / status-0 network failures must never be
+  // classified as auth-expired — otherwise coming back online (or a dropped
+  // request mid-session) would bounce the crew to /login and interrupt sync.
+  it("does not dispatch when navigator is offline (even on a 401)", async () => {
+    const { authAwareFetch, dispatchEvent } = await loadAuthAwareFetch("/clock");
+    vi.stubGlobal("navigator", { onLine: false });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("JWT expired", { status: 401 })));
+
+    await authAwareFetch(REST_URL, { headers: { Authorization: "Bearer real-user-jwt" } });
+
+    expect(dispatchEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not dispatch on a status-0 (network-failure) response", async () => {
+    const { authAwareFetch, dispatchEvent } = await loadAuthAwareFetch("/clock");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ status: 0, clone: () => ({ text: async () => "" }) } as unknown as Response),
+    );
+
+    await authAwareFetch(REST_URL, { headers: { Authorization: "Bearer real-user-jwt" } });
+
+    expect(dispatchEvent).not.toHaveBeenCalled();
+  });
 });
