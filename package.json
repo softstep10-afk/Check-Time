@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "smoke:core": "node scripts/core-smoke.mjs",
+    "smoke:deploy": "node scripts/deploy-smoke.mjs",
     "check:dangerous": "node scripts/check-dangerous-files.mjs",
     "inventory:service-role": "node scripts/inventory-service-role-routes.mjs",
     "smoke:public": "node scripts/smoke-public-routes.mjs",
