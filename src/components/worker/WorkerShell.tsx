@@ -44,6 +44,7 @@ import {
   readLatestConsent,
   writeCachedGpsConsent,
   writeConsent,
+  type ConsentState,
 } from "@/lib/gps-consent";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
@@ -814,6 +815,11 @@ export function WorkerShell({
   // match. The effect below seeds from localStorage cache, then the DB-check
   // effect below that confirms against the source of truth.
   const [gpsConsented, setGpsConsented] = useState<boolean>(false);
+  // The worker's current consent DECISION (granted / denied / unknown),
+  // tracked alongside gpsConsented so the settings row can distinguish
+  // "declined" from "never chosen". gpsConsented alone can't — it's false
+  // in both cases.
+  const [consentDecision, setConsentDecision] = useState<ConsentState>("unknown");
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [iosTipShown, setIosTipShown] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -825,6 +831,7 @@ export function WorkerShell({
     const cached = readCachedGpsConsent(window.localStorage);
     if (cached === "granted") setGpsConsented(true);
     else if (cached === "denied") setGpsConsented(false);
+    setConsentDecision(cached);
   }, []);
 
   // DB is source of truth, localStorage is cache. "unknown" leaves the
@@ -844,6 +851,7 @@ export function WorkerShell({
         if (state !== "unknown") {
           const granted = state === "granted";
           setGpsConsented(granted);
+          setConsentDecision(state);
           if (typeof window !== "undefined") {
             writeCachedGpsConsent(window.localStorage, granted);
           }
@@ -931,6 +939,7 @@ export function WorkerShell({
     }
     writeCachedGpsConsent(window.localStorage, true);
     setGpsConsented(true);
+    setConsentDecision("granted");
     setShowConsentModal(false);
   }
 
@@ -947,6 +956,7 @@ export function WorkerShell({
     }
     writeCachedGpsConsent(window.localStorage, false);
     setGpsConsented(false);
+    setConsentDecision("denied");
     setShowConsentModal(false);
   }
 
@@ -3293,6 +3303,35 @@ export function WorkerShell({
 
             <PwaInstallPrompt />
             <PushNotifications />
+
+            {/* GPS-tracking consent — a permanent way to see and change the
+                live-tracking decision from the same place as the push toggle
+                and language switch. Reuses the existing consent modal, so a
+                new choice appends a fresh worker_location_consents row and
+                flips live-tracking state without a re-login. */}
+            <div
+              className="mt-2 flex items-center justify-between gap-3 rounded-[var(--radius-md)] px-3 py-2 text-sm"
+              style={{ background: "rgba(15, 17, 23, 0.35)" }}
+            >
+              <span className="min-w-0">
+                {t("gps.settingLabel")}
+                <span className="mt-0.5 block text-[11px] text-[var(--text-muted)]">
+                  {consentDecision === "granted"
+                    ? t("gps.settingStatusGranted")
+                    : consentDecision === "denied"
+                      ? t("gps.settingStatusDenied")
+                      : t("gps.settingStatusUnknown")}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowConsentModal(true)}
+                className="shrink-0 rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs font-bold uppercase tracking-[0.1em]"
+                style={{ borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
+              >
+                {t("gps.settingChange")}
+              </button>
+            </div>
           </header>
 
           <main className="flex-1 px-4 pb-20 pt-4">

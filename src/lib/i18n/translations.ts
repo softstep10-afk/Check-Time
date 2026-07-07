@@ -1684,7 +1684,13 @@ export const translations = {
   // ── GPS Tracking ──
   "gps.consentTitle": { en: "Location Sharing", ru: "Передача геолокации" },
   "gps.consentBody": { en: "Your live location will be shared with your manager only while you are clocked in. Tracking stops automatically when you clock out. Location data is retained for the duration of your employment and at least 12 months after, and may be kept indefinitely unless specifically deleted by the owner. Data is used solely for payroll verification, dispute resolution, safety, and insurance claims. Your manager can see your position on the map during your shift.", ru: "Ваше местоположение будет передаваться менеджеру только во время смены. Отслеживание прекращается автоматически при завершении смены. Данные хранятся на протяжении вашей работы и минимум 12 месяцев после, и могут храниться бессрочно, если не удалены владельцем. Данные используются исключительно для проверки табеля, разрешения споров, безопасности и страховых случаев. Менеджер видит вашу позицию на карте во время смены." },
+  "gps.consentClarification": { en: "Note: clocking in and clocking out always records the location of that moment as part of your time records. This consent covers live location tracking during an active shift only.", ru: "Примечание: отметки прихода и ухода всегда фиксируют местоположение в этот момент как часть записей учёта времени. Это согласие распространяется только на непрерывное отслеживание местоположения во время активной смены." },
   "gps.consentAgree": { en: "I agree to share my location during active shifts", ru: "Я согласен делиться местоположением во время активных смен" },
+  "gps.settingLabel": { en: "GPS tracking during shift", ru: "GPS-трекинг во время смены" },
+  "gps.settingStatusGranted": { en: "Enabled", ru: "Разрешён" },
+  "gps.settingStatusDenied": { en: "Disabled", ru: "Отключён" },
+  "gps.settingStatusUnknown": { en: "Not set", ru: "Не выбрано" },
+  "gps.settingChange": { en: "Change", ru: "Изменить" },
   "gps.consentSignature": { en: "Type your full name to confirm", ru: "Введите полное имя для подтверждения" },
   "gps.consentConfirm": { en: "Confirm & Continue", ru: "Подтвердить и продолжить" },
   "gps.consentDecline": { en: "Skip — check in without sharing", ru: "Пропустить — начать без передачи" },
