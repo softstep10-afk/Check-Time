@@ -26,6 +26,8 @@ describe("GPS and safety consent audit UI source", () => {
     expect(workerShellSource).toContain("readCachedGpsConsent");
     expect(workerShellSource).toContain("writeCachedGpsConsent");
     expect(workerShellSource).toContain("hasCachedGpsConsentDecision");
-    expect(workerShellSource).toContain("await writeConsent");
+    // Consent is now persisted through the server-stamped route (Step 2a),
+    // not a direct client insert — but WorkerShell still writes the decision.
+    expect(workerShellSource).toContain("await postGpsConsent");
   });
 });
