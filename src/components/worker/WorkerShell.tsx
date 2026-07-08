@@ -44,9 +44,9 @@ import {
   readCachedGpsConsent,
   readLatestConsent,
   writeCachedGpsConsent,
-  writeConsent,
   type ConsentState,
 } from "@/lib/gps-consent";
+import { postGpsConsent } from "@/lib/gps-consent-client";
 import { getAppGeofenceRadiusM, resolveProjectRadiusM } from "@/lib/geofence";
 import { inferUploadContentType, validateUploadFile } from "@/lib/upload-limits";
 import {
@@ -874,12 +874,9 @@ export function WorkerShell({
           typeof window !== "undefined" &&
           readCachedGpsConsent(window.localStorage) === "granted"
         ) {
-          const res = await writeConsent(supabase, {
-            orgId: shell.profile.org_id,
-            workerId: shell.profile.id,
+          const res = await postGpsConsent({
             signedName: shell.profile.name,
             granted: true,
-            userAgent: navigator.userAgent,
           });
           if (!res.ok) console.warn("consent sync failed:", res.error);
         }
@@ -942,13 +939,7 @@ export function WorkerShell({
   }, [gpsTrackingEnabled, iosTipShown]);
 
   async function handleGpsConsent(signedName: string) {
-    const res = await writeConsent(supabase, {
-      orgId: shell.profile.org_id,
-      workerId: shell.profile.id,
-      signedName,
-      granted: true,
-      userAgent: navigator.userAgent,
-    });
+    const res = await postGpsConsent({ signedName, granted: true });
     if (!res.ok) {
       throw new Error(res.error);
     }
@@ -959,13 +950,7 @@ export function WorkerShell({
   }
 
   async function handleGpsDecline() {
-    const res = await writeConsent(supabase, {
-      orgId: shell.profile.org_id,
-      workerId: shell.profile.id,
-      signedName: shell.profile.name,
-      granted: false,
-      userAgent: navigator.userAgent,
-    });
+    const res = await postGpsConsent({ signedName: shell.profile.name, granted: false });
     if (!res.ok) {
       throw new Error(res.error);
     }
