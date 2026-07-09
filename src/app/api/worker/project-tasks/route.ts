@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createManagerTask, TaskDispatchError } from "@/lib/server/task-dispatch";
 import { readRequiredUuid } from "@/lib/server/id-guards";
+import { assertWorkerCanAccessProject } from "@/lib/server/project-access";
 import type { Profile, TaskPriority } from "@/types/database";
 
 const PRIORITIES: TaskPriority[] = ["low", "medium", "high", "urgent"];
@@ -71,24 +72,12 @@ export async function POST(request: NextRequest) {
     }
 
     const accessMode = profile.project_access_mode === "all_active" ? "all_active" : "list";
-    let allowed = false;
-    if (accessMode === "list") {
-      const { data: assignment } = await supabase
-        .from("project_assignments")
-        .select("project_id")
-        .eq("project_id", projectId.value)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      allowed = Boolean(assignment);
-    } else if (project.status === "active") {
-      const { data: exclusion, error: exclusionError } = await supabase
-        .from("project_exclusions")
-        .select("id")
-        .eq("project_id", projectId.value)
-        .eq("profile_id", user.id)
-        .maybeSingle();
-      allowed = exclusionError ? true : !exclusion;
-    }
+    const allowed = await assertWorkerCanAccessProject(supabase, {
+      workerId: user.id,
+      orgId: profile.org_id,
+      projectId: projectId.value,
+      accessMode,
+    });
 
     if (!allowed) {
       return NextResponse.json({ error: "Project is not available to this worker." }, { status: 403 });

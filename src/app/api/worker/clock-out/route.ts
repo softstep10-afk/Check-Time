@@ -4,6 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { closeOpenStoreVisits } from "@/lib/store-visits";
 import { buildNoGpsMetadata, type WorkerGpsErrorKind } from "@/lib/worker-clock-metadata";
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
+import {
+  checkClockEventTime,
+  checkClockOutAgainstClockIn,
+  clockTimeRejectionMessage,
+} from "@/lib/clock-time-bounds";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import type { TimeEvent } from "@/types/database";
 
 type ClockOutBody = {
@@ -141,6 +147,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, event: existingEvent, requireVideo: profile.require_video });
     }
 
+    // eventTime bounds (#5) — reject future / stale requested times for NEW
+    // inserts (after the idempotency short-circuit so replays stay idempotent).
+    const nowMs = new Date(nowIso).getTime();
+    const requestedTimeCheck = checkClockEventTime({
+      eventTimeMs: new Date(requestedTimestamp).getTime(),
+      nowMs,
+      offlineQueued,
+    });
+    if (!requestedTimeCheck.ok) {
+      const message = clockTimeRejectionMessage(requestedTimeCheck.reason);
+      return NextResponse.json(
+        { error: safeClientErrorMessage(new Error(message), message) },
+        { status: 422 },
+      );
+    }
+
     const { data: latestEvent, error: latestError } = await admin
       .from("time_events")
       .select("*")
@@ -164,6 +186,23 @@ export async function POST(request: NextRequest) {
     const openMs = new Date(latestEvent.event_time).getTime();
     const requestedMs = new Date(requestedTimestamp).getTime();
     const eventTime = Number.isFinite(openMs) && requestedMs <= openMs ? nowIso : requestedTimestamp;
+
+    // Max-shift + final re-assert (#5), on the FINAL event time after any
+    // fallback-to-now: reject a shift longer than 24h and re-assert the close
+    // is after the open and not in the future.
+    const shiftCheck = checkClockOutAgainstClockIn({
+      clockOutMs: new Date(eventTime).getTime(),
+      clockInMs: openMs,
+      nowMs,
+    });
+    if (!shiftCheck.ok) {
+      const message = clockTimeRejectionMessage(shiftCheck.reason);
+      return NextResponse.json(
+        { error: safeClientErrorMessage(new Error(message), message) },
+        { status: 422 },
+      );
+    }
+
     const { data: project } = await admin
       .from("projects")
       .select("settings")

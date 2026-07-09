@@ -7,6 +7,7 @@ import {
   type MaterialTaskUrgency,
 } from "@/lib/material-tasks";
 import { readRequiredUuid } from "@/lib/server/id-guards";
+import { assertWorkerCanAccessProject } from "@/lib/server/project-access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile, Task, TaskPriority } from "@/types/database";
@@ -86,35 +87,13 @@ async function assertWorkerProjectAccess(
   }
 
   const accessMode = profile.project_access_mode === "all_active" ? "all_active" : "list";
-  if (accessMode === "list") {
-    const { data: assignment } = await admin
-      .from("project_assignments")
-      .select("project_id")
-      .eq("project_id", projectId)
-      .eq("profile_id", profile.id)
-      .maybeSingle<{ project_id: string }>();
-    if (!assignment) {
-      return NextResponse.json(
-        { error: "Project is not available to this worker." },
-        { status: 403 },
-      );
-    }
-    return true;
-  }
-
-  if (project.status !== "active") {
-    return NextResponse.json(
-      { error: "Project is not available to this worker." },
-      { status: 403 },
-    );
-  }
-  const { data: exclusion, error: exclusionError } = await admin
-    .from("project_exclusions")
-    .select("id")
-    .eq("project_id", projectId)
-    .eq("profile_id", profile.id)
-    .maybeSingle<{ id: string }>();
-  if (!exclusionError && exclusion) {
+  const allowed = await assertWorkerCanAccessProject(admin, {
+    workerId: profile.id,
+    orgId: profile.org_id,
+    projectId,
+    accessMode,
+  });
+  if (!allowed) {
     return NextResponse.json(
       { error: "Project is not available to this worker." },
       { status: 403 },

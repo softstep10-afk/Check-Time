@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { readRequiredUuid } from "@/lib/server/id-guards";
+import { assertWorkerCanAccessProject } from "@/lib/server/project-access";
 import { appendProjectPublicNote, readProjectPublicNotes } from "@/lib/project-public-notes";
 import type { Profile, Project } from "@/types/database";
 
@@ -72,26 +73,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Project is archived." }, { status: 403 });
     }
 
+    // Manager bypass preserved exactly as-is; otherwise fall through to the
+    // shared worker project-access predicate.
     let allowed = MANAGER_ROLES.has(profile.role);
     if (!allowed) {
       const accessMode = profile.project_access_mode === "all_active" ? "all_active" : "list";
-      if (accessMode === "list") {
-        const { data: assignment } = await supabase
-          .from("project_assignments")
-          .select("project_id")
-          .eq("project_id", projectId.value)
-          .eq("profile_id", profile.id)
-          .maybeSingle();
-        allowed = Boolean(assignment);
-      } else if (project.status === "active") {
-        const { data: exclusion, error: exclusionError } = await supabase
-          .from("project_exclusions")
-          .select("id")
-          .eq("project_id", projectId.value)
-          .eq("profile_id", profile.id)
-          .maybeSingle();
-        allowed = exclusionError ? true : !exclusion;
-      }
+      allowed = await assertWorkerCanAccessProject(supabase, {
+        workerId: profile.id,
+        orgId: profile.org_id,
+        projectId: projectId.value,
+        accessMode,
+      });
     }
 
     if (!allowed) {
