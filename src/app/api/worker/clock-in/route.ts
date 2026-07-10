@@ -11,6 +11,11 @@ import { checkClockEventTime, clockTimeRejectionMessage } from "@/lib/clock-time
 import { safeClientErrorMessage } from "@/lib/safe-log";
 import type { TimeEvent } from "@/types/database";
 
+// Privileged roles bypass the worker project-access gate on clock-in (owner
+// decision: option B). Mirrors the same set project-notes uses. The role is
+// taken from the server-derived session profile, never the request body.
+const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
+
 type ClockInBody = {
   projectId?: unknown;
   eventTime?: unknown;
@@ -192,13 +197,17 @@ export async function POST(request: NextRequest) {
     // active project they are not excluded from. Same predicate the worker
     // project page / claim-task apply. (clock-out takes the project from the
     // open clock_in, so guarding clock-in covers the close path too.)
+    // Privileged roles (owner/admin/manager) may clock into any org project;
+    // worker/driver roles still go through the assignment/exclusion predicate.
     const accessMode = profile.project_access_mode === "all_active" ? "all_active" : "list";
-    const canAccess = await assertWorkerCanAccessProject(admin, {
-      workerId: profile.id,
-      orgId: profile.org_id,
-      projectId: project.id,
-      accessMode,
-    });
+    const canAccess =
+      MANAGER_ROLES.has(profile.role) ||
+      (await assertWorkerCanAccessProject(admin, {
+        workerId: profile.id,
+        orgId: profile.org_id,
+        projectId: project.id,
+        accessMode,
+      }));
     if (!canAccess) {
       return NextResponse.json(
         { error: "Project is not available to this worker." },
