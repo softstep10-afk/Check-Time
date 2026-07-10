@@ -6,7 +6,15 @@ import { buildNoGpsMetadata, type WorkerGpsErrorKind } from "@/lib/worker-clock-
 import { isGpsWarningSuppressedForProject } from "@/lib/driver-time-projects";
 import { haversineMeters, parseGeoPoint, toSupabasePoint } from "@/lib/worker-utils";
 import { readRequiredUuid } from "@/lib/server/id-guards";
+import { assertWorkerCanAccessProject } from "@/lib/server/project-access";
+import { checkClockEventTime, clockTimeRejectionMessage } from "@/lib/clock-time-bounds";
+import { safeClientErrorMessage } from "@/lib/safe-log";
 import type { TimeEvent } from "@/types/database";
+
+// Privileged roles bypass the worker project-access gate on clock-in (owner
+// decision: option B). Mirrors the same set project-notes uses. The role is
+// taken from the server-derived session profile, never the request body.
+const MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
 
 type ClockInBody = {
   projectId?: unknown;
@@ -25,6 +33,7 @@ type WorkerProfile = {
   require_video: boolean;
   current_project: string | null;
   is_active: boolean;
+  project_access_mode: "list" | "all_active" | null;
 };
 
 type ProjectRow = {
@@ -121,7 +130,7 @@ export async function POST(request: NextRequest) {
 
     const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .select("id, org_id, role, require_video, current_project, is_active")
+      .select("id, org_id, role, require_video, current_project, is_active, project_access_mode")
       .eq("id", user.id)
       .maybeSingle<WorkerProfile>();
 
@@ -152,6 +161,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true, event: existingEvent, requireVideo: profile.require_video });
     }
 
+    // eventTime bounds (#5) — reject backdated / future events for NEW inserts.
+    // Placed after the idempotency short-circuit so replaying an already-
+    // accepted (possibly now-stale) offline event stays idempotent.
+    const timeCheck = checkClockEventTime({
+      eventTimeMs: new Date(eventTime).getTime(),
+      nowMs: new Date(nowIso).getTime(),
+      offlineQueued,
+    });
+    if (!timeCheck.ok) {
+      const message = clockTimeRejectionMessage(timeCheck.reason);
+      return NextResponse.json(
+        { error: safeClientErrorMessage(new Error(message), message) },
+        { status: 422 },
+      );
+    }
+
     const { data: project, error: projectError } = await admin
       .from("projects")
       .select("id, org_id, site_point, gps_radius_m, radius_m, settings")
@@ -165,6 +190,29 @@ export async function POST(request: NextRequest) {
     }
     if (!project) {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
+    }
+
+    // Project-access enforcement (#6) — a worker may only clock into a project
+    // they can actually see: 'list' → an assignment row; 'all_active' → an
+    // active project they are not excluded from. Same predicate the worker
+    // project page / claim-task apply. (clock-out takes the project from the
+    // open clock_in, so guarding clock-in covers the close path too.)
+    // Privileged roles (owner/admin/manager) may clock into any org project;
+    // worker/driver roles still go through the assignment/exclusion predicate.
+    const accessMode = profile.project_access_mode === "all_active" ? "all_active" : "list";
+    const canAccess =
+      MANAGER_ROLES.has(profile.role) ||
+      (await assertWorkerCanAccessProject(admin, {
+        workerId: profile.id,
+        orgId: profile.org_id,
+        projectId: project.id,
+        accessMode,
+      }));
+    if (!canAccess) {
+      return NextResponse.json(
+        { error: "Project is not available to this worker." },
+        { status: 403 },
+      );
     }
 
     // Server-side geofence enforcement — mirrors the client formula exactly:

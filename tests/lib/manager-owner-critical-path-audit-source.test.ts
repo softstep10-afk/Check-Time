@@ -11,6 +11,7 @@ const managerMessages = readSource("src/components/manager/BulkMessageComposer.t
 const managerTaskRoute = readSource("src/app/api/manager/tasks/route.ts");
 const mediaDeleteRoute = readSource("src/app/api/media/[id]/route.ts");
 const projectNotesRoute = readSource("src/app/api/worker/project-notes/route.ts");
+const projectAccessHelper = readSource("src/lib/server/project-access.ts");
 const managerLayout = readSource("src/app/(manager)/layout.tsx");
 const archivePage = readSource("src/app/(manager)/archive/page.tsx");
 const payrollPage = readSource("src/app/(manager)/payroll/page.tsx");
@@ -47,8 +48,11 @@ describe("manager/owner critical path source guards", () => {
     expect(managerMessages).toContain('event: "UPDATE"');
     expect(projectNotesRoute).toContain("appendProjectPublicNote(project.settings");
     expect(projectNotesRoute).toContain(".from(\"projects\")");
-    expect(projectNotesRoute).toContain("project_assignments");
-    expect(projectNotesRoute).toContain("project_exclusions");
+    // Visibility predicate centralized in the shared helper (still assignment/
+    // exclusion based); the route gates through it.
+    expect(projectNotesRoute).toContain("assertWorkerCanAccessProject");
+    expect(projectAccessHelper).toContain("project_assignments");
+    expect(projectAccessHelper).toContain("project_exclusions");
     expect(projectNotesRoute).not.toContain(".from(\"tasks\")");
     expect(projectNotesRoute).not.toContain(".from(\"messages\")");
   });

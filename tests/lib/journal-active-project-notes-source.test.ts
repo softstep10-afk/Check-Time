@@ -12,6 +12,7 @@ const workerProjectViewSource = readSource("src/components/worker/WorkerProjectV
 const managerProjectDetailSource = readSource("src/components/manager/ProjectDetailPage.tsx");
 const managerProjectsSource = readSource("src/components/manager/ProjectsPage.tsx");
 const projectNotesRouteSource = readSource("src/app/api/worker/project-notes/route.ts");
+const projectAccessHelperSource = readSource("src/lib/server/project-access.ts");
 const projectMediaLibrarySource = readSource("src/components/shared/ProjectMediaLibrary.tsx");
 const uploadSourceButtonsSource = readSource("src/components/shared/UploadSourceButtons.tsx");
 
@@ -45,8 +46,12 @@ describe("journal media back, active project, notes, and picker source guards", 
   });
 
   it("keeps project note access scoped to existing project visibility guards", () => {
-    expect(projectNotesRouteSource).toContain("project_assignments");
-    expect(projectNotesRouteSource).toContain("project_exclusions");
+    // The assignment/exclusion predicate now lives in the shared helper; the
+    // route still gates access through it and keeps the manager bypass + 403.
+    expect(projectNotesRouteSource).toContain("assertWorkerCanAccessProject");
+    expect(projectNotesRouteSource).toContain("MANAGER_ROLES.has(profile.role)");
+    expect(projectAccessHelperSource).toContain("project_assignments");
+    expect(projectAccessHelperSource).toContain("project_exclusions");
     expect(projectNotesRouteSource).toContain(".eq(\"org_id\", profile.org_id)");
     expect(projectNotesRouteSource).toContain("Project is not available to this user");
   });
