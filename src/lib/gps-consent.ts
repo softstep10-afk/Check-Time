@@ -38,6 +38,36 @@ export function hasCachedGpsConsentDecision(
   return readCachedGpsConsent(storage, version) !== "unknown";
 }
 
+export type ConsentGate = {
+  /** Whether live tracking may run (a current-version GRANT exists in the DB). */
+  gpsConsented: boolean;
+  /** The current-version decision to surface (settings row, prompt gating). */
+  consentDecision: ConsentState;
+  /** Whether to prompt the consent modal at the next GPS-requiring moment. */
+  shouldPrompt: boolean;
+};
+
+/**
+ * Resolve the consent gate from the DB's CURRENT-VERSION decision — the sole
+ * source of truth (WA legal-record integrity). This takes ONLY the DB state and
+ * deliberately never consults localStorage: a cached decision must never
+ * authorize skipping the prompt or trigger a write.
+ *
+ *   granted → track, no prompt.
+ *   denied  → don't track, no prompt (honored; re-consent via the settings row).
+ *   unknown → no current-version row (or the read was inconclusive) → don't
+ *             track and PROMPT, even if a stale older-version cache exists.
+ */
+export function resolveConsentGate(dbState: ConsentState): ConsentGate {
+  if (dbState === "granted") {
+    return { gpsConsented: true, consentDecision: "granted", shouldPrompt: false };
+  }
+  if (dbState === "denied") {
+    return { gpsConsented: false, consentDecision: "denied", shouldPrompt: false };
+  }
+  return { gpsConsented: false, consentDecision: "unknown", shouldPrompt: true };
+}
+
 export function writeCachedGpsConsent(
   storage: ConsentStorage | null | undefined,
   granted: boolean,

@@ -40,9 +40,9 @@ import { useGpsTracking } from "@/lib/hooks/useGpsTracking";
 import { usePwaUpdate } from "@/lib/hooks/usePwaUpdate";
 import { hasPendingOfflineWork } from "@/lib/pwa-update";
 import {
-  hasCachedGpsConsentDecision,
   readCachedGpsConsent,
   readLatestConsent,
+  resolveConsentGate,
   writeCachedGpsConsent,
   type ConsentState,
 } from "@/lib/gps-consent";
@@ -849,36 +849,26 @@ export function WorkerShell({
     setConsentDecision(cached);
   }, []);
 
-  // DB is source of truth, localStorage is cache. "unknown" leaves the
-  // existing boolean state alone (no UI block — modal opens lazily on
-  // the first GPS-requiring action, same as before).
-  //
-  // Sync path: if localStorage says consented=true but the DB has no
-  // row yet (e.g. the worker consented before the DB table existed,
-  // or on another device that never synced), append a grant row now so
-  // the audit trail and the manager's Location Data view catch up. All
-  // failures are swallowed — GPS consent must never crash the shell.
+  // The DB's current-version (v2) consent row is the SOLE source of truth
+  // (WA legal-record integrity). We reconcile local state to it and NEVER
+  // write a consent row from cached state — a phantom consent that no human
+  // signed this session is legally void. A row is only ever written by the
+  // human acting in the modal (handleGpsConsent / handleGpsDecline). When the
+  // DB has no v2 decision, resolveConsentGate reports shouldPrompt so the modal
+  // appears at the next GPS moment, even if a stale older-version cache exists.
+  // All failures are swallowed — GPS consent must never crash the shell.
   useEffect(() => {
     if (consentChecked) return;
     async function checkConsent() {
       try {
         const state = await readLatestConsent(supabase, shell.profile.id);
-        if (state !== "unknown") {
-          const granted = state === "granted";
-          setGpsConsented(granted);
-          setConsentDecision(state);
-          if (typeof window !== "undefined") {
-            writeCachedGpsConsent(window.localStorage, granted);
-          }
-        } else if (
-          typeof window !== "undefined" &&
-          readCachedGpsConsent(window.localStorage) === "granted"
-        ) {
-          const res = await postGpsConsent({
-            signedName: shell.profile.name,
-            granted: true,
-          });
-          if (!res.ok) console.warn("consent sync failed:", res.error);
+        const gate = resolveConsentGate(state);
+        setGpsConsented(gate.gpsConsented);
+        setConsentDecision(gate.consentDecision);
+        // Cache only a definite current-version decision (fast paint next
+        // mount). Never write on "unknown".
+        if (gate.consentDecision !== "unknown" && typeof window !== "undefined") {
+          writeCachedGpsConsent(window.localStorage, gate.gpsConsented);
         }
       } catch (err) {
         console.warn("consent check failed:", err);
@@ -886,15 +876,16 @@ export function WorkerShell({
       setConsentChecked(true);
     }
     void checkConsent();
-  }, [supabase, shell.profile.id, shell.profile.org_id, shell.profile.name, consentChecked]);
+  }, [supabase, shell.profile.id, consentChecked]);
 
   useEffect(() => {
     if (!consentChecked || gpsConsented || showConsentModal || !shell.clockState.isClockedIn) return;
-    if (typeof window === "undefined") return;
-    if (!hasCachedGpsConsentDecision(window.localStorage)) {
+    // No current-version decision in the DB → prompt (a stale older-version
+    // cache must not suppress this).
+    if (consentDecision === "unknown") {
       setShowConsentModal(true);
     }
-  }, [consentChecked, gpsConsented, showConsentModal, shell.clockState.isClockedIn]);
+  }, [consentChecked, gpsConsented, showConsentModal, shell.clockState.isClockedIn, consentDecision]);
 
   const gpsTrackingEnabled = gpsConsented && shell.clockState.isClockedIn;
 
@@ -1629,12 +1620,7 @@ export function WorkerShell({
         });
         playSound("clock-in");
 
-        if (
-          gps &&
-          consentChecked &&
-          !gpsConsented &&
-          !hasCachedGpsConsentDecision(window.localStorage)
-        ) {
+        if (gps && consentChecked && consentDecision === "unknown") {
           setShowConsentModal(true);
         }
         return;
@@ -1687,13 +1673,9 @@ export function WorkerShell({
 
       // Only seed the consent modal when a real fix was captured. On the
       // No-GPS path the device couldn't produce a fix anyway — there's
-      // no point prompting for tracking consent.
-      if (
-        gps &&
-        consentChecked &&
-        !gpsConsented &&
-        !hasCachedGpsConsentDecision(window.localStorage)
-      ) {
+      // no point prompting for tracking consent. Prompt only when the DB has
+      // no current-version decision (a stale cache must not suppress it).
+      if (gps && consentChecked && consentDecision === "unknown") {
         setShowConsentModal(true);
       }
 

@@ -25,9 +25,13 @@ describe("GPS and safety consent audit UI source", () => {
     expect(workerShellSource).toContain("readLatestConsent");
     expect(workerShellSource).toContain("readCachedGpsConsent");
     expect(workerShellSource).toContain("writeCachedGpsConsent");
-    expect(workerShellSource).toContain("hasCachedGpsConsentDecision");
-    // Consent is now persisted through the server-stamped route (Step 2a),
-    // not a direct client insert — but WorkerShell still writes the decision.
+    // The consent gate is resolved from the DB's current-version decision only;
+    // prompt gating keys on that decision, never on a cached one.
+    expect(workerShellSource).toContain("resolveConsentGate");
+    expect(workerShellSource).toContain('consentDecision === "unknown"');
+    // Consent is only ever written by the human acting in the modal
+    // (handleGpsConsent / handleGpsDecline) — no phantom auto-write from cache.
     expect(workerShellSource).toContain("await postGpsConsent");
+    expect(workerShellSource).not.toContain("consent sync failed");
   });
 });

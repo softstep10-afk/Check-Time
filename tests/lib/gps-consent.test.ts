@@ -7,6 +7,7 @@ import {
   gpsConsentStorageKey,
   hasCachedGpsConsentDecision,
   readCachedGpsConsent,
+  resolveConsentGate,
   writeCachedGpsConsent,
 } from "@/lib/gps-consent";
 
@@ -73,5 +74,41 @@ describe("GPS consent audit helpers", () => {
     expect(gpsConsentSource).toContain(".eq(\"worker_id\", workerId)");
     expect(gpsConsentSource).toContain(".eq(\"consent_version\", consentVersion)");
     expect(gpsConsentSource).toContain("GPS_CONSENT_VERSION");
+  });
+});
+
+describe("resolveConsentGate — DB current-version decision is the sole truth", () => {
+  it("granted → track, no prompt", () => {
+    expect(resolveConsentGate("granted")).toEqual({
+      gpsConsented: true,
+      consentDecision: "granted",
+      shouldPrompt: false,
+    });
+  });
+
+  it("denied → tracking off, no prompt (honored decision)", () => {
+    expect(resolveConsentGate("denied")).toEqual({
+      gpsConsented: false,
+      consentDecision: "denied",
+      shouldPrompt: false,
+    });
+  });
+
+  it("unknown (no v2 row) → tracking off and PROMPT", () => {
+    expect(resolveConsentGate("unknown")).toEqual({
+      gpsConsented: false,
+      consentDecision: "unknown",
+      shouldPrompt: true,
+    });
+  });
+
+  it("takes no localStorage input — a stale cache cannot change the gate or write a row", () => {
+    // Both task scenarios (stale pre-v2 'granted' cache, and no cache) reduce to
+    // the same DB state — "unknown" — and therefore the same prompt-and-no-write
+    // outcome. The gate is a pure function of the DB decision only.
+    expect(resolveConsentGate("unknown").shouldPrompt).toBe(true);
+    expect(resolveConsentGate("unknown").gpsConsented).toBe(false);
+    // resolveConsentGate has arity 1 (dbState only) — no storage parameter.
+    expect(resolveConsentGate.length).toBe(1);
   });
 });
