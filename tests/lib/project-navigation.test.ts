@@ -112,7 +112,7 @@ describe("project navigation actions", () => {
       projectName: "Kitchen Remodel",
       userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8)",
     })).toBe(
-      "geo:47.307322,-122.228453?q=47.307322%2C-122.228453(Kitchen%20Remodel)",
+      "geo:47.307322,-122.228453?q=47.307322%2C-122.228453",
     );
   });
 

@@ -73,11 +73,7 @@ export function buildGeoNavigationUrl(
   }
 
   if (destination.source === "coordinates") {
-    const projectName = options.projectName?.trim();
-    const geoQuery = projectName
-      ? `${destination.query}(${projectName})`
-      : destination.query;
-    return `geo:${destination.query}?q=${encodeURIComponent(geoQuery)}`;
+    return `geo:${destination.query}?q=${encodeURIComponent(destination.query)}`;
   }
 
   return `geo:0,0?q=${encodeURIComponent(destination.query)}`;
