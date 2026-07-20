@@ -102,6 +102,15 @@ export function ProjectNavigationActions({
         </button>
         <button
           type="button"
+          onClick={() => void shareForTesla()}
+          className={`${buttonClass} min-h-11 flex-1 justify-center px-3 py-2 text-sm`}
+          style={{ borderColor: "rgba(59, 130, 246, 0.4)", color: "var(--blue)" }}
+        >
+          {copied === "tesla" ? <Check size={12} /> : <Share2 size={12} />}
+          {copied === "tesla" ? t("projects.copied") : t("projects.teslaShare")}
+        </button>
+        <button
+          type="button"
           onClick={() => void copyDestination("destination")}
           className={`${buttonClass} min-h-11 flex-1 justify-center px-3 py-2 text-sm`}
           style={{
