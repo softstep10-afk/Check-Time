@@ -139,4 +139,16 @@ describe("project navigation actions", () => {
       userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
     })).toBe("https://maps.apple.com/?q=47.307322%2C-122.228453");
   });
+
+  it("prefers the street address for Android geo navigation", () => {
+    const destination = getProjectNavigationDestination({
+      address: "4820 130th Ave SE, Bellevue, WA 98006",
+      siteCoordinates: { lat: 47.559413, lng: -122.16656 },
+    });
+
+    expect(buildGeoNavigationUrl(destination!, {
+      address: "4820 130th Ave SE, Bellevue, WA 98006",
+      userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8)",
+    })).toBe("geo:0,0?q=4820%20130th%20Ave%20SE%2C%20Bellevue%2C%20WA%2098006");
+  });
 });

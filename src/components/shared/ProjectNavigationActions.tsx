@@ -72,6 +72,7 @@ export function ProjectNavigationActions({
   function handleMobileGo() {
     window.location.href = buildGeoNavigationUrl(navigationDestination, {
       projectName,
+      address,
       userAgent: window.navigator.userAgent,
     });
   }

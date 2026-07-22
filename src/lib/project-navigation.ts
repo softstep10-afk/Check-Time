@@ -58,6 +58,7 @@ export function buildGeoNavigationUrl(
   destination: ProjectNavigationDestination,
   options: {
     projectName?: string | null;
+    address?: string | null;
     userAgent?: string | null;
   } = {},
 ): string {
@@ -70,6 +71,13 @@ export function buildGeoNavigationUrl(
 
   if (isIos) {
     return `https://maps.apple.com/?q=${encodeURIComponent(destination.query)}`;
+  }
+
+  // Android/Tesla: a street address geocodes to a routable road on the vehicle
+  // side, whereas a raw coordinate pin can land where the car cannot route.
+  const navAddress = options.address?.trim();
+  if (navAddress) {
+    return `geo:0,0?q=${encodeURIComponent(navAddress)}`;
   }
 
   if (destination.source === "coordinates") {
