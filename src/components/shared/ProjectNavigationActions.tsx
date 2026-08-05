@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Check, Copy, MapPin, Navigation, Share2 } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Check, Copy, MapPin, Navigation, Share2, Zap } from "lucide-react";
 import { useTranslation } from "@/lib/i18n";
 import {
   buildAppleMapsDirectionsUrl,
@@ -9,9 +9,13 @@ import {
   buildGoogleMapsDirectionsUrl,
   buildProjectAddressCopyText,
   buildProjectNavigationShareText,
+  buildTeslaAppLaunchUrl,
   getProjectNavigationDestination,
+  isAndroidUserAgent,
 } from "@/lib/project-navigation";
 import type { WorkerGeoPoint } from "@/lib/worker-types";
+
+const subscribeToNothing = () => () => {};
 
 export function ProjectNavigationActions({
   projectName,
@@ -26,6 +30,27 @@ export function ProjectNavigationActions({
 }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState<"destination" | "tesla" | null>(null);
+  const isAndroid = useSyncExternalStore(
+    subscribeToNothing,
+    () => isAndroidUserAgent(window.navigator.userAgent),
+    () => false,
+  );
+  const [teslaAwake, setTeslaAwake] = useState(false);
+  const wakeRequested = useRef(false);
+
+  // The Tesla app is launched in its own task, so this page goes hidden. When
+  // the driver comes back the vehicle link is warm and the destination sends.
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.visibilityState === "visible" && wakeRequested.current) {
+        wakeRequested.current = false;
+        setTeslaAwake(true);
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   const destination = getProjectNavigationDestination({ address, siteCoordinates });
 
   if (!destination) return null;
@@ -69,6 +94,12 @@ export function ProjectNavigationActions({
     await copyDestination("tesla");
   }
 
+  function handleWakeTesla() {
+    wakeRequested.current = true;
+    setTeslaAwake(false);
+    window.location.href = buildTeslaAppLaunchUrl();
+  }
+
   function handleMobileGo() {
     window.location.href = buildGeoNavigationUrl(navigationDestination, {
       projectName,
@@ -89,6 +120,20 @@ export function ProjectNavigationActions({
       aria-label={t("projects.navigationActions")}
     >
       <div className="nav-touch-only w-full flex-wrap items-center gap-1.5">
+        {isAndroid ? (
+          <button
+            type="button"
+            onClick={handleWakeTesla}
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-md)] border px-4 py-2 text-sm font-semibold"
+            style={{
+              borderColor: teslaAwake ? "rgba(15, 168, 120, 0.45)" : "rgba(59, 130, 246, 0.45)",
+              color: teslaAwake ? "var(--green)" : "var(--blue)",
+            }}
+          >
+            {teslaAwake ? <Check size={14} /> : <Zap size={14} />}
+            {teslaAwake ? t("projects.teslaAwake") : t("projects.wakeTesla")}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={handleMobileGo}
@@ -114,6 +159,11 @@ export function ProjectNavigationActions({
           {copied === "destination" ? <Check size={12} /> : <Copy size={12} />}
           {copied === "destination" ? t("projects.copied") : t("projects.copyDestination")}
         </button>
+        {isAndroid && !teslaAwake ? (
+          <p className="w-full text-[10px] leading-snug" style={{ color: "var(--text-secondary)" }}>
+            {t("projects.teslaWakeHint")}
+          </p>
+        ) : null}
       </div>
       <a
         href={googleUrl}

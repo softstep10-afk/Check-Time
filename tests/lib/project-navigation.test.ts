@@ -5,7 +5,9 @@ import {
   buildProjectAddressCopyText,
   buildGoogleMapsDirectionsUrl,
   buildProjectNavigationShareText,
+  buildTeslaAppLaunchUrl,
   getProjectNavigationDestination,
+  isAndroidUserAgent,
 } from "@/lib/project-navigation";
 
 describe("project navigation actions", () => {
@@ -150,5 +152,16 @@ describe("project navigation actions", () => {
       address: "4820 130th Ave SE, Bellevue, WA 98006",
       userAgent: "Mozilla/5.0 (Linux; Android 14; Pixel 8)",
     })).toBe("geo:0,0?q=4820%20130th%20Ave%20SE%2C%20Bellevue%2C%20WA%2098006");
+  });
+
+  it("launches the Tesla Android app so the sleeping vehicle wakes first", () => {
+    expect(buildTeslaAppLaunchUrl()).toBe(
+      "intent://#Intent;package=com.teslamotors.tesla;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;end",
+    );
+  });
+
+  it("detects Android user agents and leaves iOS alone", () => {
+    expect(isAndroidUserAgent("Mozilla/5.0 (Linux; Android 14; Pixel 8)")).toBe(true);
+    expect(isAndroidUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")).toBe(false);
   });
 });

@@ -99,3 +99,23 @@ export function buildProjectNavigationShareText(input: {
   }
   return lines.join("\n");
 }
+
+const TESLA_ANDROID_PACKAGE = "com.teslamotors.tesla";
+
+export function isAndroidUserAgent(userAgent?: string | null): boolean {
+  const ua = userAgent ?? (typeof navigator === "undefined" ? "" : navigator.userAgent);
+  return /\bAndroid\b/i.test(ua);
+}
+
+/**
+ * Launches the Tesla Android app straight to its launcher activity.
+ *
+ * The vehicle falls asleep after a short idle window. A geo: intent handed to
+ * a cold Tesla app cannot reach a sleeping car, which the app surfaces as
+ * "Error" - the same address then works once the app has been foregrounded
+ * and has re-established the link with the vehicle. This URL automates that
+ * step so the driver does not have to remember it.
+ */
+export function buildTeslaAppLaunchUrl(): string {
+  return `intent://#Intent;package=${TESLA_ANDROID_PACKAGE};action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;end`;
+}
